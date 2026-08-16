@@ -276,6 +276,7 @@ func _initialize() -> void:
 	_test_attempt_judgment_recognition_and_response()
 	_test_block_hands_instruction_adherence()
 	_test_second_contact_rotation_invariance()
+	_test_opponent_setter_movement_consumes_selection()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9047,7 +9048,21 @@ func _test_setter_capability_gates() -> void:
 	manager.seed_vertical_slice_data()
 	var capability_events := 0
 	var reach_states := {}
-	for seed_value in range(12000, 12040):
+	## **160 seeds, not 40, and the widening is the point.**
+	##
+	## This asserted `reach_states.has("jump")` over a window that produced
+	## **two** jump sets in forty rallies. That is a presence check on a
+	## two-sample population: any change anywhere in the resolver that reshuffles
+	## which rallies go long can move both of them and fail a gate that is not
+	## about the thing that changed. It did exactly that when the opponent's
+	## setter movement began consuming its own selection -- a home-side jump rate
+	## measured at 18/400 before and 22/400 after, i.e. unharmed and slightly up,
+	## while the forty-seed window went 2 -> 0.
+	##
+	## Widened rather than loosened: the claim is still that ordinary play
+	## produces both postures, and 160 seeds carries roughly nine jump sets, so
+	## it now measures that claim instead of a coin landing on its edge.
+	for seed_value in range(12000, 12160):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
@@ -9693,6 +9708,91 @@ func _all_equal(values: Array[int]) -> bool:
 		if value != values[0]:
 			return false
 	return values.size() > 0
+
+
+
+## The opponent's setter movement must consume the state the selection was made
+## on, and be budgeted by the realized pass.
+##
+## `_resolve_opponent_transition` used to rebuild all four quantities after
+## `_spatial_setter_choice` had already produced them: the start re-read from
+## `opponent_live_positions`, the route re-solved, the travel re-timed on the
+## `lateral` profile, and the margin measured against the literal
+## `DEFAULT_SECOND_CONTACT_SECONDS`. Selection and execution therefore described
+## two different setters -- with the serve flight as a head start the chooser had
+## one standing on the ball while this block had them 1.7 m away, and the
+## reconstructed margin was identical at pass durations from 0.42 s to 1.80 s
+## because a constant cannot hear the ball.
+##
+## The identity below is the whole claim in one line, checked on published data:
+##
+##     arrival_margin + movement_duration == the realized pass's own duration
+##
+## It cannot hold unless the margin is measured against the ball, the travel is
+## the one selection used, and both are actually published.
+func _test_opponent_setter_movement_consumes_selection() -> void:
+	var checked := 0
+	var identity_failures := 0
+	var missing_margin := 0
+	var missing_emergency := 0
+	var distinct_margins := {}
+	for serving_home in [false, true]:
+		for seed_value in range(74000, 74040):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				for event in rally.events:
+					if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+						continue
+					if str(event.metadata.get("side", "home")) != "opponent":
+						continue
+					## Checked before the margin guard below, not after: the
+					## first draft `continue`d on a missing margin first, so on
+					## the old code this counter never incremented and the check
+					## passed on both versions. A gate that cannot fail is not a
+					## gate -- the same lesson `41a57b6` recorded.
+					if not event.metadata.has("emergency_setter"):
+						missing_emergency += 1
+					if not event.metadata.has("arrival_margin"):
+						missing_margin += 1
+						continue
+					var incoming: Dictionary = event.metadata.get(
+						"incoming_pass_trajectory", {}
+					)
+					if incoming.is_empty():
+						## The coverage feed still publishes no flight, so its
+						## window is honestly the fallback. Skipped rather than
+						## counted as a failure -- see the write-up.
+						continue
+					var margin := float(event.metadata.arrival_margin)
+					var travel := float(event.metadata.get("movement_duration", 0.0))
+					var window := float(incoming.get("duration", 0.0))
+					checked += 1
+					distinct_margins[snappedf(margin, 0.001)] = true
+					if absf(margin + travel - window) > 0.0005:
+						identity_failures += 1
+			manager.free()
+
+	_check(
+		checked > 0 and missing_margin == 0,
+		"every opponent set publishes the arrival margin it was resolved with",
+	)
+	_check(
+		missing_emergency == 0,
+		"every opponent set says whether it was an emergency second contact",
+	)
+	_check(
+		checked > 0 and identity_failures == 0,
+		"an opponent setter's margin plus travel is the realized pass's own flight",
+	)
+	## A constant window would still satisfy the identity if travel were also
+	## constant, so this is the check that the ball is genuinely varying it.
+	_check(
+		distinct_margins.size() > 5,
+		"opponent arrival margins vary with the ball rather than sitting on one value",
+	)
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

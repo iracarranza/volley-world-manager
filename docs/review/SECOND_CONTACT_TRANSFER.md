@@ -24,8 +24,10 @@ REALIZED PASS
 ```
 
 §7 is the residual boundary, and it is real: the corrected weights do everything
-asked of them, and the *arrival model* turns out to be what cannot tell "had to
-take a step" from "could never have got there."
+asked of them, and what remains is a movement-model question. **§7 carries a
+correction** — the cause was first named as the standing-start cost and measured
+afterwards as the obstruction detour; see
+`FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md` §2.
 
 ---
 
@@ -298,23 +300,28 @@ parked exactly on it and the setter walking out from beside it:
 | 6.2484 m | −1.067 s | NO | team-mate |
 
 **The margin falls from +1.200 s to −0.133 s over twelve and a half
-centimetres**, then stays roughly flat for the next metre. That is the movement
-model's fixed standing-start cost, not a duty weight: at a 1.20 s window,
-*having to take a step at all* costs about as much as crossing the court.
+centimetres**, then stays roughly flat for the next metre.
+
+> **Correction.** This paragraph originally blamed the movement model's
+> standing-start cost. That is wrong, and
+> `FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md` §2 measured the real cause: in
+> this fixture a body is parked *exactly on the contact point*, so
+> `_navigation_waypoint` bends the route around them at a near
+> distance-independent toll of ~1.35 s. Clear travel over the same distances is
+> continuous and monotone — 12.5 cm costs 0.2556 s, not 1.33 s. The table below
+> is still what this fixture does; the cause named for it was not.
 
 So the honest statement of what this pass achieved:
 
-> The **weights** now express the policy correctly and rotation-invariantly. The
-> **arrival model** cannot distinguish "had to move" from "could never have got
-> there" over short legs, so at the pathological end — a team-mate standing
-> exactly on the contact point — the setter yields sooner than the policy's
-> wording implies.
+> The **weights** now express the policy correctly and rotation-invariantly. At
+> the pathological end — a team-mate standing exactly on the contact point — the
+> setter yields sooner than the policy's wording implies, because the route
+> around that body costs ~1.35 s however short the leg.
 
-This is not a new finding. It is `OUTSTANDING` §1's short-leg timing problem,
-already documented at the home call site in the comment that holds
-`setter_release_target` back for the same reason: *"the fixed costs, the standing
-start and the turn, are a much larger share of two tenths of a second than of one
-and a half."*
+Originally written as a short-leg timing problem and revised once measured: the
+**obstruction toll**, not the standing start, is what makes a 12 cm step cost as
+much as crossing the court. `OUTSTANDING` §1's short-leg issue is real and
+separate; it is not what this fixture was showing.
 
 **Not papered over**, and deliberately so. The available fix is a reachability
 cutoff — "the setter keeps it unless their margin is worse than X" — and that is

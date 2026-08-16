@@ -12,8 +12,13 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the second-contact transfer
-policy: **2,095 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the opponent setter-movement
+correction: **2,098 checks pass**. Treat any test failure as a regression.
+
+That is 2,095 plus the four checks written minus one: a sampling gate drew a
+check fewer because the opponent's second contact now consumes the state it was
+selected on and rallies resolve differently. See
+`docs/review/FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md`.
 
 That one arrived in two moves and they mean opposite things. 2,087 → 2,090 came
 with **no checks written at all**: the second contact may now transfer away from

@@ -7031,17 +7031,15 @@ gets the serve's flight as a head start. Six rotation gates pass, five checks
 guard it, and technical quality can no longer buy a ball off a reachable setter
 in any rotation. Three things were deliberately left.
 
-**1. The arrival model cannot see a short leg.** With a team-mate parked exactly
-on the contact point, the setter's arrival margin falls from +1.200 s to −0.133 s
-over twelve centimetres and then stays flat for a metre: the movement model's
-standing-start cost means *having to move at all* reads much like crossing the
-court. So at the pathological end the setter yields sooner than the policy's
-wording implies. The only fix available inside that node is an invented
-reachability cutoff sitting outside any measured distribution, which is the
-mistake this repository keeps making. `OUTSTANDING` §1's short-leg timing wants
-fixing first; the transfer table then re-measures itself. In situ this is worth
-half a percentage point of emergency setting, so it is a correctness debt rather
-than a live problem.
+**1. The obstruction toll ignores distance.** With a team-mate parked exactly on
+the contact point, the setter's arrival margin falls from +1.200 s to −0.133 s
+over twelve centimetres. This was first written up as the movement model's
+standing-start cost and that was wrong: clear travel is continuous and monotone
+(12.5 cm costs 0.2556 s), and the collapse is `_navigation_waypoint` bending the
+route around the body, at ~1.35 s whether the leg is 5 mm or 50 cm. A toll
+independent of distance is the thing to look at, and it belongs to the
+movement/approach work rather than to second-contact selection. In situ it is
+worth half a percentage point of emergency setting.
 
 **2. Three opponent callers still pass no head start.** The two dig paths and the
 coverage path into `_resolve_opponent_transition` each have a flight in scope and
@@ -7050,15 +7048,14 @@ is very likely live there too. Only the serve-receive site was corrected, becaus
 that is the one a fixture demonstrated; repairing three unmeasured sites on the
 strength of one measured one is how a pass stops being verifiable.
 
-**3. The opponent's movement is recomputed after selection, and now disagrees
-with it.** Lines 4035–4050 re-read `setter_start` from live positions and
-recompute travel on the `lateral` profile instead of consuming
-`opponent_setter_choice`. That affects execution and reporting rather than
-selection, so it belongs to the setter-movement pass — but it got sharper: the
-opponent's setter is now *selected* from a head-start-advanced position and still
-*drawn* from the un-advanced one, where before this pass both were un-advanced.
-Start there. Related: the opponent SET event publishes no `arrival_margin` and no
-`emergency_setter` at all, so that side cannot currently be measured on either.
+**3. ~~The opponent's movement is recomputed after selection.~~ Done.**
+`FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md` corrected it: the opponent now
+consumes `opponent_setter_choice`'s start, route and travel, measures its margin
+against the realized pass rather than a 0.68 literal, is handed the first ball's
+own trajectory instead of `{}`, and publishes `arrival_margin` and
+`emergency_setter` like the home side. Opponent mean travel fell 0.81 s → 0.27 s
+against home's 0.21 s. Four checks guard it, all verified to fail on the old
+resolver.
 
 Still open and untouched, from the audit: **three duty tables for one concept**
 (`_second_contact_setter`, `_spatial_setter_choice` and

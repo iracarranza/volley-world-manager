@@ -3939,7 +3939,15 @@ func _resolve_home_serve(
 		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
 		float(opponent_pass.get("set_contact_height_meters", NAN)),
 		float(opponent_pass.get("pass_apex_meters", 0.0)),
-		{},
+		## **The pass this setter is actually taking.** Passed `{}` until now, so
+		## `second_contact_window` fell through to the 0.68 literal and the
+		## opponent's first-ball setter was timed against a constant while the
+		## realized flight sat two lines above, already published on the
+		## reception event as its `outgoing_trajectory`. The home first ball has
+		## used `pass_trajectory.duration` since it existed; the dig callers into
+		## this function already pass their own. This was the last feed on either
+		## side still handing the second contact a number instead of a ball.
+		Dictionary(opponent_pass.get("trajectory", {})),
 		## The serve's own flight, which is exactly what the home first ball
 		## passes. This side's setter has been running since the ball was struck
 		## too, and until now was timed as though they had watched it land.
@@ -4064,26 +4072,60 @@ func _resolve_opponent_transition(
 		opponent_setter = opponent_setter_choice.player as VolleyballPlayer
 	if opponent_setter == null:
 		opponent_setter = opponent_team.setter() as VolleyballPlayer
-	var setter_start: Vector2 = opponent_live_positions.get(
-		opponent_setter.id, opponent_team.court_position(opponent_setter.id, "transition")
-	)
-	## The corner this setter has to turn, from the same chooser the home side
-	## uses. Only the detour is taken across, not the chooser's travel time: that
-	## is timed on the `transition` profile and this path has always used
-	## `lateral`, and swapping the profile here would be a second change wearing
-	## this one's name.
-	var opponent_detour: Variant = _navigation_waypoint(
-		opponent_setter, setter_start, opponent_setter_position,
-		opponent_second_contact.starts,
-	)
-	var setter_move_time := _movement_time(
-		opponent_setter, setter_start, opponent_setter_position, "lateral",
-		opponent_detour["corner"] if opponent_detour != null else null,
-	)
+	## **Consume the selection rather than rebuilding a second one.**
+	##
+	## These four values used to be reconstructed here from scratch: the start
+	## re-read from `opponent_live_positions`, the route re-solved, the travel
+	## re-timed on the `lateral` profile, and the margin measured against the
+	## literal `DEFAULT_SECOND_CONTACT_SECONDS`. All four already existed on
+	## `opponent_setter_choice`, computed from the state the voli was actually
+	## selected on -- so the side effect was that selection and execution
+	## described two different setters.
+	##
+	## Measured on one selection with both recipes applied to it: with the serve
+	## flight as a head start the chooser had the setter standing **on** the ball
+	## (0.000 m, margin +0.420 s) while this block had them 1.698 m away with a
+	## margin of -0.287 s. Worse, that -0.287 was **identical at pass durations
+	## of 0.42, 0.68, 0.95, 1.30 and 1.80 s**, because a constant cannot hear the
+	## ball. The home side has measured the same quantity against
+	## `second_contact_window` since it existed.
+	##
+	## The profile change from `lateral` to `transition` rides along and is not
+	## cosmetic: it is the profile the chooser timed the decision on, so keeping
+	## `lateral` here would be preserving the disagreement rather than the model.
+	## An earlier note held the travel time back to avoid "a second change
+	## wearing this one's name" -- correct then, when both recipes at least
+	## started from the same position; the head start ended that.
+	##
+	## The fallbacks matter: `_spatial_setter_choice` can return a `player` that
+	## is not `opponent_setter` after the two null-guards above, and consuming
+	## another voli's run would be a worse error than rebuilding one. Guarded.
+	var setter_choice_matches: bool = \
+		opponent_setter_choice.get("player") == opponent_setter
+	var setter_start: Vector2 = Vector2(opponent_setter_choice.start) \
+		if setter_choice_matches \
+		else Vector2(opponent_live_positions.get(
+			opponent_setter.id,
+			opponent_team.court_position(opponent_setter.id, "transition"),
+		))
+	var opponent_detour: Variant = opponent_setter_choice.get("navigation") \
+		if setter_choice_matches \
+		else _navigation_waypoint(
+			opponent_setter, setter_start, opponent_setter_position,
+			opponent_second_contact.starts,
+		)
+	var setter_move_time: float = float(opponent_setter_choice.travel_time) \
+		if setter_choice_matches \
+		else _movement_time(
+			opponent_setter, setter_start, opponent_setter_position, "lateral",
+			opponent_detour["corner"] if opponent_detour != null else null,
+		)
 	## The same quantity the home setter is scored on: how much of the pass
 	## flight is left once they have reached the ball. A setter who arrives
-	## early can load a jump set; one still scrambling takes it flat-footed.
-	var setter_arrival_margin := DEFAULT_SECOND_CONTACT_SECONDS - setter_move_time
+	## early can load a jump set; one still scrambling takes it flat-footed --
+	## and now, as on the home side, it is the realized pass that says how long
+	## that flight was.
+	var setter_arrival_margin := second_contact_window - setter_move_time
 	var set_geometry := _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48), 1.0,
@@ -4094,7 +4136,10 @@ func _resolve_opponent_transition(
 	var opponent_transition_intents := {}
 	var opponent_transition_targets := _opponent_transition_phase_map(
 		opponent_team, first_contact_player_id, opponent_setter.id,
-		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
+		## The realized pass's own flight, not the 0.68 literal. The other five
+		## volis were being moved on a fixed budget while the ball they are
+		## transitioning behind took whatever time it took.
+		opponent_setter_position, second_contact_window,
 		setter_arrival_margin, opponent_transition_intents,
 	)
 	## Same model as the home transition set, and now the same attributes. The
@@ -4459,6 +4504,16 @@ func _resolve_opponent_transition(
 			"option_evaluation": opponent_option_evaluation,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
+			## **Both were absent on this side and present on the other.**
+			## `_stamp_second_contact_claim` deliberately leaves `arrival_margin`
+			## to each call site because the live-setter override can move the
+			## window after the choice was made -- and its note said every call
+			## site stamps its own, which was true of the home paths and not of
+			## this one. Measured: 0 of 310 opponent sets carried either key,
+			## so no opponent second contact in the game could be audited for
+			## how comfortably it arrived or for whether it was an emergency.
+			"arrival_margin": setter_arrival_margin,
+			"emergency_setter": opponent_setter.id != int(opponent_team.setter_id),
 			"set_distance_meters": resolved_set_geometry.distance_meters,
 			"set_angle_degrees": resolved_set_geometry.angle_degrees,
 			"release_distance_meters": resolved_set_geometry.release_distance_meters,
