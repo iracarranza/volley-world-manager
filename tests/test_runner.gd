@@ -277,6 +277,7 @@ func _initialize() -> void:
 	_test_block_hands_instruction_adherence()
 	_test_second_contact_rotation_invariance()
 	_test_opponent_setter_movement_consumes_selection()
+	_test_set_feasibility_then_execution()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9793,6 +9794,150 @@ func _test_opponent_setter_movement_consumes_selection() -> void:
 		distinct_margins.size() > 5,
 		"opponent arrival margins vary with the ball rather than sitting on one value",
 	)
+
+
+
+## Feasibility is resolved before execution, execution shapes only the ball, and
+## the second contact terminates in exactly one of them.
+##
+## The order under test, from the home first ball:
+##
+##     hitter chosen (1905)
+##     -> setter capability read from the realized arrival (1999)
+##     -> tempo downgraded if the setter cannot command it (2015)
+##     -> set quality (2065)
+##     -> delivered point, arc, ONE trajectory (2073-2150)
+##
+## Nothing after the quality line may move the body, extend the clock or
+## re-choose the hitter, and the checks below are the ones that would notice.
+func _test_set_feasibility_then_execution() -> void:
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 2718
+	var setter := _set_probe_setter()
+
+	## **The jump-set distinction, which is the design claim.** Identical arrival
+	## margins, identical pass: only the run that produced the margin differs. A
+	## model reading time alone cannot separate these, and a jump you have to
+	## travel into is a lunge rather than a set.
+	var planted: Dictionary = simulator._jump_set_decision(setter, 2.95, 0.90, 0.15, 0.30)
+	var carried: Dictionary = simulator._jump_set_decision(setter, 2.95, 0.90, 4.20, 1.50)
+	_check(
+		bool(planted.jumping) and not bool(carried.jumping),
+		"a setter still travelling cannot jump-set on a margin that lets a planted one",
+	)
+	## And a ball that never rose to the hands is a different refusal from a
+	## rushed one -- they must not collapse into a single "standing".
+	var low: Dictionary = simulator._jump_set_decision(setter, 1.60, 0.90, 0.15, 0.30)
+	var rushed: Dictionary = simulator._jump_set_decision(setter, 2.95, 0.10, 0.15, 0.30)
+	_check(
+		not bool(low.jumping) and str(low.reason) == "under the hands"
+			and not bool(rushed.jumping) and str(rushed.reason) == "no time to load",
+		"a pass under the hands and a rushed setter are refused for different reasons",
+	)
+
+	## Feasibility may constrain the set form. It may not re-choose the hitter.
+	var assignment := HitterAssignment.new()
+	assignment.player_id = 4242
+	assignment.lane = "Left Pin"
+	assignment.tempo = 1
+	var downgraded: Resource = simulator._downgraded_assignment(assignment, 3)
+	_check(
+		int(downgraded.player_id) == 4242 and str(downgraded.lane) == "Left Pin"
+			and int(downgraded.tempo) == 3 and int(assignment.tempo) == 1,
+		"a tempo the setter cannot command changes the set form, never the hitter",
+	)
+
+	## In situ: one ball through the whole second contact, and the quantity the
+	## jump-set threshold acts on published so it can be audited at all.
+	var sets := 0
+	var without_closing := 0
+	var pass_into_set := 0
+	var pass_into_set_ok := 0
+	var set_into_attack := 0
+	var set_into_attack_ok := 0
+	for serving_home in [false, true]:
+		for seed_value in range(79000, 79040):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				## The last ball ANY contact published, not the last reception: a
+				## transition set is fed by a dig, and comparing it against a serve
+				## reception measures the test rather than the engine.
+				var last_ball := {}
+				var last_set := {}
+				for event in rally.events:
+					var kind := int(event.event_type)
+					if kind == RALLY_EVENT_SCRIPT.EventType.SET:
+						sets += 1
+						if not event.metadata.has("set_closing_speed_mps"):
+							without_closing += 1
+						var incoming: Dictionary = event.metadata.get(
+							"incoming_trajectory",
+							event.metadata.get("incoming_pass_trajectory", {}),
+						)
+						if not last_ball.is_empty() and not incoming.is_empty():
+							pass_into_set += 1
+							if _same_published_ball(last_ball, incoming):
+								pass_into_set_ok += 1
+						last_set = Dictionary(
+							event.metadata.get("outgoing_trajectory", {})
+						)
+						last_ball = last_set
+						continue
+					if kind == RALLY_EVENT_SCRIPT.EventType.ATTACK:
+						var swung_at: Dictionary = event.metadata.get(
+							"incoming_trajectory", {}
+						)
+						if not last_set.is_empty() and not swung_at.is_empty():
+							set_into_attack += 1
+							if _same_published_ball(last_set, swung_at):
+								set_into_attack_ok += 1
+					var published: Dictionary = event.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if not published.is_empty():
+						last_ball = published
+			manager.free()
+
+	_check(
+		sets > 0 and without_closing == 0,
+		"every set publishes the closing speed its jump decision turned on",
+	)
+	_check(
+		pass_into_set > 0 and pass_into_set_ok == pass_into_set,
+		"a set is resolved against the exact ball the previous contact published",
+	)
+	_check(
+		set_into_attack > 0 and set_into_attack_ok == set_into_attack,
+		"a swing is resolved against the exact set the setter published",
+	)
+
+
+func _set_probe_setter() -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = 4141
+	player.display_name = "Probe Setter"
+	for attribute in [
+		"set_accuracy", "set_balance", "set_stability", "tempo_control",
+		"hand_control", "jump_reach", "explosiveness",
+	]:
+		player.set(attribute, 50)
+	player.fatigue = 0.0
+	return player
+
+
+## Identity by endpoints and duration rather than dictionary equality, since a
+## trajectory carries stamped launch state a consumer may extend.
+func _same_published_ball(first: Dictionary, second: Dictionary) -> bool:
+	return Vector2(first.get("start_position", Vector2.ZERO)).is_equal_approx(
+			Vector2(second.get("start_position", Vector2.ONE))
+		) and Vector2(first.get("end_position", Vector2.ZERO)).is_equal_approx(
+			Vector2(second.get("end_position", Vector2.ONE))
+		) and is_equal_approx(
+			float(first.get("duration", -1.0)), float(second.get("duration", -2.0))
+		)
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

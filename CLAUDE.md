@@ -12,12 +12,16 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the opponent setter-movement
-correction: **2,098 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the set quality and generation
+audit: **2,104 checks pass**. Treat any test failure as a regression.
 
-That is 2,095 plus the four checks written minus one: a sampling gate drew a
-check fewer because the opponent's second contact now consumes the state it was
-selected on and rallies resolve differently. See
+That is 2,098 plus exactly the six checks written, which is what a
+publication-only change should do to a sampling population: nothing. See
+`docs/review/SET_QUALITY_AND_GENERATION.md`.
+
+The pass before it moved 2,095 → 2,098: four checks written and one sampling
+gate drawing a check fewer, because the opponent's second contact began
+consuming the state it was selected on and rallies resolve differently. See
 `docs/review/FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md`.
 
 That one arrived in two moves and they mean opposite things. 2,087 → 2,090 came

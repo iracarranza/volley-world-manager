@@ -2213,6 +2213,9 @@ func resolve(
 		set_event.metadata["set_posture"] = "jump" if bool(jump_set.jumping) \
 			else "standing"
 		set_event.metadata["set_posture_reason"] = str(jump_set.reason)
+		set_event.metadata["set_closing_speed_mps"] = float(
+			jump_set.get("closing_speed_mps", 0.0)
+		)
 		set_event.metadata["set_release_height_meters"] = set_release_height
 		set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			setter, bool(jump_set.jumping)
@@ -4535,6 +4538,9 @@ func _resolve_opponent_transition(
 		opponent_set_event.metadata["set_posture_reason"] = str(
 			opponent_jump_set.reason
 		)
+		opponent_set_event.metadata["set_closing_speed_mps"] = float(
+			opponent_jump_set.get("closing_speed_mps", 0.0)
+		)
 		opponent_set_event.metadata["set_release_height_meters"] = \
 			opponent_release_height
 		## **The ball this set was resolved against.** Stamped so the chain from
@@ -6176,6 +6182,9 @@ func _resolve_home_continuation(
 		cont_set_event.metadata["set_posture"] = "jump" \
 			if bool(cont_jump_set.jumping) else "standing"
 		cont_set_event.metadata["set_posture_reason"] = str(cont_jump_set.reason)
+		cont_set_event.metadata["set_closing_speed_mps"] = float(
+			cont_jump_set.get("closing_speed_mps", 0.0)
+		)
 		cont_set_event.metadata["back_set"] = bool(cont_set_geometry.back_set)
 		cont_set_event.metadata["behind_meters"] = float(
 			cont_set_geometry.behind_meters
@@ -15706,9 +15715,15 @@ func _jump_set_decision(
 	travel_seconds: float = 0.0,
 ) -> Dictionary:
 	if setter == null:
-		return {"jumping": false, "reason": "no setter"}
+		return {"jumping": false, "reason": "no setter", "closing_speed_mps": 0.0}
 	## What they are still carrying when they get there. A body arriving at speed
 	## plants forward; a body that arrived and stopped plants under itself.
+	##
+	## **Returned, because `JUMP_SET_STABLE_APPROACH_MPS` calls itself unmeasured
+	## and nothing published the quantity it acts on.** A threshold whose
+	## distribution has never been seen is the failure `FAILURE_MODES.md` §0
+	## names; this is the half that makes it auditable from the rally record
+	## rather than only from a fixture.
 	var closing_speed := travel_meters / maxf(travel_seconds, 0.01) \
 		if travel_meters > 0.0 and travel_seconds > 0.0 else 0.0
 	var standing := GeometricAttackPromotionModel.set_contact_height_meters(setter)
@@ -15724,11 +15739,13 @@ func _jump_set_decision(
 		return {
 			"jumping": false, "reason": "under the hands",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	if arrival_margin < JUMP_SET_LOAD_SECONDS:
 		return {
 			"jumping": false, "reason": "no time to load",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	## Still moving when the ball arrives. The margin can be generous and the
 	## approach still be wrong: a setter who covered six metres and got there
@@ -15738,15 +15755,18 @@ func _jump_set_decision(
 		return {
 			"jumping": false, "reason": "arriving too fast to plant",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	if poise < JUMP_SET_COMPOSURE_FLOOR:
 		return {
 			"jumping": false, "reason": "cannot release off the floor",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	return {
 		"jumping": true, "reason": "jump set",
 		"standing_height": standing, "airborne_height": airborne,
+		"closing_speed_mps": closing_speed,
 	}
 
 
