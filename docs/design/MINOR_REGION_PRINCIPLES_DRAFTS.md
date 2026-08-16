@@ -1,11 +1,17 @@
 # Minor region principles — drafts, not a decision
 
-Written 2026-08-16, on `6b1f316`. **Nothing here is applied.** `BACKLOG.md` §3a
-names this as a design question that was never decided rather than decided and
-unbuilt, and the decision is the user's. This document does the work that has to
-happen before the decision can be made well: what the seven axes actually do,
-what the existing tables already commit each region to, and three drafts of
-different ambition with their costs stated.
+Written 2026-08-16, on `6b1f316`. **Nothing here is applied.**
+
+**§4 corrected the same day**, after
+`SIXNET_ZAITGAIST_AND_TACTICAL_COHERENCE.md` §5 replaced Zaitgaist's
+overwrite-the-style model with a generational one. Drafts A, B and C for the other
+five regions are unaffected; the recommendation in §8 is not.
+
+`BACKLOG.md` §3a names this as a design question that was never decided rather
+than decided and unbuilt, and the decision is the user's. This document does the
+work that has to happen before the decision can be made well: what the seven axes
+actually do, what the existing tables already commit each region to, and three
+drafts of different ambition with their costs stated.
 
 One thing in §3a is *not* a design question, and it is separated out in §1.
 
@@ -167,24 +173,90 @@ and say plainly where a number is invented.
 
 ---
 
-## 4. Zaitgaist is not one of the six
+## 4. Zaitgaist is not one of the six — corrected 2026-08-16
 
-It should never get a table entry, under any draft.
+**The first version of this section was wrong, and the way it was wrong is worth
+keeping.**
 
-Its specialty comes from `region_overlay`, rewritten each season by
-`SixnetLeague.apply_influence_drift()` to mirror whoever last won. Tradition
-resistance is **0.0**. Position affinity is flat *on purpose*. The region's entire
-identity is that it has no identity of its own and wears the current one.
+It said Zaitgaist's principles should be *the reigning Sixnet champion's
+principles*, looked up rather than stored — the region wears the current style and
+replaces it each season. `SIXNET_ZAITGAIST_AND_TACTICAL_COHERENCE.md` §5 rejects
+exactly that:
 
-So its principles should be **the reigning Sixnet champion's principles**, looked
-up rather than stored, falling back to the reference set before a champion exists.
-That is a five-line change in `preferred_principles`, it is consistent with
-everything else already built for the region, and **seven hardcoded numbers for
-Zaitgaist would be the defect** — a permanent tradition for the region defined by
-not having one.
+> **Zaitgaist should not simply overwrite one regional style with the next.**
+> Zaitgaist does not change styles. Successive Zaitgaister generations grow up
+> under different styles.
 
-This is the only part of §3a with an answer that does not need a design call. It
-is separable from all three drafts and could ship on its own.
+Older cohorts do not forget what they learned because the programme changed
+direction. A mature Zaitgaist club can hold six generations of tactical
+inheritance at once, and the region's arc is `copy → accumulate → contradict →
+synthesize or collapse`.
+
+### Why the mistake was easy, and why "both systems agreed" was not evidence
+
+The overwrite model is what the code already does — `SixnetLeague._adopt_zeitgeist`
+says so in its own comment: *"Never accumulates. Zaitgaist replaces its borrowed
+identity outright each time."* The kit draft next door reached the same answer
+independently, and I cited that agreement as the strongest available evidence the
+rule was right.
+
+**It was not.** Two systems reaching one conclusion is only evidence when they
+reason from different premises, and both of these inherited the same one: that
+Zaitgaist's identity is a property of the *region at a moment*. The generational
+model says it is a property of *a voli's birth cohort*, and neither draft was in a
+position to notice, because neither had a cohort to hang it on.
+
+### What survives, and what the corrected answer actually is
+
+**Still true:** Zaitgaist must not get seven hardcoded numbers. A permanent
+principle table for the region defined by not having one remains the defect.
+
+**Now false:** that one lookup describes the region. It cannot, because a
+Zaitgaist *squad* is a mix of cohorts and no single principle set is true of all
+of them.
+
+The corrected shape is a change of key, not of mechanism:
+
+```text
+before   preferred_principles(region)  -> the reigning champion's set
+after    formative_principles(voli)    -> the champion when that voli was developing
+```
+
+`REGIONAL_PRINCIPLES`' own docstring is already written in the right units — *"the
+style a region's players grow up reading every week"* — which is a **formative**
+claim, not a claim about the current side. For thirteen regions the distinction is
+invisible, because the answer never changes. For Zaitgaist it is the whole region.
+
+So `preferred_principles("Zaitgaist")` still has a defensible answer — *what the
+academies are teaching now*, which is the reigning champion — but it may only be
+read as the **incoming cohort's** inheritance, never as what a Zaitgaist team
+plays. Anything that wants to know how a Zaitgaist side actually plays has to ask
+its volis, one at a time.
+
+### Two dependencies this creates, neither of them small
+
+1. **A voli needs a formative cohort.** Nothing on `VolleyballPlayer` currently
+   records what the region was teaching when they came through. This is a new
+   piece of state, and it belongs to whoever builds the generational model rather
+   than to a principles pass.
+2. **The world needs a champion history.** `career.sixnet_champion_region` stores
+   only the current champion — checked; there is no list, and season results are
+   overwritten each year. A cohort model needs champion-by-season, which is new
+   persisted state and a save-format question.
+
+**Neither is in scope here**, and stating them is the point: what looked like "a
+five-line change in `preferred_principles`" is a data-model pass with a
+save-migration in it. The first version of this section shipped a five-line
+estimate for it.
+
+### What this does to the recommendation
+
+§8 previously said §4 could ship on its own because it needed no design call. **It
+cannot, and it does.** The honest interim position for Zaitgaist is Draft A —
+the reference set, honestly labelled, with the label saying *no settled
+tradition* rather than naming the region — held until the generational model
+exists. That is worse than the overwrite model as fiction and better than it as
+data, because it does not assert a coherence the region is designed not to have.
 
 ---
 
@@ -342,9 +414,15 @@ a claim the tables were not already making.
 
 ## 8. Recommendation
 
-**§1 and §4 regardless of the rest**, because neither is a design question: the
-fallback should not name itself after the region it stands in for, and Zaitgaist's
-principles should be looked up from the champion rather than stored.
+**§1 regardless of the rest**, because it is not a design question: the fallback
+should not name itself after the region it stands in for.
+
+**§4 no longer belongs in that sentence.** It said Zaitgaist's principles should
+be looked up from the champion and that this needed no design call. The
+generational model rejects both halves — see §4 as corrected. Zaitgaist holds at
+the reference set with an honest label until a voli can carry a formative cohort
+and the world can remember who won which season, and that is a data-model pass
+with a save migration in it rather than five lines here.
 
 Then **Draft C**, with Draft B's tables kept in this document as the authored layer
 to apply once there is a probe to check them against. C makes five regions play

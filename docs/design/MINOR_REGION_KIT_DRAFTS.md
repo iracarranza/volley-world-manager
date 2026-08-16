@@ -2,6 +2,12 @@
 
 Written 2026-08-16, on `6b1f316`. **Nothing here is applied.**
 
+**Corrected the same day.** The Zaitgaist section proposed borrowing the reigning
+champion's construction each season; `SIXNET_ZAITGAIST_AND_TACTICAL_COHERENCE.md`
+§5 rules that model out in favour of a generational one. The five minor-region
+constructions are unaffected — only Zaitgaist's rule changed, and it changed from
+a cheap lookup into a dependency on state the world does not keep.
+
 `regional_kits.gd` says it plainly:
 
 > **Named, rather than silently borrowed.** Six minor regions have no drawn strip
@@ -74,7 +80,7 @@ Other unclaimed properties: a frame with nothing inside it; a spacing that
 
 ---
 
-## 3. Draft 1 — five constructions and one rule
+## 3. Draft 1 — five constructions, and Zaitgaist held back
 
 The recommendation. Each says something abstract and true about how the region
 plays, in the register the existing eight use — `columns` is not a picture of a
@@ -180,31 +186,66 @@ to the other side of the front.
 
 `trim: 0.44` — technical schools, crisply marked.
 
-### Zaitgaist — a rule, not an entry
+### Zaitgaist — a rule, not an entry — corrected 2026-08-16
 
-**It should not get a table row, and giving it one would be the defect.**
+**Still true: it should not get a table row, and giving one would be the
+defect.** Writing a permanent construction for the region defined by not having
+one is a contradiction in the data.
 
-Its specialty comes from `region_overlay`, rewritten each season by
-`SixnetLeague.apply_influence_drift()` to mirror whoever last won. Tradition
-resistance is 0.0. Position affinity is flat *on purpose*. Writing a permanent
-construction for the region defined by not having one is a contradiction in the
-data.
+**The rule this section proposed was the wrong one.** It said
+`pattern_for("Zaitgaist")` should return the reigning champion's pattern, replaced
+each season. `SIXNET_ZAITGAIST_AND_TACTICAL_COHERENCE.md` §5 rules that out:
+Zaitgaist does not change styles, *successive Zaitgaister generations grow up under
+different styles*, older cohorts do not forget, and a mature club can hold six
+inheritances at once. Overwrite is exactly the model the new design corrects.
 
-So `pattern_for("Zaitgaist")` should return **the reigning Sixnet champion's
-pattern**, falling back to `reference` before a champion exists — and that
-fallback is finally honest, because "no zeitgeist yet" is the true state in
-season one.
+> The original note here called it *"the second system in two days where
+> Zaitgaist's answer turns out to be look it up from the champion"* and treated
+> the agreement as evidence. It was not evidence. Both drafts inherited the same
+> premise — that Zaitgaist's identity is a property of the region at a moment —
+> so they could only ever agree. See `MINOR_REGION_PRINCIPLES_DRAFTS.md` §4 for
+> the same correction on the principles side.
 
-`trim: 0.22`, its own and lowest in the world, kept even when the pattern is
-borrowed. **The construction is this season's; the making of it is cheap.** That
-one detail is also what stops a Zaitgaist side being mistaken for the champion's
-on court: same build, fainter marks.
+### The corrected construction: a shirt that accumulates
 
-> This is the second system in two days where Zaitgaist's answer turns out to be
-> *look it up from the champion* rather than *store seven numbers* — see
-> `MINOR_REGION_PRINCIPLES_DRAFTS.md` §4. Two unrelated systems reaching the same
-> rule independently is the best evidence available that the rule is right rather
-> than convenient.
+The generational model hands the kit a better idea than the one it loses, and it
+is the only construction in the table that is not a fixed silhouette.
+
+**`archive` — a mark per borrowed era, added and never removed.** One era, one
+faint band; six eras, six bands of unequal spacing, because the champions did not
+change on a schedule. A Zaitgaist side's shirt is then a *record* rather than a
+fashion, which is the region's whole thesis stated in construction terms: it does
+not wear this season's style, it wears everything it has ever been taught.
+
+It also takes a property no other kit has — **the only one that changes across a
+save** — where the discarded rule took none, because a borrowed pattern is by
+definition somebody else's.
+
+`trim: 0.22` survives unchanged, and for the same reason: lowest in the world,
+because the making is cheap. Older bands sitting fainter than newer ones is the
+natural extension and costs nothing, since `trim_colour` already lightens by a
+per-region amount.
+
+### Three dependencies, and they are why this is a draft and not a proposal
+
+1. **The world does not remember its champions.** `career.sixnet_champion_region`
+   holds only the current one — checked; there is no history and the season
+   records are overwritten. An accumulating kit needs champion-by-season, which is
+   new persisted state and a save-format question. The discarded rule needed only
+   the single field that already exists, which is precisely why it looked cheap.
+2. **`marks_for` is stateless and regional.** It takes a region name and returns
+   geometry; it has no career, no season and no way to ask. Feeding it history
+   means changing that signature, which touches `player_actor_3d` and the venue
+   probe.
+3. **The mark budget is real.** `ticks` already mirrors to sixteen boxes. Six
+   accumulated bands mirror to twelve, which is fine, but the count has to be
+   capped explicitly rather than left to however many seasons a save has run.
+
+**None of that is in scope here.** Until it exists, Zaitgaist wears `reference` at
+`trim: 0.22` — and that is now honest rather than a placeholder, because a region
+with no synthesis yet genuinely has no construction of its own. It also keeps
+`_test_regional_kits`'s non-empty-marks clause satisfied, which the borrowed-pattern
+rule also did.
 
 ---
 
@@ -246,8 +287,8 @@ The third option, and the one with a mechanism already in the codebase.
 
 Every minor region has a connected major and a `REGION_TRADITION_RESISTANCE`
 value, and influence drift already moves specialty between them. So a minor's kit
-could be **its connected major's construction at its own trim**, exactly as Draft 1
-proposes for Zaitgaist alone:
+could be **its connected major's construction at its own trim** — the shape Draft 1
+used to propose for Zaitgaist before the generational correction:
 
 | region | connected major | inherited build |
 |---|---|---|
@@ -256,7 +297,7 @@ proposes for Zaitgaist alone:
 | Bompaçao | Blôc du Larg | `columns` |
 | Rhėn Tempaol | Spëddigh | `ticks` |
 | Kutré Lyn | Xérvu | `rhythm` |
-| Zaitgaist | — | the champion's |
+| Zaitgaist | — | (n/a — see the corrected section above) |
 
 Zero new geometry. Consistent with a system that already exists. And **wrong**, on
 inspection: Lo-ong Ralī in Pāwa Hitō's broad athletic panels is a mountain
@@ -271,10 +312,16 @@ reason to check rows.
 
 ## 6. Recommendation
 
-**Draft 1.** Five constructions, each taking a property the table does not yet
-have, plus the Zaitgaist rule. Roughly forty lines in `regional_kits.gd`, two of
-them generated patterns in `marks_for`, no change to `player_actor_3d.gd` and no
-change to anything the simulator reads.
+**Draft 1's five constructions**, each taking a property the table does not yet
+have. Roughly forty lines in `regional_kits.gd`, two of them generated patterns in
+`marks_for`, no change to `player_actor_3d.gd` and no change to anything the
+simulator reads.
+
+**Zaitgaist is no longer part of that recommendation.** The accumulating `archive`
+build is the right long-term answer and it needs champion history, a career-aware
+`marks_for`, and an explicit mark cap — none of which exists. Until then it wears
+`reference` at `trim: 0.22`, which is honest rather than pending: a region that has
+not synthesised anything yet has no construction of its own.
 
 Verification is a render, not a suite: `tools/venue_probe.tscn` draws the kits and
 is the instrument all eight existing patterns were reviewed in. The one thing to
@@ -284,9 +331,9 @@ clauses that touch this:
 - the **court-floor contrast** check reads `KITS`, and all fourteen colours are
   already in the table and already passing. **This draft adds no colours.**
 - `_check(not marks.is_empty(), "%s's kit is built from marks")` runs for every
-  region, which is the clause the Zaitgaist rule has to survive. It does: with no
-  champion the lookup falls to `reference`, which has marks. Worth knowing before
-  writing the rule, because a lookup that returned an empty pattern name would
-  fail this on a table that looks complete.
+  region, and is the clause any future Zaitgaist rule has to survive. `reference`
+  satisfies it today, and an `archive` build with zero recorded eras would not —
+  so whatever supplies the history must floor at one mark rather than returning an
+  empty list on a fresh save.
 
 Ship the stale `eight boxes` comment correction with it.
