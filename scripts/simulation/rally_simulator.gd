@@ -3939,6 +3939,11 @@ func _resolve_home_serve(
 		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
 		float(opponent_pass.get("set_contact_height_meters", NAN)),
 		float(opponent_pass.get("pass_apex_meters", 0.0)),
+		{},
+		## The serve's own flight, which is exactly what the home first ball
+		## passes. This side's setter has been running since the ball was struck
+		## too, and until now was timed as though they had watched it land.
+		serve_time,
 	)
 
 
@@ -3996,6 +4001,28 @@ func _resolve_opponent_transition(
 	## than against `DEFAULT_SECOND_CONTACT_SECONDS`. Empty for the feeds that
 	## still have no physical model -- see the fallback note at the window below.
 	incoming_pass_trajectory: Dictionary = {},
+	## **How long these volis have already been running when the pass is played**,
+	## which on this side of the net was nothing at all.
+	##
+	## The home side has passed the feeding ball's own flight into
+	## `_spatial_setter_choice` since that parameter existed -- the serve's for a
+	## first ball, the swing's for a transition -- because a setter releases
+	## toward their zone when the ball is *struck*, not when the platform touches
+	## it. This path passed nothing, so every opponent second contact was timed
+	## from a standing start.
+	##
+	## That was invisible while the designated setter's duty bonus was large
+	## enough to win regardless. Once responsibility stopped being absolute the
+	## two sides began answering identical physical situations differently: on a
+	## stranded-setter fixture the home side kept the setter and the opponent
+	## transferred the ball, with nothing between them but this argument. Gate
+	## `HOME/OPPONENT SYMMETRY` in `tools/run_second_contact_probe.gd`.
+	##
+	## **Last in the list deliberately**, for the same reason
+	## `incoming_pass_trajectory` above is: four callers pass this function
+	## positionally, and inserting a parameter in the middle silently hands one
+	## of them a float where a trajectory belongs.
+	head_start_seconds: float = 0.0,
 ) -> Resource:
 	var transition_penalty := float(exchange_number - 1) * 0.035
 	## **How long the setter actually has.** This was the literal 0.68 that
@@ -4027,6 +4054,11 @@ func _resolve_opponent_transition(
 		opponent_plan_for_setter, int(opponent_team.setter_id),
 		first_contact_player_id, opponent_setter,
 		opponent_setter_position, second_contact_window,
+		## The run these volis had already made. Zero until a caller supplies the
+		## feeding ball's flight, which is today the serve-receive path only --
+		## see the parameter's own note for which three callers still pass
+		## nothing and why they were not changed on an unmeasured hunch.
+		head_start_seconds,
 	)
 	if opponent_setter_choice.player != null:
 		opponent_setter = opponent_setter_choice.player as VolleyballPlayer
@@ -11036,27 +11068,38 @@ func _spatial_setter_choice(
 			"Secondary emergency setter": duty_bonus = 0.18
 			"Stay available to attack": duty_bonus = -0.16
 			"No second-contact duty": duty_bonus = -0.24
-		## **The designated-setter term stacks on the plan's, and the plan writes
-		## its nominations per slot -- so this is rotation-dependent.** The setter
-		## totals +0.80 standing in slot 2 (the plan's own primary emergency
-		## setter), +0.64 in slot 1, and +0.22 in the other four: a swing of 0.58
-		## that no design document asks for.
+		## **The active setter's responsibility replaces the plan's, it does not
+		## stack on it.** `Primary emergency setter` and `Secondary emergency
+		## setter` describe who covers *when the normal setter cannot take the
+		## second contact*. They are a fallback hierarchy, and reading them as an
+		## extra bonus for the normal setter is a category error: it made the
+		## setter's own authority depend on which slot the rotation had put them
+		## in, because the plan writes those duties per slot.
 		##
-		## It matters because +0.80 against a no-duty -0.24 is a gap of 1.04, and
-		## `arrival_score` below is clamped to [-1, 1] and weighted 0.52, so the
-		## whole authority the legs have is **also 1.04**. Two spans of identical
-		## width: in the slot-2 rotation the legs can tie responsibility and never
-		## beat it, and in the other five they can. Measured exactly --
-		## a stranded setter keeps a ball a team-mate is standing on in rotation 2
-		## and loses it in all five others, on identical geometry.
+		## `+=` totalled +0.80 in slot 2 (where the plan's own primary emergency
+		## duty lives), +0.64 in slot 1 and +0.22 in the other four -- a swing of
+		## 0.58 that no design document asks for. And the top of that range was
+		## exactly pathological: +0.80 against a no-duty -0.24 is a gap of 1.04,
+		## while `arrival_score` below is clamped to [-1, 1] and weighted 0.52, so
+		## the whole authority the legs have is **also 1.04**. Two spans of
+		## identical width, so in that one rotation the legs could tie
+		## responsibility and never beat it. Measured: a stranded setter kept a
+		## ball a team-mate was standing on in rotation 2 and lost it in all five
+		## others, on identical geometry.
 		##
-		## Not repaired here, and deliberately so: every available correction
-		## answers "should an unreachable designated setter keep the ball", which
-		## is a volleyball policy nothing in `docs/design/` has decided.
-		## `docs/review/SECOND_CONTACT_AUDIT.md` §5 states the options and the
-		## boundary; `tools/run_second_contact_probe.gd` reproduces the tables.
+		## `=` gives the setter a flat +0.46 in every rotation. That is still
+		## above the plan's primary emergency duty (+0.34), so responsibility
+		## stays strongly first -- and 0.46 against -0.24 is 0.70, inside the
+		## legs' 1.04, so an impossible claim can now yield. The policy this
+		## implements: **strong first responsibility, not absolute.**
+		##
+		## Note this branch is unreachable for a setter who played the first
+		## contact -- they are excluded from `candidates` above -- so the fallback
+		## hierarchy among the remaining five is untouched by the change.
+		## `docs/review/SECOND_CONTACT_TRANSFER.md`;
+		## `tools/run_second_contact_probe.gd` gates 1-6.
 		if candidate.id == designated_setter_id:
-			duty_bonus += 0.46
+			duty_bonus = 0.46
 		elif candidate == preferred_setter:
 			duty_bonus += 0.20
 		var arrival_score := clampf((available_time - travel_time) / 1.2, -1.0, 1.0)

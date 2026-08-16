@@ -12,14 +12,19 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the block-hands instruction
-wiring: **2,087 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the second-contact transfer
+policy: **2,095 checks pass**. Treat any test failure as a regression.
 
-That is 2,082 plus exactly the five checks that pass added. The pass before it
-moved 2,078 → 2,082 the same way, and in both cases the delta being exactly the
-number of checks written is the finding: production behaviour changed and **no
-sampling gate's population changed size**. See
-`docs/review/BLOCK_INSTRUCTION_PROOF.md` and
+That one arrived in two moves and they mean opposite things. 2,087 → 2,090 came
+with **no checks written at all**: the second contact may now transfer away from
+an unreachable setter, so rallies resolve differently and the sampling gates
+drew three more samples than before. Then 2,090 → 2,095 is exactly the five
+checks that pass added, which says the test addition disturbed no sampling
+population. See `docs/review/SECOND_CONTACT_TRANSFER.md`.
+
+The two passes before it moved 2,078 → 2,082 → 2,087, each by precisely the
+number of checks written — production behaviour changed and **no sampling gate's
+population changed size**. See `docs/review/BLOCK_INSTRUCTION_PROOF.md` and
 `docs/review/ATTEMPT_JUDGMENT_SPLIT.md`.
 A count that moves by precisely the number of checks you wrote is the one case
 where the total is worth reading — and it still is not evidence the change was

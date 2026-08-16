@@ -5,6 +5,13 @@ Run: 2026-08-16, on `71e6104`. Instrument:
 comments were corrected, one of which was stating a number the code does not
 have. §5 is the verdict and §6 is the policy boundary this pass stopped at.
 
+> **Every table below is the pre-change state and will no longer reproduce.**
+> The boundary in §6 was decided and option 1 shipped in
+> `SECOND_CONTACT_TRANSFER.md`, so re-running the probe today prints the
+> corrected numbers, not these. This document is kept as the diagnosis — what
+> the defect was and how it was found — and that write-up carries the before /
+> after comparison. Do not read a table here as current behaviour.
+
 The leg audited, immediately after the realized pass:
 
 ```text
@@ -322,6 +329,14 @@ slice's geometry does not produce often enough to see.
 | can another voli become the second contact? | yes, and the plan decides how easily |
 | does a role/rating heuristic pick the best set producer? | **no** |
 | is the selector structurally correct? | **structurally yes; numerically no** |
+
+> **Resolved.** The policy was decided after this audit and option 1 shipped:
+> *strong first responsibility, not absolute.* See
+> `SECOND_CONTACT_TRANSFER.md` for the change, the six rotation gates and the
+> residual boundary, which turned out to be the arrival model rather than the
+> weights. The rest of this section is the decision as it stood when it was
+> still open, kept because the options and what each implied are still the
+> record of why option 1 was the one taken.
 
 The structure is right. What is wrong is a magnitude, and **every available
 correction answers a volleyball question nothing in `docs/design/` has decided:

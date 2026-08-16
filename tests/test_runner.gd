@@ -275,6 +275,7 @@ func _initialize() -> void:
 	_test_gate_twenty_two_setter_progression()
 	_test_attempt_judgment_recognition_and_response()
 	_test_block_hands_instruction_adherence()
+	_test_second_contact_rotation_invariance()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9540,6 +9541,158 @@ func _player_with_id(players: Array, player_id: int) -> VolleyballPlayer:
 		if entry != null and int(entry.id) == player_id:
 			return entry
 	return null
+
+
+
+## The second contact must not be decided by which slot the rotation happened to
+## put the setter in.
+##
+## `duty_bonus` used to add the designated-setter term on top of whatever
+## emergency duty the plan had written for that voli's *slot*, so the setter
+## totalled +0.80 in slot 2, +0.64 in slot 1 and +0.22 elsewhere. The top of
+## that range was exactly the width of the arrival term's whole authority, so in
+## one rotation of six a stranded setter kept a ball a team-mate was standing on
+## and in the other five they lost it. Identical bodies, identical ball.
+##
+## Emergency duties describe who covers *when the normal setter cannot take the
+## second contact*. Reading them as an extra bonus for the normal setter is the
+## category error these checks exist to keep out.
+func _test_second_contact_rotation_invariance() -> void:
+	var reachable: Array[int] = []
+	var stranded: Array[int] = []
+	var bought: Array[int] = []
+	## The same impossible claim contested by a voli the plan nominated for
+	## nothing. This is the row the defect actually lived in: with the bonus
+	## stacked, slot 2 uniquely protected the setter here and the other five
+	## rotations did not.
+	var no_duty: Array[int] = []
+	for setter_slot in range(1, 7):
+		reachable.append(_second_contact_pick(setter_slot, false, 50))
+		stranded.append(_second_contact_pick(setter_slot, true, 50))
+		bought.append(_second_contact_pick(setter_slot, false, 99))
+		no_duty.append(_second_contact_pick(setter_slot, true, 50, false))
+
+	_check(
+		_all_equal(reachable) and reachable[0] == SECOND_CONTACT_SETTER_ID,
+		"a reachable designated setter keeps the second ball in every rotation",
+	)
+	_check(
+		_all_equal(stranded) and stranded[0] == SECOND_CONTACT_CHALLENGER_ID,
+		"an unreachable setter yields to the voli on the ball in every rotation",
+	)
+	## The policy is "strong first responsibility, not absolute" -- so the two
+	## fixtures above must genuinely differ. Without this, both could be uniform
+	## because responsibility had been flattened into nothing, and every check
+	## here would still pass.
+	_check(
+		reachable[0] != stranded[0],
+		"physical availability decides the impossible claim and nothing else",
+	)
+	## And it must be the legs doing it, not technical quality. Same geometry as
+	## the reachable fixture; only the challenger's set_accuracy moves.
+	_check(
+		_all_equal(bought) and bought[0] == SECOND_CONTACT_SETTER_ID,
+		"set_accuracy cannot buy the second ball off a reachable setter",
+	)
+	## **The rotation-invariance check proper.** Uniformity is the whole claim --
+	## whichever way it resolves, it must resolve the same way in all six, because
+	## nothing about the rotation changes a body, the ball or a relevant duty.
+	_check(
+		_all_equal(no_duty),
+		"the rotation does not decide who covers an unreachable setter",
+	)
+
+
+const SECOND_CONTACT_SETTER_ID: int = 902
+const SECOND_CONTACT_CHALLENGER_ID: int = 906
+## The pass, the far corner a covering setter ends up in, and the parking spot
+## for the four bodies that are not part of the question. Shared by every row so
+## "identical geometry" is the same numbers rather than similar ones.
+const SECOND_CONTACT_TARGET := Vector2(0.56, 0.68)
+const SECOND_CONTACT_STRANDED := Vector2(0.10, 0.94)
+const SECOND_CONTACT_PARKED := Vector2(0.50, 0.955)
+
+
+## One selection, with the setter standing in `setter_slot` and the challenger in
+## the plan's nominated slot 2 (or slot 1 when the setter is there). Everything
+## except the rotation is held.
+func _second_contact_pick(
+	setter_slot: int,
+	strand_setter: bool,
+	challenger_accuracy: int,
+	## Whether the challenger stands in a slot the plan nominates for emergency
+	## setting. False puts them in one it never does, which is the harder case:
+	## responsibility has nothing to say and only the legs are left.
+	nominated_challenger: bool = true,
+) -> int:
+	var challenger_slot := (2 if setter_slot != 2 else 1) if nominated_challenger \
+		else (4 if setter_slot != 4 else 3)
+	var lineup := RotationLineup.new()
+	lineup.setter_id = SECOND_CONTACT_SETTER_ID
+	var players: Array[VolleyballPlayer] = []
+	var starts := {}
+	var spare: Array[int] = [901, 903, 904, 905]
+	for slot_number in range(1, 7):
+		var player_id := SECOND_CONTACT_SETTER_ID
+		if slot_number == challenger_slot:
+			player_id = SECOND_CONTACT_CHALLENGER_ID
+		elif slot_number != setter_slot:
+			player_id = spare.pop_front()
+		var player := _second_contact_player(player_id)
+		if player_id == SECOND_CONTACT_CHALLENGER_ID:
+			player.set_accuracy = challenger_accuracy
+			## On the ball only when the setter is stranded. In the ordinary
+			## fixture they stand where a back-row voli stands, because a
+			## challenger parked on the contact point is not ordinary geometry --
+			## it is the pathological end of the sweep, and asserting the setter
+			## keeps the ball there would be asserting the wrong thing.
+			starts[player_id] = SECOND_CONTACT_TARGET if strand_setter \
+				else Vector2(0.48, 0.90)
+		elif player_id == SECOND_CONTACT_SETTER_ID:
+			starts[player_id] = SECOND_CONTACT_STRANDED if strand_setter \
+				else Vector2(0.66, 0.60)
+		else:
+			starts[player_id] = SECOND_CONTACT_PARKED
+		players.append(player)
+		lineup.assign_slot(slot_number, player_id)
+	var plan := DefensivePlan.new()
+	plan.rotation_number = 1
+	plan.ensure_defaults(lineup, players)
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.live_positions = starts.duplicate(true)
+	var preferred: VolleyballPlayer = simulator._second_contact_setter(
+		players, plan, SECOND_CONTACT_SETTER_ID, -1
+	)
+	var choice: Dictionary = simulator._spatial_setter_choice(
+		players, starts, plan, SECOND_CONTACT_SETTER_ID, -1, preferred,
+		SECOND_CONTACT_TARGET, 1.20,
+	)
+	var chosen: VolleyballPlayer = choice.player as VolleyballPlayer
+	return chosen.id if chosen != null else -1
+
+
+## Every attribute either selector reads pinned to the middle, so a verdict that
+## moves has exactly one cause.
+func _second_contact_player(player_id: int) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	player.display_name = "Voli %d" % player_id
+	for attribute in [
+		"set_accuracy", "ball_control", "decision_making", "ego", "leadership",
+		"aggression", "acceleration", "lateral_speed", "transition_speed",
+		"stamina", "work_rate", "anticipation", "composure",
+	]:
+		player.set(attribute, 50)
+	player.fatigue = 0.0
+	return player
+
+
+func _all_equal(values: Array[int]) -> bool:
+	for value in values:
+		if value != values[0]:
+			return false
+	return values.size() > 0
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

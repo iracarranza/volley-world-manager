@@ -7021,38 +7021,47 @@ What that page has to hold, and the two questions it will have to answer:
 
 ---
 
-## Should an unreachable designated setter keep the ball?
+## The second contact after the transfer policy: what is left
 
-`docs/review/SECOND_CONTACT_AUDIT.md` measured the second-contact selector and
-found the structure right and one magnitude wrong. `_spatial_setter_choice` adds
-its designated-setter term **on top of** whatever duty the plan already gave that
-voli, and `DefensivePlan` writes duty per *slot* — so the setter's grip on a
-scramble ball is +0.80 standing in slot 2, +0.64 in slot 1 and +0.22 in the other
-four. The widest gap, +0.80 against a no-duty −0.24, is **1.04**; the arrival
-term is clamped to [−1, 1] and weighted 0.52, so the legs' whole authority is
-**also 1.04**.
+`docs/review/SECOND_CONTACT_TRANSFER.md` implemented *strong first
+responsibility, not absolute*: the designated-setter term replaces the plan's
+per-slot emergency duty instead of stacking on it, so the setter's authority is a
+flat +0.46 in every rotation, and the opponent's serve-receive second contact now
+gets the serve's flight as a head start. Six rotation gates pass, five checks
+guard it, and technical quality can no longer buy a ball off a reachable setter
+in any rotation. Three things were deliberately left.
 
-Measured on identical geometry: a stranded setter keeps a ball a team-mate is
-standing on in the slot-2 rotation and loses it in all five others. A gate
-written in any rotation but the second would have passed.
+**1. The arrival model cannot see a short leg.** With a team-mate parked exactly
+on the contact point, the setter's arrival margin falls from +1.200 s to −0.133 s
+over twelve centimetres and then stays flat for a metre: the movement model's
+standing-start cost means *having to move at all* reads much like crossing the
+court. So at the pathological end the setter yields sooner than the policy's
+wording implies. The only fix available inside that node is an invented
+reachability cutoff sitting outside any measured distribution, which is the
+mistake this repository keeps making. `OUTSTANDING` §1's short-leg timing wants
+fixing first; the transfer table then re-measures itself. In situ this is worth
+half a percentage point of emergency setting, so it is a correctness debt rather
+than a live problem.
 
-It stayed unrepaired because every correction answers the same volleyball
-question and nothing in `docs/design/` has answered it. The four options are set
-out in §6 of the audit, each with the answer it implies. Two of them (make the
-setter term replace rather than stack; give the plan a slot-independent setter
-duty) remove the rotation dependence without touching the arrival term, and the
-rotation dependence is the part nobody chose.
+**2. Three opponent callers still pass no head start.** The two dig paths and the
+coverage path into `_resolve_opponent_transition` each have a flight in scope and
+each mirrors `_resolve_home_continuation`, which does pass one — so the asymmetry
+is very likely live there too. Only the serve-receive site was corrected, because
+that is the one a fixture demonstrated; repairing three unmeasured sites on the
+strength of one measured one is how a pass stops being verifiable.
 
-Two things ride along with that decision:
+**3. The opponent's movement is recomputed after selection, and now disagrees
+with it.** Lines 4035–4050 re-read `setter_start` from live positions and
+recompute travel on the `lateral` profile instead of consuming
+`opponent_setter_choice`. That affects execution and reporting rather than
+selection, so it belongs to the setter-movement pass — but it got sharper: the
+opponent's setter is now *selected* from a head-start-advanced position and still
+*drawn* from the un-advanced one, where before this pass both were un-advanced.
+Start there. Related: the opponent SET event publishes no `arrival_margin` and no
+`emergency_setter` at all, so that side cannot currently be measured on either.
 
-1. **Three duty tables for one concept.** `_second_contact_setter`,
-   `_spatial_setter_choice` and `ShadowSetterResponseSystem._duty_priority` score
-   the same four duty strings three different ways, and the shadow system ranks
-   `Stay available to attack` *below* having no duty at all while both production
-   selectors rank it above. The shadow layer is the intended replacement path, so
-   they have to agree before it is promoted.
-2. **The opponent's second contact gets no head start.** `_opponent_reception`
-   calls the shared chooser without `head_start_seconds`, so every opponent
-   setter is timed from a standing start at the instant the platform touched the
-   ball — the exact defect that parameter's own comment records as fixed. Audit
-   §7.
+Still open and untouched, from the audit: **three duty tables for one concept**
+(`_second_contact_setter`, `_spatial_setter_choice` and
+`ShadowSetterResponseSystem._duty_priority`, the last ranking `Stay available to
+attack` *below* having no duty), and the semantics of `Stay available to attack`
+itself, which no default produces.
