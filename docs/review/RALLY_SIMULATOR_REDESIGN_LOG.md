@@ -893,7 +893,7 @@ redesign direction.
 | `e8004b1` | platform design tightened: feasible-launch **selection** separated from feasibility; incoming momentum split into authoritative input vs authored transfer relation; hang/height moved from context to rally state; authored relations reduced four → three |
 | `dce1598` | controlled-dig promotion gated on rally-state intent; the dig is found to have no setting target at all, and the continuation dig to fabricate a 29% stretch from an empty arrival |
 | `7eb64fd` | **intent stops naming a launch.** `PLATFORM_CONTACT.md` §3a: intent is anchors plus one derived bound, not an exact `(target, height, time)`. The range form is rejected too — four of its five bounds would be invented. Selection becomes universal and the class D intent margin dissolves into it; tempo enters as a dimensionless weight rather than a margin in seconds |
-| *(this pass)* | **tactical alignment audit**, `PLATFORM_CONTACT.md` §13. Four of the five manager-tactic layers already have persisted homes; the role layer has no rally consumer and the individual layer is absent by decision. The tactical→intent pattern is already written for the block and its instruction arm is **wired to nothing**. Two combination rules found in shipped code — named choices override, graded preferences combine — and `_block_intent_margins` found to be a right tactic in a wrong channel |
+| `3ce029b` | **tactical alignment audit**, `PLATFORM_CONTACT.md` §13. Four of the five manager-tactic layers already have persisted homes; the role layer has no rally consumer and the individual layer is absent by decision. The tactical→intent pattern is already written for the block and its instruction arm is **wired to nothing**. Two combination rules found in shipped code — named choices override, graded preferences combine — and `_block_intent_margins` found to be a right tactic in a wrong channel |
 
 ---
 
@@ -1002,6 +1002,52 @@ than to the platform contact:
 - the acceptance criterion for every future tactical pass, and it is writable as a
   gate: **changing a tactical preference must leave the feasible envelope
   byte-identical and move only the selection.**
+
+### `tactical_discipline` is a blend weight, and `AttemptJudgment` has it inverted
+
+`PLATFORM_CONTACT.md` §14, reconciling the tactical design with
+`ATTRIBUTE_WIRING_AUDIT.md` §7.2. The contract was already in the repository:
+
+```gdscript
+## AttackPowerModel.aggression_from -- the canonical form
+lerpf(own_aggression, team_decisiveness, tactical_discipline)
+```
+
+**Discipline is how much of the team's call survives contact with the voli's own
+disposition.** Never a capability, never a threshold, and meaningless where there
+is no call to adhere to.
+
+- **`AttemptJudgment.judgment()` is inverted, not merely imprecise.** At all four
+  `backs_off` sites the safer option is *also* a departure from the called action
+  — the setter declining the quick set, the blocker softing — so discipline
+  should push toward persisting and instead pushes toward abandoning. It is also
+  a monotonic-capability use of a non-ability attribute, the test §8.2 of the
+  audit sets. The docstring shows the cause: *"chanced by all but the most
+  disciplined"* uses discipline-as-self-restraint, a second meaning nothing else
+  in the codebase uses and no attribute owns. `aggression` already means the
+  temperament half and is already correctly outside `ABILITY_ATTRIBUTES`;
+- **this corrects the "named choices override" half of §13.3.** That rule was read
+  off `_block_hands_intent`'s `match instruction:` — a branch the same audit had
+  just found dead, so an unexercised shape was cited as a shipped precedent. An
+  unmediated override also makes every voli obey identically, which is the one
+  behaviour the tactical system exists to prevent. **One rule replaces two: the
+  layers resolve by precedence to one *call*, and discipline decides how much of
+  it survives the voli.** Anchors and preference weights are unaffected;
+- **it re-orders the implementation.** Wiring the block instruction while
+  `judgment()` still holds discipline would spend the attribute twice at one
+  decision — once through the read, once as adherence — in the very pass meant to
+  demonstrate the architecture, and invisibly, because both push plausibly. The
+  `AttemptJudgment` correction goes first;
+- **a style may not compile to one speed or risk scalar.** "Pass higher" and "play
+  faster" are different phases of one coherent instruction, and the phase axis
+  already exists twice over: `TacticSheet.behaviours` is keyed `"slot:phase"`, and
+  five of the seven principle axes are already phase-scoped. The two that are not
+  — `decisiveness`, `emotional_expression` — read as temperament rather than
+  instruction, which is consistent;
+- **no "under pressure" layer, and no conditionals in instructions.** The variation
+  such a layer would script is already produced by the read, the envelope and
+  discipline. Adding it would count circumstance twice and move the voli's job to
+  the manager.
 
 ### Serve
 

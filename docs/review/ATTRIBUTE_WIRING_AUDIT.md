@@ -414,6 +414,29 @@ not less.
 Resolve this semantic conflict before tactical-intent wiring begins to depend on
 `tactical_discipline` more heavily.
 
+> **Resolved 2026-08-16 in `docs/design/PLATFORM_CONTACT.md` §14.** The
+> suspicion above is confirmed, and the repository already contained the correct
+> contract: `AttackPowerModel.aggression_from` reads
+> `lerpf(own_aggression, team_decisiveness, tactical_discipline)`, making
+> discipline **a blend weight between individual disposition and the team's
+> call** — never a capability and never a threshold.
+>
+> Under that contract `judgment()` is not merely imprecise, it is **inverted**:
+> at all four `backs_off` sites the safer option is also a departure from the
+> called action, so discipline should push toward persisting and instead pushes
+> toward abandoning. It is also a monotonic-capability use of a non-ability
+> attribute, which is the test §8.2 of this document sets.
+>
+> Recommended split — recognition (`decision_making`, `composure`) separated
+> from response (`aggression`, then discipline **only where a call exists**). No
+> new attribute; `aggression` already means "how strongly do they pursue
+> terminal, high-commitment actions", which is what `backs_off` decides against.
+> Weights deliberately not chosen: removal alone moves four live sites and needs
+> a measured before/after.
+>
+> This blocks the block-instruction wiring, which would otherwise spend
+> discipline twice at one decision.
+
 #### Block contact-envelope balance
 
 `ContactEnvelopeSystem` includes tactical discipline directly in block

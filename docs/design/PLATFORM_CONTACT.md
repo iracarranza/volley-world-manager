@@ -10,6 +10,12 @@ tactical system. It changes no earlier conclusion and adds the missing half:
 where preferences come from. Read it before proposing any tactical field, and
 read §13.2 before citing the block as a precedent.
 
+**§14 reconciles §13 with `ATTRIBUTE_WIRING_AUDIT.md`** and corrects one of its
+conclusions: `tactical_discipline` is a blend weight, so a manager instruction is
+*adhered to* rather than obeyed, and §13.3's "named choices override" is wrong.
+It also re-orders the implementation — the `AttemptJudgment` correction now comes
+before the block proof.
+
 Covers the four contacts a voli makes with the forearms: serve reception, the
 controlled floor dig, the emergency dig, and attack coverage.
 
@@ -1218,6 +1224,13 @@ And it maps onto §3a's split exactly, which is the sign it is the right rule:
 | **categorical intent** — a stated choice | override; the shipped block pattern |
 | **preference weights** — how much a thing is wanted | combine, as deviations |
 
+> **§14.3 corrects the middle row.** The "override" half of this rule was read
+> off `_block_hands_intent`'s `match instruction: return`, which §13.2 had just
+> established is dead — so it was an unexercised branch cited as a precedent. An
+> unmediated override also makes every voli obey identically, which is the one
+> outcome the tactical system must not produce. The corrected rule is below;
+> **the two rows about anchors and preference weights stand.**
+
 **There is no modifier stack**, and that is the load-bearing claim. The layers
 resolve to one value per dimension by precedence or by deviation, and then stop.
 Conflicting wants are *not* reconciled by arithmetic on instructions — they are
@@ -1468,6 +1481,191 @@ of how much behaviour moves — the instruction currently fires on 0% of blocks,
 any team using it will see a real change and the suite baseline will move.
 
 Then platform slice 1, with `anchor_source` and `preference_source` per §13.10.
+
+---
+
+## 14. Reconciling the tactical design with the attribute audit — 2026-08-16
+
+`docs/review/ATTRIBUTE_WIRING_AUDIT.md` §7.2 flags `tactical_discipline` as
+having "both good and questionable consumers" and asks that the semantic
+conflict be resolved **before** tactical intent starts depending on it. This is
+that resolution. It changes one conclusion in §13 and it does not need a new
+attribute, a new slider or a new constant, because **the repository already
+contains its own answer in one shipped function.**
+
+### 14.1 The contract is already implemented — in `AttackPowerModel`
+
+```gdscript
+static func aggression_from(
+    aggression_rating: float, team_decisiveness: float, tactical_discipline: float
+) -> float:
+    return clampf(lerpf(aggression_rating, team_decisiveness, tactical_discipline), 0.0, 1.0)
+```
+
+At discipline 0 the hitter swings at their own temperament. At discipline 1 they
+swing at what the team wants. **`tactical_discipline` is the blend weight
+between individual disposition and the team's call** — which is exactly the
+audit's own stated question, "how strongly do they adhere to the team's
+assignment/method", and it is live production code.
+
+> **`tactical_discipline` is a blend weight. It is never a capability and never a
+> threshold.**
+
+That single sentence resolves every consumer, and it is a test rather than an
+opinion: discipline may appear only where there is *a call and a disposition to
+blend between*. Where there is no call, it has no referent and must do nothing.
+
+| consumer | verdict |
+|---|---|
+| `AttackPowerModel.aggression_from` | **canonical.** The form every other use should take |
+| tempo strictness, `rally_simulator.gd:7545` | **correct.** Pulls the setter toward the *called* tempo. Additive rather than a blend, but the direction and the referent are right |
+| `AttemptJudgment.judgment()` | **wrong — see §14.2** |
+| `ContactEnvelopeSystem` block `action_balance` | **wrong.** A blend weight raising a physical balance quantity, which is both a capability use and a mental→physics crossing. The audit already has this; noted here only because §13 must not build on it |
+| `FamiliaritySystem` | out of scope; not a contact decision |
+
+### 14.2 `AttemptJudgment` — yes, it should change, and the sign is the problem
+
+The function answers: *does this voli recognise the attempt is beyond them and
+back off?* It weights `decision_making` 0.50, `tactical_discipline` 0.30,
+`composure` 0.20.
+
+**Discipline does not belong, and not merely because it is imprecise.** Every one
+of the four `backs_off` sites — the setter's tempo, the hitter's swing (×2), the
+blocker's hands — has the same shape: *the safer option is also a departure from
+the called action.* A setter who declines the quick set is abandoning the called
+play. A blocker who softs is not killing.
+
+So under the contract in §14.1, discipline should push a voli **toward persisting
+with the call**, and in `judgment()` it does the opposite: more discipline → higher
+judgment → more likely to back off. **The sign is inverted relative to the
+attribute's own definition**, and the docstring shows why — "a marginal one gets
+chanced by all but the most disciplined" is using *discipline as self-restraint*,
+a second meaning the codebase does not otherwise use and does not have an
+attribute for.
+
+It is also a **capability** use of a non-ability attribute: higher is
+monotonically better at recognising. §8.2 of the audit sets exactly that test,
+and `ego`, `aggression` and `leadership` are already excluded from
+`ABILITY_ATTRIBUTES` for failing it.
+
+**The recommended shape splits one question into the two it actually is:**
+
+```text
+recognition  — do I know this is beyond me?
+    decision_making, composure                    a capability
+
+response     — knowing that, do I abandon the call?
+    aggression, and tactical_discipline           temperament, then adherence
+    where a call exists                           -- only where there is a call
+```
+
+`aggression` is named because it already means precisely this — "how strongly do
+they pursue terminal/high-commitment actions" — and `backs_off` is by definition
+a decision not to pursue one. **No attribute is invented**; one is removed from a
+function it does not belong in, and one already-defined non-ability attribute is
+available for the term that is genuinely temperament.
+
+**Not decided here: the weights.** The current 0.50/0.30/0.20 was chosen by eye,
+and replacing it by eye would repeat that. Discipline's removal alone moves four
+live decision sites, so the change needs a measured before/after — that is what
+the next pass is for, and it is why this is a design note rather than an edit.
+
+### 14.3 What this corrects in §13.3
+
+§13.3 concluded "named choices override, graded preferences combine," reading the
+override half off `_block_hands_intent`'s `match instruction: return "soft"`. Two
+problems, and the second is the serious one:
+
+1. That branch is **dead** (§13.2), so an unexercised shape was cited as a shipped
+   precedent. `aggression_from` is a live one and it disagrees.
+2. **An unmediated override makes every voli obey identically**, which is the one
+   behaviour the tactical system exists to avoid. A team told "kill block" would
+   contain twelve identical blockers.
+
+The corrected rule is one rule where §13.3 had two, and it subsumes both:
+
+> **Every tactical layer resolves, by precedence, to one *call*.
+> `tactical_discipline` is how much of that call survives contact with the voli's
+> own read and disposition.**
+
+Categorical calls and graded preferences differ only in what is being blended —
+a choice between two named actions, or a position on a scale. The layer stack
+still produces exactly one call per dimension, so there is still **no modifier
+stack**; what changed is that the call is *adhered to*, not *obeyed*.
+
+This is what makes the brief's success criterion structural rather than
+aspirational: the same instruction meets a different voli and a different
+circumstance and produces different, sensible behaviour, without the manager
+scripting either.
+
+### 14.4 The three corrections the brief names, checked against this
+
+**"Pass higher + play faster" is not a contradiction, so style must compile
+per-phase.** Agreed, and the data model already assumes it in two places:
+`TacticSheet.behaviours` is keyed `"slot:phase"` with phases `Attack` / `Block` /
+`Floor`, and **five of the seven principle axes are already phase-scoped** —
+`serve_aggression` (serve), `block_commitment` (block), `pin_focus` (attack),
+`tempo_variation` and `transition_commitment` (set/transition). Only
+`decisiveness` and `emotional_expression` are global, and those two read as
+temperament rather than instruction, which is consistent.
+
+So the requirement is not a change of shape but a prohibition, worth stating
+before anyone compiles a style: **a style may not compile to one speed or risk
+scalar.** "Higher first contact so the offence can assemble, then fast" is one
+coherent instruction across two phases, and the phase key already exists to hold
+it.
+
+**No "under pressure" tactics layer.** Not needed, and §14.3 is why: the variation
+a pressure layer would script is already produced by the read, the envelope and
+discipline. Adding a conditional layer on top would double-count circumstance —
+once in the physics and once in the instruction — and give the manager a lever on
+something they are not in the gym for.
+
+**Tactics are not a conditional scripting language.** Same mechanism. The manager
+states one stable call per dimension per phase; the voli decides what it means on
+this ball. Any design that needs `if …` in the instruction has moved the voli's
+job to the manager.
+
+### 14.5 Is the block still the next implementation pass? Yes — but it is now second
+
+§13.13 recommended wiring `formation["hands_instruction"]` as the smallest
+end-to-end proof. That is still the right proof, and **it can no longer be
+first**, because of a dependency §14.2 exposes.
+
+If the instruction is wired while `judgment()` still contains discipline, then at
+one block decision discipline is spent **twice**: once inside
+`backs_off` → the read, and again as the adherence weight on the call. That is
+the audit's regression principle violated in the very pass meant to demonstrate
+the architecture — and it would be invisible, because both spends push in
+plausible directions.
+
+So the order inverts:
+
+```text
+pass 1   AttemptJudgment semantic correction   (attributes; no tactics)
+pass 2   block instruction wired, adhered to per discipline   (the proof)
+pass 3   platform slice 1                       (§13.10 markers)
+```
+
+Pass 1 is the larger and less glamorous one — it touches four live decision sites
+and will move the suite baseline — and it has to land first for the proof to prove
+anything.
+
+### 14.6 The final semantic contract for the attributes in scope
+
+| attribute | primary question | may it be a capability? | where it may appear |
+|---|---|---|---|
+| `decision_making` | given what is perceived, how good is the option chosen? | yes | recognition, selection |
+| `composure` | how much does pressure disrupt otherwise available judgment? | yes | recognition, execution stability |
+| `tactical_discipline` | how much of the team's call survives contact with my own read? | **no** | only as a **blend weight**, and only where a call exists |
+| `aggression` | how strongly do I pursue terminal, high-commitment actions? | **no** | the temperament side of a blend |
+| `court_vision`, `anticipation` | what do I perceive / predict? | yes | perception only |
+
+The two "no" rows are the load-bearing ones. Both are already outside
+`ABILITY_ATTRIBUTES`, and the rule that keeps them honest is the audit's own:
+**a non-ability attribute may never appear where higher is monotonically
+better.** `judgment()` currently breaks it for `tactical_discipline`; nothing else
+in the rally does.
 
 ---
 
