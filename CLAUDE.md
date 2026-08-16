@@ -25,10 +25,11 @@ A count that moves by precisely the number of checks you wrote is the one case
 where the total is worth reading — and it still is not evidence the change was
 correct, only that it did not disturb coverage.
 
-That is *fewer* than the 2,083 recorded the day before, and nothing was deleted.
-Sampling gates emit a check per sample, and the forward serve changed which
-rallies reach a reception -- so the population several gates sample moved. It is
-the clearest possible demonstration of the paragraph below.
+It does not always behave. The 2,078 entry was *fewer* than the 2,083 recorded
+the day before with nothing deleted, because the forward serve changed which
+rallies reach a reception and several sampling gates draw a check per sample. A
+delta can therefore be negative, zero, or exactly what you wrote, and only the
+last of those tells you anything.
 
 The count itself is not the signal and should not be read as one -- sampling
 tests emit a variable number of checks, and this line sat at 1,048 for four days
