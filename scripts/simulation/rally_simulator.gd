@@ -10822,8 +10822,20 @@ func _stamp_navigation(event: RallyEvent, navigation: Variant) -> void:
 ##   only a slight pull toward being the one who touches it. If this term grows
 ##   it is a sign the second contact is being modelled as an attack.
 ##
-## Sized against `duty_bonus`, whose extremes are +0.46 for the designated
-## setter and -0.24 for no duty at all -- a spread of 0.70.
+## Sized against `duty_bonus` -- but **this paragraph used to state that spread
+## wrongly and the constants below were sized against the wrong number.** It
+## read "+0.46 for the designated setter and -0.24 for no duty at all -- a
+## spread of 0.70", which takes the designated-setter term as if it were the
+## whole of that voli's duty. It is not: it is added *on top of* whatever the
+## plan already gave them, so the real extreme is +0.80 -- the plan's own
+## "Primary emergency setter" (+0.34) plus the designated-setter term (+0.46) --
+## and the real spread is **1.04**. Measured, not reasoned:
+## `tools/run_second_contact_probe.gd` and `docs/review/SECOND_CONTACT_AUDIT.md`.
+##
+## The constants are left where they are. 0.09 against 1.04 is still well under
+## the tenth the paragraph below claims, so the sizing conclusion survives its
+## own arithmetic being wrong -- which is worth saying plainly rather than
+## quietly correcting, because it was luck and not judgement.
 ##
 ## **The first sizing said a tenth and was a third.** 0.14 + 0.07 + 0.04 reaches
 ## 0.25 for a voli at the top of all three, which is enough to hand a second
@@ -11024,6 +11036,25 @@ func _spatial_setter_choice(
 			"Secondary emergency setter": duty_bonus = 0.18
 			"Stay available to attack": duty_bonus = -0.16
 			"No second-contact duty": duty_bonus = -0.24
+		## **The designated-setter term stacks on the plan's, and the plan writes
+		## its nominations per slot -- so this is rotation-dependent.** The setter
+		## totals +0.80 standing in slot 2 (the plan's own primary emergency
+		## setter), +0.64 in slot 1, and +0.22 in the other four: a swing of 0.58
+		## that no design document asks for.
+		##
+		## It matters because +0.80 against a no-duty -0.24 is a gap of 1.04, and
+		## `arrival_score` below is clamped to [-1, 1] and weighted 0.52, so the
+		## whole authority the legs have is **also 1.04**. Two spans of identical
+		## width: in the slot-2 rotation the legs can tie responsibility and never
+		## beat it, and in the other five they can. Measured exactly --
+		## a stranded setter keeps a ball a team-mate is standing on in rotation 2
+		## and loses it in all five others, on identical geometry.
+		##
+		## Not repaired here, and deliberately so: every available correction
+		## answers "should an unreachable designated setter keep the ball", which
+		## is a volleyball policy nothing in `docs/design/` has decided.
+		## `docs/review/SECOND_CONTACT_AUDIT.md` §5 states the options and the
+		## boundary; `tools/run_second_contact_probe.gd` reproduces the tables.
 		if candidate.id == designated_setter_id:
 			duty_bonus += 0.46
 		elif candidate == preferred_setter:
@@ -11142,6 +11173,22 @@ func _seam_margin(first: VolleyballPlayer, second: VolleyballPlayer) -> float:
 
 ## The designated setter, unless they took the first contact -- then whoever the
 ## plan nominated to cover for them.
+##
+## **This does not decide who sets.** Every caller hands the answer straight to
+## `_spatial_setter_choice` as `preferred_setter`, where it is worth +0.20 in a
+## re-score that reads live positions, the realized pass's own duration, the
+## head start and recovery debt. So this function contributes a *preference* and
+## a null-fallback, and nothing else -- which is the right shape, because it
+## takes no position and no clock and could not honestly decide reachability.
+##
+## Worth knowing before reading the numbers below: they are **not** the duty
+## weights `_spatial_setter_choice` uses. The same four duty strings are scored
+## +0.42 / +0.24 / -0.10 / -0.22 here and +0.34 / +0.18 / -0.16 / -0.24 there,
+## and `ShadowSetterResponseSystem._duty_priority` uses a third table that ranks
+## "Stay available to attack" *below* "No second-contact duty" -- the opposite
+## order to both of these. Three tables for one concept, in one leg. Recorded in
+## `docs/review/SECOND_CONTACT_AUDIT.md` §4 rather than unified here, because
+## picking which table is canonical is a tactical decision, not a tidy-up.
 func _second_contact_setter(
 	candidates: Array[VolleyballPlayer],
 	defensive_plan: Resource,

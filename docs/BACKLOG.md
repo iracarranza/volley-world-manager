@@ -7017,3 +7017,42 @@ What that page has to hold, and the two questions it will have to answer:
    it wants measuring against a mixed squad before the page is built on top of
    it. The chef serves one paste a week; whether comfort should read what is
    *served* rather than what is *available* is the open question.
+
+
+---
+
+## Should an unreachable designated setter keep the ball?
+
+`docs/review/SECOND_CONTACT_AUDIT.md` measured the second-contact selector and
+found the structure right and one magnitude wrong. `_spatial_setter_choice` adds
+its designated-setter term **on top of** whatever duty the plan already gave that
+voli, and `DefensivePlan` writes duty per *slot* — so the setter's grip on a
+scramble ball is +0.80 standing in slot 2, +0.64 in slot 1 and +0.22 in the other
+four. The widest gap, +0.80 against a no-duty −0.24, is **1.04**; the arrival
+term is clamped to [−1, 1] and weighted 0.52, so the legs' whole authority is
+**also 1.04**.
+
+Measured on identical geometry: a stranded setter keeps a ball a team-mate is
+standing on in the slot-2 rotation and loses it in all five others. A gate
+written in any rotation but the second would have passed.
+
+It stayed unrepaired because every correction answers the same volleyball
+question and nothing in `docs/design/` has answered it. The four options are set
+out in §6 of the audit, each with the answer it implies. Two of them (make the
+setter term replace rather than stack; give the plan a slot-independent setter
+duty) remove the rotation dependence without touching the arrival term, and the
+rotation dependence is the part nobody chose.
+
+Two things ride along with that decision:
+
+1. **Three duty tables for one concept.** `_second_contact_setter`,
+   `_spatial_setter_choice` and `ShadowSetterResponseSystem._duty_priority` score
+   the same four duty strings three different ways, and the shadow system ranks
+   `Stay available to attack` *below* having no duty at all while both production
+   selectors rank it above. The shadow layer is the intended replacement path, so
+   they have to agree before it is promoted.
+2. **The opponent's second contact gets no head start.** `_opponent_reception`
+   calls the shared chooser without `head_start_seconds`, so every opponent
+   setter is timed from a standing start at the instant the platform touched the
+   ball — the exact defect that parameter's own comment records as fixed. Audit
+   §7.
