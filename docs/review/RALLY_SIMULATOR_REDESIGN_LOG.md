@@ -892,7 +892,8 @@ redesign direction.
 | `666a56f` | `PLATFORM_CONTACT.md`; intent/circumstance/execution replaces per-event apex bands. Audit finds the DIG posture penalty `"emergency"/"fall"` unreachable, and incoming momentum computed but discarded by both outgoing models |
 | `e8004b1` | platform design tightened: feasible-launch **selection** separated from feasibility; incoming momentum split into authoritative input vs authored transfer relation; hang/height moved from context to rally state; authored relations reduced four → three |
 | `dce1598` | controlled-dig promotion gated on rally-state intent; the dig is found to have no setting target at all, and the continuation dig to fabricate a 29% stretch from an empty arrival |
-| *(this pass)* | **intent stops naming a launch.** `PLATFORM_CONTACT.md` §3a: intent is anchors plus one derived bound, not an exact `(target, height, time)`. The range form is rejected too — four of its five bounds would be invented. Selection becomes universal and the class D intent margin dissolves into it; tempo enters as a dimensionless weight rather than a margin in seconds |
+| `7eb64fd` | **intent stops naming a launch.** `PLATFORM_CONTACT.md` §3a: intent is anchors plus one derived bound, not an exact `(target, height, time)`. The range form is rejected too — four of its five bounds would be invented. Selection becomes universal and the class D intent margin dissolves into it; tempo enters as a dimensionless weight rather than a margin in seconds |
+| *(this pass)* | **tactical alignment audit**, `PLATFORM_CONTACT.md` §13. Four of the five manager-tactic layers already have persisted homes; the role layer has no rally consumer and the individual layer is absent by decision. The tactical→intent pattern is already written for the block and its instruction arm is **wired to nothing**. Two combination rules found in shipped code — named choices override, graded preferences combine — and `_block_intent_margins` found to be a right tactic in a wrong channel |
 
 ---
 
@@ -962,6 +963,45 @@ offsets, in the least visible form available.** `_desired_pass_target` is the
 shipped instance: an overpass-avoidance preference living inside the reception's
 target as five bare numeric literals that no gate names and no constant audit can
 find. Expect the same wherever a representation is more precise than its evidence.
+
+### Manager tactics reaching the rally — audited, and mostly already built
+
+`PLATFORM_CONTACT.md` §13. The findings that belong to the whole simulator rather
+than to the platform contact:
+
+- **the block's manager-instruction arm is dead.** `_block_hands_intent` matches
+  `"soft block"` / `"kill block"` off `formation.hands_instruction`, and nothing
+  in the repository writes that key. The comment above it claims `TacticSheet` is
+  its first consumer; `behaviour_of` is called by the worksheet and by
+  `DrillSession` and by nothing else. **A new variant of the §0 shape**, and one
+  `audit_unreachable_branches.py` cannot see: the literals *are* produced, four
+  hops upstream in a menu table, so the tool passes them while the domain
+  reaching the resolver stays empty. This is the live example of the cross-file
+  limitation that document already names;
+- **`TacticSheet` is the role/position layer and has no rally consumer.** Keyed by
+  slot on purpose. The individual-instruction layer does not exist and cannot be
+  added to the sheet — it needs a player-id key and a lifetime that survives a
+  transfer;
+- **two combination rules already ship, and both are right.**
+  `_block_hands_intent` lets a named instruction *replace* the layer below;
+  `serve_risk` lets style add a signed deviation to an instruction's base value.
+  Named choices override, graded preferences combine — which follows from what the
+  quantities are rather than from taste, and means **there is no modifier stack**:
+  conflicting wants are reconciled by the feasible envelope, not by arithmetic on
+  instructions;
+- **`_block_intent_margins` is a right tactic in a wrong channel.** `block_intent`
+  is a legitimate team instruction whose magnitudes were argued against a real
+  distribution, and it reaches the ball as direct outcome-band shifts — skipping
+  intent, feasibility and execution. Under the target grammar it would set the
+  hands' angle and let the deflection model produce those shifts;
+- **`ContactEnvelopeSystem` is not the feasible-launch envelope**, despite owning
+  the name. It answers whether a body can reach a contact point, which is the body-
+  state stage, and its own header calls it a balance mapping rather than a
+  measurement. Building launch feasibility on it would put a balance layer inside
+  physics;
+- the acceptance criterion for every future tactical pass, and it is writable as a
+  gate: **changing a tactical preference must leave the feasible envelope
+  byte-identical and move only the selection.**
 
 ### Serve
 

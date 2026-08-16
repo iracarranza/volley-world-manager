@@ -5,6 +5,11 @@ Revised the same day by the §3a audit, which changed the intent representation
 from one exact launch to anchors plus a derived bound. §§3, 4a, 4b, 6, 11 and 12
 carry amendments; **§3a is the reasoning and should be read first.**
 
+**§13 is a second audit**, of whether this model can carry a layered manager
+tactical system. It changes no earlier conclusion and adds the missing half:
+where preferences come from. Read it before proposing any tactical field, and
+read §13.2 before citing the block as a precedent.
+
 Covers the four contacts a voli makes with the forearms: serve reception, the
 controlled floor dig, the emergency dig, and attack coverage.
 
@@ -1102,6 +1107,370 @@ rate, because its intent does not name a launch at all.
 
 ---
 
+## 13. How manager tactics reach this contact — audited 2026-08-16
+
+The design must eventually carry a layered tactical interface — style, team
+instructions, role instructions, individual instructions, rally context — that
+compiles into intent and preference and **never** into physics. This section
+audits whether `7eb64fd`'s model can take that, against the code that exists
+rather than against a diagram.
+
+**Verdict: structurally compatible, and more of it is already built than the
+brief assumes. The gap is not architecture. It is one compile step, one missing
+layer, and two channels that currently bypass the whole chain.**
+
+### 13.1 Four of the five tactical layers already have homes
+
+Audited in `team_principles.gd`, `defensive_plan.gd`, `tactic_sheet.gd`,
+`worksheet.gd` and `rally_simulator.gd`.
+
+| layer | where it lives today | persisted | reaches the rally |
+|---|---|---|---|
+| **style** | `TeamPrinciples.PRESETS` (6) and `Regions.REGIONAL_PRINCIPLES` (8+), seven dimensionless axes | yes | **yes** — read throughout the resolver |
+| **team instructions** | `DefensivePlan`: `block_strategy`, `floor_system`, `block_defense_relationship`, `defensive_depth`, `short_ball_posture`, `block_intent`, `serve_target`, `serve_risk`, `setter_release_targets` | yes | **partly** — `serve_risk` and `block_intent` do; the rest do not |
+| **role / position** | `TacticSheet.behaviours`, keyed `"slot:phase"`; `zone_priorities` as `[line, seam, cross, tip]` | yes | **no** — read only by the worksheet and `DrillSession` |
+| **individual** | *nothing* | — | — |
+| **rally context** | rally state | n/a | yes |
+
+Two things follow that are worth having before any field is proposed.
+
+**The role layer is already correctly keyed and has no consumer.**
+`TacticSheet` stores behaviours by *slot*, and its own comment says why: "a plan
+is a shape the club plays, and it outlives the particular voli standing in
+position four." That is exactly the role/position layer, already built, already
+saved, and read by nothing in the rally. Its own file states the ambition — "the
+whole point of telling a voli to close the line is that they then close the
+line."
+
+**The individual layer is absent by decision, not by oversight**, and it cannot
+be added to `TacticSheet`: it needs a different key (player id, not slot) and a
+different lifetime (it follows the voli through a transfer; a slot instruction
+does not). That is a data-model consequence worth knowing before anyone extends
+the sheet.
+
+### 13.2 The pattern is shipped for the block — and its instruction arm is dead
+
+`_block_hands_intent` is already the exact chain the brief describes, and it is
+worth reading before anything new is designed:
+
+```gdscript
+match instruction:
+    "soft block": return "soft"     ## 1. the manager said
+    "kill block": return "kill"
+...
+return "soft" if AttemptJudgmentModel.backs_off(blocker, deficit) else "kill"
+                                    ## 2. the voli read it   3. otherwise press
+```
+
+It returns **an intent** — what the blocker *means to do with their hands* — and
+the physics resolves it afterward. `MANAGER INSTRUCTION → intent → feasibility →
+execution → ball`, in one function, already in production.
+
+**And the instruction never arrives.** The value comes from
+`formation.get("hands_instruction", "")`; `_form_home_block` and
+`_form_opponent_block` do not put that key in the dictionary, and **nothing in
+the repository writes it**. The `match` falls through on every block in every
+rally. The comment above it says `TacticSheet` "stores a per-voli block
+behaviour… this is their first consumer", and that is false — `behaviour_of` is
+called by the worksheet and by `DrillSession`, and by nothing else.
+
+> This is a third instance of the §0 shape, and a new variant of it.
+> `audit_unreachable_branches.py` **does not flag it**, because the literals
+> `"soft block"` and `"kill block"` genuinely are produced — in
+> `worksheet.gd`'s menu table, four hops upstream, in a `Control` that never
+> talks to the resolver. The tool's own findings document names this limitation
+> ("cross-file domain tracking… is not built") and here is a live example: the
+> *literal* exists and the *domain* is empty.
+
+The practical consequence for this design is a caution, not a licence. **The
+tactical→intent pattern must not be cited as proven because the block does it.**
+The block writes it down and does not run it.
+
+### 13.3 Two combination rules already exist, and the difference between them is the answer
+
+The brief asks which layers override and which combine, and says not to assume
+additive modifiers. The codebase has already answered, twice, differently, and
+both answers are right:
+
+```gdscript
+## Categorical — the instruction REPLACES the layer below
+match instruction:
+    "soft block": return "soft"
+
+## Scalar — the instruction is the BASE, style adds a signed deviation
+serve_risk = defensive_plan.serve_risk
+serve_risk = clampf(serve_risk + (home_principles.serve_aggression - 0.5) * 0.70, …)
+```
+
+> **Named choices override. Graded preferences combine.**
+
+That is not a stylistic split; it follows from what the quantities *are*. You
+cannot half-soft-block — the hands go one way or the other, so a style cannot
+blend into a stated choice. Serve risk is a position on a continuum, so a team
+that believes in aggression genuinely sits further along it than the same
+instruction on a cautious team.
+
+And it maps onto §3a's split exactly, which is the sign it is the right rule:
+
+| §3a category | combination rule |
+|---|---|
+| **anchors** — a place chosen | override; the seat is at one place |
+| **categorical intent** — a stated choice | override; the shipped block pattern |
+| **preference weights** — how much a thing is wanted | combine, as deviations |
+
+**There is no modifier stack**, and that is the load-bearing claim. The layers
+resolve to one value per dimension by precedence or by deviation, and then stop.
+Conflicting wants are *not* reconciled by arithmetic on instructions — they are
+reconciled by the feasible envelope at selection, which is physical. A team that
+wants a low fast pass and a precise one is not resolved by weighting; it is
+resolved by what the contact can actually produce.
+
+### 13.4 The five categories, separated
+
+| category | what it is | who may change it | examples |
+|---|---|---|---|
+| **physical anchors** | a place a person chooses to aim or stand | manager, directly | `setter_release_target` — already manager-set via `set_setter_release_target` |
+| **derived constraints** | a fact computed from bodies and the rally | **nobody** | `arrival_floor_seconds` from `_movement_time`; `height_anchor_meters` from `set_contact_height_meters` |
+| **tactical preferences** | how feasible launches are ranked | every tactical layer | higher/lower, sooner/later, precision/tempo, overpass aversion |
+| **body / contact state** | what actually happened to this body | nobody | incoming ball, arrival, posture, `ContactEnvelopeSystem`'s reach result |
+| **execution inputs** | technique and the draws | nobody | `reception`, `ball_control`, the existing normals |
+
+The rule that falls out of the first two rows is checkable and worth stating as
+the test for every future instruction:
+
+> **An instruction may move an anchor only when that anchor is policy. It may
+> never move a derived physical fact — for those it may only weight a
+> preference.**
+
+The release seat is policy: a coach genuinely chooses where the setter works
+from, and the game already lets them. A setter's standing release height is not
+policy — it is how tall they are with their arms up. Their travel time is not
+policy — it is how fast they run. "Setter operates closer to the net" moves the
+first. "Pass higher" may not touch the second or third.
+
+### 13.5 Do the three current fields survive? Two do. One is already fused.
+
+The audit the brief asks for, on `7eb64fd`'s own fields:
+
+| field | verdict |
+|---|---|
+| `height_anchor_meters` | **clean.** Pure derivation from the setter's body. Future-proof precisely *because* "pass higher" must not move it |
+| `arrival_floor_seconds` | **clean, and must stay a floor.** "Give more recovery time" may not raise it; the setter's legs do not slow down because the manager wants a slower ball. The instruction weights arrival preference *above* the floor |
+| `target_anchor` | **fused, today, in production.** `_desired_pass_target` returns the manager's release seat **plus** an overpass-safety offset — an anchor and a preference added into one `Vector2`, with five bare literals doing the fusing |
+
+So the answer to "do any currently combine manager preference with derived
+fact?" is **yes, exactly one, and it is the only one of the three that already
+exists in code.** The split is: the seat is the anchor; overpass aversion becomes
+a preference; and the reception stops being the one context whose target silently
+includes a safety rule no other context gets and no team can turn off.
+
+### 13.6 The four example instructions, routed
+
+| instruction | routes to | may not |
+|---|---|---|
+| pass higher / lower | preference weight on height relative to the anchor | move `height_anchor_meters`; touch apex |
+| pass faster / more recovery time | preference weight on arrival, above the floor | move `arrival_floor_seconds` |
+| setter base closer to / further from the net | **the anchor** — `setter_release_targets`, which already exists and is already read by reception | anything else |
+| set tighter / further off the net | the *set* contact's target anchor, when that contact is designed | increase attack quality; force the ball netward |
+
+Three of the four are preference weights and one is an anchor move, and the one
+that moves an anchor is the one already implemented — which is the strongest
+available evidence that the split is drawn in the right place.
+
+### 13.7 Is the six-object structure useful? Four distinctions are load-bearing; the objects are not.
+
+The brief proposes `PlatformContactIntent` / `Preferences` / `State` /
+`Selection` / `Execution` / `Result`. Assessed one at a time:
+
+| proposed | verdict |
+|---|---|
+| Intent vs **Preferences** | **load-bearing, and it is the answer to the brief's key question.** They must stay separate, for a reason stronger than tidiness — see below |
+| **State** | load-bearing; already §2 and §4 |
+| **Selection** | load-bearing **as an output record**, not as an input stage object. It is what makes Case B diagnosable |
+| **Execution** | not load-bearing. It is a function's parameters — attributes and draws — and naming it adds a box without adding a boundary |
+| **Result** | load-bearing; already §6 |
+
+**Why intent and preferences must not fuse**: they have different *lifetimes and
+authorities*. Anchors and the arrival floor are derived per contact, from this
+setter at this instant. Preferences are compiled from tactics and are stable
+across every contact in a rotation. Fusing them means recompiling the tactical
+hierarchy on every touch, and — worse — it makes the Case A / Case B comparison
+below impossible to state, because "the same want met a different circumstance"
+requires the want to be a separate object that can be held constant.
+
+**But the redesign log's rule stands: do not create classes to match a diagram.**
+The recommendation is to publish these as named, documented regions of one
+record — the same discipline `height_source` and `launch_source` already use —
+and to promote any of them to a class only when a second consumer exists. Four
+concepts, zero classes, until something needs one.
+
+### 13.8 The Case A / Case B test
+
+The brief's own readiness test. Both stories under this architecture, with the
+same compiled tactics:
+
+**Compiled once, from style + team + individual:**
+`arrival preference → sooner` (fast transition, "pass lower"),
+`height preference → lower`, `precision weight → raised` (libero individual),
+`anchor → the release seat, moved netward` (team: setter closer to net).
+
+**Case A — readable serve, balanced arrival, setter already at the seat.**
+The arrival floor is ≈ 0 and therefore *slack*; the envelope is wide, because a
+planted platform under a moderate serve can angle and pace the ball almost
+anywhere. Every preference is satisfiable at once: the ranking's maximum is a low,
+fast, accurate ball to the seat. Execution perturbs it. **The instruction is
+realized.**
+
+**Case B — same tactics, libero at full stretch under a hard serve.**
+Nothing about the compiled preference changes — and that is the point of keeping
+it a separate object. What changes is the envelope: at full stretch the reachable
+platform-angle range is narrow, so the low fast ball is simply not in the set.
+The ranking still runs, over a smaller set, and its maximum is whatever least
+badly serves the same wants. Because the incoming pace is enormous and the one
+available angle is upward, **the ball that comes out is high and loose** — a
+survival ball, produced with no rule anywhere saying "bad circumstance means high
+ball." It is §8's third case, reached by tactics rather than by hypothesis.
+
+Both stories are told by the same five stages with one object differing. **The
+architecture passes its own test**, and the reason it passes is §3a: a preference
+can be held constant across two circumstances in a way an exact intended launch
+cannot, because an exact launch is *defined* partly by the circumstance it was
+computed against.
+
+### 13.9 Hidden tactical preferences already baked into geometry or bands
+
+The migration list. Each is a real coaching preference currently expressed
+somewhere it cannot be argued with, and each should eventually become a
+selection-layer weight:
+
+1. **`_desired_pass_target`'s safety offset** — overpass aversion, in the target
+   point, five bare literals. Known; §3a.
+2. **The dig's apex band `lerpf(1.35, 3.05, …)`** — this is the instruction *"give
+   the setter recovery time"*, authored as physics and applied to every team in
+   the world with no way to differ. It is the single largest hidden preference in
+   the model and it is the one this whole document exists to delete.
+3. **The dig's target `contact + Vector2(0.03, −0.04)`** — a tactical
+   *non*-decision baked as geometry: aim a stride from yourself. §4b.
+4. **`digger.id % 2` lateral sign** — already condemned; not a preference so much
+   as a fiction standing where one belongs.
+5. **`_block_hands_intent`'s fall-through to `"kill"`** — "press unless you know
+   better" is a team aggression default, authored in the resolver rather than
+   sourced from `block_commitment`, which exists and is per-team.
+6. **`_block_intent_margins`** — and this one is subtler and worth stating
+   carefully. `block_intent` is a *legitimate* team instruction in the *right*
+   place, and its magnitudes were argued against a real distribution. But it
+   reaches the ball as direct shifts to the outcome bands
+   (`{"stuff": -0.06, "touch": -0.02, "funnel": 0.09}`), which is
+   `INSTRUCTION → outcome`, skipping intent, feasibility and execution entirely.
+   Under the target grammar the same instruction would set the hands' angle and
+   let the deflection model produce those shifts. **A right tactic in a wrong
+   channel** — and it is the clearest example in the codebase of what the brief
+   is asking future work to avoid.
+
+Not on this list, and deliberately: `DefensivePlan`'s `defensive_depth`,
+`short_ball_posture`, `floor_system` and `zone_priorities`. Those are preferences
+sitting in a preference store, which is where they belong. `zone_priorities` in
+particular is already a manager-set, persisted, dimensionless ranking over four
+lanes — the single closest existing thing to the preference object this design
+needs, and the natural template for it.
+
+### 13.10 What slices 1 and 2 must publish so tactics can arrive without a rewrite
+
+Two additions, both in the manner of `height_source`, both free:
+
+**Slice 1 gains `anchor_source` per anchor.** The reception's target comes from a
+manager-set seat; the dig's comes from a fixed offset off its own contact point.
+Today those are the same type and are indistinguishable in the data. Marking them
+means the first tactical consumer can find every anchor that is *not* policy and
+therefore not yet steerable — and it makes §13.9's item 3 countable rather than
+anecdotal.
+
+**Slice 1 also gains `preference_source`, whose honest current value is
+`"none"`.** Nothing supplies a preference yet. Publishing the field with an
+absence marker is what stops the schema changing when tactics arrive: the marker
+takes a new value, the record does not grow a new shape. This is the same
+argument §11 already makes for the intent fields themselves.
+
+**Slice 2 publishes the envelope's extent, not only its satisfiability.** That is
+what buys the acceptance criterion for every future tactical pass:
+
+> **Changing a tactical preference must leave the feasible envelope
+> byte-identical and move only the selection.**
+
+That is a gate somebody can write, and it is the falsifiable form of "tactics do
+not change physics." Any future instruction that fails it has reached the
+resolver, whatever its comment says.
+
+### 13.11 Does the grammar generalise to the other contact families?
+
+Checked, not redesigned. The five stages are recognisable in all four:
+
+| family | intent anchor | feasibility | shipped example of the pattern |
+|---|---|---|---|
+| **strike** — serve, attack | aim point, target zone | launch search against net and court | **yes, and it works**: `_serve_launch` relaxes a preferred pace toward a derived floor, takes the quickest clearing trial, keeps a fallback |
+| **platform** — reception, dig, coverage | seat, height anchor, arrival floor | the launch envelope this document designs | designed here; unbuilt |
+| **set** — overhead redirection | the hitter's contact window | reachable release from the pass | not designed |
+| **block** — block contact | hands intent, lane | closure and reach | **written and unwired** — §13.2 |
+
+The strike family is the only one where the whole chain runs, and it is the model
+to copy. One warning for whoever writes the set or block version:
+**`ContactEnvelopeSystem` is not the feasible-launch envelope.** Its name is the
+one this design wants and its content is a different question — it answers "can
+this body reach that contact point", which belongs to the *body state* stage, not
+to feasibility. Its own header says it is "game-balance mappings, not claims of
+biomechanical measurement". Conflating the two would put a balance layer inside
+the physics stage, which is the failure this architecture is built to prevent.
+
+### 13.12 Attribute separation — does the architecture permit it?
+
+The brief asks whether the stages can carry different attributes rather than one
+scalar doing five jobs. They can, and three of the five already have a home:
+
+| job | stage | today |
+|---|---|---|
+| read / anticipation | perception | `anticipation` reaches block and dig reads |
+| movement | body state | the locomotion model, `transition_speed` |
+| balance / stability | contact feasibility | `reception_balance`, `reception_stability` — currently spent on a scalar |
+| decision-making | **selection** | `decision_making`, `tactical_discipline` exist and reach nothing here |
+| technique | execution | `reception`, `ball_control` |
+| evaluation | downstream | `quality`, causal direction reversed per §7 |
+
+The architecture permits the split because the stages are separate; **nothing
+about it forces the split**, and that is worth saying. The mappings above are not
+locked and should not be. What the design does guarantee is that if
+`reception_quality` is still doing five jobs later, it will be a choice somebody
+made rather than a shape the model imposed.
+
+### 13.13 The next implementation pass
+
+**Not platform slice 1. Wire the dead instruction arm first.**
+
+`formation["hands_instruction"]` from `TacticSheet.behaviour_of(slot, "Block")` is
+the smallest end-to-end proof that a manager instruction can reach a contact as
+*intent*. Everything it needs exists and is persisted; the consumer is written;
+the vocabulary matches; and the comment claiming it already works is currently
+false, which is worse than an absence because it will be believed.
+
+It is the right first pass for three reasons:
+
+1. **It changes production behaviour**, so it actually tests the acceptance
+   criterion rather than asserting it. Slice 1 is outcome-neutral by
+   construction and can prove nothing about the chain.
+2. **It adds no physics and no constant.** The intent function, the bands and the
+   deflection model are untouched; one dictionary key starts carrying a value it
+   was written to carry.
+3. **It is the only place the pattern is already written**, so the pass is a
+   connection rather than a design.
+
+It must ship with the honest correction to the comment above `_block_hands_intent`,
+a gate that the instruction actually reaches the resolver, and a measured report
+of how much behaviour moves — the instruction currently fires on 0% of blocks, so
+any team using it will see a real change and the suite baseline will move.
+
+Then platform slice 1, with `anchor_source` and `preference_source` per §13.10.
+
+---
+
 ## Implementation conclusions that survive every revision
 
 Carried forward unchanged through the §3a audit, because none of them depends on
@@ -1135,3 +1504,13 @@ how intent is represented:
 - **Reading "intent is anchors" as "intent is a box".** §3a rejects the range
   form explicitly and for a stated reason: four of its five bounds would be
   invented, and a range authors a cliff where the data supports a gradient.
+- **Citing the block as proof the tactical→intent pattern works.** §13.2: it is
+  written and wired to nothing. It is a template, not evidence.
+- **Letting a tactical instruction move a derived constraint.** §13.4: an
+  instruction may move an anchor only where the anchor is policy. "Pass higher"
+  may not raise the height anchor, and "give more recovery time" may not raise
+  the arrival floor — those are a setter's height and a setter's legs.
+- **Building the feasible-launch envelope on `ContactEnvelopeSystem`.** §13.11:
+  the name is right and the content is a different question. It answers whether a
+  body can reach a contact point, which is body state, and it says in its own
+  header that it is a balance mapping rather than a measurement.
