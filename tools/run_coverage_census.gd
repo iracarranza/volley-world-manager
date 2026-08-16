@@ -17,7 +17,7 @@ const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
 const RallyEventScript := preload("res://scripts/models/rally_event.gd")
 
 const FIRST_SEED: int = 30000
-const SEED_COUNT: int = 700
+const SEED_COUNT: int = 2500
 
 
 func _initialize() -> void:

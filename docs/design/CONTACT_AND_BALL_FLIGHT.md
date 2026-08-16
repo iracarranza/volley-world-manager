@@ -528,15 +528,25 @@ is added with `start = rebound point`, `end = rebound point + Vector2(0.04,
 `_ensure_event_trajectories` invents one: `flight_time = 0.58`, `apex = 1.8`,
 both endpoint heights defaulted to 1.0 m.
 
-Measured over 1,400 isolated rallies, 60 successful coverage contacts, **60 of
-60 fabricated afterwards** — every one carries `height_source = "default"`,
+Measured over **5,000 isolated rallies, 234 successful coverage contacts, 234 of
+234 fabricated afterwards** — every one carries `height_source = "default"`,
 duration exactly 0.58, apex exactly 1.8, heights 1.0 → 1.0, and a target offset
-of exactly 0.5763 m. The next contact is a SET in 60 of 60.
+of exactly 0.5763 m. Not a distribution with a tight peak: **four values, each
+identical on all 234 contacts.** The next contact is a SET in 234 of 234.
+
+(First measured at 1,400 rallies and 60 contacts; deepened to 5,000 rallies with
+every figure unchanged to four decimal places. The gap median moved 1.1148 to
+1.1158.)
+
+Coverage falls to the home side about three times as often — 172 against 62 —
+which is unexplained and probably follows the block-touch asymmetry the dig work
+already measured at 22.9% against 6.5%.
 
 **Four accounts of one covered ball, and no two agree.** The drawn flight lasts
-0.58 s. The gap from the coverage contact to the SET that plays it runs 0.885 to
-1.296 s, median **1.115 s** — so the ball is drawn landing roughly half a second
-before the setter touches it. The setter's own reachability window is a third
+0.58 s. The gap from the coverage contact to the SET that plays it runs 0.865 to
+1.296 s, median **1.116 s**, with a 5th percentile of 0.927 — so **the drawn ball
+lands more than half a second before the setter touches it on essentially every
+coverage contact in the game**, not merely at the median. The setter's own reachability window is a third
 number and differs per site: the first-exchange home site passes nothing and
 falls through to `DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS` (0.68 s); the
 continuation site passes `coverage_time`, which is the **incoming** block leg's
