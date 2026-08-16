@@ -890,7 +890,7 @@ redesign direction.
 | `829ec7a` | pace-relief floor derived from minimum reachable speed; attempted power reserve reverted as authored physics |
 | `5ba5cee` | ATTACK_COVERAGE census/classification; ownership migration stops on missing platform physics |
 | `666a56f` | `PLATFORM_CONTACT.md`; intent/circumstance/execution replaces per-event apex bands. Audit finds the DIG posture penalty `"emergency"/"fall"` unreachable, and incoming momentum computed but discarded by both outgoing models |
-| `9114d2e` | platform design tightened: feasible-launch **selection** separated from feasibility; incoming momentum split into authoritative input vs authored transfer relation; hang/height moved from context to rally state; authored relations reduced four → three |
+| `e8004b1` | platform design tightened: feasible-launch **selection** separated from feasibility; incoming momentum split into authoritative input vs authored transfer relation; hang/height moved from context to rally state; authored relations reduced four → three |
 
 ---
 
