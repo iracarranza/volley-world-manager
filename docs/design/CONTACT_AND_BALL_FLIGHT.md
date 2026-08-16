@@ -200,6 +200,47 @@ This is deliberate, consistently used by every writer, and matches what
 `RallyKinematics` actually solves. **Do not reopen it.** A pass that reinterprets
 `apex_height_meters` as absolute is breaking a correct prior decision.
 
+## The serve has two models, and neither is the authority — CURRENT
+
+Audited 2026-08-16. No code changed.
+
+**Production is an inverse fit to an outcome that was already rolled.** The order
+in `_resolve_opponent_serve` is: `serve_error := rng.randf() < chance` → choose an
+aim point → *(shadow record)* → if the error rolled, `_errant_serve_landing`
+**moves the landing to make the verdict true** → take the distance to that
+landing → `_serve_arc` sweeps pace × spin calling `solve_angle_for_range` until
+something clears the tape, and keeps the fastest ground speed. The code says so
+itself: *"the official ball has to go where the official verdict already says it
+went."* Landing is an input; launch state is solved backwards from it.
+
+**The geometric shadow is forward but degenerate.** `resolve_serve` aims, applies
+execution error, flies it and lets the landing fall out — the right direction —
+but measured over ten serves on both sides, `launch_mode` was **lofted 10 times
+out of 10**, which is why its launch angle is ~77°. A shot chosen from one branch
+every time is not a repertoire.
+
+They are not two answers to one question. Production asks *"what launch puts the
+ball where I already decided it lands?"*; the shadow asks *"what does this
+server's ball do?"* The 2.89× horizontal-speed gap is that difference, not an
+error in either arithmetic.
+
+Measured intended-to-realised pace, ten serves: production keeps **0.53–0.85** of
+the geometric pace, relieving downward in every case.
+
+**The 215/218-through-the-net note in `_serve_arc` does not prove real pace is
+wrong.** It proves an over-constrained inverse solve: real pace *plus* an exact
+predetermined landing *plus* a 2.6 m contact leaves almost no solution above the
+tape. That is evidence about the solving direction, not about the server.
+
+**Verdict: C — neither model as currently structured.** Worth keeping from
+production: pace relief, the net-clearance filter, and quickest-clearing
+selection, which are real machinery. Worth keeping from the shadow: the forward
+order — aim, execution error, launch, physics, landing. What must change is that
+a rolled outcome may not define a landing that launch state is then fitted to.
+
+**Nothing here requires authoring physics.** Every needed component exists. The
+missing piece is order.
+
 ## UNRESOLVED PHYSICS — do not fill with defaults
 
 1. **DIG apex calibration.** `lerpf(1.35, 3.05, 1.0 - spoil)` was chosen by eye
