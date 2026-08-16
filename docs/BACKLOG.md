@@ -812,6 +812,26 @@ decided and unbuilt.
 Whichever way it goes, the label is wrong today: a fallback should not name
 itself after the region it is standing in for.
 
+**Three drafts now exist**: `docs/design/MINOR_REGION_PRINCIPLES_DRAFTS.md`. It
+also settles two things this entry left open. The seven axes' actual effects in
+the rally are written down for the first time, which is what any of these numbers
+have to be judged against; and asking whether the eight *existing* sets can be
+predicted from the tables the same regions already carry gives a real answer —
+`pin_focus` ranks perfectly against pin mass, `transition_commitment` follows the
+specialty lists, and `emotional_expression` has no modelled input anywhere. So
+two axes of seven derive, and the recommendation is the draft that authors only
+what the tables already force.
+
+Zaitgaist turns out not to be one of the six. Its principles should be looked up
+from the reigning Sixnet champion, exactly as its specialty already is, and
+storing seven permanent numbers for the region defined by not having an identity
+is the contradiction. That part needs no design call.
+
+The **kits** half of the same gap — six regions on `FALLBACK_PATTERN`, which
+`regional_kits.gd` calls "the list of what is still owed" — has drafts in
+`docs/design/MINOR_REGION_KIT_DRAFTS.md`, and reaches the same conclusion about
+Zaitgaist independently.
+
 ## 4. Career dashboard — the part of the rework that regressed out
 
 The nav dropdown, Home news panel, Team sub-tabs and the aggregated lineup

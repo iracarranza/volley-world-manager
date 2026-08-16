@@ -174,7 +174,17 @@ func _venues() -> Array:
 				_sky()
 				_env.fog_enabled = true
 				_env.fog_light_color = Color(0.62, 0.70, 0.80)
-				_env.fog_density = 0.004
+				## **0.004 was a per-metre density read as an opacity**, which is
+				## why four passes of backdrop tuning kept producing slabs. Every
+				## other venue leaves `fog_mode` at its exponential default, where
+				## 0.004 per metre is the right order for a room-sized haze --
+				## Spëddigh and Ĭspayk both use exactly that number correctly.
+				## `_sky()` switches this venue to `FOG_MODE_DEPTH`, where the same
+				## field means *opacity over the depth ramp*, so 0.004 is four
+				## tenths of one percent and the carefully-set ramp below had
+				## nothing to apply. The number was right and the instrument
+				## underneath it had changed: `FAILURE_MODES.md` §0, in a renderer.
+				_env.fog_density = 1.0
 				_env.fog_sky_affect = 0.0
 				## **The haze was set for a backdrop and the subject moved behind
 				## it.** `_sky()` fades everything out by 520 m, and the water
@@ -566,10 +576,19 @@ func _terrace() -> void:
 	## hillside was standing in front of the thing it was there to give scale to.
 	## Volcanic terracing drops; it does not fan out. Narrow steps, stepping
 	## seaward and down, finished by x = -72, which puts water in the sightline.
+	##
+	## **And each one runs down to -60 rather than being 3.4 m thick.** As plates
+	## they were five slabs stacked in the air with water visible underneath, which
+	## is the same defect as an island showing its own base: a terrace is the *cut
+	## face* of a hillside, not a shelf hung off one. Everything below the sea's
+	## surface at -25.7 is never drawn, so the extra depth costs nothing and buys
+	## the one thing the frame was missing -- the steps reading as one mass.
+	const CUT_FLOOR := -60.0
 	for i in range(5):
+		var top := -3.3 - float(i) * 4.8
 		var step := _box(
-			Vector3(30.0, 3.4, FREE_ZONE_END * 2.0 + 30.0 - float(i) * 4.0),
-			Vector3(-24.0 - float(i) * 11.0, -5.0 - float(i) * 4.8, 0.0),
+			Vector3(30.0, top - CUT_FLOOR, FREE_ZONE_END * 2.0 + 30.0 - float(i) * 4.0),
+			Vector3(-24.0 - float(i) * 11.0, (top + CUT_FLOOR) * 0.5, 0.0),
 			Color(0.26, 0.21, 0.18).lightened(float(i) * 0.06), 0.0, 0.98
 		)
 		step.name = "Hillside%d" % i
@@ -589,16 +608,59 @@ func _terrace() -> void:
 	## thing in this venue that could survive the sightline was pointed away from
 	## the only frame that mattered. Moved across, spread along the coast, and
 	## tall enough that their tops clear the horizon rather than the parapet.
-	for i in range(6):
-		var peak := _box(
-			Vector3(64.0 + float(i % 3) * 30.0, 78.0 + float(i % 4) * 34.0,
-				64.0 + float(i % 2) * 26.0),
-			Vector3(-470.0 - float(i % 3) * 130.0, 4.0 + float(i % 4) * 16.0,
-				-460.0 + float(i) * 180.0),
-			Color(0.30, 0.33, 0.40).lightened(float(i) * 0.05), 0.0, 1.0
+	## **A ridge, not six towers.** These were 78 to 180 m tall at 470 to 860 m
+	## out, which put their tops most of the way up the sky and each one alone
+	## against it -- and an isolated object with a flat top reads as an object,
+	## whatever its size. Tops now sit between about -10 and +35 rather than
+	## between 43 and 142.
+	##
+	## **The first attempt at the replacement was a skyline**, and the reason is
+	## worth keeping because it is not obvious: nine tapered masses at even
+	## spacing, each about as tall as its neighbour and none of them touching, is
+	## the silhouette of a city. Land is continuous. What separates a ridge from a
+	## row of towers is that the segments *overlap* -- spacing well under their own
+	## width, so the individual boxes merge into one mass -- and that the skyline
+	## between them rises and falls in saddles rather than holding a level. It is
+	## the same lesson the islets just taught one scale down: the slab was never a
+	## colour problem, and haze could not have fixed it.
+	##
+	## Heights come from two sine terms at incommensurate rates, which gives a
+	## profile with a few high points and long low cols and no repeating period a
+	## viewer can catch. It is the cheapest possible stand-in for terrain and it
+	## is the only part of the backdrop that does not want a hand-placed number.
+	const RIDGE_BASE := -40.0
+	for i in range(14):
+		var top := 10.0 + 16.0 * sin(float(i) * 0.85) + 9.0 * sin(float(i) * 2.1)
+		var rise := top - RIDGE_BASE
+		for k in range(2):
+			var height := rise * (0.72 + float(k) * 0.28)
+			var mass := _box(
+				Vector3(
+					205.0 - float(k) * 87.0, height, 130.0 - float(k) * 56.0
+				),
+				Vector3(
+					-560.0 - float(i % 2) * 40.0 + float(k) * 12.0,
+					RIDGE_BASE + height * 0.5,
+					-600.0 + float(i) * 95.0 + float(k) * 18.0
+				),
+				Color(0.30, 0.33, 0.40).lightened(
+					float(i) * 0.02 + float(k) * 0.05
+				), 0.0, 1.0
+			)
+			mass.name = "Ridge%d_%d" % [i, k]
+			mass.rotation.y = 0.35 + float(i) * 0.21 + float(k) * 0.4
+	## A second range behind the first, at the far end of the fog ramp, where it
+	## arrives as a pale suggestion rather than as geometry. Two bands is what
+	## makes a coastline read as deep instead of as a backdrop at one distance --
+	## and it costs nothing, because at 760 m the fog has taken almost all of it.
+	for i in range(8):
+		var far_mass := _box(
+			Vector3(260.0, 46.0 + 22.0 * sin(float(i) * 1.3), 150.0),
+			Vector3(-760.0, -18.0, -560.0 + float(i) * 170.0),
+			Color(0.34, 0.37, 0.43), 0.0, 1.0
 		)
-		peak.name = "Peak%d" % i
-		peak.rotation.y = 0.6 + float(i) * 0.4
+		far_mass.name = "FarRange%d" % i
+		far_mass.rotation.y = 0.2 + float(i) * 0.33
 	## **Islands across the water, on the open side.** The inland ridge is behind
 	## the broadcast camera and does nothing for the frame a match is actually
 	## watched in -- which is why altitude still did not read. An archipelago has
@@ -616,21 +678,54 @@ func _terrace() -> void:
 	## §0 exactly: the knob could not reach its own stated range, and every
 	## measurement taken through it was of the wrong thing. `_venue_camera()`
 	## opens the plane now.
+	## **Three lumps each, not one box.** Aerial perspective fixed the *value* of
+	## these and they still read as slabs, which is the tell that the defect was
+	## never colour: a single axis-aligned box seen near face-on is a rectangle,
+	## and no amount of haze makes a rectangle look like land. Each site is now a
+	## descending group -- a mass, a shoulder and an outlier -- separately rotated,
+	## so the silhouette steps instead of ending in one vertical edge.
+	##
+	## Every lump's base sits at -42, sixteen metres under the sea's surface at
+	## -25.7, because the previous set showed its own bottom edge above the water.
+	## An island with a visible base is a block floating on a floor.
+	##
+	## Tops now stand 8 to 20 m above the water rather than 25, and the sites are
+	## scaled unevenly. Same distance, roughly half the frame height: these are
+	## islets a few hundred metres off a terrace, not headlands pretending to be
+	## far away.
+	const ISLAND_BASE := -42.0
 	for i in range(4):
-		var island := _box(
-			Vector3(52.0 + float(i % 3) * 30.0, 26.0 + float(i % 3) * 14.0,
-				46.0 + float(i % 2) * 28.0),
-			Vector3(-290.0 - float(i % 2) * 90.0, -14.0 + float(i % 3) * 4.0,
-				-150.0 + float(i) * 128.0),
-			Color(0.26, 0.31, 0.40).lightened(float(i) * 0.06), 0.0, 1.0
+		var spread := 0.75 + float(i % 3) * 0.22
+		var site := Vector3(
+			-290.0 - float(i % 2) * 90.0, 0.0, -150.0 + float(i) * 128.0
 		)
-		island.name = "Island%d" % i
-		island.rotation.y = 0.3 + float(i) * 0.5
+		for j in range(3):
+			var top := (-8.0 - float(j) * 6.0) - float(i % 2) * 3.0
+			var height := top - ISLAND_BASE
+			var lump := _box(
+				Vector3(
+					(40.0 - float(j) * 11.5) * spread, height,
+					(34.0 - float(j) * 9.0) * spread
+				),
+				site + Vector3(
+					float(j) * 13.0 * spread, ISLAND_BASE + height * 0.5,
+					float(j) * -11.0 * spread * (1.0 if i % 2 == 0 else -1.0)
+				),
+				Color(0.26, 0.31, 0.40).lightened(
+					float(i) * 0.06 + float(j) * 0.03
+				), 0.0, 1.0
+			)
+			lump.name = "Island%d_%d" % [i, j]
+			lump.rotation.y = 0.3 + float(i) * 0.5 + float(j) * 0.7
 	## And the shoulder this court is cut into, running up behind the near stand,
 	## so the terrace is part of a hillside rather than a table in the air.
+	##
+	## Same correction as the terraces below it: it used to stop at y = -6 and
+	## from the seaward establishing shot it hung in the air over the water like a
+	## billboard. A shoulder comes up out of the ground.
 	var shoulder := _box(
-		Vector3(70.0, 46.0, 150.0),
-		Vector3(FREE_ZONE_SIDE + 44.0, 17.0, -20.0),
+		Vector3(70.0, 100.0, 150.0),
+		Vector3(FREE_ZONE_SIDE + 44.0, -10.0, -20.0),
 		Color(0.27, 0.23, 0.20), 0.0, 0.99
 	)
 	shoulder.name = "Shoulder"
@@ -884,9 +979,16 @@ func _frame_broadcast() -> void:
 	if camera == null:
 		return
 	if _open_air:
-		camera.position = Vector3(16.5, 8.4, 10.4)
-		camera.fov = 50.0
-		camera.look_at(Vector3(-1.5, 4.0, 0.0), Vector3.UP)
+		## **Closer, lower, and aimed at the net rather than above it.** The lifted
+		## seat put the horizon in frame and then left the court in the bottom-left
+		## quarter with the far terrace filling the rest -- the backdrop won an
+		## argument it was only ever meant to settle. Aiming at 2.6 m instead of
+		## 4.0 is the whole fix: the subject comes back to the middle of the frame
+		## and the horizon still sits about a fifth down from the top, which is
+		## where a broadcaster on a cliff would put it.
+		camera.position = Vector3(14.8, 7.2, 9.0)
+		camera.fov = 52.0
+		camera.look_at(Vector3(-0.6, 2.6, 0.2), Vector3.UP)
 	else:
 		camera.position = Vector3(15.5, 9.0, 9.5)
 		camera.fov = 46.0
@@ -931,11 +1033,27 @@ func _establishing(id: String) -> void:
 	## distance -- inland and its ridge to one side of frame, the drop and the
 	## water to the other, court between them. Two earlier attempts put the
 	## camera inside the hillside and then 140 m away looking at sky.
-	camera.position = Vector3(-4.0, 21.0, 57.0)
-	camera.fov = 48.0
-	## Aimed below and beyond the court, not at it: the subject of this frame is
-	## the hillside, and the court is the thing perched on top of it.
-	camera.look_at(Vector3(2.0, -2.0, 0.0), Vector3.UP)
+	## **Moved to the seaward side, because the old seat was inside the hillside's
+	## shadow looking at it.** The `Shoulder` mass runs from x = 19 to x = 89 and
+	## as far forward as z = 55; the camera stood at x = -4, z = 57, so half the
+	## frame was one flat brown face two metres away and the terrace below it read
+	## as a slab over a void. That is a third camera placed against geometry
+	## nobody re-checked after the geometry moved.
+	##
+	## From out over the water the shot finally says what it is for: the drop, the
+	## terracing, the court perched on top of it, and the hillside standing behind
+	## the whole thing instead of in front of it. Longer lens because the stand-off
+	## is twice what it was and the court would otherwise be a smudge.
+	##
+	## The first seaward seat was still too close in z: `Shoulder` reaches forward
+	## to z = 55 and the camera sat at z = 54, so its 150 m flank was *beside* the
+	## lens and wrapped across two thirds of the frame. Standing further out and
+	## further along puts it in front of the camera where a hillside belongs,
+	## twenty degrees off axis instead of astride it.
+	camera.position = Vector3(-138.0, 46.0, 96.0)
+	camera.fov = 30.0
+	## Still aimed below the court, not at it: the subject is what it stands on.
+	camera.look_at(Vector3(0.0, -10.0, 0.0), Vector3.UP)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var path := "user://venue_%s_wide.png" % id
