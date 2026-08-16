@@ -89,7 +89,7 @@ The world should be capable of producing a story in which a minor region has an 
 
 Once qualifying regions are established, academy squads are drawn from eligible volis of that region.
 
-Selection should not be a simple CA sort or a literal season-rating leaderboard.
+Selection should not be a simple CA sort or a literal season-rating leaderboard. It also should not be a purity test that selects only the volis whose club careers most closely resemble the regional default.
 
 A better shape is:
 
@@ -100,14 +100,43 @@ season evidence / playing time / performance
         ↓
 positional candidate pool
         ↓
-academy role needs + regional tactical identity
+regional tactical identity
++ role coverage
++ matchup answers
++ specialist value
         ↓
 selected representative squad
 ```
 
 Season performance establishes candidacy. The academy then attempts to build the strongest coherent representative team rather than merely selecting the highest statistical performers.
 
-This creates meaningful selection disputes and makes club playing time consequential.
+The academy should feel like the assembly of the region's most notable and powerful volis. Most selections will usually make sense inside the fixed regional philosophy because that philosophy shaped the local developmental pipeline. But the academy is trying to win, not to produce a textbook demonstration.
+
+A standout voli can therefore be selected because they:
+
+- fit the regional system unusually well;
+- are simply too powerful or accomplished to omit;
+- provide a specialist role the standard regional profile does not supply;
+- answer a particular opponent archetype;
+- preserve an alternative tactical branch for specific rotations or match states;
+- can remain effective despite being somewhat outside the region's normal tactical assumptions.
+
+Example: a Blôc du Larg academy may mostly select tall, patient blockers and defenders who fit its normal block/floor structure, while still carrying a wildcard commit-blocking specialist and a second libero whose reads are particularly useful against tooling-heavy attackers. Those selections do not change Blôc's philosophy. They give the fixed philosophy additional answers.
+
+This distinction matters:
+
+```text
+REGIONAL PHILOSOPHY
+fixed
+
+ACADEMY SQUAD
+selected to express that philosophy as strongly as possible
+while covering its predictable weaknesses
+```
+
+The academy coach may therefore prefer a slightly less orthodox voli over a more regionally typical one when the unusual voli provides a concrete competitive function.
+
+This creates meaningful selection disputes, makes club playing time consequential, and lets celebrated club specialists become Sixnet wildcards rather than forcing every representative squad into six copies of the regional archetype.
 
 ## 5. Zaitgaist: tactical memory, not one copied style
 
