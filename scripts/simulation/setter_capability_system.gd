@@ -104,11 +104,14 @@ static func command(setter: VolleyballPlayer) -> float:
 	) / 100.0, 0.0, 1.0)
 
 
-## How reliably this setter recognises that a ball is beyond them and takes the
-## safer option instead. This is what makes an overreach a decision rather than
-## a dice roll.
-static func judgment(setter: VolleyballPlayer) -> float:
-	return AttemptJudgmentModel.judgment(setter)
+## How reliably this setter recognises that a ball is beyond them. This is what
+## makes an overreach a decision rather than a dice roll.
+##
+## Renamed from `judgment` with `AttemptJudgment`'s split: recognising the
+## overreach and going anyway are two questions, and this is only the first. See
+## that file's header.
+static func recognition(setter: VolleyballPlayer) -> float:
+	return AttemptJudgmentModel.recognition(setter)
 
 
 ## Command this tempo demands off a pass of this quality.
@@ -241,7 +244,12 @@ static func evaluate(
 
 	return {
 		"command": setter_command,
-		"judgment": judgment(setter),
+		## Renamed with the function. Nothing consumed the old key -- checked
+		## across `scripts`, `scenes`, `tests` and `tools` -- so this is a rename
+		## rather than a contract change, and the payload now says which of the
+		## two questions it answers.
+		"recognition": recognition(setter),
+		"persistence": AttemptJudgmentModel.persistence(setter),
 		"tempos_within_capability": within,
 		"requested_tempo": wanted,
 		"resolved_tempo": resolved,

@@ -894,6 +894,8 @@ redesign direction.
 | `dce1598` | controlled-dig promotion gated on rally-state intent; the dig is found to have no setting target at all, and the continuation dig to fabricate a 29% stretch from an empty arrival |
 | `7eb64fd` | **intent stops naming a launch.** `PLATFORM_CONTACT.md` §3a: intent is anchors plus one derived bound, not an exact `(target, height, time)`. The range form is rejected too — four of its five bounds would be invented. Selection becomes universal and the class D intent margin dissolves into it; tempo enters as a dimensionless weight rather than a margin in seconds |
 | `3ce029b` | **tactical alignment audit**, `PLATFORM_CONTACT.md` §13. Four of the five manager-tactic layers already have persisted homes; the role layer has no rally consumer and the individual layer is absent by decision. The tactical→intent pattern is already written for the block and its instruction arm is **wired to nothing**. Two combination rules found in shipped code — named choices override, graded preferences combine — and `_block_intent_margins` found to be a right tactic in a wrong channel |
+| `32b5871` | tactical design reconciled with the attribute audit: `tactical_discipline` is a blend weight, `AttemptJudgment` has it inverted, and the implementation re-orders |
+| *(this pass)* | **`AttemptJudgment` split into recognition and response**, and measured. Discipline leaves a decision it had no referent in; `aggression` takes the temperament half as a centred deviation. One site moves materially (block soft hands −21.6%); rally outcomes do not move at all |
 
 ---
 

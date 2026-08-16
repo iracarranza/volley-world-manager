@@ -100,6 +100,9 @@ const SETTER_HANDOFF_CALIBRATION_SCRIPT := preload(
 const SETTER_PROGRESSION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/setter_progression_calibration.gd"
 )
+const ATTEMPT_JUDGMENT_SCRIPT := preload(
+	"res://scripts/simulation/attempt_judgment.gd"
+)
 const PLAYER_OBSERVATION_SCRIPT := preload(
 	"res://scripts/models/player_observation.gd"
 )
@@ -267,6 +270,7 @@ func _initialize() -> void:
 	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
+	_test_attempt_judgment_recognition_and_response()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9324,6 +9328,95 @@ func _test_gate_twenty_one_setter_handoffs() -> void:
 			and int(Dictionary(report.get("overall", {})).get("invalid", 1)) == 0,
 		"Gate 21 validates every selected owner against the action candidates",
 	)
+
+
+## Recognition and response are two questions, and only one of them is a skill.
+##
+## `AttemptJudgment` used to weight `tactical_discipline` at 0.30 for the
+## question "do I realise this is beyond me?". `PLATFORM_CONTACT.md` §14
+## establishes discipline as a blend weight toward an actual team call -- so at
+## these sites it had no referent, acted as a capability, and pushed the wrong
+## way, since backing off is itself a departure from the called action.
+##
+## These checks are exact rather than sampled: `backs_off` is deterministic, so
+## a synthetic voli with everything pinned but one attribute isolates each term
+## completely.
+func _test_attempt_judgment_recognition_and_response() -> void:
+	var deficits: Array[float] = [0.05, 0.15, 0.25, 0.35]
+
+	## Discipline must not reach this decision at all, at any overreach size.
+	var discipline_free := true
+	for value in [10, 50, 90]:
+		var subject := _judgment_subject({"tactical_discipline": value})
+		for deficit in deficits:
+			if ATTEMPT_JUDGMENT_SCRIPT.backs_off(subject, deficit) \
+					!= ATTEMPT_JUDGMENT_SCRIPT.backs_off(
+						_judgment_subject({"tactical_discipline": 50}), deficit
+					):
+				discipline_free = false
+	_check(
+		discipline_free
+			and is_equal_approx(
+				ATTEMPT_JUDGMENT_SCRIPT.recognition(
+					_judgment_subject({"tactical_discipline": 10})
+				),
+				ATTEMPT_JUDGMENT_SCRIPT.recognition(
+					_judgment_subject({"tactical_discipline": 90})
+				),
+			),
+		"tactical discipline does not decide whether a voli knows an attempt is beyond them",
+	)
+
+	## Recognition is a capability: more of either term, more recognition.
+	_check(
+		ATTEMPT_JUDGMENT_SCRIPT.recognition(_judgment_subject({"decision_making": 90}))
+			> ATTEMPT_JUDGMENT_SCRIPT.recognition(
+				_judgment_subject({"decision_making": 10}))
+			and ATTEMPT_JUDGMENT_SCRIPT.recognition(
+				_judgment_subject({"composure": 90}))
+				> ATTEMPT_JUDGMENT_SCRIPT.recognition(
+					_judgment_subject({"composure": 10})),
+		"recognition rises with decision making and with composure",
+	)
+
+	## Temperament is a response, and it pushes the other way: the aggressive
+	## voli goes anyway at an overreach the cautious one declines. Searched
+	## across the reachable band rather than asserted at one deficit, so the
+	## check cannot pass by landing on a lucky threshold.
+	var separated := false
+	for deficit in deficits:
+		if ATTEMPT_JUDGMENT_SCRIPT.backs_off(
+			_judgment_subject({"aggression": 10}), deficit
+		) and not ATTEMPT_JUDGMENT_SCRIPT.backs_off(
+			_judgment_subject({"aggression": 90}), deficit
+		):
+			separated = true
+	_check(
+		separated
+			and ATTEMPT_JUDGMENT_SCRIPT.persistence(
+				_judgment_subject({"aggression": 90}))
+				> ATTEMPT_JUDGMENT_SCRIPT.persistence(
+					_judgment_subject({"aggression": 10})),
+		"aggression makes a voli persist with an attempt their equal declines",
+	)
+
+	## The correction re-attributes variation without moving the centre: a voli
+	## at 50 everywhere behaves exactly as the old three-term model did. If this
+	## fails, the split has become a rebalance.
+	_check(
+		is_equal_approx(
+			ATTEMPT_JUDGMENT_SCRIPT.recognition(_judgment_subject({})), 0.5
+		) and not ATTEMPT_JUDGMENT_SCRIPT.backs_off(_judgment_subject({}), 0.0),
+		"a neutral voli lands where the old model put them, and never backs off a zero deficit",
+	)
+
+
+## A voli with every attribute this decision reads pinned to 50, then overridden.
+func _judgment_subject(overrides: Dictionary) -> VolleyballPlayer:
+	var subject := VolleyballPlayer.new()
+	for name in ["decision_making", "tactical_discipline", "composure", "aggression"]:
+		subject.set(name, int(overrides.get(name, 50)))
+	return subject
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

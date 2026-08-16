@@ -436,6 +436,18 @@ Resolve this semantic conflict before tactical-intent wiring begins to depend on
 >
 > This blocks the block-instruction wiring, which would otherwise spend
 > discipline twice at one decision.
+>
+> **Landed 2026-08-16** — see `docs/review/ATTEMPT_JUDGMENT_SPLIT.md`.
+> `judgment()` became `recognition()` (decision_making + composure, renormalised)
+> and `persistence()` (aggression, as a signed deviation from neutral);
+> `tactical_discipline` left both. Measured: discipline moved the flip deficit
+> across 40% of its reachable range and now moves it not at all; aggression's new
+> range is the numerical mirror of discipline's old one. One live site moved
+> materially — the block's soft-hands rate, 0.0875 → 0.0686 — and the scoreboard
+> did not move at all, 410/800 home points before and after. Three coefficients
+> remain uncalibrated and are marked as such in the source. The trace also
+> corrected the site count: five, not four, and the setter's path is a bare
+> in-file call inside `evaluate()` that a `grep` for `.backs_off(` misses.
 
 #### Block contact-envelope balance
 

@@ -12,8 +12,17 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the derived serve relief floor:
-**2,078 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the `AttemptJudgment`
+recognition/response split: **2,082 checks pass**. Treat any test failure as a
+regression.
+
+That is the previous 2,078 plus exactly the four checks that pass added, and the
+delta being exactly four is itself the finding: production behaviour moved at
+every site that decides whether a voli backs off an overreach, and **no sampling
+gate's population changed size**. See `docs/review/ATTEMPT_JUDGMENT_SPLIT.md`.
+A count that moves by precisely the number of checks you wrote is the one case
+where the total is worth reading — and it still is not evidence the change was
+correct, only that it did not disturb coverage.
 
 That is *fewer* than the 2,083 recorded the day before, and nothing was deleted.
 Sampling gates emit a check per sample, and the forward serve changed which
