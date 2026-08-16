@@ -187,9 +187,19 @@ them, otherwise if its own power is below `ISOLATION_THRESHOLD` (40) it
 
 A minor region is by design far weaker than any major neighbour, so the gap
 essentially always exceeds 15. Left alone, minor regions would **always blend
-and never intensify** — culturally absorbed within a few seasons, losing exactly
-the specialisation that justifies the tier. The isolation branch, which is the
-one that actually describes a small stubborn tradition, would never fire.
+and never intensify** — every generation accented by the neighbour within a few
+seasons, losing exactly the specialisation that justifies the tier. The isolation
+branch, which is the one that actually describes a small stubborn tradition, would
+never fire.
+
+> **Read "absorbed" throughout this document as *accented*.** Clarified
+> 2026-08-16. Influence drift writes only into `region_overlay` — additive
+> specialty and body-bias deltas over a region's own list — and has no path to
+> `REGIONAL_PRINCIPLES`. A heavily-influenced minor region produces generations
+> that look like its connected major in *what they are good at*; it keeps its
+> philosophy, its own specialty list, and its existence. Cultural extinction is
+> not designed and not implemented. See
+> `FIXED_REGIONAL_PHILOSOPHIES_AND_CLUB_TACTICAL_VARIANCE.md` §1.
 
 Fix, decided:
 

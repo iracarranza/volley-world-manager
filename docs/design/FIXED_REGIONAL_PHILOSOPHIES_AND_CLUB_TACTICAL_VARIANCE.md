@@ -24,6 +24,54 @@ What can change is:
 
 The underlying regional answer to **how volleyball should be played** remains stable.
 
+### Philosophy and expression are two layers, and only one of them is fixed
+
+Added 2026-08-16, because §1 as written reads as forbidding something the world
+already does and should keep doing.
+
+| layer | what it is | may it drift? |
+|---|---|---|
+| **core philosophy** | the region's answer to how volleyball should be played — its `REGIONAL_PRINCIPLES` / `TeamPrinciples` identity | **never**, through ordinary neighbour influence |
+| **expression** | what kinds of volis a generation is developed to be — specialty emphasis, body bias | **yes**, slowly |
+
+A neighbouring or dominant region can change *what a generation is good at*
+without changing *what the region believes volleyball is*. Blôc du Larg raising a
+cohort with more reach than usual because Pāwa Hitō has been winning is still
+patient block-and-floor volleyball, played by taller people.
+
+**The implementation already draws the line in exactly this place**, which is why
+nothing here changes code:
+
+- `SixnetLeague._blend_specialty_toward()` writes only into
+  `CareerState.region_overlay`, whose own contract is *"additive generation
+  deltas… layered on top of `REGION_SPECIALTY`/`REGION_*_BIAS`, never replacing
+  them"*;
+- `player_generator.gd` consumes it as `REGION_SPECIALTY[region] + specialty_add`
+  — an extension, with its own comment saying influence drift *"broadens what a
+  region is good at, it never takes away what it already had"*;
+- no path from `region_overlay` reaches `REGIONAL_PRINCIPLES`, `TeamPrinciples`,
+  or anything the rally reads as identity.
+
+So the drift that exists is expression drift, and §1's "philosophies do not drift
+into one another" is true of the layer it is about.
+
+### Minor regions resist, and resistance is not survival
+
+`Regions.REGION_TRADITION_RESISTANCE` scales the threshold a neighbour's strength
+gap must clear before it influences a minor region. Weak resistance means a minor
+region's *current developmental expression* becomes heavily accented by its
+connected major — a Kutré Lyn generation that increasingly looks Xérvyan in what
+it is good at.
+
+**It does not mean the minor region stops being itself.** Its philosophy is not
+overwritten, its specialty list is not replaced, and there is no code path that
+deletes a regional identity.
+
+> **"Absorption" in this system means an accented generation, not an extinguished
+> region.** Cultural extinction — a region losing its philosophy outright — is not
+> designed, not implemented, and may not be inferred from the word "absorb" in
+> older comments. It would need its own design pass that says so explicitly.
+
 ## 2. Zaitgaist is not an exception to the rule
 
 Zaitgaist's permanent philosophy is the absence of a permanent borrowed content model:
