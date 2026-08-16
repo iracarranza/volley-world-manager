@@ -113,7 +113,7 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 @export var sixnet_form: Dictionary = {}  ## region_name -> competitive form (10-95)
 @export var sixnet_slots: Dictionary = {}  ## "upper_1".."lower_4" -> region_name
 ## Per-region additive generation deltas from influence drift, layered on top
-## of `PlayerGenerator`'s static `REGION_SPECIALTY`/`REGION_*_BIAS` consts,
+## of `VolleyballPlayerGenerator`'s static `REGION_SPECIALTY`/`REGION_*_BIAS` consts,
 ## never replacing them. A region absent here (or present with an empty
 ## dict) generates identically to before this feature existed.
 @export var region_overlay: Dictionary = {}

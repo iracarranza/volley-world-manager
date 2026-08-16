@@ -10,7 +10,7 @@ extends Resource
 @export_range(1, 100) var potential: int = 70
 ## Per-attribute ceiling this player was generated with, keyed by attribute
 ## name -- the same ceilings `potential` was scored from, kept individually
-## rather than only as their aggregate. `PlayerGenerator` populates this;
+## rather than only as their aggregate. `VolleyballPlayerGenerator` populates this;
 ## hand-authored fixture players (`GameManager._make_player()`) leave it empty,
 ## which callers read as "no ceiling data, fall back to the current value."
 ## This is what lets a potential-attribute wheel be exact today; when scouting

@@ -14643,25 +14643,6 @@ func _serve_confidence(
 	)
 
 
-## The serve arc, at the pace the server can actually generate.
-##
-## **`solve_struck_arc` asks the least force that reaches, so every serve in the
-## game was hit at exactly the speed needed to land where it landed.** Measured
-## over 400 serves, launch speed ran 14.2 to 15.4 m/s between the tenth and
-## ninetieth percentile -- a band 1.2 m/s wide across every server on both
-## rosters, because the number was a property of the *distance* and nothing
-## else. `serve_power` and `serve_technique` did not reach the ball at all, and
-## raising the whole pace ceiling moved this table by zero.
-##
-## The speed the server has was already being computed: `_geometric_serve_record`
-## resolves the same serve through the shared ballistics and stores it, and it
-## was read for nothing but a shadow comparison. Failure mode #1 -- the third
-## instance of it found on this branch.
-##
-## Speed is carried and the angle is re-solved, which is the doctrine `_swing_arc`
-## states for the same reason: a serve's speed belongs to the server and travels,
-## while its angle belongs to the server *and their target*, and the official
-## landing point is not always the geometric one.
 ## What this hitter puts on this ball.
 ##
 ## `hand_control` rather than `attack_accuracy` is the technique term, because

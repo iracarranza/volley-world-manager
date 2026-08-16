@@ -76,7 +76,7 @@ const CLOSE_FRACTIONS: Array[float] = [1.0, 0.6, 0.2]
 ##
 ## Ids, names, position codes, physique and every structural relationship --
 ## rotations, plays, defensive assignments -- are left exactly as they were.
-## Only the ability attributes are replaced, drawn from `PlayerGenerator` and
+## Only the ability attributes are replaced, drawn from `VolleyballPlayerGenerator` and
 ## matched by position role so a middle still gets a middle's profile.
 ## The region is a parameter now.
 ##
@@ -159,7 +159,7 @@ static func summarise(values: Array) -> Dictionary:
 	}
 
 
-## A roster to measure. `generated` draws from `PlayerGenerator`, which is the
+## A roster to measure. `generated` draws from `VolleyballPlayerGenerator`, which is the
 ## population a real league is built from; the hand-authored vertical slice is a
 ## fixture and its spread reflects whoever typed it.
 static func generated_population(

@@ -74,9 +74,11 @@ const CEILING_MAX_MPS: float = 50.4
 ## **A serve cannot be made faster by raising this, and pushing it tries to make
 ## the serve worse.** Both used to share the constants above. Raising those by a
 ## fifth moved the drawn attack median 14.4 -> 16.7 m/s and left the drawn serve
-## median exactly where it was, because `_serve_arc`'s relief loop takes pace off
+## median exactly where it was, because the serve's relief sweep takes pace off
 ## until the ball both clears the tape and lands in -- so the extra was granted
-## and immediately spent. Worse, at the higher figure *both* a timid and an
+## and immediately spent. (That sweep lived in `rally_simulator._serve_arc` when
+## this was measured; it is now `GeometricAttackResolver._serve_launch`, and its
+## floor is derived rather than the 0.55 it was then.) Worse, at the higher figure *both* a timid and an
 ## aggressive serve exceeded what the geometry could deliver and were relieved to
 ## the same feasible ball, which collapsed the distinction
 ## `_test_the_serve_flies_the_same_ball_as_the_spike` exists to hold: risk has to
@@ -90,7 +92,8 @@ const CEILING_MAX_MPS: float = 50.4
 ## Held at the pre-raise values, which the relief loop can still deliver. Making
 ## serves genuinely faster is a spin problem rather than a power one -- a
 ## topspin ball falls harder than gravity and can therefore be launched faster
-## and still drop in, which is what `_serve_arc` already documents.
+## and still drop in, which is what `GeometricAttackResolver._serve_launch`
+## already documents.
 const SERVE_CEILING_MIN_MPS: float = 24.0
 const SERVE_CEILING_MAX_MPS: float = 42.0
 
