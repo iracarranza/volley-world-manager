@@ -220,7 +220,10 @@ const SERVE_SPREAD_MULTIPLIER: float = 0.70
 ## What was wrong was never the sweep; it was that the sweep was aimed at a
 ## landing point an RNG draw had already decided on.
 const SERVE_PACE_RELIEF_STEPS: int = 8
-const SERVE_PACE_RELIEF_FLOOR: float = 0.55
+## There is no relief *floor* constant, and there was: `SERVE_PACE_RELIEF_FLOOR`
+## sat at 0.55 and stopped the sweep before the serve became feasible. The floor
+## is now `BallFlightModel.minimum_speed_to_reach` for the aim and the candidate
+## spin -- see `_serve_launch`.
 ## How many spin settings a server is allowed to consider between none and all
 ## of theirs. Three is enough to find the trade -- flat, half-brushed, fully
 ## brushed -- and a finer sweep buys resolution the shot does not have.
@@ -705,6 +708,7 @@ static func resolve_serve(
 		attacking_negative_y, spin_state,
 		AttackSwingModel.vertical_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 		AttackSwingModel.bearing_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
+		AttackSwingModel.power_error_scale(control, SERVE_SPREAD_MULTIPLIER, false),
 	)
 	## **The one launch state.** Everything below reads pace, angle and gravity
 	## from here and from nowhere else, which is the whole of what this pass
@@ -792,6 +796,32 @@ static func _serve_launch(
 	## path to the tape and the ball has to stay up over the extra ground.
 	vertical_spread_degrees: float,
 	bearing_spread_degrees: float,
+	## **The fraction of intended pace one sigma of power shortfall removes, and
+	## it is deliberately not used.**
+	##
+	## The serve's dominant net-error channel is power, not angle -- measured, a
+	## power-shortfall draw past one sigma put 0.81 of live serves into the tape
+	## against 0.16 for an equally bad vertical draw. Budgeting the clearance
+	## against it at the same two sigma the angle already gets was tried, both by
+	## adding the two shortfalls and by combining them in quadrature as the
+	## independent draws they are. Both work, and both cost too much: the net rate
+	## went to 0.001-0.007, and the live serve became a **2.8 second lob** at 66
+	## degrees with nine metres of clearance and no aces at all.
+	##
+	## The reason is the distance. Height at the tape carries a gravity drop going
+	## as `1/v^2`; from nine metres behind the endline two sigma of pace is worth
+	## over two metres of height, against half a metre for two sigma of angle. A
+	## serve that insures against its own mishit at the rate an angle is insured
+	## stops being a serve.
+	##
+	## Making it work needs a *smaller* sigma count for pace than for angle, and
+	## nothing in the model says what that number is. It is a real design
+	## question -- how much pace does a server hold back? -- and inventing a
+	## fourth constant to answer it is what this repository's process rules forbid
+	## a fidelity pass from doing. The parameter stays on the signature so the
+	## quantity is named and reachable when that decision is made.
+	## See `docs/design/CONTACT_AND_BALL_FLIGHT.md`, UNRESOLVED PHYSICS 7.
+	_power_shortfall_scale: float,
 ) -> Dictionary:
 	var aimed_to_net := _ground_distance_to_net(
 		contact, bearing_degrees, attacking_negative_y
@@ -827,18 +857,48 @@ static func _serve_launch(
 	## cannot get the ball over still tries to get the ball over.
 	var forced := {}
 	var forced_height := -INF
-	for step in range(SERVE_PACE_RELIEF_STEPS):
-		var trial := full_speed * lerpf(
-			1.0, SERVE_PACE_RELIEF_FLOOR,
-			float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
+	## **Spin outside, pace inside, because the floor of the pace sweep is a
+	## property of the spin.** A ball falling at 25 m/s squared needs more speed
+	## to carry the same distance than one falling at 9.8, so there is no single
+	## slowest serve -- there is one per brush setting, and it has to be solved
+	## before the pace can be swept against it.
+	for spin_step in range(SERVE_SPIN_LEVELS):
+		var used := BallSpin.spin(
+			float(spin_state.get("axis", 0.0)),
+			float(spin_state.get("rate_rps", 0.0))
+				* float(spin_step) / float(SERVE_SPIN_LEVELS - 1),
 		)
-		for spin_step in range(SERVE_SPIN_LEVELS):
-			var used := BallSpin.spin(
-				float(spin_state.get("axis", 0.0)),
-				float(spin_state.get("rate_rps", 0.0))
-					* float(spin_step) / float(SERVE_SPIN_LEVELS - 1),
+		var gravity := BallSpin.gravity_for(used)
+		## **The floor is derived, and it used to be a dial.**
+		##
+		## `SERVE_PACE_RELIEF_FLOOR` stopped the sweep at 0.55 of full pace
+		## whatever the shot was, and for a strong float server nothing inside
+		## that bound clears: measured, the driven root's height at the tape
+		## climbed 1.447 -> 2.674 m as pace came off and was *still* short of the
+		## 2.877 m needed when the sweep ran out. The search then fell to the
+		## lofted root and served a 68 degree ball with 10.1 m of clearance and a
+		## 2.98 s flight -- a punt, on 6.5% of live serves, and worse for a better
+		## server, because technique purifies a float and removes the topspin that
+		## would have let it dive.
+		##
+		## `_quickest_clearing_loft` had already written down the answer, about
+		## its own floor, forty lines away: *"The floor is a derived quantity, not
+		## a dial. Below the minimum speed for the range nothing reaches at any
+		## angle, and at it the two roots merge."* That is the honest bottom of a
+		## pace sweep -- past it there is no serve to find, and short of it there
+		## are serves being refused for no physical reason.
+		var reach_floor := float(BallFlightModel.minimum_speed_to_reach(
+			aim_distance_meters, contact_height_meters, gravity
+		).speed_mps)
+		## A server who cannot carry the ball that far at full pace has no relief
+		## to give: the sweep would otherwise interpolate *upward*, handing them
+		## speed they do not have.
+		var relief_floor := minf(reach_floor, full_speed)
+		for step in range(SERVE_PACE_RELIEF_STEPS):
+			var trial := lerpf(
+				full_speed, relief_floor,
+				float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
 			)
-			var gravity := BallSpin.gravity_for(used)
 			var solved := BallFlightModel.solve_angle_for_range(
 				trial, aim_distance_meters, contact_height_meters, gravity
 			)

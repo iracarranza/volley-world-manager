@@ -119,19 +119,28 @@ func _table(case: Dictionary) -> void:
 
 	var best_speed := 0.0
 	var best_desc := "(nothing cleared)"
-	for step in range(GeometricAttackResolver.SERVE_PACE_RELIEF_STEPS):
-		var trial := full_pace * lerpf(
-			1.0, GeometricAttackResolver.SERVE_PACE_RELIEF_FLOOR,
-			float(step)
-				/ float(GeometricAttackResolver.SERVE_PACE_RELIEF_STEPS - 1),
+	for spin_step in range(GeometricAttackResolver.SERVE_SPIN_LEVELS):
+		var used := BallSpin.spin(
+			float(spin.get("axis", 0.0)),
+			float(spin.get("rate_rps", 0.0)) * float(spin_step)
+				/ float(GeometricAttackResolver.SERVE_SPIN_LEVELS - 1),
 		)
-		for spin_step in range(GeometricAttackResolver.SERVE_SPIN_LEVELS):
-			var used := BallSpin.spin(
-				float(spin.get("axis", 0.0)),
-				float(spin.get("rate_rps", 0.0)) * float(spin_step)
-					/ float(GeometricAttackResolver.SERVE_SPIN_LEVELS - 1),
+		var gravity := BallSpin.gravity_for(used)
+		## The derived floor, per spin setting, exactly as the resolver takes it.
+		var relief_floor := minf(
+			float(BallFlightModel.minimum_speed_to_reach(
+				distance, height, gravity
+			).speed_mps),
+			full_pace,
+		)
+		print("    spin %.2f gravity %.2f -> slowest ball that reaches: %.2f m/s"
+			% [float(used.rate_rps), gravity, relief_floor])
+		for step in range(GeometricAttackResolver.SERVE_PACE_RELIEF_STEPS):
+			var trial := lerpf(
+				full_pace, relief_floor,
+				float(step)
+					/ float(GeometricAttackResolver.SERVE_PACE_RELIEF_STEPS - 1),
 			)
-			var gravity := BallSpin.gravity_for(used)
 			var solved := BallFlightModel.solve_angle_for_range(
 				trial, distance, height, gravity
 			)

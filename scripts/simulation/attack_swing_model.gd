@@ -173,6 +173,31 @@ static func form_spread_multiplier(
 	return lerpf(FORM_SPREAD_WORST, FORM_SPREAD_BEST, (form + 1.0) * 0.5)
 
 
+## How much of the intended pace one sigma of power error moves, as a fraction.
+##
+## **Extracted so a planner can read it before the draw.** It was inline in
+## `deliver`, which meant the only way to know how much pace a contact might lose
+## was to take the loss -- so a launch search could plan around its own angular
+## spread, which it is handed, and not around its power spread, which it was not.
+## Measured on the serve, that gap is the dominant net-error channel: a
+## power-shortfall draw beyond one sigma put 0.81 of live serves into the tape
+## against 0.16 for an equally bad vertical draw.
+##
+## `overshooting` selects the side, because the two are deliberately asymmetric
+## -- shortfall is about three times overshoot, which is what makes "mishit" the
+## common failure and "caught it too well" the rare one. A planner asks for the
+## shortfall side; `deliver` asks for whichever side the draw landed on. One
+## definition, so the reserve a contact is planned with cannot drift from the
+## error it is then judged by -- the same reason `deliver` computes its angular
+## spreads through the functions the hitter aimed against.
+static func power_error_scale(
+	accuracy: float, spread_multiplier: float, overshooting: bool
+) -> float:
+	return lerpf(
+		POWER_SHORTFALL, POWER_OVERSHOOT, 1.0 if overshooting else 0.0
+	) * (1.0 - clampf(accuracy, 0.0, 1.0) * 0.55) * maxf(spread_multiplier, 0.0)
+
+
 static func deliver(
 	intended_bearing_degrees: float,
 	intended_vertical_angle_degrees: float,
@@ -194,9 +219,7 @@ static func deliver(
 	var vertical_error := vertical_draw * vertical_spread
 	## The asymmetry. A negative draw takes the full shortfall; a positive one
 	## only ever adds a little.
-	var power_scale := lerpf(
-		POWER_SHORTFALL, POWER_OVERSHOOT, 1.0 if power_draw > 0.0 else 0.0
-	) * (1.0 - precision * 0.55) * widen
+	var power_scale := power_error_scale(precision, widen, power_draw > 0.0)
 	var power_error := power_draw * power_scale
 
 	return {

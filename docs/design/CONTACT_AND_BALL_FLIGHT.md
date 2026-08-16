@@ -411,6 +411,97 @@ So the multiplier cannot be used to set the net rate, and recalibrating it would
 move long and wide to hit a number that net is producing. Its evidence is stale;
 the reason not to touch it now is stronger than that.
 
+### The relief floor is derived — CURRENT, landed 2026-08-16
+
+`SERVE_PACE_RELIEF_FLOOR = 0.55` is gone. The sweep now runs from full pace down
+to `BallFlightModel.minimum_speed_to_reach(aim, contact height, gravity)` — the
+slowest ball that carries to the aim at all, below which no serve exists to find.
+The floor is solved **per spin setting**, because a ball falling at 25 m/s² needs
+more speed to carry the same distance than one falling at 9.8, so the pace loop
+now sits inside the spin loop rather than beside it.
+
+The bound is derived rather than tuned in the only sense that matters: it is not
+a number anybody chose. `_quickest_clearing_loft` had already written the rule
+down for its own floor forty lines away — *"The floor is a derived quantity, not
+a dial. Below the minimum speed for the range nothing reaches at any angle, and
+at it the two roots merge."*
+
+**The float punt is gone.** The strong float cell that served a 68° ball with
+10.1 m of clearance now serves **driven at 14.48 m/s and 16.3°**, and an
+independent enumeration of the sweep agrees with the resolver on all four probed
+cases. Jump Topspin strong is untouched at 28.10 m/s and 6.4°, so the change
+reaches only the cell that was broken.
+
+| | before | after A |
+|---|---|---|
+| live error / net | 0.220 / 0.170 | **0.176 / 0.131** |
+| live clearance | 0.61 | **0.85** |
+| live driven share | 0.935 | **0.981** |
+| factorial error / net | 0.098 / 0.029 | 0.105 / **0.039** |
+| factorial driven share | 0.933 | **1.000** |
+| factorial angle | 13.7° | 13.1° |
+| ability weak / average / strong | 0.168 / 0.088 / 0.038 | 0.176 / 0.097 / 0.042 |
+| Jump Float error / net / duration | 0.159 / 0.080 / 1.30 | 0.180 / 0.120 / 1.24 |
+
+Live improves and the factorial's net rate *rises*, and both are the same fact:
+**the punt was hiding error.** A ball lobbed nine metres over the tape cannot be
+netted, so the strong-float cell scored 0.065 net by never playing a real serve.
+Converting it to a driven serve converts its immunity into ordinary risk.
+Ability monotonicity survives, and Jump Float remains the worst style now that it
+is honest about it.
+
+### The power-shortfall margin — UNRESOLVED, and this is why
+
+Attempted, measured, and **reverted**. Both variants worked and both cost too
+much.
+
+The rule tried: plan the launch so the ball still clears at the pace it would
+have after a `NET_CLEARANCE_SPREAD_SIGMAS`-sigma power shortfall, using
+`AttackSwingModel.power_error_scale` — the same scale `deliver` applies to the
+draw, extracted so a planner can read it before the draw is taken. No new
+constant: the sigma count is the clearance rule's own and the scale is the
+delivery model's own.
+
+| | A (no power budget) | A+B added | A+B in quadrature |
+|---|---|---|---|
+| factorial net | 0.039 | 0.034 | **0.007** |
+| factorial angle | 13.1° | 25.1° | 20.4° |
+| factorial driven share | 1.000 | 0.644 | 0.700 |
+| **live net** | 0.131 | 0.074 | **0.003** |
+| **live angle** | 19.8° | 70.0° | **66.6°** |
+| **live clearance** | 0.85 | 10.48 | **9.01** |
+| **live duration** | 1.28 | 3.04 | **2.78** |
+| **live driven share** | 0.981 | 0.000 | 0.021 |
+| **live ace** | 0.009 | 0.000 | **0.000** |
+
+Quadrature is the right combination and was not chosen to soften the result —
+`deliver` pulls its three draws from separate normals, so adding two independent
+two-sigma shortfalls plans for a serve that essentially never happens. It halved
+the cost and did not change the verdict.
+
+**The reason is the distance, and it is not fixable by combination.** Height at
+the tape carries a gravity drop going as `1/v²`. For the live server two sigma of
+pace is worth **2.19 m** of height at the net against **0.56 m** for two sigma of
+angle — so the power budget is four times the angular one and dominates any way
+they are combined. A serve that insures against its own mishit at the rate an
+angle is insured stops being a serve: every live serve became a 2.8 second lob
+with no aces at all.
+
+**Making it work needs a smaller sigma count for pace than for angle, and nothing
+in the model says what that number is.** `tactical_risk` already means the pace
+instruction and `serve_consistency` is already inside the spread the reserve
+would be derived from; reusing either is double-counting dressed as derivation.
+So this is a genuine design question — *how much pace does a server hold back?* —
+and it is recorded as UNRESOLVED PHYSICS 7 rather than answered with a fourth
+constant.
+
+What survives the revert is `AttackSwingModel.power_error_scale`, extracted from
+inside `deliver` and behaviour-neutral (both probes reproduce A byte for byte).
+It is what makes the quantity nameable before the draw, which is what the pass
+that answers the question will need. `_serve_launch` still takes it, named
+`_power_shortfall_scale`, so the parameter documents the hole rather than hiding
+it.
+
 ### The calibration this invalidated
 
 `SERVE_SPREAD_MULTIPLIER = 0.70` carries a sweep table claiming 15.6% / 10.6%
@@ -453,7 +544,14 @@ What a recalibration will need to decide is named below, not invented here.
    is 17.0 of the live 22.0 points of serve error, so this is not a rounding
    question. What it needs is a decision about how much pace a server holds in
    reserve, which is design, not plumbing.
-8. **The pace-relief floor is a dial where a derived quantity belongs.**
+   **Attempted and reverted 2026-08-16** — see "The power-shortfall margin"
+   above for the two measured variants and why neither could be kept. The
+   remaining question is narrow and stated: how many sigmas of pace does a server
+   hold in reserve, given that two is demonstrably too many?
+8. **~~The pace-relief floor is a dial where a derived quantity belongs.~~**
+   **Resolved 2026-08-16** — the floor is now
+   `BallFlightModel.minimum_speed_to_reach`, per spin setting. Kept below for the
+   record of what it was.
    `SERVE_PACE_RELIEF_FLOOR = 0.55` bounds how much pace the launch search may
    give up. For a **strong float server** nothing inside that bound clears: the
    driven root's height at the tape climbs 1.447 → 2.674 m as pace comes off and
