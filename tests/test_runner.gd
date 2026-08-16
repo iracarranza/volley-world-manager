@@ -103,6 +103,9 @@ const SETTER_PROGRESSION_CALIBRATION_SCRIPT := preload(
 const ATTEMPT_JUDGMENT_SCRIPT := preload(
 	"res://scripts/simulation/attempt_judgment.gd"
 )
+const RALLY_SIMULATOR_SCRIPT := preload(
+	"res://scripts/simulation/rally_simulator.gd"
+)
 const PLAYER_OBSERVATION_SCRIPT := preload(
 	"res://scripts/models/player_observation.gd"
 )
@@ -271,6 +274,7 @@ func _initialize() -> void:
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_attempt_judgment_recognition_and_response()
+	_test_block_hands_instruction_adherence()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9417,6 +9421,125 @@ func _judgment_subject(overrides: Dictionary) -> VolleyballPlayer:
 	for name in ["decision_making", "tactical_discipline", "composure", "aggression"]:
 		subject.set(name, int(overrides.get(name, 50)))
 	return subject
+
+
+## The manager's call reaches the court, and discipline moves toward *it*.
+##
+## The first end-to-end tactical proof in the engine: a behaviour written on the
+## clipboard becomes an attempted block action, mediated by the blocker's own read
+## and their adherence. `docs/review/BLOCK_INSTRUCTION_PROOF.md` has the sweep.
+##
+## The bidirectional pair is the load-bearing part. An attribute that pushed the
+## same way under both calls would be temperament wearing an instruction's name,
+## and these two checks are what makes that a failure rather than a story.
+func _test_block_hands_instruction_adherence() -> void:
+	## Own read is kill (`deficit <= 0`), so a SOFT call is the disagreement.
+	var soft_low := _hands_rate("soft", 10, 0.10, 1.0, "soft block")
+	var soft_high := _hands_rate("soft", 90, 0.10, 1.0, "soft block")
+	_check(
+		soft_high > soft_low + 0.25,
+		"a soft-hands call reaches more disciplined blockers more often",
+	)
+
+	## Own read is soft (beaten and still closing), so a KILL call is the
+	## disagreement. Same attribute, opposite direction.
+	var kill_low := _hands_rate("kill", 10, -0.10, 0.55, "kill block")
+	var kill_high := _hands_rate("kill", 90, -0.10, 0.55, "kill block")
+	_check(
+		kill_high > kill_low + 0.25,
+		"a kill-hands call reaches more disciplined blockers more often",
+	)
+
+	## With nobody asking, discipline must do nothing at all -- the check that
+	## keeps it an adherence weight rather than a second temperament.
+	_check(
+		is_equal_approx(_hands_rate("soft", 10, 0.10, 1.0, ""),
+			_hands_rate("soft", 90, 0.10, 1.0, ""))
+			and is_equal_approx(_hands_rate("soft", 10, -0.10, 0.55, ""),
+				_hands_rate("soft", 90, -0.10, 0.55, "")),
+		"discipline changes nothing when no hands call was made",
+	)
+
+	## And it may not move the physical contest it is handed. The verdict is a
+	## choice about hands; the close fraction and contest margin are inputs.
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var contest := -0.10
+	var close := 0.55
+	simulator._block_hands_intent(
+		_hands_blocker(90), contest, close, "kill block"
+	)
+	_check(
+		is_equal_approx(contest, -0.10) and is_equal_approx(close, 0.55),
+		"the hands decision leaves the physical contest it was handed alone",
+	)
+
+	## End to end: a behaviour written on a real `TacticSheet` arrives at the
+	## decision site. Part B of the probe cannot show this, because the vertical
+	## slice ships no drawn sheet -- so without this check the wiring is only
+	## proven from the halfway point.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var blocker_id := lineup.player_at_slot(3)
+	var sheet := TacticSheet.new()
+	sheet.behaviours["3:Block"] = "soft block"
+	var wired := RALLY_SIMULATOR_SCRIPT.new()
+	wired.tactic_sheet = sheet
+	var reached := str(wired._hands_instruction_for(
+		_player_with_id(manager.players, blocker_id), lineup
+	))
+	var unwired := RALLY_SIMULATOR_SCRIPT.new()
+	_check(
+		reached == "soft block"
+			and str(unwired._hands_instruction_for(
+				_player_with_id(manager.players, blocker_id), lineup
+			)).is_empty(),
+		"a block behaviour written on the clipboard reaches the blocker who was told it",
+	)
+	manager.free()
+
+
+## Share of `samples` seeds on which this blocker's hands came out `wanted`.
+##
+## `_identity_roll` is a hash of the rally seed, so sweeping seeds turns one
+## deterministic decision into an exact rate rather than a sampled one.
+func _hands_rate(
+	wanted: String,
+	discipline: int,
+	contest_margin: float,
+	close_fraction: float,
+	instruction: String,
+) -> float:
+	var samples := 200
+	var hits := 0
+	for seed_value in range(samples):
+		var simulator := RALLY_SIMULATOR_SCRIPT.new()
+		simulator.rally_seed = seed_value
+		var verdict: Dictionary = simulator._block_hands_intent(
+			_hands_blocker(discipline), contest_margin, close_fraction, instruction
+		)
+		if str(verdict.hands) == wanted:
+			hits += 1
+	return float(hits) / float(samples)
+
+
+## Everything pinned but discipline, so the voli's own verdict is constant and
+## adherence is the only thing that can move the result.
+func _hands_blocker(discipline: int) -> VolleyballPlayer:
+	var blocker := VolleyballPlayer.new()
+	blocker.decision_making = 50
+	blocker.composure = 50
+	blocker.aggression = 50
+	blocker.tactical_discipline = discipline
+	return blocker
+
+
+func _player_with_id(players: Array, player_id: int) -> VolleyballPlayer:
+	for entry in players:
+		if entry != null and int(entry.id) == player_id:
+			return entry
+	return null
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

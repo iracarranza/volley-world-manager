@@ -12,14 +12,15 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the `AttemptJudgment`
-recognition/response split: **2,082 checks pass**. Treat any test failure as a
-regression.
+Current branch baseline, verified 2026-08-16 on the block-hands instruction
+wiring: **2,087 checks pass**. Treat any test failure as a regression.
 
-That is the previous 2,078 plus exactly the four checks that pass added, and the
-delta being exactly four is itself the finding: production behaviour moved at
-every site that decides whether a voli backs off an overreach, and **no sampling
-gate's population changed size**. See `docs/review/ATTEMPT_JUDGMENT_SPLIT.md`.
+That is 2,082 plus exactly the five checks that pass added. The pass before it
+moved 2,078 → 2,082 the same way, and in both cases the delta being exactly the
+number of checks written is the finding: production behaviour changed and **no
+sampling gate's population changed size**. See
+`docs/review/BLOCK_INSTRUCTION_PROOF.md` and
+`docs/review/ATTEMPT_JUDGMENT_SPLIT.md`.
 A count that moves by precisely the number of checks you wrote is the one case
 where the total is worth reading — and it still is not evidence the change was
 correct, only that it did not disturb coverage.

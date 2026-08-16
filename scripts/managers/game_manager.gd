@@ -624,6 +624,10 @@ func resolve_active_rally(
 	## a function of what it was given, which is what makes a rally replayable
 	## from a seed.
 	simulator.pair_familiarity = team.pair_familiarity if team != null else {}
+	## The clipboard, by the same rule as the line above: handed in, not looked
+	## up. `TacticSheet` has been persisted and readable since it was written and
+	## no rally had ever seen it.
+	simulator.tactic_sheet = team.tactic_sheet if team != null else null
 	if team != null:
 		simulator.team_cohesion = float(team.cohesion)
 		simulator.team_tactical_familiarity = float(team.tactical_familiarity)

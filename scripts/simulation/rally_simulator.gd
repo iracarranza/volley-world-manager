@@ -454,19 +454,34 @@ const BLOCK_DEPTH_RELIEF_WEIGHT: float = 0.10
 ## `deficit` is how far the swing is beyond this block, on the 0-to-0.4 scale
 ## `AttemptJudgment` documents: zero when the contest is winning, growing as the
 ## swing pulls ahead.
+## Returns `{hands, call, followed}` rather than a bare string, so a rally record
+## can say what was *asked* as well as what was done. An instruction nobody can
+## see obeyed or ignored is not an instruction.
 func _block_hands_intent(
 	blocker: VolleyballPlayer,
 	contest_margin: float,
 	close_fraction: float,
 	instruction: String = "",
-) -> String:
+) -> Dictionary:
+	## **The call names an action; it does not perform one.** This used to be a
+	## `match` that returned outright, which made every blocker obey identically
+	## -- and it never fired anyway, because nothing wrote the key. Both halves
+	## were wrong in the same direction: an instruction is something a voli
+	## *adheres to*, in proportion to `tactical_discipline`, not something that
+	## replaces them.
+	##
+	## Only the two hands behaviours map. `close line` and `close cross` are lane
+	## instructions from the same clipboard page and say nothing about the hands;
+	## treating them as a hands call would be inventing a call the manager did not
+	## make.
+	var call := ""
 	match instruction:
 		"soft block":
-			return "soft"
+			call = "soft"
 		"kill block":
-			return "kill"
+			call = "kill"
 	if blocker == null:
-		return "neutral"
+		return {"hands": "neutral", "call": call, "followed": false}
 	## **Late and low, not behind on the contest.**
 	##
 	## The first version read the deficit off `contest - attack_quality`, and every
@@ -488,9 +503,29 @@ func _block_hands_intent(
 		short_of_the_ball + beaten_on_the_contest,
 		0.0, AttemptJudgmentModel.OBVIOUS_DEFICIT,
 	)
-	if deficit <= 0.0:
-		return "kill"
-	return "soft" if AttemptJudgmentModel.backs_off(blocker, deficit) else "kill"
+	## What this voli would do left alone: recognition and temperament, exactly as
+	## `AttemptJudgment` splits them. `tactical_discipline` is deliberately absent
+	## here -- it decides adherence below, never self-assessment.
+	var own := "kill" if deficit <= 0.0 \
+		else ("soft" if AttemptJudgmentModel.backs_off(blocker, deficit) else "kill")
+	if call.is_empty() or call == own:
+		## No call, or the call is what they were going to do anyway. Nothing for
+		## discipline to act on, and it must not act: an attribute that moves a
+		## voli when nobody asked them anything is temperament.
+		return {"hands": own, "call": call, "followed": not call.is_empty()}
+	## They disagree with the call. **The sign comes from `call`, not from the
+	## attribute** -- discipline returns whatever was asked, so it pushes toward
+	## soft under a soft call and toward kill under a kill call. An attribute that
+	## always produced the same action would be temperament again, and the gate in
+	## `test_runner.gd` fails if it is.
+	##
+	## `_identity_roll` rather than a fresh draw: it is the repeatable per-rally
+	## channel the identity calls already use, so this adds no RNG stream and
+	## nothing downstream reseeds.
+	var follows := _identity_roll(
+		"block-hands|%d" % blocker.id
+	) < _rating(blocker, "tactical_discipline")
+	return {"hands": call if follows else own, "call": call, "followed": follows}
 
 
 ## How a ball off the block flies. The angle is a squirt off the hands rather
@@ -1040,6 +1075,14 @@ var recovery_fatigue_cost: Dictionary = {}
 ## already is, and for the same reason: a resolver that writes to the roster it
 ## is resolving breaks replay determinism, and the gate catches it immediately.
 var exertion_cost: Dictionary = {}
+## What the manager drew on the clipboard, handed in before the resolve like
+## `pair_familiarity` beside it. The resolver deliberately never sees the
+## `VolleyballTeam`; it sees the sheet, which is the same boundary
+## `defensive_plan` and `team_principles` already respect.
+##
+## Home only, and that asymmetry is honest rather than an omission: the sheet is
+## the manager's own club's, and an opponent hands-call would have to be invented.
+var tactic_sheet: Resource = null
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
 var opponent_principles: Resource
@@ -3165,6 +3208,10 @@ func resolve(
 			## swing into a waiting digger did exactly what it meant to.
 			"block_intent": str(block_resolution.get("block_intent", "Balanced")),
 			"block_hands": str(block_resolution.get("block_hands", "neutral")),
+			"block_hands_call": str(block_resolution.get("block_hands_call", "")),
+			"block_hands_followed": bool(
+				block_resolution.get("block_hands_followed", false)
+			),
 			## And *how* the wall was beaten, which the attack event already
 			## carried and this one did not. Over the top is a reach problem and
 			## around the edge is a read problem -- they want opposite fixes, and
@@ -5268,6 +5315,10 @@ func _resolve_opponent_transition(
 			)),
 			"signature_actor_id": int(geometric.get("signature_actor_id", blocker_id)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
+			"block_hands_call": str(block_result.get("block_hands_call", "")),
+			"block_hands_followed": bool(
+				block_result.get("block_hands_followed", false)
+			),
 			## Alongside the hands, and for the same reason -- see the note on the
 			## opponent block above. The plan's intent is what separates a funnel
 			## that funnelled from a seal that was beaten.
@@ -6692,6 +6743,10 @@ func _resolve_home_continuation(
 					if opponent_blocker != null else -1
 			)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
+			"block_hands_call": str(block_result.get("block_hands_call", "")),
+			"block_hands_followed": bool(
+				block_result.get("block_hands_followed", false)
+			),
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			## When each blocker jumped, so playback can draw the apex where the
 			## blocker actually put it. Without this the drawn jump was centred on
@@ -7281,11 +7336,14 @@ func _contest_block(
 	## What the hands mean to do, decided before the bands are read because it
 	## moves one of them. The margin is the block's own lead over the swing, which
 	## is what a blocker in the air can feel.
-	var hands := _block_hands_intent(
+	var hands_intent := _block_hands_intent(
 		formation.get("primary") as VolleyballPlayer, contest - attack_quality,
 		primary_close, str(formation.get("hands_instruction", "")),
 	)
+	var hands := str(hands_intent.hands)
 	resolved["block_hands"] = hands
+	resolved["block_hands_call"] = str(hands_intent.call)
+	resolved["block_hands_followed"] = bool(hands_intent.followed)
 	var hands_stuff_shift := 0.0
 	match hands:
 		"kill":
@@ -12368,6 +12426,23 @@ func _fallback_hitter(
 ## than crowning one player. Removed rather than kept as a second, cruder
 ## answer to a question the block system now owns.
 
+## What the clipboard told this blocker to do with their hands, or "".
+##
+## Returns empty for every reason it can: no sheet handed in, no lineup, a voli
+## not in the rotation, or a slot the manager left blank. An absent instruction
+## is a real state and must read as one -- it is what every block in the game had
+## until now.
+func _hands_instruction_for(
+	blocker: VolleyballPlayer, lineup: RotationLineup
+) -> String:
+	if tactic_sheet == null or blocker == null or lineup == null:
+		return ""
+	var slot := lineup.slot_for_player(blocker.id)
+	if slot <= 0:
+		return ""
+	return str(tactic_sheet.behaviour_of(slot, "Block"))
+
+
 
 ## `set_flight_time` is the opponent set's own flight, for the same reason the
 ## opponent block uses it: it is how long home blockers actually have.
@@ -12548,6 +12623,16 @@ func _form_home_block(
 		"assist_attempt": assist_attempt,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		## **The manager's call, finally reaching the court.** `TacticSheet` has
+		## stored a per-slot block behaviour since it was written, and
+		## `_block_hands_intent` has had a branch for it since it was written, and
+		## nothing has ever carried a value between them. Keyed by slot because
+		## that is how the sheet is keyed -- a plan is a shape the club plays, and
+		## it outlives whoever stands in position four.
+		##
+		## Home only. The sheet belongs to the manager's own club, so an opponent
+		## hands-call would have to be invented, and this pass does not invent one.
+		"hands_instruction": _hands_instruction_for(primary, lineup),
 		## The reached positions, so the geometric wall stands where the blockers
 		## closed to rather than where they began.
 		"primary_net_x": float(primary_terms.get("closed_net_x", 0.5)),
