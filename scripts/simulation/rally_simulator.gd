@@ -1424,6 +1424,7 @@ func resolve(
 			players, lineup, defensive_plan, opponent_team,
 			active_play, false, seed_value
 		)
+		_seed_carried_body_states(live_state, rally_clock)
 		live_reception_integration = LiveReceptionIntegratorModel.apply(
 			live_state, shadow_summary, selected_live_reception
 		)
@@ -1767,6 +1768,7 @@ func resolve(
 			players, lineup, defensive_plan, opponent_team,
 			active_play, false, seed_value
 		)
+		_seed_carried_body_states(attack_state, rally_clock)
 	var setter_response := Dictionary(
 		shadow_summary.get("shadow_setter_response", {})
 	)
@@ -4678,6 +4680,7 @@ func _resolve_opponent_transition(
 		rng.seed + exchange_number * 2411,
 	)
 	opponent_state.simulation_time = maxf(rally_clock - 0.55, 0.0)
+	_seed_carried_body_states(opponent_state, opponent_state.simulation_time)
 	var opponent_hitter_actor := opponent_state.player_state(
 		&"opponent", opponent_hitter.id
 	)
@@ -6275,6 +6278,7 @@ func _resolve_home_continuation(
 		rng.seed + exchange_number * 1009,
 	)
 	transition_state.simulation_time = maxf(rally_clock - 0.55, 0.0)
+	_seed_carried_body_states(transition_state, transition_state.simulation_time)
 	for raw_player_id in transition_state.home_players:
 		var phase_actor := transition_state.player_state(&"home", int(raw_player_id))
 		if phase_actor != null:
@@ -10688,6 +10692,47 @@ func _contact_recovery_state(
 ## rally -- it is why a defender who dug off the floor is not the one covering
 ## the next ball -- and the *fatigue* is spent across the match. Both are booked
 ## here so no call site can take the pose without the price.
+## **What a body is still carrying when a new phase state is built.**
+##
+## `RallyStateBuilder` makes every actor at rest, BALANCED and IDLE, and the
+## resolver rebuilds a phase state several times per rally. So a blocker who had
+## just landed, or a defender still getting up off the floor, arrived in the next
+## phase as though nothing had happened -- the debt was still charged against
+## their *clock* through `_recovery_time_penalties`, but the body the contact
+## envelope looked at was fresh.
+##
+## `player_recovery` has carried both the debt and a **name** for it since it was
+## written (`"airborne"` from a block jump, `"fall"`, `"knee"`, `"blown_away"`,
+## `"platform"` from a floor contact). Nothing ever read the name back. This does,
+## and nothing else: no new state, no new value, no new relation. A voli who owes
+## nothing at this moment is left exactly as the builder made them.
+##
+## This is what `ContactEnvelopeSystem`'s AIRBORNE takeoff exclusion and the
+## claimant's usable-time requirement were both waiting on -- two certified
+## repairs that could not fire because the state they test never survived a leg.
+## See `docs/review/ACTOR_CONTINUITY.md`.
+func _seed_carried_body_states(state: RallyState, at_time: float) -> void:
+	if state == null:
+		return
+	for actor in state.all_player_states():
+		var record: Dictionary = player_recovery.get(actor.player_id, {})
+		if record.is_empty():
+			continue
+		var ready_at := float(record.get("ready_at", 0.0))
+		if ready_at <= at_time:
+			continue
+		actor.recovery_until = maxf(actor.recovery_until, ready_at)
+		## A body still owing a block jump has not landed; every other debt is a
+		## body getting back up. The distinction is the one `player_recovery`
+		## already draws, not a new one.
+		actor.body_state = RallyPlayerState.BodyState.AIRBORNE \
+			if str(record.get("state", "")) == "airborne" \
+			else RallyPlayerState.BodyState.RECOVERING
+		## Recovery preserves whatever orientation the last real movement
+		## established, which is what the moving-orientation policy says it does.
+		actor.movement_mode = RallyPlayerState.MovementMode.RECOVERY
+
+
 func _note_recovery(
 	player: VolleyballPlayer, state: String, at_time: float
 ) -> void:

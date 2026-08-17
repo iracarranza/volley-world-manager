@@ -35,7 +35,7 @@ The governing fidelity milestone remains the one in
 | **M9 — tactical A/B certification** | **PLANNED** | Manager instructions create the predicted visible volleyball differences through voli interpretation and physical feasibility, not merely hidden coefficient movement. | `TACTICS_AND_TRAINING.md`, platform-contact tactical audit |
 | **M10 — presentation and legibility cleanup** | **PLANNED** | Presentation reports the certified simulation cleanly: cogniticons coalesce and persist semantically, waiting belongs to pre-serve, ready state is visibly legible, and remaining block/contact poses expose real intent/state without inventing simulation facts. | `OUTSTANDING.md`, `READABLE_BODIES.md`, presentation review docs |
 
-## The plumbing M3 is behind
+## ~~The plumbing M3 is behind~~ DONE
 
 Two correctness repairs are certified and **latent**, and both wait on the same
 missing structure: `ContactEnvelopeSystem`'s AIRBORNE takeoff exclusion

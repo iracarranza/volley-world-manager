@@ -12,10 +12,15 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on the short-ball sweep:
-**2,131 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on the actor-continuity pass:
+**2,133 checks pass**. Treat any test failure as a regression.
 
-That is 2,129 plus exactly the two checks written, on a change that moved no
+That is 2,131 plus exactly the two checks written. Three consecutive passes have
+now moved the count by precisely what they wrote while moving populations by
+wildly different amounts -- one halved the home wall's failure rows, two changed
+no outcome at all -- so the count is measuring test authorship and nothing else.
+
+Before it, 2,129 plus exactly the two checks written, on a change that moved no
 outcome at all -- the mix over 600 rallies came back byte-identical, because no
 live claim ever reaches the condition the repair added. A repair can be correct
 and latent at the same time, and the count says nothing about which.

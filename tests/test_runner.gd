@@ -294,6 +294,7 @@ func _initialize() -> void:
 	_test_block_setter_pull_applies_once()
 	_test_setter_release_is_a_run()
 	_test_immediate_control_needs_a_usable_body()
+	_test_compromised_bodies_survive_the_boundary()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10682,6 +10683,72 @@ func _test_immediate_control_needs_a_usable_body() -> void:
 	_check(
 		winner != null and winner.id == 902,
 		"and a viable teammate takes the ball the compromised body cannot",
+	)
+
+
+## A compromised body survives the leg boundary.
+##
+## The resolver rebuilds a fresh `RallyState` per phase and seeded it from
+## positions and velocities only, so a blocker who had just landed arrived in the
+## next phase as though nothing had happened. `player_recovery` carried both the
+## debt and a *name* for it -- `"airborne"` from a block jump, `"fall"`/`"knee"`
+## from the floor -- and nothing read the name back. Two certified repairs were
+## latent on exactly this. See `docs/review/ACTOR_CONTINUITY.md`.
+##
+## Both checks fail on the pre-pass resolver.
+func _test_compromised_bodies_survive_the_boundary() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var front := lineup.front_row_player_ids()
+	var blocker_id := int(front[0])
+	var digger_id := int(front[1]) if front.size() > 1 else int(front[0])
+	var clean_id := int(front[2]) if front.size() > 2 else -1
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	simulator.player_recovery = {
+		blocker_id: {"state": "airborne", "ready_at": 1.40, "delay": 0.36},
+		digger_id: {"state": "fall", "ready_at": 1.20, "delay": 0.34},
+	}
+	var state: RallyState = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup,
+		manager.defensive_plans.get(lineup.rotation_number),
+		manager.opponent_team, null, true, 4242,
+	)
+	simulator._seed_carried_body_states(state, 0.90)
+	var blocker: RallyPlayerState = state.player_state(&"home", blocker_id)
+	var digger: RallyPlayerState = state.player_state(&"home", digger_id)
+	var clean: RallyPlayerState = state.player_state(&"home", clean_id) \
+		if clean_id >= 0 else null
+	_check(
+		blocker != null
+			and blocker.body_state == RallyPlayerState.BodyState.AIRBORNE
+			and is_equal_approx(blocker.recovery_until, 1.40)
+			and digger != null
+			and digger.body_state == RallyPlayerState.BodyState.RECOVERING
+			and (clean == null
+				or clean.body_state == RallyPlayerState.BodyState.BALANCED),
+		"a landing and a floor trip survive into the next phase, distinctly",
+	)
+
+	## And the consequence the continuity exists for: the carried state reaches
+	## the contact envelope, where a body still in the air cannot take off again.
+	var airborne_envelope: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+		blocker, &"attack", 3.10, 1.20, true,
+	)
+	var clean_envelope: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+		state.player_state(&"home", clean_id) if clean_id >= 0 else blocker,
+		&"attack", 3.10, 1.20, true,
+	)
+	var airborne_jump := float(airborne_envelope.get(
+		"maximum_contact_height_meters", 0.0
+	)) - float(airborne_envelope.get("standing_reach_meters", 0.0))
+	var clean_jump := float(clean_envelope.get(
+		"maximum_contact_height_meters", 0.0
+	)) - float(clean_envelope.get("standing_reach_meters", 0.0))
+	_check(
+		is_zero_approx(airborne_jump) and clean_jump > 0.001,
+		"and the carried state reaches the envelope that refuses a second takeoff",
 	)
 
 
