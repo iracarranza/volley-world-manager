@@ -7062,3 +7062,46 @@ Still open and untouched, from the audit: **three duty tables for one concept**
 `ShadowSetterResponseSystem._duty_priority`, the last ranking `Stay available to
 attack` *below* having no duty), and the semantics of `Stay available to attack`
 itself, which no default produces.
+
+
+---
+
+## What is a defender oriented toward while they wait?
+
+`docs/review/DEFENSIVE_READINESS_BOUNDARY.md` stopped the defensive-responsibility
+pass at its first question, and this is the sentence that unblocks it.
+
+The movement model already prices preparation correctly: `_movement_profile`
+turns `RallyPlayerState.facing` into a direction-change delay and an arrival
+balance, spending it on **startup** and never on top speed. Measured, a body
+prepared the wrong way pays ~0.18 s on a 1.37 s trip.
+
+Nothing supplies that facing. It defaults to the constant `Vector2(0, -1)`;
+`apply_position` only updates it when velocity is non-zero, so a standing
+defender never does; and `_travel` overwrites it with the route direction on
+every call, which pins `facing_fit` at 1.0 for every voli on every leg. The
+defensive claimant does not even receive an actor -- `evaluate_arrival` takes a
+player and a point, and its only startup term is `reaction_delay` from
+`anticipation`, which is omnidirectional. Measured: four balls, four directions,
+identical reach margin of 1.0840 m.
+
+`RallyPlayerState.readiness` has the same shape -- defaults to 1.0, never
+written, and `ContactEnvelopeSystem` spends it on the contact envelope and the
+take-off multiplier regardless.
+
+Three candidate rules, none selected, each with a different consequence:
+
+1. **orient toward the live threat** -- most physically obvious; defenders get
+   better at balls in front and worse at balls behind, which is the sport;
+2. **orient toward the assigned zone** -- preparation becomes a consequence of
+   the manager's plan, so a defender set deep is genuinely worse at a short ball;
+   the most tactical texture and the biggest behavioural change;
+3. **retain facing from the last committed movement** -- the only option that is
+   purely a repair (stop `_travel` overwriting), but a voli who has stood still
+   all rally still carries an arbitrary constant.
+
+Until one exists as published state, propagating facing into defensive arrival
+would propagate a value that never varies, and the whole defensive-responsibility
+policy -- feasibility gate, immediate-possession precedence, short-ball
+ownership, fallback ordering -- sits downstream of it. The policy itself is
+written and agreed; only this input is missing.

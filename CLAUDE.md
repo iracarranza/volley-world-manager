@@ -12,12 +12,15 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the attack-chain forward walk:
-**2,106 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the defensive-readiness
+boundary: **2,109 checks pass**. Treat any test failure as a regression.
 
-That is 2,104 plus exactly the two checks written -- another publication-only
-change, so no sampling population moved. See
-`docs/review/FORWARD_WALK_ATTACK_CHAIN.md`.
+That is 2,106 plus exactly the three checks written, and that pass changed **no
+production code at all** -- it stopped at a missing physical state. See
+`docs/review/DEFENSIVE_READINESS_BOUNDARY.md`.
+
+The pass before it moved 2,104 → 2,106: two checks written and, again, no
+sampling movement. See `docs/review/FORWARD_WALK_ATTACK_CHAIN.md`.
 
 The pass before it moved 2,098 → 2,104: six checks written and, again, no
 sampling movement. See `docs/review/SET_QUALITY_AND_GENERATION.md`.

@@ -2,6 +2,9 @@ extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const RALLY_MOVEMENT_SYSTEM_SCRIPT := preload(
+	"res://scripts/simulation/rally_movement_system.gd"
+)
 const READY_STANCE_SCRIPT := preload("res://scripts/data/ready_stance.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
@@ -279,6 +282,7 @@ func _initialize() -> void:
 	_test_opponent_setter_movement_consumes_selection()
 	_test_set_feasibility_then_execution()
 	_test_every_swing_publishes_the_ball_it_struck()
+	_test_movement_model_prices_facing()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9996,6 +10000,79 @@ func _test_every_swing_publishes_the_ball_it_struck() -> void:
 		compared > 0 and matched == compared,
 		"that ball is the exact set the setter published, on every path",
 	)
+
+
+
+## The movement model can price a prepared direction, and must keep being able
+## to.
+##
+## **This is an invariant test, not repair evidence.** It passes before and after
+## the defensive-readiness audit, because that audit made no production change --
+## it stopped at a missing physical state. What it protects is the half of the
+## relation that *does* exist: `_movement_profile` turns `facing` into a
+## direction-change delay and an arrival balance, and spends it on startup rather
+## than on top speed.
+##
+## Without this check, the capability could be deleted as dead weight -- nothing
+## in the resolver currently supplies a facing that differs from the route -- and
+## the eventual fix would then have nothing to build on. See
+## `docs/review/DEFENSIVE_READINESS_BOUNDARY.md`.
+func _test_movement_model_prices_facing() -> void:
+	var defender := VolleyballPlayer.new()
+	defender.id = 7171
+	for attribute in [
+		"anticipation", "lateral_speed", "acceleration", "transition_speed",
+		"stamina", "work_rate", "composure",
+	]:
+		defender.set(attribute, 50)
+	defender.fatigue = 0.0
+
+	var start := Vector2(0.50, 0.80)
+	var target := Vector2(0.62, 0.66)
+	var opening := RallyKinematics.court_delta_meters(start, target).normalized()
+
+	var toward := _facing_profile(defender, start, target, opening, opening)
+	var away := _facing_profile(defender, start, target, opening, -opening)
+
+	_check(
+		float(toward.facing_fit) > 0.99 and float(away.facing_fit) < 0.01,
+		"facing fit reads the angle between preparation and the requested direction",
+	)
+	## The whole point of the policy's §11: preparation buys a cheaper first step,
+	## never a faster body.
+	_check(
+		float(away.turn_delay) > float(toward.turn_delay) + 0.05
+			and float(away.seconds) > float(toward.seconds),
+		"a body prepared the wrong way pays a turn cost and arrives later",
+	)
+	_check(
+		is_equal_approx(float(toward.maximum_speed), float(away.maximum_speed)),
+		"preparation does not change top speed, only the cost of starting",
+	)
+
+
+func _facing_profile(
+	defender: VolleyballPlayer,
+	start: Vector2,
+	target: Vector2,
+	opening: Vector2,
+	facing: Vector2,
+) -> Dictionary:
+	var actor := RallyPlayerState.create(defender, &"home", -1, start)
+	actor.velocity = Vector2.ZERO
+	actor.facing = facing.normalized()
+	var profile: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT._movement_profile(
+		actor, opening, RallyPlayerState.MovementMode.LATERAL
+	)
+	var traversal: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT.traversal_result(
+		actor, target, RallyPlayerState.MovementMode.LATERAL
+	)
+	return {
+		"facing_fit": float(profile.facing_fit),
+		"turn_delay": float(profile.get("direction_change_delay", 0.0)),
+		"maximum_speed": float(profile.maximum_speed),
+		"seconds": float(traversal.seconds),
+	}
 
 
 func _test_gate_twenty_two_setter_progression() -> void:
