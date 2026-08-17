@@ -2845,10 +2845,21 @@ participates, and turning the offence flags on does not fix it -- measured with
 `ENABLE_HOME_MIDDLE_OFFENSE` and `ENABLE_CLAMPED_ARRIVAL_MARGIN` both on, the home
 wall still contacted exactly 6 balls with an identical depth distribution.
 
-**Next, and it is a different question from the one this section was opened to
-answer: why does the home wall fail to form on a quarter of opponent swings?**
-`_form_home_block` is the producer. Ask what it returns on those 31 rows before
-changing anything in it.
+**Answered: `docs/review/HOME_WALL_FORMATION.md`.** Not a read failure and not
+the `block_participation` filter -- of 134 "no wall" rows, **0** had nobody
+assigned and **134** had a primary who could not get across. Both formers compute
+the same setter pull; `_form_home_block` alone writes it onto the body via
+`live_positions`, and it is called twice per rally, so the second call pulls again
+from the already-pulled position. Suppressing terms one at a time: 134 as
+shipped, **42** with the pull anchored idempotently to the rotation slot, **0**
+with it never written. The failures are first-tempo balls -- set flight p50 0.128 s
+against 0.284 s where the wall forms -- against a body displaced 1.3 m from its
+slot with 0.43 s to cover 1.0 m.
+
+The repair is two decisions and neither is taken: how to de-compound (slot anchor
+loses legitimate live displacement; first-call-only preserves it), and whether the
+pull should reach the body at all, which is a block-symmetry question this list
+already owns above.
 
 ### One defect this instrumentation introduced
 

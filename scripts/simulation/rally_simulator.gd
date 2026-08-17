@@ -5202,6 +5202,33 @@ func _resolve_opponent_transition(
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
 			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## **Answering the complaint immediately above.**
+			##
+			## `wall_size` says how many blockers joined; it does not say why the
+			## others did not, and "nobody was assigned" wants the opposite fix from
+			## "nobody arrived". The home wall reports no wall at all on roughly a
+			## quarter of opponent swings while the opponent's wall never does, and
+			## that asymmetry cannot be attributed from `wall_size` alone. These are
+			## the formation's own terms, forwarded rather than recomputed, so they
+			## cannot disagree with the wall that was actually built.
+			"home_block_terms": {
+				"front_blockers": int(home_block_formation.get("front_blocker_count", 0)),
+				"primary_id": staged_home_primary.id if staged_home_primary != null else -1,
+				"primary_close": float(home_block_formation.get("primary_close", 0.0)),
+				"assist_close_attempted": float(home_block_formation.get(
+					"assist_close_attempted", 0.0
+				)),
+				"primary_close_terms": Dictionary(home_block_formation.get(
+					"primary_close_terms", {}
+				)).duplicate(true),
+				"read_quality": float(home_block_formation.get("read_quality", 0.0)),
+				"preset_window_seconds": float(home_block_formation.get(
+					"preset_window_seconds", 0.0
+				)),
+				"set_flight_seconds": float(home_block_formation.get(
+					"set_flight_seconds", 0.0
+				)),
+			},
 			## When each blocker jumped, so playback can draw the apex where the
 			## blocker actually put it. Without this the drawn jump was centred on
 			## the contact for everybody, which makes a mistimed block look
@@ -12949,6 +12976,11 @@ func _form_home_block(
 		),
 		"setter_pull": setter_pull,
 		"read_quality": read_quality,
+		## How many front-row bodies the plan actually offered this wall. Zero and
+		## "nobody arrived" are different defects with opposite fixes, and until this
+		## was forwarded the rally record could not tell them apart -- see the
+		## `home_block_terms` publication on the opponent ATTACK event.
+		"front_blocker_count": front_blockers.size(),
 	}
 
 
@@ -13145,6 +13177,14 @@ func _blocker_close_terms(
 		"footwork_meters": absf(footwork_x - start_x) * CourtConstants.COURT_WIDTH_METERS,
 		"reaction_delay": reaction_delay,
 		"available_time": available_time,
+		## **Where this blocker was standing, against where their rotation puts
+		## them.** The two walls are built from different starting geometry -- the
+		## home former reads `live_positions` and the opponent former reads the
+		## rotation slot -- and no published term said so, which made a close
+		## deficit impossible to attribute to displacement rather than to time.
+		## See `docs/review/HOME_WALL_FORMATION.md`.
+		"start_x": start_x,
+		"slot_x": CourtConstants.slot_position(slot_number).x,
 	}
 
 
