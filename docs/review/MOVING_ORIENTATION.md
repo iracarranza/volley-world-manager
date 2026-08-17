@@ -203,6 +203,18 @@ So orientation now evolves honestly everywhere an actor is carried
 (`project_toward`, the four integrators, the opportunity system), and the one
 consumer that would show it in a rally outcome still cannot see it.
 
+**Follow-up, and it reverses the recommendation this section originally made.**
+Measured with `tools/run_carried_facing_probe.gd` over the same 600 rallies: of
+**796** defensive contacts, **2** were made by a body that had already run.
+0.3%. Every defensive leg in the resolver is `"lateral"`, and LATERAL preserves
+— so a defender cannot change their own orientation, and a carrier built for
+them would hold the ready facing they already receive.
+
+Carrying an actor between legs is therefore **downstream of §8, not upstream of
+it**. Defenders never change orientation because every defensive leg is LATERAL;
+every leg is LATERAL because nothing can select the other form; nothing can
+select it because §4's two relations are missing. The boundary did not move.
+
 ---
 
 ## 6. Tests

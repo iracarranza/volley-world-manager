@@ -7123,7 +7123,7 @@ was never written anywhere, so its two envelope consumers were a folded constant
 and an identity, and a threshold at 0.45 sat on a distribution that was a single
 point at 1.0.
 
-## Carry a rally actor between legs, so a moved body's orientation reaches the resolver
+## ~~Carry a rally actor between legs~~ MEASURED, AND NOT WORTH BUILDING YET
 
 Orientation now evolves honestly everywhere an actor is carried -- through
 `project_toward`, the four live integrators and the opportunity system. The
@@ -7141,6 +7141,32 @@ The same missing structure is what makes `ContactEnvelopeSystem`'s new AIRBORNE
 takeoff exclusion currently unreachable, and it is what a future readiness
 relation would need before it could be measured at all. One piece of plumbing,
 three consequences.
+
+**Measured, and the paragraph above is wrong about the order.**
+`tools/run_carried_facing_probe.gd`, over 600 rallies: of **796** defensive
+contacts, **2** were made by a voli who had already swung. **0.3%.** That share
+is the whole of what a carried facing would change, because every defensive leg
+in the resolver is `"lateral"` and LATERAL *preserves* orientation -- a defender
+pursuing a ball cannot change their own facing, so the carrier would hold the
+side-relative ready facing they already get. The setter is the same: 26 more
+contacts, and `_spatial_setter_choice` resolves a release as `"lateral"` too.
+
+So building it now would ship a carrier for a constant -- the failure this
+repository keeps catching, reached by building rather than by neglect.
+
+The dependency runs the other way. Carrying a facing is **downstream** of §8, not
+upstream of it: defenders never change orientation because every defensive leg
+is LATERAL, every defensive leg is LATERAL because nothing can select the other
+form, and nothing can select it because the two relations below are missing.
+Do §8 first; this becomes worth building the moment a defender can open up.
+
+One thing here is worth doing on its own and is not blocked: the two halves of
+the engine **disagree about the setter's release**. `ShadowSetterResponseSystem`
+resolves it in TRANSITION and `_spatial_setter_choice` resolves the same movement
+as `"lateral"`. Under the moving-orientation policy §11 that is a
+classification defect, and exactly one of them is describing the physical
+movement. It needs a decision about what a setter's release *is* before either
+is changed, so it is named here rather than fixed.
 
 ## Two relations the defensive form comparison needs, and nobody has measured
 
