@@ -4,6 +4,9 @@ extends RefCounted
 const BallFlight := preload("res://scripts/simulation/ball_flight_model.gd")
 const BallTrajectory := preload("res://scripts/models/ball_trajectory.gd")
 const RallyMovement := preload("res://scripts/simulation/rally_movement_system.gd")
+const ApproachMechanics := preload(
+	"res://scripts/simulation/approach_mechanics_system.gd"
+)
 
 ## Numerical resolution only. These values do not describe a ball or a body and
 ## must never be tuned against rally outcomes. The coarse scan finds the first
@@ -86,12 +89,19 @@ static func opportunities(
 	excluded_actor_ids: Array[int] = [],
 	preferred_position: Variant = null,
 	preferred_height_meters: float = NAN,
+	continue_after_legal_net_crossing: bool = false,
+	earliest_search_time: float = NAN,
+	derive_attack_approach: bool = false,
 ) -> Dictionary:
 	if str(free_flight.get("trajectory_role", "")) \
 			!= "authoritative_free_flight":
 		return {"available": false, "reason": "not authoritative free flight"}
-	var start_time := float(free_flight.get("start_time", 0.0))
-	var terminal := _first_uncontrolled_terminal(free_flight)
+	var flight_start := float(free_flight.get("start_time", 0.0))
+	var start_time := flight_start if is_nan(earliest_search_time) \
+		else maxf(flight_start, earliest_search_time)
+	var terminal := _first_uncontrolled_terminal(
+		free_flight, not continue_after_legal_net_crossing
+	)
 	var end_time := float(terminal.get(
 		"time", free_flight.get("end_time", start_time)
 	))
@@ -103,6 +113,7 @@ static func opportunities(
 		var found := _preferred_opportunity(
 			free_flight, actor, action_type, allow_jump,
 			start_time, end_time, preferred_position, preferred_height_meters,
+			derive_attack_approach,
 		)
 		if not found.is_empty():
 			by_actor[actor.player_id] = found
@@ -214,6 +225,34 @@ static func height_at_time(free_flight: Dictionary, at_time: float) -> float:
 	)
 
 
+## The complete velocity of the same authoritative launch at one instant.
+## Horizontal velocity is invariant; vertical velocity advances under the
+## flight's own gravity. A later contact consumes this rather than reconstructing
+## an incoming ball from two endpoints.
+static func velocity_at_time(free_flight: Dictionary, at_time: float) -> Vector3:
+	var start_time := float(free_flight.get("start_time", 0.0))
+	var elapsed := clampf(
+		at_time - start_time, 0.0,
+		float(free_flight.get("duration", 0.0)),
+	)
+	var launch := Vector3(free_flight.get(
+		"launch_velocity_mps", Vector3.ZERO
+	))
+	var gravity := float(free_flight.get(
+		"launch_gravity_mps2", BallFlight.DEFAULT_GRAVITY_MPS2
+	))
+	return Vector3(launch.x, launch.y - gravity * elapsed, launch.z)
+
+
+## The net-plane fact exposed without deciding what the other team does with
+## it. `reason` is `net` below the tape and `crossed_net_unresolved` above it.
+static func net_crossing(free_flight: Dictionary) -> Dictionary:
+	var terminal := _first_uncontrolled_terminal(free_flight, true)
+	if str(terminal.get("reason", "")) not in ["net", "crossed_net_unresolved"]:
+		return {}
+	return terminal
+
+
 static func _preferred_opportunity(
 	free_flight: Dictionary,
 	actor: RallyPlayerState,
@@ -223,6 +262,7 @@ static func _preferred_opportunity(
 	end_time: float,
 	preferred_position: Variant,
 	preferred_height_meters: float,
+	derive_attack_approach: bool,
 ) -> Dictionary:
 	if end_time <= start_time + TIME_EPSILON_SECONDS:
 		return {}
@@ -233,7 +273,8 @@ static func _preferred_opportunity(
 		var share := float(index) / float(SEARCH_SAMPLES)
 		var candidate_time := lerpf(start_time, end_time, share)
 		var candidate := _opportunity_at(
-			free_flight, actor, action_type, allow_jump, candidate_time
+			free_flight, actor, action_type, allow_jump, candidate_time,
+			derive_attack_approach,
 		)
 		if candidate.reachable:
 			## With no intent this is a pure physical query, so return the exact
@@ -248,7 +289,8 @@ static func _preferred_opportunity(
 				for _step in range(REFINE_STEPS):
 					var middle := (low + high) * 0.5
 					var trial := _opportunity_at(
-						free_flight, actor, action_type, allow_jump, middle
+						free_flight, actor, action_type, allow_jump, middle,
+						derive_attack_approach,
 					)
 					if trial.reachable:
 						refined = trial
@@ -273,7 +315,19 @@ static func _opportunity_at(
 	action_type: StringName,
 	allow_jump: bool,
 	at_time: float,
+	derive_attack_approach: bool,
 ) -> ActionOpportunity:
+	## A body still committed to recovery cannot make a contact merely because
+	## its standing reach overlaps the ball. Movement time may be zero while the
+	## action remains physically unavailable; availability is a separate fact.
+	if actor == null or not actor.is_available(at_time):
+		return ActionOpportunity.new()
+	var approach := {}
+	if action_type == &"attack" and derive_attack_approach:
+		approach = ApproachMechanics.evaluate_takeoff(
+			actor, position_at_time(free_flight, at_time),
+			maxf(at_time - float(free_flight.get("start_time", at_time)), 0.0),
+		)
 	return RallyMovement.evaluate_opportunity(
 		actor,
 		action_type,
@@ -283,6 +337,7 @@ static func _opportunity_at(
 		0.0,
 		height_at_time(free_flight, at_time),
 		allow_jump,
+		approach,
 	)
 
 
@@ -329,6 +384,15 @@ static func _opportunity_record(
 		"used_reaching_extension": opportunity.used_reaching_extension,
 		"physical_feasibility": opportunity.physical_feasibility,
 		"arrival_balance": opportunity.arrival_balance,
+		"expected_quality": opportunity.expected_quality,
+		"technical_difficulty": opportunity.technical_difficulty,
+		"approach_profile": {
+			"approach_speed_mps": opportunity.approach_speed_mps,
+			"runup_quality": opportunity.approach_quality,
+			"approach_alignment": opportunity.approach_alignment,
+			"lateral_control": opportunity.lateral_control,
+			"jump_multiplier": opportunity.jump_multiplier,
+		},
 	}
 
 
@@ -351,7 +415,10 @@ static func _intent_error_squared(
 ## reported explicitly rather than silently converted into a point: resolving an
 ## overpass against the other side is a materially different volleyball action
 ## and belongs to the next policy layer.
-static func _first_uncontrolled_terminal(free_flight: Dictionary) -> Dictionary:
+static func _first_uncontrolled_terminal(
+	free_flight: Dictionary,
+	stop_at_legal_net_crossing: bool = true,
+) -> Dictionary:
 	var start_time := float(free_flight.get("start_time", 0.0))
 	var floor_time := float(free_flight.get("end_time", start_time))
 	var start := Vector2(free_flight.get("start_position", Vector2.ZERO))
@@ -379,11 +446,12 @@ static func _first_uncontrolled_terminal(free_flight: Dictionary) -> Dictionary:
 			+ (CourtConstants.NET_Y - start.y) / normalized_velocity.y
 		if net_time > start_time + TIME_EPSILON_SECONDS \
 				and net_time < terminal_time:
-			terminal_time = net_time
-			terminal_reason = "net" \
-				if height_at_time(free_flight, net_time) \
-					<= CourtConstants.NET_HEIGHT_METERS \
-				else "crossed_net_unresolved"
+			var below_tape := height_at_time(free_flight, net_time) \
+				<= CourtConstants.NET_HEIGHT_METERS
+			if below_tape or stop_at_legal_net_crossing:
+				terminal_time = net_time
+				terminal_reason = "net" if below_tape \
+					else "crossed_net_unresolved"
 	return {
 		"reason": terminal_reason,
 		"time": terminal_time,

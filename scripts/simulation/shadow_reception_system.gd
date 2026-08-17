@@ -802,19 +802,9 @@ static func _contact_options(
 	opportunity: ActionOpportunity,
 	confidence: float,
 ) -> Array[String]:
-	var options: Array[String] = []
-	if opportunity.physical_feasibility >= 0.35:
-		options.append("emergency_keep_alive")
-	if opportunity.reachable and opportunity.arrival_balance >= 0.38:
-		options.append("safe_center_pass")
-	if opportunity.reachable \
-			and opportunity.arrival_margin >= 0.12 \
-			and opportunity.arrival_balance >= 0.62 \
-			and confidence >= 0.60 \
-			and player.ball_control >= 65 \
-			and player.decision_making >= 60:
-		options.append("quick_release_pass")
-	return options
+	return RallyDecisionModel.available_first_contact_actions(
+		player, opportunity, confidence
+	)
 
 
 static func _selection_score(
