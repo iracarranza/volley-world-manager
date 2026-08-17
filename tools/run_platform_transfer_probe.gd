@@ -45,6 +45,7 @@ func _initialize() -> void:
 	_incoming_against_outgoing(rows)
 	_coverage(rows)
 	_launch_angle(rows)
+	_implied_retention(rows)
 	quit()
 
 
@@ -427,3 +428,73 @@ func _launch_angle(rows: Array) -> void:
 	print("  is what says whether the apex band and the target are one decision or")
 	print("  two -- and section 13.9 lists them as two separate hidden preferences,")
 	print("  items 2 and 3, without noticing they contradict each other.")
+
+
+## ------------------------------------------------------------------ part six
+##
+## What §11 says slice 2 is for: "**this is where T1 gets its distribution.**"
+##
+## The form is not open. `BlockDeflectionModel` is a shipped contact model in
+## this engine with exactly T1's shape -- `outgoing = incoming x PACE_KEPT`, one
+## fraction per contact kind, plus a departure angle per kind -- and its own
+## magnitudes were argued against a measured swing-pace band rather than picked.
+## So a platform T1 has a precedent to copy rather than a form to invent.
+##
+## What it does not have is magnitudes, and this is the distribution they would
+## have to be argued against. The current model does not use a retention
+## fraction, so the ratio below is not "the value T1 should take" -- it is what
+## the present behaviour *implies*, and its spread is the finding.
+func _implied_retention(rows: Array) -> void:
+	print("\n" + "=".repeat(78))
+	print("PART 6 -- the retention fraction the present model implies")
+	print("=".repeat(78))
+	print("  `BlockDeflectionModel` already spends incoming speed this way:")
+	print("    stuff 0.72, tool 0.60, recycle 0.12, touch 0.16, each with a")
+	print("    departure angle. That is T1's shape, shipped, in this engine.")
+	print("")
+	print("  Below is `outgoing / incoming` for the platform families, which the")
+	print("  model does not compute and therefore does not control.\n")
+	var measurable: Array = rows.filter(
+		func(row): return float(row["incoming"]) > 0.0
+	)
+	print("  %-28s %-7s %-9s %-9s %-9s" % [
+		"family / posture", "n", "min", "p50", "max",
+	])
+	var buckets := {}
+	for row in measurable:
+		for key in [str(row["family"]), "%s / %s" % [row["family"], row["posture"]]]:
+			var bucket: Array = buckets.get(key, [])
+			bucket.append(float(row["speed"]) / float(row["incoming"]))
+			buckets[key] = bucket
+	var keys: Array = buckets.keys()
+	keys.sort()
+	for key in keys:
+		var stats := _stats(buckets[key])
+		print("  %-28s %-7d %-9.3f %-9.3f %-9.3f" % [
+			key, int(stats.n), stats.min, stats.p50, stats.max,
+		])
+	var amplified := 0
+	for row in measurable:
+		if float(row["speed"]) > float(row["incoming"]):
+			amplified += 1
+	print("")
+	print("  %d of %d contacts return the ball **faster than it arrived**." % [
+		amplified, measurable.size(),
+	])
+	print("  A passer does add energy -- a platform is not a wall -- but a")
+	print("  *planted* dig returning 4.2x on a slow ball is not a passer driving")
+	print("  through it, it is a height band with no reference to the incoming")
+	print("  ball at all. That is the same finding as part 3, in the units T1")
+	print("  would be authored in.")
+	print("")
+	print("  Read the min and max columns, not the median. A retention fraction")
+	print("  is a *fraction*: the block's four sit between 0.12 and 0.72 and each")
+	print("  is one number. What the platform families imply spans more than an")
+	print("  order of magnitude within a single posture, because the quantity is")
+	print("  not being spent -- it is being back-computed from a height band and a")
+	print("  destination that never saw the incoming ball.")
+	print("")
+	print("  So this table is not a proposal. It is the range a proposal has to")
+	print("  explain, and the width of it is the argument that the present")
+	print("  behaviour cannot be reproduced by any single fraction -- which is")
+	print("  what makes T1 a change rather than a refactor.")

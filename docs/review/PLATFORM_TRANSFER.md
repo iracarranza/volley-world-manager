@@ -183,6 +183,58 @@ a *larger* drift off its target, so it goes further and lower at once.
 
 ---
 
+## 4b. T1 gets its distribution — and its *form* was already shipped
+
+§11 says slice 2 is "where T1 gets its distribution". Two things fell out of
+looking for it, and the first was not expected.
+
+**The form is not open.** `BlockDeflectionModel` is a shipped contact model in
+this engine with exactly T1's shape:
+
+```gdscript
+const STUFF_PACE_KEPT: float = 0.72
+const TOOL_PACE_KEPT: float = 0.60
+const RECYCLE_PACE_KEPT: float = 0.12
+const TOUCH_PACE_KEPT: float = 0.16
+```
+
+`outgoing = incoming × retention`, one fraction per contact kind, each with a
+departure angle beside it — and its own comment records that the magnitudes were
+rebased against a measured swing-pace band rather than picked. **So a platform T1
+has a precedent to copy rather than a form to invent**, the same way M3's missing
+shoulder anchor turned out to be `UNIVERSAL_RATIOS.shoulder_y` rather than a new
+number.
+
+**The distribution is what a proposal has to explain.** `outgoing / incoming`
+across the shipped model — which does not compute it and therefore does not
+control it:
+
+| family / posture | n | min | p50 | max |
+|---|---:|---:|---:|---:|
+| reception | 484 | 0.508 | **0.656** | 1.530 |
+| reception / planted | 72 | 0.582 | 0.655 | 1.266 |
+| reception / reaching | 5 | 0.508 | 0.629 | 0.728 |
+| dig | 87 | **0.139** | 0.974 | **4.228** |
+| dig / planted | 50 | **0.139** | 0.974 | **4.228** |
+| dig / reaching | 10 | 0.186 | 0.843 | 2.541 |
+
+Read the min and max, not the median. A retention fraction is a *fraction*: the
+block's four are single numbers between 0.12 and 0.72. **The dig's planted
+posture spans a factor of thirty**, and **63 of 571 contacts return the ball
+faster than it arrived**. A passer does add energy — a platform is not a wall —
+but a *planted* dig returning 4.2× on a slow ball is not a passer driving through
+it. It is a height band with no reference to the incoming ball, which is part 4's
+finding restated in the units T1 would be authored in.
+
+One datum worth handing forward rather than burying: **the reception's implied
+retention is 0.656 at the median with a comparatively tight 0.51–1.53 spread**,
+which sits between the block's tool (0.60) and stuff (0.72). That is not a
+proposal and it is not a calibration — it is the one place in this measurement
+where the present behaviour is already close to something a single fraction could
+reproduce.
+
+---
+
 ## 5. What this settles for slice 3, and what it does not
 
 **Settles.** T1 is not a recalibration. There is no `outgoing = f(incoming, …)`
@@ -199,12 +251,15 @@ slice order — but recorded, because the reason is measured: it is the only
 context whose current ball is a display constant, so promotion there cannot
 regress a tuned behaviour.
 
-**Does not settle.** The shape of T1 itself. Knowing the channel is empty says
-nothing about what belongs in it, and choosing an absorption curve by eye is
-exactly what §0 forbids. §11's own instruction stands: "if the shadow cannot
-discriminate a plausible transfer relation from the existing bands, the honest
-outcome is to say so and stop." What this pass adds is that there are no existing
-bands *in this dimension* to discriminate against.
+**Settles the form, not the magnitude.** §4b: `BlockDeflectionModel` already
+ships T1's shape, so slice 3 does not have to invent a representation. What it
+still has to author is four-to-six numbers — a retention fraction and a departure
+angle per platform context — and choosing those by eye is exactly what §0
+forbids. §11's own instruction stands: "if the shadow cannot discriminate a
+plausible transfer relation from the existing bands, the honest outcome is to say
+so and stop." What this pass adds is that there are no existing bands *in this
+dimension* to discriminate against, and a measured range for the magnitudes to be
+argued within.
 
 **Does not settle.** T2's *shape* — the reachable platform-angle range. §4a
 measures the angle the shipped model emits and finds it unbounded and, on the
