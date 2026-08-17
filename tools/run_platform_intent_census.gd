@@ -27,13 +27,25 @@ extends SceneTree
 
 const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
 const RallyEventScript := preload("res://scripts/models/rally_event.gd")
+const RallySimulatorScript := preload(
+	"res://scripts/simulation/rally_simulator.gd"
+)
+
+const COURT_WIDTH_METERS: float = 9.0
+const COURT_LENGTH_METERS: float = 18.0
 
 const FIRST_SEED: int = 23000
 const RALLIES_PER_SERVER: int = 300
 
 
+## How far the anchor a contact published sits from the seat its own named
+## recipient is heading for. Accumulated across the sweep; see part 4.
+var _anchor_to_seat: Dictionary = {}
+
+
 func _initialize() -> void:
 	_report(_sweep())
+	_anchor_against_the_seat()
 	quit()
 
 
@@ -59,6 +71,7 @@ func _sweep() -> Dictionary:
 			var outcome := str(result.terminal_outcome)
 			counts[outcome] = int(counts.get(outcome, 0)) + 1
 			_collect(result, intents)
+			_collect_seat_gap(manager, result)
 			manager.free()
 	return {
 		"outcomes": counts, "events": events, "home_points": home_points,
@@ -199,3 +212,90 @@ func _report(census: Dictionary) -> void:
 	])
 	print("  a tactical preference yet, and the field exists so that when one does")
 	print("  the marker takes a new value and the record does not grow a new shape.")
+
+
+## ----------------------------------------------------------------- part four
+##
+## `PLATFORM_CONTACT.md` section 4b's *first* traced defect, in metres.
+##
+## > **The controlled dig has no setting target at all.** All three sites aim at
+## > `contact + (0.03–0.04, −0.03 to −0.05)` -- about 0.8 m from where the ball
+## > was dug. **The setter's position is never consulted.**
+##
+## Slice 1 published the anchor and the intended recipient side by side, which is
+## what makes this measurable rather than anecdotal: the record names the setter
+## and then aims somewhere the setter is not, and the gap between those two is a
+## number nobody had.
+func _collect_seat_gap(manager: Object, result: Resource) -> void:
+	var lineup: RotationLineup = manager.current_lineup()
+	var plan: Resource = manager.defensive_plans.get(
+		lineup.rotation_number
+	) if lineup != null else null
+	var home_seat := Vector2(0.50, 0.60)
+	if plan != null and lineup != null:
+		home_seat = plan.setter_release_target(lineup.active_setter_id())
+	var opponent_seat: Vector2 = \
+		RallySimulatorScript._opponent_setter_release_target(manager.opponent_team)
+	for entry in result.events:
+		var event := entry as RallyEvent
+		if event == null:
+			continue
+		var record: Dictionary = event.metadata.get("platform_intent", {})
+		if record.is_empty():
+			continue
+		var purpose := str(record.get("purpose", ""))
+		if purpose == "attack_coverage":
+			continue
+		var seat := home_seat if str(event.metadata.get("side", "")) == "home" \
+			else opponent_seat
+		var anchor := Vector2(record.get("target_anchor", seat))
+		var gap := Vector2(
+			(anchor.x - seat.x) * COURT_WIDTH_METERS,
+			(anchor.y - seat.y) * COURT_LENGTH_METERS,
+		).length()
+		var bucket: Array = _anchor_to_seat.get(purpose, [])
+		bucket.append(gap)
+		_anchor_to_seat[purpose] = bucket
+
+
+func _anchor_against_the_seat() -> void:
+	print("\n" + "=".repeat(78))
+	print("PART 4 -- how far the anchor sits from the recipient it names")
+	print("=".repeat(78))
+	print("  Section 4b, in metres. A contact that names the setter and then aims")
+	print("  somewhere the setter is not has said two contradictory things, and")
+	print("  until slice 1 published both there was no way to count it.\n")
+	var purposes: Array = _anchor_to_seat.keys()
+	purposes.sort()
+	print("  %-18s %-7s %-9s %-9s %-9s %-9s" % [
+		"purpose", "n", "min m", "p50 m", "max m", "mean m",
+	])
+	for purpose in purposes:
+		var stats := _stats(_anchor_to_seat[purpose])
+		print("  %-18s %-7d %-9.3f %-9.3f %-9.3f %-9.3f" % [
+			str(purpose), int(stats.n), stats.min, stats.p50, stats.max,
+			stats.mean,
+		])
+	print("")
+	print("  The reception is the control: it aims *at* the seat by construction,")
+	print("  offset only by `_desired_pass_target`'s overpass safety margin, so its")
+	print("  row is what a small honest gap looks like. Whatever the dig's row")
+	print("  reads above that is the distance between what it says it wants and")
+	print("  where it throws the ball.")
+
+
+func _stats(values: Array) -> Dictionary:
+	if values.is_empty():
+		return {"n": 0, "min": 0.0, "p50": 0.0, "max": 0.0, "mean": 0.0}
+	var sorted := values.duplicate()
+	sorted.sort()
+	var total := 0.0
+	for value in sorted:
+		total += float(value)
+	return {
+		"n": sorted.size(),
+		"min": float(sorted[0]),
+		"p50": float(sorted[sorted.size() / 2]),
+		"max": float(sorted[sorted.size() - 1]),
+		"mean": total / sorted.size(),
+	}

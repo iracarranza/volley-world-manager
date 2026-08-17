@@ -13,14 +13,14 @@ godot --headless --path . --script res://tests/test_runner.gd
 ```
 
 Current branch baseline, verified 2026-08-17 on M4 slice 2's first half:
-**2,146 checks pass**. Treat any test failure as a regression.
+**2,147 checks pass**. Treat any test failure as a regression.
 
-That is 2,142 plus five checks written **minus one**, and the minus one is the
+That is 2,142 plus six checks written **minus one**, and the minus one is the
 interesting half: the continuation dig stopped fabricating a constant stretch, so
 rallies resolve differently and a sampling gate drew one fewer. The 600-rally
 outcome mix is nevertheless unchanged, because the repair touches nine contacts.
 
-Four of those five are **characterisation checks rather than invariants** -- they
+Five of those six are **characterisation checks rather than invariants** -- they
 hold open the finding that the incoming ball's speed reaches no platform launch
 and that a dig thrown four times as far leaves at the same height, and slice 3 is
 supposed to make them fail. Adding a two-line transfer term moved the count to

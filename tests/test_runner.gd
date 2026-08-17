@@ -11065,6 +11065,42 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 		"a dig's arrival reaches its spoil, so an empty arrival is a real loss",
 	)
 
+	## §4b's first defect, held as a universal rather than a rate: **every**
+	## controlled dig aims within a stride of its own contact point, because the
+	## anchor is `contact + (0.03–0.04, −0.03 to −0.05)` and the setter's position
+	## is never consulted. Measured over 277 digs, the anchor sits a median
+	## **4.054 m** from the seat the same record names as its recipient.
+	##
+	## Characterisation again: slice 3 promoting the seat must fail this.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var dig_contacts := 0
+	var aimed_at_itself := 0
+	for seed_value in range(23000, 23060):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		for entry in rally.events:
+			var event := entry as RallyEvent
+			if event == null \
+					or event.event_type != RALLY_EVENT_SCRIPT.EventType.DIG:
+				continue
+			var record: Dictionary = event.metadata.get("platform_intent", {})
+			if str(record.get("purpose", "")) != "controlled_dig":
+				continue
+			dig_contacts += 1
+			var anchor := Vector2(record.get(
+				"target_anchor", event.start_position
+			))
+			if COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+				anchor, event.start_position
+			) < 1.20:
+				aimed_at_itself += 1
+	_check(
+		dig_contacts > 0 and aimed_at_itself == dig_contacts,
+		"a controlled dig aims a stride from itself, never at the setter it names",
+	)
+
 
 ## An incoming flight of a chosen pace, shaped like what `_ball_trajectory`
 ## publishes. Only the three fields `_incoming_ball_speed` reads are needed, and

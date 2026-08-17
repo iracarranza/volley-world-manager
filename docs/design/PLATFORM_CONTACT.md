@@ -562,6 +562,13 @@ to a setting zone" describes no code. It intends a point a stride away from
 itself. The setting target it needs already exists on both sides and is simply
 not read.
 
+> **Measured 2026-08-17, and it is four metres.** Slice 1 publishes the anchor
+> and the intended recipient side by side, so the contradiction is now countable:
+> over 277 controlled digs the published `target_anchor` sits a median **4.054 m**
+> from the release seat of the setter the same record names, up to 8.982 m. The
+> reception is the control at 0.000 m median, 0.441 m worst.
+> `docs/review/PLATFORM_TRANSFER.md` §5a.
+
 **The continuation dig passes `arrival = {}`.** Empty, so `reach_margin` defaults
 to 0.0 and `stretched` computes `(0.25 − 0.0) / 0.85 = 0.294` — a 29% stretch
 fabricated on every continuation dig.

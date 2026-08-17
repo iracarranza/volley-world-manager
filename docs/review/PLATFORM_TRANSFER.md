@@ -215,7 +215,38 @@ can face.
 
 ---
 
-## 6. Tests — four checks, and they are characterisation, not invariants
+## 5a. §4b's other defect, now in metres
+
+> **The controlled dig has no setting target at all.** All three sites aim at
+> `contact + (0.03–0.04, −0.03 to −0.05)` — about 0.8 m from where the ball was
+> dug. **The setter's position is never consulted.**
+
+Slice 1 published the anchor and the intended recipient side by side, which is
+what turns that paragraph into a number: the record names the setter and then
+aims where the setter is not.
+
+| purpose | n | min | **p50** | max | mean |
+|---|---:|---:|---:|---:|---:|
+| controlled dig | 277 | 0.126 | **4.054 m** | 8.982 | 3.872 |
+| serve reception | 484 | 0.000 | **0.000 m** | 0.441 | 0.071 |
+
+Metres from the published `target_anchor` to the release seat of the setter the
+same record names as `intended_recipient_id`. The reception is the control — it
+aims *at* the seat by construction, offset only by `_desired_pass_target`'s
+overpass safety margin, so 0.000 / 0.441 is what an honest gap looks like.
+
+**Four metres at the median, on a nine-metre court, up to nearly nine.** That is
+the distance between what a controlled dig says it wants and where it throws the
+ball, and it is now countable rather than anecdotal — which was §13.10's stated
+reason for adding `anchor_source` in the first place.
+
+Held as a universal rather than a rate: every controlled dig in a 60-seed sweep
+aims within a stride of its own contact point. Demonstrated live by pointing one
+dig site at the seat, which failed the check and moved the count 2,147 → 2,155.
+
+---
+
+## 6. Tests — six checks, and most are characterisation, not invariants
 
 `_test_the_incoming_ball_reaches_no_platform_launch`. Two incoming flights over
 the same line, one four times as fast as the other, through both resolvers; then
@@ -246,7 +277,7 @@ The first check exists so the other two cannot pass on a degenerate fixture: it
 asserts the two flights really do differ by nearly four times before asking
 whether anything downstream noticed.
 
-Suite: **2,146 checks, no failures.**
+Suite: **2,147 checks, no failures.**
 
 ---
 
