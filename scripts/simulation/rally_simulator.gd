@@ -45,6 +45,9 @@ const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_
 const PlatformContactModel := preload(
 	"res://scripts/simulation/platform_contact_model.gd"
 )
+const FreeFlightInterceptionModel := preload(
+	"res://scripts/simulation/free_flight_interception_system.gd"
+)
 const GeometricAttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
@@ -1034,6 +1037,10 @@ var geometric_development_open: bool = false
 ## A probe can open this contact alone without also promoting reception, setter,
 ## attack and block implementations and contaminating the comparison.
 var platform_dig_development_open: bool = false
+## Debug-only paired measurement can still run the retired ball beside the
+## promoted one. This preserves the validation protocol after production opens;
+## ordinary callers never set it and cannot disable production authority.
+var platform_dig_development_force_legacy: bool = false
 ## The opponent's defensive plan for this rally, built on first use.
 var opponent_plan: Resource = null
 var rally_clock: float = 0.0
@@ -1174,6 +1181,7 @@ func resolve(
 	home_team_name: String = "",
 	serve_context: Dictionary = {},
 	match_flow: float = 0.0,
+	development_legacy_platform_dig: bool = false,
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
@@ -1194,6 +1202,8 @@ func resolve(
 	geometric_serves = {}
 	geometric_development_open = development_continuous_reception
 	platform_dig_development_open = development_physical_platform_dig
+	platform_dig_development_force_legacy = development_legacy_platform_dig \
+		and OS.is_debug_build()
 	opponent_plan = null
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
@@ -3686,6 +3696,7 @@ func resolve(
 			float(opponent_dig_pass.get("set_contact_height_meters", NAN)),
 			float(opponent_dig_pass.get("pass_apex_meters", 0.0)),
 			Dictionary(opponent_dig_pass.get("trajectory", {})),
+			float(attack_trajectory.get("duration", 0.0)),
 		)
 	result.key_factors.append(_factor("attack_control"))
 	return _finish(result, "kill", true, hitter.id, {
@@ -4185,17 +4196,43 @@ func _resolve_opponent_transition(
 	)
 	if opponent_setter == null:
 		opponent_setter = opponent_team.setter() as VolleyballPlayer
-	var opponent_setter_choice := _spatial_setter_choice(
-		opponent_second_contact.candidates, opponent_second_contact.starts,
-		opponent_plan_for_setter, int(opponent_team.setter_id),
-		first_contact_player_id, opponent_setter,
-		opponent_setter_position, second_contact_window,
-		## The run these volis had already made. Zero until a caller supplies the
-		## feeding ball's flight, which is today the serve-receive path only --
-		## see the parameter's own note for which three callers still pass
-		## nothing and why they were not changed on an unmeasured hunch.
-		head_start_seconds,
-	)
+	var physical_choice := {}
+	if str(incoming_pass_trajectory.get("trajectory_role", "")) \
+			== "authoritative_free_flight":
+		physical_choice = _physical_second_contact_choice(
+			incoming_pass_trajectory,
+			opponent_second_contact.candidates, opponent_second_contact.starts,
+			opponent_plan_for_setter, int(opponent_team.setter_id),
+			first_contact_player_id, opponent_setter, &"opponent",
+			_opponent_setter_release_target(opponent_team),
+			GeometricAttackPromotionModel.set_contact_height_meters(opponent_setter),
+			head_start_seconds,
+		)
+		_stamp_free_flight_resolution(result, physical_choice)
+		if physical_choice.get("player") == null:
+			var terminal_reason := str(Dictionary(physical_choice.get(
+				"terminal", {}
+			)).get("reason", "unresolved"))
+			if terminal_reason == "crossed_net_unresolved":
+				return _finish(result, "m5_unresolved_overpass", true,
+					first_contact_player_id, {})
+			return _finish(result, "kill", true, first_contact_player_id, {})
+		opponent_setter_position = Vector2(physical_choice.contact_position)
+		second_contact_window = float(physical_choice.contact_time) \
+			- float(incoming_pass_trajectory.get("start_time", 0.0))
+	var opponent_setter_choice := physical_choice \
+		if not physical_choice.is_empty() \
+		else _spatial_setter_choice(
+			opponent_second_contact.candidates, opponent_second_contact.starts,
+			opponent_plan_for_setter, int(opponent_team.setter_id),
+			first_contact_player_id, opponent_setter,
+			opponent_setter_position, second_contact_window,
+			## The run these volis had already made. Zero until a caller supplies the
+			## feeding ball's flight, which is today the serve-receive path only --
+			## see the parameter's own note for which three callers still pass
+			## nothing and why they were not changed on an unmeasured hunch.
+			head_start_seconds,
+		)
 	if opponent_setter_choice.player != null:
 		opponent_setter = opponent_setter_choice.player as VolleyballPlayer
 	if opponent_setter == null:
@@ -4320,6 +4357,8 @@ func _resolve_opponent_transition(
 	## exact shape this engine has produced eleven times now. A setter taking a
 	## dug ball is doing the same thing they do off a pass: reaching for a
 	## contact at some height, off some approach, for some tempo.
+	if physical_choice.has("contact_height_meters"):
+		pass_contact_height_meters = float(physical_choice.contact_height_meters)
 	var opponent_capability := SetterCapabilityModel.evaluate(
 		opponent_setter, opponent_tempo_call, incoming_quality,
 		pass_contact_height_meters if is_finite(pass_contact_height_meters) \
@@ -4570,19 +4609,27 @@ func _resolve_opponent_transition(
 	## The same posture question the home side asks. This side released standing
 	## on every ball in the game because nothing here ever passed `true`.
 	var opponent_jump_set := _jump_set_decision(
-		opponent_setter, pass_apex_meters, setter_arrival_margin,
+		opponent_setter,
+		pass_contact_height_meters if is_finite(pass_contact_height_meters) \
+			else pass_apex_meters,
+		setter_arrival_margin,
 		RallyKinematics.court_distance_meters(
 			Vector2(opponent_setter_choice.get("origin", setter_start)),
 			opponent_setter_position,
 		),
 		float(opponent_setter_choice.get("total_travel_seconds", setter_move_time)),
 	)
-	var opponent_release_height := GeometricAttackPromotionModel \
-		.set_contact_height_meters(opponent_setter, bool(opponent_jump_set.jumping))
+	if bool(physical_choice.get("requires_jump", false)):
+		opponent_jump_set["jumping"] = true
+		opponent_jump_set["reason"] = "required by physical interception"
+	var opponent_release_height := pass_contact_height_meters \
+		if not physical_choice.is_empty() \
+		else GeometricAttackPromotionModel.set_contact_height_meters(
+			opponent_setter, bool(opponent_jump_set.jumping)
+		)
 	var set_arc := _set_arc(
 		opponent_setter, opponent_tempo, opponent_set_quality,
-		minf(opponent_release_height, maxf(pass_apex_meters, 0.01)) \
-			if pass_apex_meters > 0.0 else opponent_release_height,
+		opponent_release_height,
 		GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
 		RallyKinematics.court_distance_meters(
 			opponent_setter_position, opponent_contact
@@ -4648,6 +4695,12 @@ func _resolve_opponent_transition(
 			"option_evaluation": opponent_option_evaluation,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
+			"body_contact_position": Vector2(physical_choice.get(
+				"body_contact_position", opponent_setter_position
+			)),
+			"movement_entry_velocity": Vector2(physical_choice.get(
+				"entry_velocity_mps", Vector2.ZERO
+			)),
 			## **Both were absent on this side and present on the other.**
 			## `_stamp_second_contact_claim` deliberately leaves `arrival_margin`
 			## to each call site because the live-setter override can move the
@@ -6161,9 +6214,35 @@ func _resolve_home_continuation(
 		cont_second_contact.candidates, defensive_plan,
 		lineup.active_setter_id(), defender.id,
 	)
+	var physical_choice := {}
+	if str(incoming_pass_trajectory.get("trajectory_role", "")) \
+			== "authoritative_free_flight":
+		physical_choice = _physical_second_contact_choice(
+			incoming_pass_trajectory,
+			cont_second_contact.candidates, cont_second_contact.starts,
+			defensive_plan, lineup.active_setter_id(), defender.id, setter,
+			&"home", defensive_plan.setter_release_target(
+				lineup.active_setter_id()
+			), GeometricAttackPromotionModel.set_contact_height_meters(setter),
+			transition_head_start_seconds,
+		)
+		_stamp_free_flight_resolution(result, physical_choice)
+		if physical_choice.get("player") == null:
+			var terminal_reason := str(Dictionary(physical_choice.get(
+				"terminal", {}
+			)).get("reason", "unresolved"))
+			if terminal_reason == "crossed_net_unresolved":
+				return _finish(result, "m5_unresolved_overpass", false, defender.id, {
+					"hitter": defender.display_name,
+				})
+			return _finish(result, "opponent_kill", false, defender.id, {
+				"hitter": defender.display_name,
+			})
 	# Preserve contact continuity: the transition set begins where the dig
 	# actually finishes instead of teleporting the ball to center court.
-	var set_contact := dig_position
+	var set_contact := Vector2(physical_choice.get(
+		"contact_position", dig_position
+	))
 	## **The hardcoded 0.68 the movement-agreement gate has been naming for
 	## months.** It is the one window in the engine that was not derived from a
 	## ball: the first-ball set takes the pass's own flight and this took a
@@ -6171,17 +6250,22 @@ func _resolve_home_continuation(
 	## chasing a flat one had exactly the same time. The constant stays as the
 	## fallback for a dig with no modelled flight, which is what the zero
 	## default above means.
-	var second_contact_window := dig_flight_seconds if dig_flight_seconds > 0.0 \
-		else DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS
-	var setter_choice := _spatial_setter_choice(
-		cont_second_contact.candidates, cont_second_contact.starts,
-		defensive_plan, lineup.active_setter_id(), defender.id, setter,
-		set_contact, second_contact_window,
-		## The opponent's attack flight. The home side has been transitioning out
-		## of defence since the swing was struck, not since the dig came off the
-		## platform -- the same head start the first ball gets from the serve.
-		transition_head_start_seconds,
-	)
+	var second_contact_window := float(physical_choice.get(
+		"contact_time", 0.0
+	)) - float(incoming_pass_trajectory.get("start_time", 0.0)) \
+		if not physical_choice.is_empty() \
+		else (dig_flight_seconds if dig_flight_seconds > 0.0 \
+			else DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS)
+	var setter_choice := physical_choice if not physical_choice.is_empty() \
+		else _spatial_setter_choice(
+			cont_second_contact.candidates, cont_second_contact.starts,
+			defensive_plan, lineup.active_setter_id(), defender.id, setter,
+			set_contact, second_contact_window,
+			## The opponent's attack flight. The home side has been transitioning out
+			## of defence since the swing was struck, not since the dig came off the
+			## platform -- the same head start the first ball gets from the serve.
+			transition_head_start_seconds,
+		)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
@@ -6234,11 +6318,16 @@ func _resolve_home_continuation(
 	## dig is contacting the ball below their standing reach or above what the
 	## approach lets them jump to, and that is priced identically for a first
 	## ball. It was simply never asked on this path.
+	var realised_pass_contact_height := float(physical_choice.get(
+		"contact_height_meters", NAN
+	))
+	if is_nan(realised_pass_contact_height):
+		realised_pass_contact_height = SetterCapabilityModel.pass_contact_height_meters(
+			incoming_quality, rng.randf()
+		)
 	var setter_capability := SetterCapabilityModel.evaluate(
 		setter, assignment.tempo, incoming_quality,
-		SetterCapabilityModel.pass_contact_height_meters(
-			incoming_quality, rng.randf()
-		),
+		realised_pass_contact_height,
 		clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
 	)
 	## Capability is not permission here either. The first ball abandons a tempo
@@ -6326,15 +6415,21 @@ func _resolve_home_continuation(
 	## implied -- when a dig grows an arc, this line is where it arrives.
 	var cont_jump_set := _jump_set_decision(
 		setter,
-		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		realised_pass_contact_height,
 		setter_arrival_margin,
 		RallyKinematics.court_distance_meters(
 			Vector2(setter_choice.get("origin", setter_start)), set_contact
 		),
 		float(setter_choice.get("total_travel_seconds", setter_move_time)),
 	)
-	var cont_release_height := GeometricAttackPromotionModel \
-		.set_contact_height_meters(setter, bool(cont_jump_set.jumping))
+	if bool(physical_choice.get("requires_jump", false)):
+		cont_jump_set["jumping"] = true
+		cont_jump_set["reason"] = "required by physical interception"
+	var cont_release_height := realised_pass_contact_height \
+		if not physical_choice.is_empty() \
+		else GeometricAttackPromotionModel.set_contact_height_meters(
+			setter, bool(cont_jump_set.jumping)
+		)
 	var continuation_set_arc := _set_arc(
 		setter, assignment.tempo, set_quality,
 		cont_release_height,
@@ -6397,6 +6492,12 @@ func _resolve_home_continuation(
 			"emergency_setter": emergency_setter,
 			"first_contact_id": defender.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
+			"body_contact_position": Vector2(physical_choice.get(
+				"body_contact_position", set_contact
+			)),
+			"movement_entry_velocity": Vector2(physical_choice.get(
+				"entry_velocity_mps", Vector2.ZERO
+			)),
 			"arrival_margin": setter_arrival_margin,
 			"flight_time": continuation_flight_time,
 			"release_interval": cont_release_interval,
@@ -7467,6 +7568,7 @@ func _resolve_home_continuation(
 		float(cont_dig_pass.get("set_contact_height_meters", NAN)),
 		float(cont_dig_pass.get("pass_apex_meters", 0.0)),
 		Dictionary(cont_dig_pass.get("trajectory", {})),
+		float(continuation_attack_trajectory.get("duration", 0.0)),
 	)
 
 
@@ -10428,30 +10530,32 @@ func _physical_platform_dig_result(
 			or not shadow.has("realised_velocity_mps"):
 		return {}
 	var realised: Dictionary = shadow.realised
-	var destination := Vector2(realised.target_plane_position)
-	var set_contact_height := maxf(
-		float(realised.target_plane_height_meters), 0.0
-	)
-	var duration := maxf(
-		float(realised.target_plane_time_seconds),
-		BallFlightModel.MIN_FLIGHT_DURATION,
-	)
 	var apex_height := maxf(
 		float(realised.apex_height_meters), contact_height
 	)
 	var launch_velocity := Vector3(shadow.realised_velocity_mps)
-	var trajectory := _ball_trajectory(
-		"dig", contact_position, destination, duration,
-		maxf(apex_height - contact_height, 0.0), contact_time,
-		launch_velocity.y, NAN, contact_height, set_contact_height,
+	## M5: the platform contact owns a launch, so the unconstrained projectile
+	## owns its endpoint. The target plane remains a diagnostic about intent; it
+	## is not promoted into the next voli's hands. A later physical interception
+	## may realize a prefix of this exact record without rewriting the launch.
+	var trajectory := FreeFlightInterceptionModel.from_launch(
+		"dig", contact_position, contact_height, launch_velocity, contact_time,
+		"%d:dig:%d:%.6f" % [rally_seed, digger.id, contact_time],
 	)
+	if trajectory.is_empty():
+		return {}
+	var destination := Vector2(trajectory.end_position)
+	var duration := float(trajectory.duration)
 	return {
 		"trajectory": trajectory,
+		"authoritative_free_flight": trajectory,
 		"destination": destination,
 		"duration": duration,
 		"pass_apex_meters": apex_height,
 		"pass_contact_height_meters": contact_height,
-		"set_contact_height_meters": set_contact_height,
+		## There is no setter contact yet. M5 supplies this only after a body
+		## actually intercepts the free flight.
+		"set_contact_height_meters": NAN,
 		"target_error_meters": float(realised.horizontal_error_meters),
 		"incoming_speed_mps": float(incoming.speed_mps),
 		"platform_contact": {
@@ -10470,17 +10574,24 @@ func _physical_platform_dig_result(
 			"binding_constraint": str(shadow.binding_constraint),
 			"circumstance_severity": severity,
 			"reaches_target_plane": bool(realised.reaches_target_plane),
-			"target_plane_height_meters": set_contact_height,
+			"target_plane_position": Vector2(realised.target_plane_position),
+			"target_plane_time_seconds": float(
+				realised.target_plane_time_seconds
+			),
+			"target_plane_height_meters": float(
+				realised.target_plane_height_meters
+			),
 		},
 	}
 
 
 func _physical_platform_dig_enabled() -> bool:
-	return RallyFeatureFlagsModel.ENABLE_PHYSICAL_PLATFORM_DIG \
+	return not platform_dig_development_force_legacy \
+		and (RallyFeatureFlagsModel.ENABLE_PHYSICAL_PLATFORM_DIG \
 		or (
 			platform_dig_development_open and OS.is_debug_build()
 			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
-		)
+		))
 
 
 ## Body velocity is a derived journey, in the same court frame as the incoming
@@ -11708,6 +11819,54 @@ func _second_contact_temperament(candidate: VolleyballPlayer) -> float:
 		+ (float(candidate.aggression) - 50.0) / 50.0 * SECOND_CONTACT_AGGRESSION_PULL
 
 
+## The existing second-contact decision policy, separated from the endpoint
+## search so M5 can apply the same attributes and tactical responsibilities to
+## physically discovered interception opportunities. This extraction changes no
+## weight and introduces no new preference.
+func _second_contact_duty_bonus(
+	candidate: VolleyballPlayer,
+	defensive_plan: Resource,
+	designated_setter_id: int,
+	preferred_setter: VolleyballPlayer,
+) -> float:
+	if candidate == null:
+		return -1000.0
+	var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
+		if defensive_plan != null else null
+	var duty := str(assignment.second_contact_responsibility) \
+		if assignment != null else "No second-contact duty"
+	var duty_bonus := 0.0
+	match duty:
+		"Primary emergency setter": duty_bonus = 0.34
+		"Secondary emergency setter": duty_bonus = 0.18
+		"Stay available to attack": duty_bonus = -0.16
+		"No second-contact duty": duty_bonus = -0.24
+	if candidate.id == designated_setter_id:
+		duty_bonus = 0.46
+	elif candidate == preferred_setter:
+		duty_bonus += 0.20
+	return duty_bonus
+
+
+func _second_contact_claim_score(
+	candidate: VolleyballPlayer,
+	arrival_margin: float,
+	defensive_plan: Resource,
+	designated_setter_id: int,
+	preferred_setter: VolleyballPlayer,
+) -> float:
+	if candidate == null:
+		return -1000.0
+	var arrival_score := clampf(arrival_margin / 1.2, -1.0, 1.0)
+	return arrival_score * 0.52 \
+		+ _rating(candidate, "set_accuracy") * 0.28 \
+		+ _rating(candidate, "decision_making") * 0.12 \
+		+ _second_contact_duty_bonus(
+			candidate, defensive_plan, designated_setter_id, preferred_setter
+		) \
+		+ _second_contact_temperament(candidate)
+
+
 ## What a teammate nearby is worth, which is not always positive.
 ##
 ## **Two volis in one space were being scored as double coverage.** The term
@@ -11764,6 +11923,171 @@ func _support_term(support_count: int, nearest_teammate_meters: float) -> float:
 	)
 	return SUPPORT_HELP_CEILING * closeness \
 		* minf(float(support_count) / 2.0, 1.0)
+
+
+## M5's launch-time body state. Positions, velocity, facing and recovery are all
+## carried facts. The pre-contact release is the same transition head start the
+## legacy chooser already used, but it runs toward the intent's release seat --
+## a fact available before the dig -- rather than toward the realised ball.
+func _second_contact_actor_states(
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
+	side: StringName,
+	expected_area: Vector2,
+	head_start_seconds: float,
+	launch_time: float,
+) -> Array[RallyPlayerState]:
+	var actors: Array[RallyPlayerState] = []
+	var velocities: Dictionary = opponent_live_velocities \
+		if side == &"opponent" else live_velocities
+	for candidate in candidates:
+		if candidate == null:
+			continue
+		var start := Vector2(starts.get(candidate.id, expected_area))
+		var actor := RallyPlayerState.create(candidate, side, -1, start)
+		actor.velocity = Vector2(velocities.get(candidate.id, Vector2.ZERO))
+		actor.facing = Vector2(player_facing.get(
+			candidate.id, RallyPlayerState.side_relative_ready_facing(side)
+		))
+		var recovery: Dictionary = player_recovery.get(candidate.id, {})
+		var recovery_delay := float(recovery.get("delay", 0.0))
+		var running := maxf(head_start_seconds - recovery_delay, 0.0)
+		if running > 0.0 and expected_area != Vector2.ZERO:
+			var projected := RallyMovementSystemModel.project_toward(
+				actor, expected_area, running,
+				RallyPlayerState.MovementMode.TRANSITION,
+			)
+			var projected_actor := projected.get("actor") as RallyPlayerState
+			if projected_actor != null:
+				actor = projected_actor
+		var ready_at := float(recovery.get("ready_at", 0.0))
+		if ready_at > launch_time:
+			actor.recovery_until = ready_at
+			actor.committed_until = maxf(actor.committed_until, ready_at)
+			actor.body_state = RallyPlayerState.BodyState.AIRBORNE \
+				if str(recovery.get("state", "")) == "airborne" \
+				else RallyPlayerState.BodyState.RECOVERING
+			actor.movement_mode = RallyPlayerState.MovementMode.RECOVERY
+		actors.append(actor)
+	return actors
+
+
+## Apply the existing second-contact responsibility policy to physically
+## discovered opportunities. Physics decides who can meet which point of the
+## flight; tactics and attributes decide which viable claimant takes it.
+func _physical_second_contact_choice(
+	free_flight: Dictionary,
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
+	defensive_plan: Resource,
+	designated_setter_id: int,
+	first_contact_player_id: int,
+	preferred_setter: VolleyballPlayer,
+	side: StringName,
+	expected_area: Vector2,
+	expected_height_meters: float,
+	head_start_seconds: float,
+) -> Dictionary:
+	var actors := _second_contact_actor_states(
+		candidates, starts, side, expected_area, head_start_seconds,
+		float(free_flight.get("start_time", rally_clock)),
+	)
+	var physical := FreeFlightInterceptionModel.opportunities(
+		free_flight, actors, &"set", true, [first_contact_player_id],
+		expected_area, expected_height_meters,
+	)
+	if not bool(physical.get("available", false)):
+		return physical
+	var available: Dictionary = physical.get("opportunities", {})
+	var best := {}
+	var best_score := -1000.0
+	var claimants: Array = []
+	for raw_id in available:
+		var opportunity: Dictionary = available[raw_id]
+		var candidate := opportunity.get("player") as VolleyballPlayer
+		if candidate == null:
+			continue
+		var score := _second_contact_claim_score(
+			candidate, float(opportunity.get("arrival_margin", 0.0)),
+			defensive_plan, designated_setter_id, preferred_setter,
+		)
+		claimants.append({"id": candidate.id, "score": score})
+		if score > best_score:
+			best_score = score
+			best = opportunity.duplicate(true)
+			best["score"] = score
+	claimants.sort_custom(func(a, b) -> bool: return float(a.score) > float(b.score))
+	best["claimant_count"] = claimants.size()
+	best["seam_conflict"] = false
+	if claimants.size() >= 2:
+		var gap := float(claimants[0].score) - float(claimants[1].score)
+		best["claim_margin"] = gap
+		best["seam_conflict"] = gap < _seam_margin(
+			_player_by_id(candidates, int(claimants[0].id)),
+			_player_by_id(candidates, int(claimants[1].id)),
+		)
+		best["contested_by"] = int(claimants[1].id)
+	best["terminal"] = physical.get("terminal", {})
+	best["authoritative_free_flight"] = free_flight
+	best["intended_setter_had_opportunity"] = available.has(
+		designated_setter_id
+	)
+	if not best.is_empty() and best.has("contact_time"):
+		best["realised_trajectory"] = FreeFlightInterceptionModel.realised_prefix(
+			free_flight, float(best.contact_time)
+		)
+	return best
+
+
+func _stamp_free_flight_resolution(
+	result: Resource,
+	choice: Dictionary,
+) -> void:
+	if result == null or result.events.is_empty() or choice.is_empty():
+		return
+	var feeding_event := result.events[-1] as RallyEvent
+	if feeding_event == null:
+		return
+	var free_flight: Dictionary = choice.get("authoritative_free_flight", {})
+	if free_flight.is_empty():
+		return
+	feeding_event.metadata["authoritative_free_flight"] = free_flight
+	feeding_event.metadata["free_flight_terminal"] = choice.get("terminal", {})
+	feeding_event.metadata["intended_setter_had_opportunity"] = bool(
+		choice.get("intended_setter_had_opportunity", false)
+	)
+	var realised: Dictionary = choice.get("realised_trajectory", {})
+	if not realised.is_empty():
+		feeding_event.metadata["outgoing_trajectory"] = realised
+		feeding_event.metadata["pass_duration_seconds"] = float(
+			realised.get("duration", 0.0)
+		)
+		feeding_event.metadata["set_contact_height_meters"] = float(
+			choice.get("contact_height_meters", NAN)
+		)
+		feeding_event.end_position = Vector2(choice.get(
+			"contact_position", feeding_event.end_position
+		))
+		feeding_event.metadata["realised_interceptor_id"] = int(choice.get(
+			"player_id", -1
+		))
+		feeding_event.metadata["free_flight_resolution"] = "intercepted"
+		return
+	var terminal: Dictionary = choice.get("terminal", {})
+	var terminal_time := float(terminal.get(
+		"time", free_flight.get("end_time", free_flight.get("start_time", 0.0))
+	))
+	var terminal_segment := FreeFlightInterceptionModel.realised_prefix(
+		free_flight, terminal_time
+	)
+	if not terminal_segment.is_empty():
+		feeding_event.metadata["outgoing_trajectory"] = terminal_segment
+		feeding_event.end_position = Vector2(terminal.get(
+			"position", feeding_event.end_position
+		))
+	feeding_event.metadata["free_flight_resolution"] = str(terminal.get(
+		"reason", "unresolved"
+	))
 
 
 func _spatial_setter_choice(
@@ -11869,16 +12193,6 @@ func _spatial_setter_choice(
 			"set_accuracy", start, 0.0,
 		)
 		var reach_margin := float(arrival.get("reach_margin_meters", 0.0))
-		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
-			if defensive_plan != null else null
-		var duty := str(assignment.second_contact_responsibility) \
-			if assignment != null else "No second-contact duty"
-		var duty_bonus := 0.0
-		match duty:
-			"Primary emergency setter": duty_bonus = 0.34
-			"Secondary emergency setter": duty_bonus = 0.18
-			"Stay available to attack": duty_bonus = -0.16
-			"No second-contact duty": duty_bonus = -0.24
 		## **The active setter's responsibility replaces the plan's, it does not
 		## stack on it.** `Primary emergency setter` and `Secondary emergency
 		## setter` describe who covers *when the normal setter cannot take the
@@ -11909,15 +12223,10 @@ func _spatial_setter_choice(
 		## hierarchy among the remaining five is untouched by the change.
 		## `docs/review/SECOND_CONTACT_TRANSFER.md`;
 		## `tools/run_second_contact_probe.gd` gates 1-6.
-		if candidate.id == designated_setter_id:
-			duty_bonus = 0.46
-		elif candidate == preferred_setter:
-			duty_bonus += 0.20
-		var arrival_score := clampf((available_time - travel_time) / 1.2, -1.0, 1.0)
-		var score := arrival_score * 0.52 \
-			+ _rating(candidate, "set_accuracy") * 0.28 \
-			+ _rating(candidate, "decision_making") * 0.12 + duty_bonus \
-			+ _second_contact_temperament(candidate)
+		var score := _second_contact_claim_score(
+			candidate, available_time - travel_time, defensive_plan,
+			designated_setter_id, preferred_setter,
+		)
 		if score > best_score:
 			best_score = score
 			best = {

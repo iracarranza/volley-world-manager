@@ -1,6 +1,6 @@
 extends SceneTree
 
-## M4 slice 3: paired production-closed / controlled-dig-development rollout.
+## M4/M5: paired retired-legacy / production controlled-dig rollout.
 ##
 ##     godot --headless --path . \
 ##       --script res://tools/run_platform_dig_rollout_probe.gd
@@ -11,6 +11,9 @@ extends SceneTree
 
 const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
 const RallyEventScript := preload("res://scripts/models/rally_event.gd")
+const FreeFlightInterception := preload(
+	"res://scripts/simulation/free_flight_interception_system.gd"
+)
 
 const FIRST_SEED: int = 23000
 const RALLIES_PER_SERVER: int = 300
@@ -25,7 +28,7 @@ func _initialize() -> void:
 	_print_contacts(legacy, physical)
 	_gate(
 		int(legacy.promoted) == 0,
-		"production-closed rallies publish no promoted platform dig",
+		"the debug legacy arm publishes no promoted platform dig",
 	)
 	_gate(
 		int(physical.successful_digs) > 0
@@ -43,6 +46,38 @@ func _initialize() -> void:
 	_gate(
 		int(physical.event_endpoint_matches) == int(physical.promoted),
 		"the DIG event and its outgoing trajectory end at the same point",
+	)
+	_gate(
+		int(physical.authoritative_free_flights) == int(physical.promoted),
+		"every promoted dig publishes one authoritative free flight",
+	)
+	_gate(
+		int(physical.prefix_failures) == 0,
+		"every realised segment is a prefix of its authoritative free flight",
+	)
+	_gate(
+		int(physical.launch_mutations) == 0,
+		"later interception never rewrites the platform launch",
+	)
+	_gate(
+		int(physical.duplicate_contact_actors) == 0,
+		"the digger cannot also take the second contact",
+	)
+	_gate(
+		int(physical.next_actor_mismatches) == 0,
+		"the realised interceptor is the next contact actor exactly once",
+	)
+	_gate(
+		int(physical.unreachable_intended_terminations) == 0,
+		"an intended setter without an opportunity cannot terminate the flight",
+	)
+	_gate(
+		int(physical.alternate_interceptors) > 0,
+		"a viable non-intended voli can intercept the ball en route",
+	)
+	_gate(
+		int(physical.unresolved_overpasses) == 0,
+		"this controlled rollout does not reach unresolved overpass semantics",
 	)
 	if failures == 0:
 		print("\nPASS: physical controlled-dig rollout gates")
@@ -63,6 +98,17 @@ func _arm(open_physical_dig: bool) -> Dictionary:
 		"failed_with_launch": 0,
 		"complete_trajectories": 0,
 		"event_endpoint_matches": 0,
+		"authoritative_free_flights": 0,
+		"intercepted": 0,
+		"alternate_interceptors": 0,
+		"intended_misses": 0,
+		"prefix_failures": 0,
+		"launch_mutations": 0,
+		"duplicate_contact_actors": 0,
+		"next_actor_mismatches": 0,
+		"unreachable_intended_terminations": 0,
+		"unresolved_overpasses": 0,
+		"terminal_reasons": {},
 		"intent_satisfiable": 0,
 		"reaches_target_plane": 0,
 		"bindings": {},
@@ -78,7 +124,7 @@ func _arm(open_physical_dig: bool) -> Dictionary:
 			manager.seed_vertical_slice_data()
 			manager.match_state.serving_home = serving_home
 			var rally: Resource = manager.resolve_active_rally(
-				seed_value, false, open_physical_dig
+				seed_value, false, open_physical_dig, not open_physical_dig
 			)
 			if rally == null:
 				manager.free()
@@ -87,8 +133,8 @@ func _arm(open_physical_dig: bool) -> Dictionary:
 			report.events += rally.events.size()
 			var outcome := str(rally.terminal_outcome)
 			report.outcomes[outcome] = int(report.outcomes.get(outcome, 0)) + 1
-			for entry in rally.events:
-				var event := entry as RallyEvent
+			for event_index in range(rally.events.size()):
+				var event := rally.events[event_index] as RallyEvent
 				if event == null \
 						or event.event_type != RallyEventScript.EventType.DIG:
 					continue
@@ -103,6 +149,50 @@ func _arm(open_physical_dig: bool) -> Dictionary:
 				if str(platform.get("source", "")) != "shared_physical_platform":
 					continue
 				report.promoted += 1
+				var free_flight: Dictionary = event.metadata.get(
+					"authoritative_free_flight", {}
+				)
+				if not free_flight.is_empty():
+					report.authoritative_free_flights += 1
+				var resolution := str(event.metadata.get(
+					"free_flight_resolution", "missing"
+				))
+				if resolution == "intercepted":
+					report.intercepted += 1
+					var actual_id := int(event.metadata.get(
+						"realised_interceptor_id", -1
+					))
+					var intended_value: Variant = Dictionary(event.metadata.get(
+						"platform_intent", {}
+					)).get("intended_recipient_id", -1)
+					var intended_id := int(intended_value) \
+						if intended_value is int else -1
+					if actual_id != intended_id:
+						report.alternate_interceptors += 1
+					if not bool(event.metadata.get(
+						"intended_setter_had_opportunity", false
+					)):
+						report.intended_misses += 1
+						if actual_id == intended_id:
+							report.unreachable_intended_terminations += 1
+					if actual_id == event.actor_id:
+						report.duplicate_contact_actors += 1
+					if event_index + 1 >= rally.events.size() \
+							or (rally.events[event_index + 1] as RallyEvent).event_type \
+								!= RallyEventScript.EventType.SET \
+							or (rally.events[event_index + 1] as RallyEvent).actor_id \
+								!= actual_id:
+						report.next_actor_mismatches += 1
+					if not _is_prefix(free_flight, trajectory):
+						report.prefix_failures += 1
+					if not _same_launch(free_flight, trajectory):
+						report.launch_mutations += 1
+				else:
+					report.terminal_reasons[resolution] = int(
+						report.terminal_reasons.get(resolution, 0)
+					) + 1
+					if resolution == "crossed_net_unresolved":
+						report.unresolved_overpasses += 1
 				if bool(platform.get("intent_satisfiable", false)):
 					report.intent_satisfiable += 1
 				if bool(platform.get("reaches_target_plane", false)):
@@ -161,7 +251,7 @@ func _print_contacts(legacy: Dictionary, physical: Dictionary) -> void:
 	print("\n" + "=".repeat(90))
 	print("CONTROLLED-DIG OWNERSHIP AND PLAUSIBILITY")
 	print("=".repeat(90))
-	print("  production-closed promoted: %d / %d successful" % [
+	print("  forced-legacy promoted:    %d / %d successful" % [
 		legacy.promoted, legacy.successful_digs,
 	])
 	print("  physical rollout promoted:  %d / %d successful" % [
@@ -170,6 +260,17 @@ func _print_contacts(legacy: Dictionary, physical: Dictionary) -> void:
 	print("  failed digs with a launch:   %d / %d" % [
 		physical.failed_with_launch, physical.failed_digs,
 	])
+	print("  authoritative free flights:  %d / %d" % [
+		physical.authoritative_free_flights, physical.promoted,
+	])
+	print("  realised interceptions:      %d / %d" % [
+		physical.intercepted, physical.promoted,
+	])
+	print("  intended setter misses:      %d" % physical.intended_misses)
+	print("  alternate interceptors:      %d" % physical.alternate_interceptors)
+	print("  uncontrolled terminals:      %s" % _counts_text(
+		physical.terminal_reasons
+	))
 	print("  intent simultaneously met:  %d / %d" % [
 		physical.intent_satisfiable, physical.promoted,
 	])
@@ -183,6 +284,46 @@ func _print_contacts(legacy: Dictionary, physical: Dictionary) -> void:
 	print("  segment duration min/p50/max: %s s" % _stats_text(physical.durations))
 	print("  horizontal target error min/p50/max: %s m" % \
 		_stats_text(physical.target_errors))
+
+
+func _is_prefix(free_flight: Dictionary, realised: Dictionary) -> bool:
+	if free_flight.is_empty() or realised.is_empty():
+		return false
+	if str(realised.get("trajectory_role", "")) != "realised_segment" \
+			or str(realised.get("authoritative_flight_id", "")) \
+				!= str(free_flight.get("authoritative_flight_id", "")):
+		return false
+	var realised_end := float(realised.get("end_time", 0.0))
+	if realised_end > float(free_flight.get("end_time", 0.0)) + 0.00001:
+		return false
+	var expected_position := FreeFlightInterception.position_at_time(
+		free_flight, realised_end
+	)
+	var expected_height := FreeFlightInterception.height_at_time(
+		free_flight, realised_end
+	)
+	return expected_position.distance_to(Vector2(realised.get(
+		"end_position", Vector2(-9.0, -9.0)
+	))) <= 0.00001 \
+		and absf(expected_height - float(realised.get(
+			"end_height_meters", -9.0
+		))) <= 0.00001
+
+
+func _same_launch(free_flight: Dictionary, realised: Dictionary) -> bool:
+	for key in [
+		"launch_speed_mps", "launch_angle_degrees", "launch_horizontal_mps",
+		"launch_vertical_mps", "launch_gravity_mps2",
+	]:
+		if not is_equal_approx(
+			float(free_flight.get(key, NAN)), float(realised.get(key, NAN))
+		):
+			return false
+	return Vector3(free_flight.get(
+		"launch_velocity_mps", Vector3(INF, INF, INF)
+	)).is_equal_approx(Vector3(realised.get(
+		"launch_velocity_mps", Vector3(-INF, -INF, -INF)
+	)))
 
 
 func _stats_text(values: Array) -> String:
