@@ -4,6 +4,11 @@ Run: 2026-08-17, from `0788741`. Instruments:
 `tools/run_body_centre_probe.gd`, `tools/run_platform_standoff_options.gd`.
 **Measured, then derived. One production addition, and it invents nothing.**
 
+**Promotion note, later the same day:** this document records why the first
+attempt was reverted. The contact-family height was subsequently plumbed
+directly, without reading the ambiguous trajectory endpoint; M3 is closed by
+[`BODY_CENTRE_PROMOTION.md`](BODY_CENTRE_PROMOTION.md).
+
 M3's exit condition: *"A voli's body location is distinct from the point where
 hands/platform contact the ball. Reach, wingspan, body type and net encroachment
 use one physical geometry instead of placing the sternum on the ball."*

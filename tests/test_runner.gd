@@ -297,6 +297,7 @@ func _initialize() -> void:
 	_test_immediate_control_needs_a_usable_body()
 	_test_compromised_bodies_survive_the_boundary()
 	_test_contact_offset_is_derived_geometry()
+	_test_platform_arrival_places_the_body_behind_contact()
 	_test_platform_contacts_state_an_intent()
 	_test_the_incoming_ball_reaches_no_platform_launch()
 	_test_play_validation_and_serialization()
@@ -10814,6 +10815,42 @@ func _test_contact_offset_is_derived_geometry() -> void:
 				longer.shoulder_height_meters(), voli.shoulder_height_meters()
 			),
 		"a longer arm reaches further in front from the same shoulder",
+	)
+
+
+## M3 promotion: the relation above is not merely available on the player; the
+## defensive arrival consumes it. The full-arrival fixture is deliberately held
+## apart from claim quality and RNG so the gate can distinguish body placement
+## from a changed rally outcome.
+func _test_platform_arrival_places_the_body_behind_contact() -> void:
+	var simulator: RefCounted = RALLY_SIMULATOR_SCRIPT.new()
+	var voli := _orientation_voli()
+	voli.height_cm = 192.0
+	voli.wingspan_cm = 204.0
+	var start := Vector2(0.50, 0.85)
+	var contact := Vector2(0.50, 0.65)
+	var height := GEOMETRIC_PROMOTION_SCRIPT.pass_contact_height_meters(voli)
+	var direction := Vector2(0.0, -1.0)
+	var reached: Vector2 = simulator._reached_point(
+		voli, start, contact, 3.0, "lateral", 0.0, height, direction,
+	)
+	var body_gap := COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+		reached, contact
+	)
+	_check(
+		absf(body_gap - voli.contact_offset_meters(height)) < 0.001
+			and reached.y < contact.y,
+		"a full platform arrival stands the body behind its own contact geometry",
+	)
+
+	## Contact geometry is not permission to clean up a journey the resolver said
+	## the body could not make. With no usable time the body remains at its start.
+	var beaten: Vector2 = simulator._reached_point(
+		voli, start, contact, 0.0, "lateral", 0.0, height, direction,
+	)
+	_check(
+		beaten.is_equal_approx(start),
+		"the platform stand-off does not teleport a body that never arrived",
 	)
 
 

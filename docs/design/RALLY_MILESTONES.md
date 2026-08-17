@@ -26,8 +26,8 @@ The governing fidelity milestone remains the one in
 | **M0 — authoritative rally skeleton** | **DONE** | One causal rally chain: serve → receive → set → approach → attack → block → defence → dig → same set loop. No parallel transition architecture or hidden replacement ball. | Review chain in `docs/review/`; especially [`FORWARD_WALK_ATTACK_CHAIN.md`](../review/FORWARD_WALK_ATTACK_CHAIN.md) |
 | **M1 — responsibility and defensive ownership** | **DONE** | Feasibility gates ownership; immediate possession, short/zone responsibility, transfer and fallback ordering are explicit; landing blockers carry real recovery debt. | `docs/review/DEFENSIVE_READINESS_BOUNDARY.md` and later readiness reviews |
 | **M2 — physical preparation state** | **DONE, with one relation deferred** | Facing describes real body preparation and evolves by movement **form** — IDLE/LATERAL/BLOCK_CLOSE/RECOVERY preserve, APPROACH/TRANSITION establish the route — with no angle, distance or turn-rate constant anywhere. `readiness` was **removed**: nothing wrote it, so its two envelope consumers were a folded constant and an identity. Deferred and named rather than fudged: the defensive form comparison (§8) needs two unmeasured relations — what a hip turn costs, and a per-form top speed — and belongs to the locomotion rework. | [`READY_ORIENTATION.md`](../review/READY_ORIENTATION.md), [`MOVING_ORIENTATION.md`](../review/MOVING_ORIENTATION.md), [`READINESS_REMOVAL.md`](../review/READINESS_REMOVAL.md) |
-| **M3 — body centre vs contact geometry** | **RELATION DERIVED, promotion pending** | A voli's body location is distinct from the point where hands/platform contact the ball. Reach, wingspan, body type and net encroachment use one physical geometry instead of placing the sternum on the ball. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md), platform-offset measurement history, [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md) |
-| **M4 — physical platform contact** | **DESIGNED** | Reception, controlled dig, emergency dig and attack coverage produce an outgoing ball from incoming ball + body/contact state + intent/selection + execution, not from event-specific apex bands. | [`PLATFORM_CONTACT.md`](PLATFORM_CONTACT.md) |
+| **M3 — body centre vs contact geometry** | **DONE** | Platform body placement consumes the contact family's real per-voli height and the already-derived shoulder/arm offset; full arrivals stand behind contact while partial journeys remain physical. No trajectory endpoint height or stand-off constant is used. | [`BODY_CENTRE_SCOPE.md`](../review/BODY_CENTRE_SCOPE.md), [`BODY_CENTRE_PROMOTION.md`](../review/BODY_CENTRE_PROMOTION.md) |
+| **M4 — physical platform contact** | **IN PROGRESS / NEXT** | Reception, controlled dig, emergency dig and attack coverage produce an outgoing ball from incoming ball + body/contact state + intent/selection + execution, not from event-specific apex bands. Intent publication and shipped-model transfer characterization are done; attribute leverage and the T1–T3 shadow envelope are next. | [`PLATFORM_CONTACT.md`](PLATFORM_CONTACT.md), [`PLATFORM_INTENT.md`](../review/PLATFORM_INTENT.md), [`PLATFORM_TRANSFER.md`](../review/PLATFORM_TRANSFER.md) |
 | **M5 — free-flight and interception authority** | **PLANNED** | Outgoing launch exists independently of who later intercepts it. Intended recipient ≠ physical endpoint; free flight ≠ realized segment; shanks may be intercepted en route; gameplay physics no longer depends on presentation reconstruction. | [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md), `OUTSTANDING.md` second-contact/shank section |
 | **M6 — all-contact consistency audit** | **PLANNED** | Serve, set, attack, block and platform families obey one ownership rubric: incoming ball → physical feasibility → intent/selection where applicable → execution → one authoritative outgoing ball. Reopen a certified family only on controlled proof of an authority break. | [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md), review ledgers |
 | **M7 — continuous per-voli rally actions** | **PLANNED** | Player action state survives ball-event boundaries: previous contacter clears, setter transition overlaps the first ball, hitters approach before release, blockers/defenders establish before contact, early arrivals wait instead of stretching motion to fill a flight. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md), `RALLY_PHYSICAL_TIME.md`, `OFF_BALL_MOVEMENT.md` |
@@ -88,11 +88,11 @@ the repository describing one skeleton and agreeing about it.
 the waist, 0.786 m at the chest, and zero above the shoulder and at the floor,
 both boundaries geometric rather than authored. **Nothing is authored in it.**
 
-Still open, and plumbing rather than policy: it is consumed by nothing. Promoting
-it means `_reached_point` standing the body off instead of returning `target`,
-which needs the contact height plumbed to each defensive site and a certified
-before/after — moving every defensive body by half a metre deserves its own
-measurement rather than riding along with the derivation.
+**Promoted and certified 2026-08-17:** [`BODY_CENTRE_PROMOTION.md`](../review/BODY_CENTRE_PROMOTION.md).
+All eight platform sites now supply their contact family's own per-voli height
+and the arriving ball's direction. The deterministic fixture moved 5/5 full
+arrivals from the ball to the exact derived offset; partial journeys remain
+untouched. The unresolved trajectory endpoint field is not read.
 
 ## Platform-contact sub-milestones
 

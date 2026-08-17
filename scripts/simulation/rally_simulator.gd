@@ -1596,18 +1596,14 @@ func resolve(
 	var receiver_reach := _reached_point(
 		receiver, receiver_start, serve_landing, serve_time, "lateral",
 		float(arrival.get("read_error_meters", 0.0)),
-		## **M3 is deliberately not wired here yet, and the reason is measured.**
-		##
-		## The stand-off needs the height the ball is met at, and this flight does
-		## not know it: `_ball_trajectory` was passed NAN for `end_height`, so
-		## `end_height_meters` is the 1.0 m default on all 120 serves sampled --
-		## the value its own comment calls "a metre and a fifth of fiction". A
-		## body placed against that would be placed against a placeholder, which
-		## is the failure this repository exists to catch rather than commit.
-		##
-		## `_reached_point` takes the two arguments and `_body_behind_contact`
-		## computes the offset; both are inert until a real arrival height is
-		## published here. See `docs/review/BODY_CENTRE_SCOPE.md` section 6.
+		## The contact family's own body-derived height, not the trajectory's
+		## ambiguous endpoint height. A reception already computes this exact
+		## quantity for the outgoing pass; using it here closes M3 without making
+		## either meaning of `end_height_meters` authoritative by accident.
+		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
+		_incoming_ball_direction(
+			serve_trajectory, serve_landing, opponent_serve_origin
+		),
 	)
 	if not using_live_reception:
 		## Short of the ball is where a beaten passer actually is, and it is what
@@ -3387,6 +3383,11 @@ func resolve(
 		var coverer_reach := _reached_point(
 			coverer, coverer_start, recycle_target,
 			float(opponent_block_trajectory.get("duration", 0.24)), "lateral",
+			0.0,
+			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
+			_incoming_ball_direction(
+				opponent_block_trajectory, recycle_target, attack_target
+			),
 		) if coverer != null else recycle_target
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
@@ -3568,6 +3569,11 @@ func resolve(
 		opponent_defender, Vector2(opponent_defense.start), attack_target,
 		opponent_defense_time, "lateral",
 		float(opponent_defense.get("read_error_meters", 0.0)),
+		GeometricAttackPromotionModel.pass_contact_height_meters(opponent_defender),
+		_incoming_ball_direction(
+			opponent_arriving_trajectory, attack_target,
+			Vector2(opponent_arriving_trajectory.get("start_position", attack_target)),
+		),
 	)
 	## The ball that leaves this dig, resolved once, here. Only a successful dig
 	## has an outgoing flight -- a defender who never controlled it did not pass
@@ -3858,7 +3864,12 @@ func _resolve_home_serve(
 	var reception_success := receiver_arrived \
 		and reception_quality >= RECEPTION_PLAYABLE_FLOOR
 	var opponent_receiver_reach := _reached_point(
-		receiver, receiver_start, opponent_landing, serve_time, "lateral"
+		receiver, receiver_start, opponent_landing, serve_time, "lateral", 0.0,
+		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
+		_incoming_ball_direction(
+			serve_trajectory, opponent_landing,
+			CourtConstants.serve_origin(0.82, true),
+		),
 	)
 	opponent_live_positions[receiver.id] = opponent_receiver_reach
 	## Where the setter will stand, resolved before the pass rather than after it
@@ -5671,7 +5682,12 @@ func _resolve_opponent_transition(
 			coverer, coverer_start, home_block_target, "lateral"
 		) if coverer != null else 4.0
 		var coverer_reach := _reached_point(
-			coverer, coverer_start, home_block_target, coverage_time, "lateral"
+			coverer, coverer_start, home_block_target, coverage_time, "lateral",
+			0.0,
+			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
+			_incoming_ball_direction(
+				home_block_trajectory, home_block_target, opponent_contact
+			),
 		) if coverer != null else home_block_target
 		if coverer != null:
 			opponent_live_positions[coverer.id] = coverer_reach
@@ -5928,6 +5944,14 @@ func _resolve_opponent_transition(
 	var defender_reach := _reached_point(
 		defender, defender_start, home_target, attack_time, "lateral",
 		float(defense_arrival.get("read_error_meters", 0.0)),
+		GeometricAttackPromotionModel.pass_contact_height_meters(defender),
+		_incoming_ball_direction(
+			home_block_trajectory if not home_block_trajectory.is_empty()
+				else visible_opponent_attack,
+			home_target, Vector2(
+				visible_opponent_attack.get("start_position", home_target)
+			),
+		),
 	)
 	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
@@ -7130,7 +7154,12 @@ func _resolve_home_continuation(
 			coverer, coverer_start, block_event_end, "lateral"
 		) if coverer != null else 4.0
 		var coverer_reach := _reached_point(
-			coverer, coverer_start, block_event_end, coverage_time, "lateral"
+			coverer, coverer_start, block_event_end, coverage_time, "lateral",
+			0.0,
+			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
+			_incoming_ball_direction(
+				cont_block_trajectory, block_event_end, attack_target
+			),
 		) if coverer != null else block_event_end
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
@@ -7290,6 +7319,13 @@ func _resolve_home_continuation(
 		opponent_defender, transition_defender_start, attack_target,
 		cont_defense_time, "lateral",
 		float(cont_defense.get("read_error_meters", 0.0)),
+		GeometricAttackPromotionModel.pass_contact_height_meters(opponent_defender),
+		_incoming_ball_direction(
+			continuation_arriving_trajectory, attack_target,
+			Vector2(continuation_arriving_trajectory.get(
+				"start_position", attack_target
+			)),
+		),
 	)
 	if opponent_defender != null:
 		opponent_live_positions[opponent_defender.id] = transition_defender_reach
@@ -10736,6 +10772,21 @@ func _incoming_ball_force(trajectory: Dictionary, fallback: float) -> float:
 		inverse_lerp(RECOVERY_SLOW_BALL_MPS, RECOVERY_FAST_BALL_MPS, speed),
 		0.0, 1.0,
 	)
+
+
+## Court-space direction in which the ball reaches a contact. The trajectory's
+## launch point is authoritative when present; `fallback_start` is an already-
+## resolved origin held by the call site, never a guessed bearing. M3 consumes
+## only this direction, so no speed, endpoint-height or presentation quantity is
+## smuggled into body placement with it.
+func _incoming_ball_direction(
+	trajectory: Dictionary,
+	contact_position: Vector2,
+	fallback_start: Vector2,
+) -> Vector2:
+	var start := Vector2(trajectory.get("start_position", fallback_start))
+	var travel := contact_position - start
+	return travel.normalized() if travel.length_squared() > 0.000001 else Vector2.ZERO
 
 
 ## Ground speed of the drawn arc, in metres per second, or zero when there is no
