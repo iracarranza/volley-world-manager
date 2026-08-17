@@ -65,6 +65,7 @@ exactly as the builder made them.
 | C4 — one actor per player per phase; lookups return that same actor | **PASS** |
 | C5 — a new rally starts with nobody carrying anything | **PASS** |
 | C6 — the carried state reaches the envelope | **PASS** |
+| C7 — orientation is carried, by the forms that establish one | **PASS** |
 
 C6 is the one the continuity exists for:
 
@@ -115,12 +116,29 @@ model that is correct and a model that gets the right answer for an adjacent
 reason, and it is what makes the two previously-latent repairs load-bearing the
 moment any path asks the envelope about a body mid-recovery.
 
-**Facing rides along and is expected inert.** Every defensive leg in the resolver
-is LATERAL and LATERAL preserves orientation, so a defender's facing cannot
-change between legs while the form comparison is blocked — measured at 2 of 796
+### Facing, carried — and inert, as predicted
+
+The first version of this pass carried body state and recovery and left facing
+out, on the argument that it would be inert. Carrying it and *observing* the
+inertness is the better version of that argument, and it is now what happens:
+`player_facing` sits beside `live_velocities`, is reset per rally, and is written
+by `_commit_facing` only where a leg's **form** establishes an orientation —
+`movement_establishes_facing()` decides, so a shuffle or a block close cannot
+overwrite what a run established.
+
+Gate C7 checks the mechanism rather than a rally outcome, deliberately, because
+the outcome is expected not to move: every defensive leg in the resolver is
+`"lateral"` and LATERAL preserves, so a defender cannot change their own
+orientation while the form comparison is blocked — measured at 2 of 796
 defensive contacts made by a body that had run
-(`tools/run_carried_facing_probe.gd`). Its inertness is not a failure of this
-pass and must not be reported as a consequence of it.
+(`tools/run_carried_facing_probe.gd`). **Its inertness is not a failure of this
+pass and must not be reported as a consequence of it.**
+
+C7's second check nearly shipped degenerate: the committed facing was `(0, −1)`,
+which is also the builder's default, so "seeded, not the default" would have
+passed without demonstrating anything. Same defect gate G hit in the
+moving-orientation pass. A diagonal run separates them — builder default
+`(0, −1)`, seeded `(0.8, −0.6)`.
 
 ---
 

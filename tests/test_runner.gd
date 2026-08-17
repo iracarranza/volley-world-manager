@@ -10722,6 +10722,18 @@ func _test_compromised_bodies_survive_the_boundary() -> void:
 	var digger: RallyPlayerState = state.player_state(&"home", digger_id)
 	var clean: RallyPlayerState = state.player_state(&"home", clean_id) \
 		if clean_id >= 0 else null
+	## Orientation is the third thing a body carries, beside where it is and what
+	## it is carrying, and only a leg whose *form* establishes one may write it --
+	## a shuffle cannot overwrite what a run established.
+	simulator._commit_facing(blocker_id, {"exit_velocity": Vector2(2.4, -1.8)})
+	simulator._commit_facing(blocker_id, {"exit_velocity": Vector2.ZERO})
+	simulator._seed_carried_body_states(state, 0.90)
+	_check(
+		state.player_state(&"home", blocker_id).facing.is_equal_approx(
+			Vector2(2.4, -1.8).normalized()
+		),
+		"a committed run's orientation survives the boundary, and a still leg keeps it",
+	)
 	_check(
 		blocker != null
 			and blocker.body_state == RallyPlayerState.BodyState.AIRBORNE

@@ -12,8 +12,8 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on the M3 contact-geometry pass:
-**2,136 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on the actor-continuity completion:
+**2,137 checks pass**. Treat any test failure as a regression.
 
 That is 2,133 plus exactly the three checks written, and 2,133 was 2,131 plus
 two. Four consecutive passes have

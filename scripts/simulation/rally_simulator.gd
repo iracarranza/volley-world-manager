@@ -1042,6 +1042,21 @@ var opponent_live_positions: Dictionary = {}
 ## and by the resolver never. These two dictionaries are the missing half.
 var live_velocities: Dictionary = {}
 var opponent_live_velocities: Dictionary = {}
+## Which way a body was set when it finished its last committed leg.
+##
+## The third of the three things a body carries, beside where it is and what it
+## is carrying. Only a leg whose *form* establishes an orientation writes here --
+## `movement_establishes_facing()` decides, so a shuffle or a block close leaves
+## whatever was already set. A voli with no entry is seeded from their side's
+## ready facing by `RallyStateBuilder`, which is what every actor got before this
+## existed.
+##
+## **Expected inert for defenders, and that is not a failure.** Every defensive
+## leg in the resolver is `"lateral"` and LATERAL preserves, so a defender cannot
+## change their own orientation while the form comparison is blocked -- measured
+## at 2 of 796 defensive contacts made by a body that had run. See
+## `docs/review/ACTOR_CONTINUITY.md`.
+var player_facing: Dictionary = {}
 ## Who is still getting up, on either side of the net. Keyed by player id, and
 ## holding the state, the moment they are a defender again, and how long the debt
 ## was -- so a dig taken halfway through a recovery is priced on how much of it is
@@ -1206,6 +1221,7 @@ func resolve(
 	## old assumption was true.
 	live_velocities = {}
 	opponent_live_velocities = {}
+	player_facing = {}
 	opponent_live_positions = _initial_opponent_positions(opponent_team, home_serving)
 	var result: Resource = RallyResultModel.new()
 	result.initial_home_positions = live_positions.duplicate(true)
@@ -2448,6 +2464,7 @@ func resolve(
 		)
 		hitter_move_time = float(actual_hitter_leg.seconds)
 		live_velocities[hitter.id] = actual_hitter_leg.exit_velocity
+		_commit_facing(hitter.id, actual_hitter_leg)
 		if prepared_actor != null:
 			resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
 				prepared_actor, hitter_body_contact, set_flight_time
@@ -6443,6 +6460,7 @@ func _resolve_home_continuation(
 	)
 	var hitter_move_time := float(continuation_leg.seconds)
 	live_velocities[hitter.id] = continuation_leg.exit_velocity
+	_commit_facing(hitter.id, continuation_leg)
 	var continuation_set_path_contact := SetPathReadModelRef.assess_contact(
 		hitter, continuation_body_contact, continuation_ideal_body
 	)
@@ -10786,10 +10804,25 @@ func _contact_recovery_state(
 ## claimant's usable-time requirement were both waiting on -- two certified
 ## repairs that could not fire because the state they test never survived a leg.
 ## See `docs/review/ACTOR_CONTINUITY.md`.
+## Records the orientation a committed leg left a body in, when its form
+## establishes one at all. A `"transition"` or `"approach"` leg opens the body up
+## and the route becomes the orientation; every other form preserves what was
+## already there, so nothing is written and nothing is overwritten.
+func _commit_facing(player_id: int, leg: Dictionary) -> void:
+	var exit_velocity := Vector2(leg.get("exit_velocity", Vector2.ZERO))
+	if exit_velocity.length_squared() <= 0.0001:
+		return
+	player_facing[player_id] = exit_velocity.normalized()
+
+
 func _seed_carried_body_states(state: RallyState, at_time: float) -> void:
 	if state == null:
 		return
 	for actor in state.all_player_states():
+		## Orientation first, and independently of the recovery debt below: a
+		## body that owes nothing still finished its last leg facing somewhere.
+		if player_facing.has(actor.player_id):
+			actor.facing = Vector2(player_facing[actor.player_id])
 		var record: Dictionary = player_recovery.get(actor.player_id, {})
 		if record.is_empty():
 			continue

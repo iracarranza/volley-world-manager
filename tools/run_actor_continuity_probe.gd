@@ -24,6 +24,7 @@ extends SceneTree
 ##   C4  no duplicate actor: one state object per player per phase
 ##   C5  the seeding resets per rally
 ##   C6  and it reaches the envelope -- an airborne body cannot take off
+##   C7  facing is carried too, and only a leg whose form establishes one writes
 
 const RallySimulatorScript := preload("res://scripts/simulation/rally_simulator.gd")
 const RallyStateBuilderModel := preload(
@@ -41,6 +42,7 @@ var _failures: Array[String] = []
 
 func _initialize() -> void:
 	_gates()
+	_facing_gate()
 	_summary()
 	quit()
 
@@ -174,6 +176,60 @@ func _gates() -> void:
 		is_zero_approx(heights["carried airborne"])
 			and heights["clean"] > 0.001,
 		"C6: a body carried in airborne cannot take off again; a clean one can",
+	)
+
+
+## C7 -- the third thing a body carries. `player_facing` records the orientation
+## a committed leg left a body in, and only a leg whose *form* establishes one
+## writes to it, so a shuffle cannot overwrite what a run established.
+##
+## Expected inert for defenders while the form comparison is blocked -- every
+## defensive leg is LATERAL and LATERAL preserves -- which is why this gate
+## checks the mechanism rather than a rally outcome.
+func _facing_gate() -> void:
+	print("\n" + "=".repeat(78))
+	print("C7 -- orientation is carried, by the leg forms that establish one")
+	print("=".repeat(78))
+	var manager: Object = GameManagerScript.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var subject := int(lineup.front_row_player_ids()[0])
+	var simulator: Object = RallySimulatorScript.new()
+	simulator.rally_seed = 4242
+	simulator.player_facing = {}
+
+	## A run establishes; a shuffle does not overwrite it.
+	## **Deliberately not straight at the net.** The builder's default is
+	## (0, -1), so committing that would leave "seeded" and "default" identical
+	## and the second check below would pass without demonstrating anything --
+	## the same degenerate-fixture defect gate G hit in the moving-orientation
+	## pass. A diagonal run separates them.
+	simulator._commit_facing(subject, {"exit_velocity": Vector2(2.4, -1.8)})
+	var after_run: Vector2 = Vector2(simulator.player_facing.get(subject, Vector2.ZERO))
+	simulator._commit_facing(subject, {"exit_velocity": Vector2.ZERO})
+	var after_still: Vector2 = Vector2(simulator.player_facing.get(subject, Vector2.ZERO))
+	print("  after a committed run      %s" % str(after_run))
+	print("  after a leg carrying none  %s" % str(after_still))
+	_verdict(
+		after_run.is_equal_approx(Vector2(2.4, -1.8).normalized())
+			and after_still.is_equal_approx(after_run),
+		"C7: a committed run sets the orientation and nothing else erases it",
+	)
+
+	## And it reaches a freshly built phase state.
+	var state: RallyState = RallyStateBuilderModel.build(
+		manager.players, lineup, manager.defensive_plans.get(
+			lineup.rotation_number
+		), manager.opponent_team, null, true, 4242,
+	)
+	var before: Vector2 = RallyPlayerState.side_relative_ready_facing(&"home")
+	simulator._seed_carried_body_states(state, 0.0)
+	var actor: RallyPlayerState = state.player_state(&"home", subject)
+	print("  builder default %s -> seeded %s" % [str(before), str(actor.facing)])
+	_verdict(
+		actor != null and actor.facing.is_equal_approx(after_run)
+			and not actor.facing.is_equal_approx(before),
+		"C7: and a fresh phase state receives the orientation, not the default",
 	)
 
 
