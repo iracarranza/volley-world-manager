@@ -298,6 +298,7 @@ func _initialize() -> void:
 	_test_compromised_bodies_survive_the_boundary()
 	_test_contact_offset_is_derived_geometry()
 	_test_platform_contacts_state_an_intent()
+	_test_the_incoming_ball_reaches_no_platform_launch()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10933,6 +10934,99 @@ func _test_platform_contacts_state_an_intent() -> void:
 			and float(distant["arrival_floor_seconds"]) > 0.5,
 		"the arrival floor is the setter's own journey, and goes slack at the seat",
 	)
+
+
+## M4 slice 2's finding, pinned so that promoting T1 has to move it deliberately.
+##
+## T1 is "incoming speed + platform/body state + absorption ability → outgoing
+## speed", and slice 2 asked what the shipped model already does with the first
+## term. Measured over 571 platform contacts: **nothing.** The outgoing vertical
+## -- the only component either resolver actually sets -- correlates with incoming
+## speed at r = +0.009 on the dig and r = −0.170 on the reception, and the
+## reception's is its execution penalty rather than a transfer.
+##
+## These are **characterisation checks, not invariants**: they hold a gap open
+## rather than a behaviour correct. When slice 3 promotes a real transfer
+## relation, they must fail, and the diff that changes them is the promotion. See
+## `docs/review/PLATFORM_TRANSFER.md`.
+func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var digger := _orientation_voli(9501)
+	digger.reception = 55
+	digger.dig_control = 55
+	digger.ball_control = 55
+	var setter := _orientation_voli(9502)
+	setter.height_cm = 188.0
+	setter.wingspan_cm = 192.0
+	var contact := Vector2(0.46, 0.84)
+	var target := Vector2(0.50, 0.60)
+
+	## Two incoming balls over the same path, one four times as fast as the other.
+	## Same path deliberately: the drift term reads the incoming *direction*, so
+	## varying the line would move the destination for a reason that is not speed.
+	var gentle := _incoming_flight(Vector2(0.54, 0.16), contact, 1.60)
+	var savage := _incoming_flight(Vector2(0.54, 0.16), contact, 0.40)
+	_check(
+		simulator._incoming_ball_speed(savage)
+			> simulator._incoming_ball_speed(gentle) * 3.5,
+		"the fixture really does vary the incoming ball, by nearly four times",
+	)
+
+	var soft_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": 0.30},
+		"planted", gentle, 1.10, setter, 2.40,
+	)
+	var hard_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": 0.30},
+		"planted", savage, 1.10, setter, 2.40,
+	)
+	_check(
+		is_equal_approx(
+			float(soft_dig["pass_apex_meters"]), float(hard_dig["pass_apex_meters"])
+		)
+			and is_equal_approx(
+				float(soft_dig["duration"]), float(hard_dig["duration"])
+			),
+		"a dig off a savage ball leaves at the same height as one off a gentle ball",
+	)
+
+	## And the reception, which looked at first like it did carry the relation:
+	## its outgoing *speed* correlates with incoming at r = +0.43. Decomposed, all
+	## of that is `distance / duration` -- a harder serve is passed further, not
+	## faster off the arms. Held here at the source: the apex band reads
+	## `execution`, and `execution` never sees this trajectory.
+	var soft_pass: Dictionary = simulator._reception_pass_result(
+		digger, Vector2(0.46, 0.90), contact, target,
+		Vector2(0.54, 0.02), 0.55, {"reach_margin_meters": 0.30, "edge_ratio": 0.4},
+		0.62, 0.51, 0.98, gentle, setter,
+	)
+	simulator.rally_seed = 4242
+	var hard_pass: Dictionary = simulator._reception_pass_result(
+		digger, Vector2(0.46, 0.90), contact, target,
+		Vector2(0.54, 0.02), 0.55, {"reach_margin_meters": 0.30, "edge_ratio": 0.4},
+		0.62, 0.51, 0.98, savage, setter,
+	)
+	_check(
+		is_equal_approx(
+			float(soft_pass["pass_apex_meters"]),
+			float(hard_pass["pass_apex_meters"]),
+		),
+		"and a reception's height is set by execution, never by the ball's pace",
+	)
+
+
+## An incoming flight of a chosen pace, shaped like what `_ball_trajectory`
+## publishes. Only the three fields `_incoming_ball_speed` reads are needed, and
+## supplying more would invite the fixture to drift from the real record.
+func _incoming_flight(
+	origin: Vector2, contact: Vector2, duration_seconds: float
+) -> Dictionary:
+	return {
+		"start_position": origin,
+		"end_position": contact,
+		"duration": duration_seconds,
+	}
 
 
 func _orientation_voli(player_id: int = 901) -> VolleyballPlayer:

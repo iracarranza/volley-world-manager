@@ -12,10 +12,17 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on M4 slice 1:
-**2,142 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on M4 slice 2's first half:
+**2,145 checks pass**. Treat any test failure as a regression.
 
-That is 2,137 plus exactly the five checks written, on a pass that was *required*
+That is 2,142 plus exactly the three checks written, and those three are
+**characterisation checks rather than invariants** -- they hold open the finding
+that the incoming ball's speed reaches no platform launch, and slice 3 is
+supposed to make them fail. Adding a two-line transfer term moved the count to
+2,149, because a real physical change perturbs sampling populations and an inert
+one does not. See `docs/review/PLATFORM_TRANSFER.md`.
+
+Before it, 2,137 plus exactly the five checks written, on a pass that was *required*
 to move nothing: slice 1 publishes what a platform contact was for and nothing
 reads it. The outcome mix over 600 rallies was verified byte-identical by running
 one probe twice -- production, then `git stash` -- which is the only comparison

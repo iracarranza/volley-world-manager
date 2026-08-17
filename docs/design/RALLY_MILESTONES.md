@@ -106,7 +106,13 @@ rallies is byte-identical against the stashed tree. 785 contacts carry a record,
 761 name a recipient and two derived anchors, and **484 of 785 aim anywhere a
 manager can reach**. See [`../review/PLATFORM_INTENT.md`](../review/PLATFORM_INTENT.md).
 2. **Slice 2 — shadow physical envelope.** Measure T1–T3 and intent
-satisfiability without changing rallies.
+satisfiability without changing rallies. **First half done**, 2026-08-17: the
+shipped ball measured in §6's units, and T1's own question answered — the
+incoming ball's speed reaches the outgoing launch at r = +0.009 (dig) and
+−0.170 (reception), and coverage's ball is a display constant, identical on all
+24 contacts. So T1 is a channel that does not exist rather than a band to
+recalibrate. The envelope half still needs T1/T2 authored and is not started.
+See [`../review/PLATFORM_TRANSFER.md`](../review/PLATFORM_TRANSFER.md).
 3. **Slice 3 — controlled dig.** First promoted platform context.
 4. **Slice 4 — coverage contact state.** Resolve its missing arrival/posture/contact
 state from existing facts.

@@ -971,7 +971,23 @@ byte-identical — while making countable, for the first time, how many platform
 contacts in the game have any stated intent at all. The expected answer is that
 coverage has none and the other two have half of one.
 
-**Slice 2 — the envelope as a shadow, and the transfer relation with it.** It
+**Slice 2 — the envelope as a shadow, and the transfer relation with it.**
+
+> **First half measured, 2026-08-17**, and it sharpens what the second half is
+> for. The paragraph below asks what the shadow would produce against the
+> existing bands. Measured, **there are no existing bands in T1's dimension**:
+> the incoming ball's speed reaches the outgoing launch at r = +0.009 on the dig
+> and −0.170 on the reception, and the reception's apparent +0.429 on total speed
+> decomposes entirely into pass *distance* (+0.506). Coverage is starker still —
+> it calls no pass resolver at all, so its ball is the display fallback's
+> constant on all 24 contacts in 600 rallies. `docs/review/PLATFORM_TRANSFER.md`.
+>
+> So the sharpest question below — how often the current ball lies outside the
+> available envelope — is still the right one, but it can no longer be answered
+> as "the bands are approximately right/wrong". There is nothing in this
+> dimension to be approximately anything.
+
+It
 also carries the gate measurement §4b asks for: **what fraction of controlled
 digs could physically have produced the ball the team wanted.**
 Implement §§4–6 as a resolver that runs beside the current one, publishes what it
