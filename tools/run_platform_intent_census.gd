@@ -17,9 +17,9 @@ extends SceneTree
 ##
 ## The doc also states its own expectation, which is what makes this falsifiable:
 ## "the expected answer is that coverage has none and the other two have half of
-## one." Half of one, because reception and dig name a target and a recipient and
-## the two disagree -- the dig aims a stride from the digger and calls it a pass
-## to the setter.
+## one." This probe now also verifies the narrow follow-up: controlled digs state
+## the existing setter release seat as intent while their legacy realized
+## destination remains separately measurable and production-authoritative.
 ##
 ## Run it on the production tree and again with the change stashed. Comparing the
 ## two runs on one instrument is the check; quoting a census taken on a different
@@ -41,6 +41,7 @@ const RALLIES_PER_SERVER: int = 300
 ## How far the anchor a contact published sits from the seat its own named
 ## recipient is heading for. Accumulated across the sweep; see part 4.
 var _anchor_to_seat: Dictionary = {}
+var _legacy_destination_to_seat: Array = []
 
 
 func _initialize() -> void:
@@ -173,9 +174,9 @@ func _report(census: Dictionary) -> void:
 	print("  %-18s %-9d" % ["all", total])
 	print("")
 	print("  `steerable` is the count whose target came from the manager-set")
-	print("  release seat rather than a fixed offset off the contact point. It is")
-	print("  section 13.9's item 3, countable: every contact outside that column")
-	print("  aims a stride from itself and calls it a pass.")
+	print("  release seat rather than a fixed offset off the contact point.")
+	print("  Reception and controlled dig should be in this column; coverage")
+	print("  remains unsteerable because it has no recipient or pass intent.")
 
 	print("\n" + "=".repeat(78))
 	print("PART 3 -- the two derived anchors, and how often the floor binds")
@@ -256,15 +257,21 @@ func _collect_seat_gap(manager: Object, result: Resource) -> void:
 		var bucket: Array = _anchor_to_seat.get(purpose, [])
 		bucket.append(gap)
 		_anchor_to_seat[purpose] = bucket
+		if purpose == "controlled_dig" and bool(event.success):
+			var destination := event.end_position
+			_legacy_destination_to_seat.append(Vector2(
+				(destination.x - seat.x) * COURT_WIDTH_METERS,
+				(destination.y - seat.y) * COURT_LENGTH_METERS,
+			).length())
 
 
 func _anchor_against_the_seat() -> void:
 	print("\n" + "=".repeat(78))
-	print("PART 4 -- how far the anchor sits from the recipient it names")
+	print("PART 4 -- intent anchor versus legacy realized destination")
 	print("=".repeat(78))
-	print("  Section 4b, in metres. A contact that names the setter and then aims")
-	print("  somewhere the setter is not has said two contradictory things, and")
-	print("  until slice 1 published both there was no way to count it.\n")
+	print("  Intent metadata should name the existing release seat. The actual dig")
+	print("  destination remains the legacy `_dig_pass_result` output; reporting it")
+	print("  separately prevents this metadata repair masquerading as ball physics.\n")
 	var purposes: Array = _anchor_to_seat.keys()
 	purposes.sort()
 	print("  %-18s %-7s %-9s %-9s %-9s %-9s" % [
@@ -276,12 +283,13 @@ func _anchor_against_the_seat() -> void:
 			str(purpose), int(stats.n), stats.min, stats.p50, stats.max,
 			stats.mean,
 		])
-	print("")
-	print("  The reception is the control: it aims *at* the seat by construction,")
-	print("  offset only by `_desired_pass_target`'s overpass safety margin, so its")
-	print("  row is what a small honest gap looks like. Whatever the dig's row")
-	print("  reads above that is the distance between what it says it wants and")
-	print("  where it throws the ball.")
+	var legacy := _stats(_legacy_destination_to_seat)
+	print("\n  successful controlled-dig realized destination -> release seat:")
+	print("  n=%d min=%.3f m p50=%.3f m max=%.3f m mean=%.3f m" % [
+		int(legacy.n), legacy.min, legacy.p50, legacy.max, legacy.mean,
+	])
+	print("  This row is expected to stay non-zero: it is the unchanged legacy ball,")
+	print("  not the repaired intent anchor.")
 
 
 func _stats(values: Array) -> Dictionary:

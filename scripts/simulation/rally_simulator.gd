@@ -3543,17 +3543,17 @@ func resolve(
 		float(opponent_defense.distance_meters),
 	)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
-	## The anchor as aimed, captured before `opponent_pass_target` is overwritten
-	## with where the ball actually went. The recipient is the setter and the
-	## anchor is a stride from the digger, and the two disagreeing is the point:
-	## it is section 13.9's item 3 made countable instead of anecdotal.
+	## Intent names the release seat the setter is trying to reach. The legacy
+	## pass below still aims at `opponent_pass_target`; publishing the honest
+	## anchor must not smuggle a destination or trajectory change into slice 2.
 	var opponent_dig_setter := opponent_team.setter() as VolleyballPlayer
+	var opponent_dig_release := _opponent_setter_release_target(opponent_team)
 	var opponent_dig_intent := _platform_intent(
-		"controlled_dig", opponent_pass_target, "contact_offset",
+		"controlled_dig", opponent_dig_release, "release_seat",
 		opponent_dig_setter,
 		Vector2(opponent_live_positions.get(
 			opponent_dig_setter.id if opponent_dig_setter != null else -1,
-			opponent_pass_target,
+			opponent_dig_release,
 		)),
 	)
 	## When the ball actually reaches the defender, which is the end of the
@@ -5956,11 +5956,14 @@ func _resolve_opponent_transition(
 	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
 	var home_dig_setter := _player_by_id(players, lineup.active_setter_id())
+	var home_dig_release: Vector2 = defensive_plan.setter_release_target(
+		lineup.active_setter_id()
+	)
 	var home_dig_intent := _platform_intent(
-		"controlled_dig", defense_pass_target, "contact_offset",
+		"controlled_dig", home_dig_release, "release_seat",
 		home_dig_setter,
 		Vector2(live_positions.get(
-			lineup.active_setter_id(), defense_pass_target
+			lineup.active_setter_id(), home_dig_release
 		)),
 	)
 	## See the mirrored site on the home swing: the continuation's second-contact
@@ -7335,12 +7338,13 @@ func _resolve_home_continuation(
 	rally_clock = maxf(rally_clock, cont_dig_time)
 	var cont_desired_target := attack_target + Vector2(0.04, -0.03)
 	var cont_dig_setter := opponent_team.setter() as VolleyballPlayer
+	var cont_dig_release := _opponent_setter_release_target(opponent_team)
 	var cont_dig_intent := _platform_intent(
-		"controlled_dig", cont_desired_target, "contact_offset",
+		"controlled_dig", cont_dig_release, "release_seat",
 		cont_dig_setter,
 		Vector2(opponent_live_positions.get(
 			cont_dig_setter.id if cont_dig_setter != null else -1,
-			cont_desired_target,
+			cont_dig_release,
 		)),
 	)
 	var cont_dig_pass := {}
@@ -10017,11 +10021,9 @@ const PLATFORM_INTENT_UNSET: String = "unset"
 ## would have had to invent whatever the uniformity demanded and the data does not
 ## supply -- four of five bounds, by section 3a's own count.
 ##
-## `anchor_source` separates the two kinds of target this engine actually has: a
-## manager-set release seat, which is steerable, and a fixed offset off the
-## contact point, which is a tactical *non*-decision baked as geometry. They are
-## the same type today and indistinguishable in the data, which is what makes
-## section 13.9's item 3 anecdotal rather than countable.
+## `anchor_source` separates a manager-set release seat, which is steerable, from
+## a fixed contact offset. Receptions and controlled digs state the former;
+## coverage still has only the latter because it has no recipient or pass intent.
 func _platform_intent(
 	purpose: String,
 	target_anchor: Vector2,

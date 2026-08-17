@@ -10965,6 +10965,8 @@ func _test_platform_contacts_state_an_intent() -> void:
 	var complete := 0
 	var receptions := 0
 	var seated_receptions := 0
+	var controlled_digs := 0
+	var seated_digs := 0
 	for seed_value in range(23000, 23040):
 		var rally: Resource = manager.resolve_active_rally(seed_value)
 		if rally == null:
@@ -10981,17 +10983,20 @@ func _test_platform_contacts_state_an_intent() -> void:
 					missing = true
 			if not missing:
 				complete += 1
-			if event.event_type != RALLY_EVENT_SCRIPT.EventType.RECEPTION:
-				continue
-			receptions += 1
-			## A reception is the one context that aims at a manager-set seat, and
-			## it is the whole content of `anchor_source`: everything else in this
-			## engine aims a stride from itself and calls it a pass.
-			if str(record.get("anchor_source", "")) == "release_seat" \
-					and int(record.get("intended_recipient_id", -1)) >= 0 \
-					and record.get("height_anchor_meters") is float \
-					and record.get("arrival_floor_seconds") is float:
-				seated_receptions += 1
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+				receptions += 1
+				if str(record.get("anchor_source", "")) == "release_seat" \
+						and int(record.get("intended_recipient_id", -1)) >= 0 \
+						and record.get("height_anchor_meters") is float \
+						and record.get("arrival_floor_seconds") is float:
+					seated_receptions += 1
+			elif str(record.get("purpose", "")) == "controlled_dig":
+				controlled_digs += 1
+				if str(record.get("anchor_source", "")) == "release_seat" \
+						and int(record.get("intended_recipient_id", -1)) >= 0 \
+						and record.get("height_anchor_meters") is float \
+						and record.get("arrival_floor_seconds") is float:
+					seated_digs += 1
 	_check(
 		contacts > 0 and complete == contacts,
 		"every platform contact publishes a complete intent record",
@@ -10999,6 +11004,10 @@ func _test_platform_contacts_state_an_intent() -> void:
 	_check(
 		receptions > 0 and seated_receptions == receptions,
 		"a reception aims at the release seat, at a person, with both anchors derived",
+	)
+	_check(
+		controlled_digs > 0 and seated_digs == controlled_digs,
+		"a controlled dig aims at the release seat, at a person, with both anchors derived",
 	)
 
 	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
@@ -11188,21 +11197,27 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 		"a dig's arrival reaches its spoil, so an empty arrival is a real loss",
 	)
 
-	## §4b's first defect, held as a universal rather than a rate: **every**
-	## controlled dig aims within a stride of its own contact point, because the
-	## anchor is `contact + (0.03–0.04, −0.03 to −0.05)` and the setter's position
-	## is never consulted. Measured over 277 digs, the anchor sits a median
-	## **4.054 m** from the seat the same record names as its recipient.
-	##
-	## Characterisation again: slice 3 promoting the seat must fail this.
+	## The intent repair is held at the actual anchor, not only its source label.
+	## This remains metadata-only: the legacy dig destination is deliberately not
+	## asserted here because `_dig_pass_result` still owns and preserves it.
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	var dig_contacts := 0
-	var aimed_at_itself := 0
+	var release_anchored_digs := 0
 	for seed_value in range(23000, 23060):
 		var rally: Resource = manager.resolve_active_rally(seed_value)
 		if rally == null:
 			continue
+		var lineup: RotationLineup = manager.current_lineup()
+		var plan: Resource = manager.defensive_plans.get(
+			lineup.rotation_number
+		) if lineup != null else null
+		var home_release := Vector2(0.50, 0.60)
+		if plan != null and lineup != null:
+			home_release = plan.setter_release_target(lineup.active_setter_id())
+		var opponent_release: Vector2 = RallySimulator._opponent_setter_release_target(
+			manager.opponent_team
+		)
 		for entry in rally.events:
 			var event := entry as RallyEvent
 			if event == null \
@@ -11215,13 +11230,15 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 			var anchor := Vector2(record.get(
 				"target_anchor", event.start_position
 			))
-			if COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
-				anchor, event.start_position
-			) < 1.20:
-				aimed_at_itself += 1
+			var expected := home_release \
+				if str(event.metadata.get("side", "")) == "home" \
+				else opponent_release
+			if str(record.get("anchor_source", "")) == "release_seat" \
+					and anchor.is_equal_approx(expected):
+				release_anchored_digs += 1
 	_check(
-		dig_contacts > 0 and aimed_at_itself == dig_contacts,
-		"a controlled dig aims a stride from itself, never at the setter it names",
+		dig_contacts > 0 and release_anchored_digs == dig_contacts,
+		"every controlled-dig intent uses its team's existing setter release seat",
 	)
 
 
