@@ -42,6 +42,9 @@ const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout
 const RallyActionVocabularyModel := preload("res://scripts/simulation/rally_action_vocabulary.gd")
 const CognitionCompilerModel := preload("res://scripts/simulation/cognition_compiler.gd")
 const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
+const PlatformContactModel := preload(
+	"res://scripts/simulation/platform_contact_model.gd"
+)
 const GeometricAttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
@@ -1027,6 +1030,10 @@ var geometric_serves: Dictionary = {}
 ## different functions, so it is held for the rally rather than threaded
 ## through every continuation signature.
 var geometric_development_open: bool = false
+## M4's controlled-dig rollout is independent of the continuous-rally stack.
+## A probe can open this contact alone without also promoting reception, setter,
+## attack and block implementations and contaminating the comparison.
+var platform_dig_development_open: bool = false
 ## The opponent's defensive plan for this rally, built on first use.
 var opponent_plan: Resource = null
 var rally_clock: float = 0.0
@@ -1162,6 +1169,7 @@ func resolve(
 	home_serving: bool,
 	seed_value: int,
 	development_continuous_reception: bool = false,
+	development_physical_platform_dig: bool = false,
 	team_principles: Resource = null,
 	home_team_name: String = "",
 	serve_context: Dictionary = {},
@@ -1185,6 +1193,7 @@ func resolve(
 	geometric_swing_index = 0
 	geometric_serves = {}
 	geometric_development_open = development_continuous_reception
+	platform_dig_development_open = development_physical_platform_dig
 	opponent_plan = null
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
@@ -3389,6 +3398,10 @@ func resolve(
 				opponent_block_trajectory, recycle_target, attack_target
 			),
 		) if coverer != null else recycle_target
+		var coverage_contact_state := _attack_coverage_contact_state(
+			coverer, coverer_start, recycle_target,
+			float(opponent_block_trajectory.get("duration", 0.24)),
+		)
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
 		var coverage_pass_target := recycle_target + Vector2(0.04, -0.05)
@@ -3414,6 +3427,10 @@ func resolve(
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
 				"movement_duration": coverer_move_time,
+				"arrival": coverage_contact_state.arrival,
+				"contact_posture": coverage_contact_state.posture,
+				"pass_contact_height_meters": coverage_contact_state.contact_height,
+				"incoming_trajectory": opponent_block_trajectory,
 				## Coverage happens when the blocked ball comes back down, which
 				## is the end of the deflection's own arc. `rally_clock` here is
 				## still the set's contact time -- earlier than the block itself,
@@ -3588,6 +3605,11 @@ func resolve(
 			last_dig_posture, opponent_arriving_trajectory,
 			float(opponent_defense.distance_meters),
 			opponent_team.setter() as VolleyballPlayer, opponent_dig_time,
+			_platform_body_velocity(
+				Vector2(opponent_defense.start), opponent_defender_reach,
+				float(opponent_defense.travel_time), opponent_defense_time,
+			),
+			opponent_dig_intent,
 		)
 		opponent_pass_target = Vector2(opponent_dig_pass.destination)
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
@@ -3646,7 +3668,9 @@ func resolve(
 			),
 			"pass_duration_seconds": opponent_dig_pass.get("duration", 0.0),
 			"target_error_meters": opponent_dig_pass.get("target_error_meters", 0.0),
-			"pass_spoil": opponent_dig_pass.get("spoil", 0.0)})
+			"pass_spoil": opponent_dig_pass.get("spoil", 0.0),
+			"platform_contact": opponent_dig_pass.get("platform_contact", {}),
+		})
 	_note_recovery(opponent_defender, opponent_dig_recovery, opponent_dig_time)
 	## Where they actually ended up, not where the ball was. A defender who was
 	## beaten to it starts the next phase short of it, which is the position the
@@ -5689,6 +5713,9 @@ func _resolve_opponent_transition(
 				home_block_trajectory, home_block_target, opponent_contact
 			),
 		) if coverer != null else home_block_target
+		var coverage_contact_state := _attack_coverage_contact_state(
+			coverer, coverer_start, home_block_target, coverage_time,
+		)
 		if coverer != null:
 			opponent_live_positions[coverer.id] = coverer_reach
 		var coverage_pass_target := home_block_target + Vector2(0.04, 0.05)
@@ -5717,6 +5744,9 @@ func _resolve_opponent_transition(
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
 				"movement_duration": coverer_move_time,
+				"arrival": coverage_contact_state.arrival,
+				"contact_posture": coverage_contact_state.posture,
+				"pass_contact_height_meters": coverage_contact_state.contact_height,
 				"incoming_trajectory": home_block_trajectory,
 				"event_time": coverage_contact_time,
 			},
@@ -5987,6 +6017,11 @@ func _resolve_opponent_transition(
 			defense_arrival, str(last_dig_posture), opponent_attack_trajectory,
 			float(defense_arrival.get("distance_meters", 0.0)),
 			_player_by_id(players, lineup.active_setter_id()), rally_clock,
+			_platform_body_velocity(
+				defender_start, defender_reach, defender_move_time, attack_time,
+			),
+			home_dig_intent,
+			home_arriving_trajectory,
 		)
 		defense_pass_target = Vector2(home_dig_pass.destination)
 	_add_event(result, RallyEventModel.EventType.DIG, defender.id, defender.display_name,
@@ -6056,6 +6091,7 @@ func _resolve_opponent_transition(
 			"pass_duration_seconds": home_dig_pass.get("duration", 0.0),
 			"target_error_meters": home_dig_pass.get("target_error_meters", 0.0),
 			"pass_spoil": home_dig_pass.get("spoil", 0.0),
+			"platform_contact": home_dig_pass.get("platform_contact", {}),
 			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": home_dig_time})
@@ -7164,6 +7200,9 @@ func _resolve_home_continuation(
 				cont_block_trajectory, block_event_end, attack_target
 			),
 		) if coverer != null else block_event_end
+		var coverage_contact_state := _attack_coverage_contact_state(
+			coverer, coverer_start, block_event_end, coverage_time,
+		)
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
 		var coverage_pass_target := block_event_end + Vector2(0.04, -0.05)
@@ -7192,6 +7231,9 @@ func _resolve_home_continuation(
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
 				"movement_duration": coverer_move_time,
+				"arrival": coverage_contact_state.arrival,
+				"contact_posture": coverage_contact_state.posture,
+				"pass_contact_height_meters": coverage_contact_state.contact_height,
 				"incoming_trajectory": cont_block_trajectory,
 				"event_time": coverage_contact_time,
 			},
@@ -7370,6 +7412,11 @@ func _resolve_home_continuation(
 			transition_defender_start.distance_to(transition_defender_reach)
 				* CourtConstants.COURT_WIDTH_METERS,
 			opponent_team.setter() as VolleyballPlayer, cont_dig_time,
+			_platform_body_velocity(
+				transition_defender_start, transition_defender_reach,
+				float(cont_defense.travel_time), cont_defense_time,
+			),
+			cont_dig_intent,
 		)
 		cont_desired_target = Vector2(cont_dig_pass.destination)
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
@@ -7402,6 +7449,7 @@ func _resolve_home_continuation(
 			"pass_duration_seconds": cont_dig_pass.get("duration", 0.0),
 			"target_error_meters": cont_dig_pass.get("target_error_meters", 0.0),
 			"pass_spoil": cont_dig_pass.get("spoil", 0.0),
+			"platform_contact": cont_dig_pass.get("platform_contact", {}),
 			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": cont_dig_time})
@@ -9532,7 +9580,7 @@ func _block_deflection_trajectory(
 		var physical_duration := deflection_duration_seconds \
 			if deflection_duration_seconds > 0.0 \
 			else float(physical_arc.duration_seconds)
-		return _ball_trajectory(
+		return _stamp_launch_contact_height(_ball_trajectory(
 			"block_deflection", from_point, to_point,
 			maxf(
 				physical_duration,
@@ -9546,24 +9594,24 @@ func _block_deflection_trajectory(
 			NAN if deflection_playable else float(physical_arc.get(
 				"vertical_speed_mps", NAN
 			)),
-		)
+		), contact_height)
 	if stuffed:
-		return _ball_trajectory(
+		return _stamp_launch_contact_height(_ball_trajectory(
 			"block_deflection", from_point, to_point,
 			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
-		)
+		), contact_height)
 	if incoming_speed_mps <= 0.0:
 		## No swing speed to read -- the legacy solve, which at least always has
 		## an answer.
 		var solved := RallyKinematics.solve_struck_arc(
 			distance, BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,
 		)
-		return _ball_trajectory(
+		return _stamp_launch_contact_height(_ball_trajectory(
 			"block_deflection", from_point, to_point,
 			maxf(float(solved.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
 			maxf(float(solved.apex_height_meters), apex_hint),
 			start_time,
-		)
+		), contact_height)
 	## Timing decides how much of the band a blocker commands; the hands decide
 	## which end of it they are trying to reach. Both, because a well-timed kill
 	## block and a well-timed soft block are the same pair of hands making
@@ -9581,13 +9629,25 @@ func _block_deflection_trajectory(
 		distance, maxf(incoming_speed_mps * (1.0 - absorbed), MIN_DEFLECTION_MPS),
 		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,
 	)
-	return _ball_trajectory(
+	return _stamp_launch_contact_height(_ball_trajectory(
 		"block_deflection", from_point, to_point,
 		maxf(float(arc.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
 		maxf(float(arc.apex_height_meters), apex_hint),
 		start_time,
 		float(arc.get("vertical_speed_mps", NAN)),
-	)
+	), contact_height)
+
+
+## A block owns where its hands contacted the ball even when the next contact
+## has not been chosen yet. Keep that fact beside the flight without rewriting
+## `start_height_meters`: legacy presentation/gameplay still uses that field's
+## existing contract. The next platform contact can pair this height with its own
+## derived contact height and recover the arrival vertical without a new number.
+func _stamp_launch_contact_height(
+	trajectory: Dictionary, contact_height_meters: float
+) -> Dictionary:
+	trajectory["launch_contact_height_meters"] = contact_height_meters
+	return trajectory
 
 
 ## The ball is contacted where the hitter can be, not where the set wanted them.
@@ -10218,7 +10278,21 @@ func _dig_pass_result(
 	movement_distance_meters: float,
 	setter: VolleyballPlayer,
 	contact_time: float,
+	body_velocity_mps: Vector2 = Vector2.ZERO,
+	platform_intent: Dictionary = {},
+	physical_incoming_trajectory: Dictionary = {},
 ) -> Dictionary:
+	if _physical_platform_dig_enabled():
+		var physical := _physical_platform_dig_result(
+			digger, contact_position,
+			physical_incoming_trajectory \
+				if not physical_incoming_trajectory.is_empty() \
+				else incoming_trajectory,
+			arrival,
+			body_velocity_mps, platform_intent, contact_time,
+		)
+		if not physical.is_empty():
+			return physical
 	var control := clampf(dig_control, 0.0, 1.0)
 	## **What the dig could not absorb goes somewhere.** Three things spoil a
 	## platform, and the dig already measured all of them: arriving late (a
@@ -10294,6 +10368,139 @@ func _dig_pass_result(
 		"spoil": spoil,
 		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
 	}
+
+
+## M4 slice 3's one promoted context. Success/ownership has already been
+## resolved before this function is called; this stage owns only the physical
+## ball a successful forearm contact produces. The model cannot see `DIG`, the
+## terminal outcome or the old control/spoil bands.
+func _physical_platform_dig_result(
+	digger: VolleyballPlayer,
+	contact_position: Vector2,
+	incoming_trajectory: Dictionary,
+	arrival: Dictionary,
+	body_velocity_mps: Vector2,
+	platform_intent: Dictionary,
+	contact_time: float,
+) -> Dictionary:
+	if digger == null:
+		return {}
+	var contact_height := GeometricAttackPromotionModel \
+		.pass_contact_height_meters(digger)
+	var incoming := PlatformContactModel.incoming_velocity_at_contact(
+		incoming_trajectory, contact_height
+	)
+	if not bool(incoming.get("available", false)):
+		return {}
+	var target_value: Variant = platform_intent.get("target_anchor", null)
+	var height_value: Variant = platform_intent.get("height_anchor_meters", null)
+	if not target_value is Vector2 \
+			or not (height_value is float or height_value is int):
+		return {}
+	var stability := (
+		_rating(digger, "reception_balance")
+		+ _rating(digger, "reception_stability")
+	) * 0.5
+	var technique := (
+		_rating(digger, "reception") + _rating(digger, "ball_control")
+	) * 0.5
+	var severity := clampf(float(arrival.get("edge_ratio", 0.0)), 0.0, 1.0)
+	var shadow := PlatformContactModel.evaluate({
+		"incoming_velocity_mps": incoming.velocity_mps,
+		"contact_position": contact_position,
+		"contact_height_meters": contact_height,
+		"body_velocity_mps": body_velocity_mps,
+		"circumstance_severity": severity,
+		"stability_ability": stability,
+		"technique_ability": technique,
+		"intent_target_anchor": target_value,
+		"intent_height_anchor_meters": height_value,
+		"intent_arrival_floor_seconds": float(platform_intent.get(
+			"arrival_floor_seconds", 0.0
+		)),
+		## Separate deterministic stream: opening the rollout cannot resequence
+		## any perception, contest or tactical draw around this contact.
+		"seed": hash("%d|platform-dig|%d|%.6f" % [
+			rally_seed, digger.id, contact_time,
+		]),
+	})
+	if not bool(shadow.get("selection_available", false)) \
+			or not shadow.has("realised_velocity_mps"):
+		return {}
+	var realised: Dictionary = shadow.realised
+	var destination := Vector2(realised.target_plane_position)
+	var set_contact_height := maxf(
+		float(realised.target_plane_height_meters), 0.0
+	)
+	var duration := maxf(
+		float(realised.target_plane_time_seconds),
+		BallFlightModel.MIN_FLIGHT_DURATION,
+	)
+	var apex_height := maxf(
+		float(realised.apex_height_meters), contact_height
+	)
+	var launch_velocity := Vector3(shadow.realised_velocity_mps)
+	var trajectory := _ball_trajectory(
+		"dig", contact_position, destination, duration,
+		maxf(apex_height - contact_height, 0.0), contact_time,
+		launch_velocity.y, NAN, contact_height, set_contact_height,
+	)
+	return {
+		"trajectory": trajectory,
+		"destination": destination,
+		"duration": duration,
+		"pass_apex_meters": apex_height,
+		"pass_contact_height_meters": contact_height,
+		"set_contact_height_meters": set_contact_height,
+		"target_error_meters": float(realised.horizontal_error_meters),
+		"incoming_speed_mps": float(incoming.speed_mps),
+		"platform_contact": {
+			"source": "shared_physical_platform",
+			"incoming_source": str(incoming.get("source", "missing")),
+			"maximum_outgoing_speed_mps": float(
+				shadow.maximum_outgoing_speed_mps
+			),
+			"redirection_half_angle_degrees": float(
+				shadow.redirection_half_angle_degrees
+			),
+			"selected_velocity_mps": Vector3(shadow.selected_velocity_mps),
+			"realised_velocity_mps": launch_velocity,
+			"execution_error_degrees": float(shadow.execution_error_degrees),
+			"intent_satisfiable": bool(shadow.intent_satisfiable),
+			"binding_constraint": str(shadow.binding_constraint),
+			"circumstance_severity": severity,
+			"reaches_target_plane": bool(realised.reaches_target_plane),
+			"target_plane_height_meters": set_contact_height,
+		},
+	}
+
+
+func _physical_platform_dig_enabled() -> bool:
+	return RallyFeatureFlagsModel.ENABLE_PHYSICAL_PLATFORM_DIG \
+		or (
+			platform_dig_development_open and OS.is_debug_build()
+			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
+		)
+
+
+## Body velocity is a derived journey, in the same court frame as the incoming
+## ball. Required movement can end before the ball arrives; a settled body then
+## contributes no fictional extra travel merely because the flight continued.
+func _platform_body_velocity(
+	start: Vector2,
+	contact: Vector2,
+	required_seconds: float,
+	available_seconds: float,
+) -> Vector2:
+	var duration := available_seconds
+	if required_seconds > 0.0 and available_seconds > 0.0:
+		duration = minf(required_seconds, available_seconds)
+	if duration <= 0.0001:
+		return Vector2.ZERO
+	return Vector2(
+		(contact.x - start.x) * CourtConstants.COURT_WIDTH_METERS / duration,
+		(contact.y - start.y) * CourtConstants.COURT_LENGTH_METERS / duration,
+	)
 
 
 func _reception_pass_result(
@@ -11997,6 +12204,35 @@ func _resolve_attack_coverage(
 		0.0, 1.0,
 	)
 	return {"player": best, "quality": quality, "success": quality >= 0.32}
+
+
+## M4 slice 4: state the body/contact facts an attack-coverage touch already
+## implies. This does not select its outgoing ball and does not alter the legacy
+## success contest. Arrival comes from the shared movement/reach evaluator;
+## posture is classified on the same continuous facts used by a floor dig.
+func _attack_coverage_contact_state(
+	coverer: VolleyballPlayer,
+	start: Vector2,
+	contact: Vector2,
+	ball_time_seconds: float,
+) -> Dictionary:
+	if coverer == null:
+		return {"arrival": {}, "posture": "missing", "contact_height": 0.0}
+	var arrival := CoverageModel.evaluate_arrival(
+		coverer, null, contact, ball_time_seconds, "reception",
+		start, 0.0,
+	)
+	var posture := "planted"
+	if float(arrival.get("reach_margin_meters", 0.0)) < 0.0:
+		posture = "reaching"
+	elif float(arrival.get("distance_meters", 0.0)) > POSTURE_DIG_MOVING_METERS:
+		posture = "moving"
+	return {
+		"arrival": arrival,
+		"posture": posture,
+		"contact_height": GeometricAttackPromotionModel \
+			.pass_contact_height_meters(coverer),
+	}
 
 
 func _finish_serve_error(result: Resource, server_name: String) -> Resource:

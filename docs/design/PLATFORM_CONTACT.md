@@ -988,6 +988,15 @@ coverage has none and the other two have half of one.
 
 **Slice 2 — the envelope as a shadow, and the transfer relation with it.**
 
+> **BUILT, 2026-08-17.** Route B explicitly authorises six shared T1--T3 values
+> as category-3 game abstractions, not measured biomechanics. One model consumes
+> every contact family without enum-specific bands; all 484 receptions and 277
+> controlled digs have physical input and a minimal selection in the fixed
+> population. Coverage has physical input on all 24 contacts but deliberately no
+> selection. Attribute leverage and contact-level plausibility pass; outcome
+> rates were not calibration targets. See
+> `docs/review/PLATFORM_AUTHORED_CALIBRATION.md`.
+
 > **First half measured, 2026-08-17**, and it sharpens what the second half is
 > for. The paragraph below asks what the shadow would produce against the
 > existing bands. Measured, **there are no existing bands in T1's dimension**:
@@ -1074,9 +1083,21 @@ does not wait on the selection pass. That is what keeps slice 2 where it is.
 state and the worst current model, and because it is where the `id % 2` rule
 lives. One context, measured, before any other moves.
 
+> **DEVELOPMENT ROLLOUT BUILT, PRODUCTION CLOSED, 2026-08-17.** The independent
+> rollout promotes every successful controlled dig to a shared physical launch
+> and never gives a failed dig a ball. In the paired population only 41 of 86
+> launches remain airborne to the intended target plane; forcing the other 45
+> into a setter contact would violate M5's intended-recipient/interceptor split.
+> Production therefore waits on free-flight interception, not on T1--T3 tuning.
+
 **Slice 4 — coverage's contact state.** Resolve arrival, posture and contact
 height at the three coverage sites from values already in scope (§4). All class
 B, no new physics.
+
+> **BUILT, 2026-08-17.** All three sites now publish their incoming deflection,
+> shared arrival result, posture and per-voli contact height. No coverage outcome
+> or outgoing ball changed. The remaining block is §4a's full keep-alive
+> preference, not missing physical state.
 
 **Slice 5 — reception and coverage promoted; the bands and `spoil` deleted.**
 

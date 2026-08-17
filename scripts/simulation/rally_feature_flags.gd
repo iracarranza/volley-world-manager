@@ -14,6 +14,13 @@ const ALLOW_DEVELOPMENT_ATTACK_OVERRIDE: bool = true
 const ENABLE_CONTINUOUS_BLOCK_EVENTS: bool = false
 const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 
+## M4 slice 3: the shared T1--T3 platform relation owns a successful controlled
+## dig's outgoing ball. Production remains closed while the paired rollout is
+## measured; development may open this one contact family without promoting
+## reception or coverage alongside it.
+const ENABLE_PHYSICAL_PLATFORM_DIG: bool = false
+const ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE: bool = true
+
 ## Gate E: the geometric attack. Where the other rollouts promote one *contact*,
 ## this one replaces how an attack is decided and resolved end to end -- course,
 ## power, swing, flight, block intersection and in/out.

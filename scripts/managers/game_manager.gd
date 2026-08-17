@@ -618,6 +618,7 @@ func called_play() -> OffensivePlay:
 func resolve_active_rally(
 	seed_value: int,
 	development_continuous_reception: bool = false,
+	development_physical_platform_dig: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
 	## Handed in before the resolve, not looked up inside it. The resolver stays
@@ -635,6 +636,7 @@ func resolve_active_rally(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,
 		development_continuous_reception,
+		development_physical_platform_dig,
 		team.principles if team != null else null,
 		team.team_name if team != null else "",
 		match_state.serve_context() if match_state != null else {},

@@ -77,6 +77,9 @@ const SETTER_CAPABILITY_SCRIPT := preload("res://scripts/simulation/setter_capab
 const CONTACT_ENVELOPE_SCRIPT := preload(
 	"res://scripts/simulation/contact_envelope_system.gd"
 )
+const PLATFORM_CONTACT_MODEL_SCRIPT := preload(
+	"res://scripts/simulation/platform_contact_model.gd"
+)
 const SETTER_FAILURE_CLASSIFIER_SCRIPT := preload(
 	"res://scripts/simulation/setter_failure_classifier.gd"
 )
@@ -301,6 +304,7 @@ func _initialize() -> void:
 	_test_platform_attributes_retain_leverage_after_the_physical_gate()
 	_test_platform_contacts_state_an_intent()
 	_test_the_incoming_ball_reaches_no_platform_launch()
+	_test_shared_platform_shadow_contract()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -11239,6 +11243,179 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 	_check(
 		dig_contacts > 0 and release_anchored_digs == dig_contacts,
 		"every controlled-dig intent uses its team's existing setter release seat",
+	)
+
+
+## M4's shared platform relation is an authored feasibility/execution boundary,
+## not another resolver-specific outcome model. These checks pin the narrow
+## semantic authority of T1--T3 while the relation remains production-inert.
+func _test_shared_platform_shadow_contract() -> void:
+	var base := {
+		"incoming_velocity_mps": Vector3(0.0, -6.0, 10.0),
+		"contact_position": Vector2(0.50, 0.78),
+		"contact_height_meters": 0.72,
+		"body_velocity_mps": Vector2.ZERO,
+		"circumstance_severity": 0.25,
+		"stability_ability": 0.60,
+		"technique_ability": 0.50,
+		"intent_target_anchor": Vector2(0.50, 0.60),
+		"intent_height_anchor_meters": 2.20,
+		"intent_arrival_floor_seconds": 0.42,
+		"seed": 7401,
+	}
+	var ordinary: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(base)
+	_check(
+		bool(ordinary.get("available", false))
+			and bool(ordinary.get("selection_available", false)),
+		"the shared platform shadow selects a feasible launch from physical state and intent",
+	)
+
+	## Event vocabulary and terminal labels are not inputs to the relation. This
+	## prevents reception/dig/coverage from acquiring private physical bands.
+	var labelled_input := base.duplicate(true)
+	labelled_input["event_family"] = "DIG"
+	labelled_input["terminal_outcome"] = "opponent_kill"
+	var labelled: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(labelled_input)
+	_check(
+		Vector3(labelled.get("selected_velocity_mps", Vector3.ZERO)).is_equal_approx(
+			Vector3(ordinary.get("selected_velocity_mps", Vector3.ONE))
+		)
+			and is_equal_approx(
+				float(labelled.get("maximum_outgoing_speed_mps", -1.0)),
+				float(ordinary.get("maximum_outgoing_speed_mps", -2.0)),
+			)
+			and is_equal_approx(
+				float(labelled.get("redirection_half_angle_degrees", -1.0)),
+				float(ordinary.get("redirection_half_angle_degrees", -2.0)),
+			),
+		"event family and result labels cannot change shared platform physics",
+	)
+
+	## Intent chooses within the feasible set; it does not enlarge that set.
+	var other_intent := base.duplicate(true)
+	other_intent["intent_target_anchor"] = Vector2(0.34, 0.62)
+	var redirected: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(other_intent)
+	_check(
+		is_equal_approx(
+			float(ordinary.maximum_outgoing_speed_mps),
+			float(redirected.maximum_outgoing_speed_mps),
+		)
+			and is_equal_approx(
+				float(ordinary.redirection_half_angle_degrees),
+				float(redirected.redirection_half_angle_degrees),
+			),
+		"tactical intent selects a launch without defining its pace or redirection envelope",
+	)
+
+	## T1 retains a shared fraction of incoming pace. With body direction and
+	## circumstance fixed, only that term may account for the ceiling difference.
+	var slow_input := base.duplicate(true)
+	slow_input["incoming_velocity_mps"] = Vector3(0.0, -2.0, 4.0)
+	var fast_input := slow_input.duplicate(true)
+	fast_input["incoming_velocity_mps"] = Vector3(0.0, -6.0, 12.0)
+	var slow: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(slow_input)
+	var fast: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(fast_input)
+	var incoming_difference := (
+		Vector3(fast_input.incoming_velocity_mps).length()
+		- Vector3(slow_input.incoming_velocity_mps).length()
+	)
+	_check(
+		is_equal_approx(
+			float(fast.maximum_outgoing_speed_mps)
+				- float(slow.maximum_outgoing_speed_mps),
+			incoming_difference * PLATFORM_CONTACT_MODEL_SCRIPT.PACE_RETENTION,
+		)
+			and is_equal_approx(
+				float(fast.redirection_half_angle_degrees),
+				float(slow.redirection_half_angle_degrees),
+			),
+		"T1 carries incoming pace without changing the shared T2 envelope",
+	)
+
+	## Circumstance narrows physical authority without inventing contact-family
+	## constants. Its two effects stay legible: less active drive and less angle.
+	var planted_input := base.duplicate(true)
+	planted_input["circumstance_severity"] = 0.0
+	var stretched_input := base.duplicate(true)
+	stretched_input["circumstance_severity"] = 1.0
+	var planted: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(planted_input)
+	var stretched: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(stretched_input)
+	_check(
+		float(planted.active_generated_speed_mps)
+			> float(stretched.active_generated_speed_mps)
+			and float(planted.redirection_half_angle_degrees)
+				> float(stretched.redirection_half_angle_degrees),
+		"body circumstance narrows active pace and reachable redirection",
+	)
+
+	## T3 alone scales execution dispersion. Aggregate seeded draws avoid making a
+	## single normal deviate an accidental contract, while the cone assertion
+	## prevents error from manufacturing an unreachable launch.
+	var weak_error := 0.0
+	var elite_error := 0.0
+	var realised_inside := true
+	var realised_in_flight_domain := true
+	for draw in range(120):
+		var weak_input := base.duplicate(true)
+		weak_input["technique_ability"] = 0.0
+		weak_input["seed"] = 91000 + draw
+		var elite_input := weak_input.duplicate(true)
+		elite_input["technique_ability"] = 1.0
+		var weak: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(weak_input)
+		var elite: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(elite_input)
+		weak_error += float(weak.get("execution_error_degrees", 0.0))
+		elite_error += float(elite.get("execution_error_degrees", 0.0))
+		var realised := Vector3(weak.get("realised_direction", Vector3.ZERO))
+		var natural := Vector3(weak.get("natural_direction", Vector3.ONE))
+		realised_inside = realised_inside and rad_to_deg(natural.angle_to(realised)) \
+			<= float(weak.get("redirection_half_angle_degrees", 0.0)) + 0.001
+		var realised_elevation := rad_to_deg(atan2(
+			realised.y, Vector2(realised.x, realised.z).length()
+		))
+		realised_in_flight_domain = realised_in_flight_domain \
+			and realised_elevation \
+				<= BallFlightModel.MAX_LAUNCH_ANGLE_DEGREES + 0.001 \
+			and realised_elevation \
+				>= BallFlightModel.MIN_LAUNCH_ANGLE_DEGREES - 0.001
+	_check(
+		weak_error > elite_error * 2.0 and realised_inside \
+			and realised_in_flight_domain,
+		"T3 gives technique strong angular-error leverage inside the physical envelope",
+	)
+
+	var underconstrained := base.duplicate(true)
+	underconstrained.erase("intent_target_anchor")
+	underconstrained.erase("intent_height_anchor_meters")
+	var physical_only: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(
+		underconstrained
+	)
+	_check(
+		bool(physical_only.get("available", false))
+			and not bool(physical_only.get("selection_available", true)),
+		"physical feasibility can exist without fabricating a missing contact intent",
+	)
+	_check(
+		not bool(PLATFORM_CONTACT_MODEL_SCRIPT.evaluate({}).get("available", true)),
+		"the shadow refuses to invent missing physical contact state",
+	)
+
+	## Adjacent contacts jointly own a playable deflection's vertical state. The
+	## trajectory need not pretend its display defaults are physical, and no
+	## restitution/angle parameter is introduced to reconstruct the arrival.
+	var deflection: Dictionary = BALL_TRAJECTORY_SCRIPT.create(
+		"block_deflection",
+		Vector2(0.50, 0.50), Vector2(0.52, 0.60), Vector2(0.54, 0.72),
+		0.0, 0.46, 0.35,
+	).to_dict()
+	deflection["launch_contact_height_meters"] = CourtConstants.NET_HEIGHT_METERS
+	deflection["height_source"] = "default"
+	var deflection_arrival: Dictionary = \
+		PLATFORM_CONTACT_MODEL_SCRIPT.incoming_velocity_at_contact(deflection, 0.82)
+	_check(
+		bool(deflection_arrival.get("available", false))
+			and str(deflection_arrival.get("source", ""))
+				== "adjacent_contact_heights",
+		"adjacent owned contact heights recover a playable deflection's arrival vector",
 	)
 
 
