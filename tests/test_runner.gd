@@ -293,6 +293,7 @@ func _initialize() -> void:
 	_test_readiness_is_body_state()
 	_test_block_setter_pull_applies_once()
 	_test_setter_release_is_a_run()
+	_test_immediate_control_needs_a_usable_body()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10627,6 +10628,60 @@ func _test_setter_release_is_a_run() -> void:
 	_check(
 		float(as_run.seconds) < float(as_shuffle.seconds) - 0.001,
 		"a release run and a defensive shuffle are not the same movement",
+	)
+
+
+## A body that cannot act does not own the ball arriving on it.
+##
+## `immediate_control` was geometry alone, so a voli owing more recovery than the
+## ball's whole flight still held the lock and took the ball off a fully
+## available teammate. Measured at 1.24 s of debt against a 1.25 s ball -- one
+## hundredth of a second of usable time -- the compromised defender still won.
+##
+## No threshold was introduced: the test is whether any usable time exists. See
+## `docs/review/SHORT_BALL_RESPONSIBILITY.md`. Check 1 fails on the pre-pass
+## selector; check 2 is an invariant and is labelled as one.
+func _test_immediate_control_needs_a_usable_body() -> void:
+	var zone: Resource = DEFENSIVE_ZONE_SCRIPT.new()
+	zone.player_id = 901
+	zone.zone_type = DEFENSIVE_ZONE_SCRIPT.ZoneType.FLOOR_DEFENSE
+	zone.center = Vector2(0.42, 0.62)
+	zone.radius_meters = 2.6
+	zone.enabled = true
+	var origin := Vector2(0.40, 0.66)
+	var ball := Vector2(0.42, 0.62)
+	## Everything but the time is held: same body, same ball, same distance.
+	var able: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+		_orientation_voli(), zone, ball, 1.25, "dig_control", origin,
+	)
+	var spent: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+		_orientation_voli(), zone, ball, 0.02, "dig_control", origin,
+	)
+	_check(
+		bool(able.get("immediate_control", false))
+			and not bool(spent.get("immediate_control", false)),
+		"a voli with no usable time does not immediately control the ball on them",
+	)
+
+	## 2 -- **invariant.** And responsibility then goes somewhere: a teammate who
+	## can play it takes it, rather than the ball belonging to nobody. This holds
+	## on both sides of the change and guards against the lock being narrowed
+	## into a hole.
+	var far_zone: Resource = DEFENSIVE_ZONE_SCRIPT.new()
+	far_zone.player_id = 902
+	far_zone.zone_type = DEFENSIVE_ZONE_SCRIPT.ZoneType.FLOOR_DEFENSE
+	far_zone.center = Vector2(0.42, 0.74)
+	far_zone.radius_meters = 3.2
+	far_zone.enabled = true
+	var claim: Dictionary = COVERAGE_CALCULATOR_SCRIPT.choose_claimant(
+		[_orientation_voli(), _orientation_voli(902)] as Array[VolleyballPlayer],
+		{901: zone, 902: far_zone}, ball, 1.25, "dig_control",
+		{901: 1.24}, {901: origin, 902: Vector2(0.42, 0.695)},
+	)
+	var winner := claim.get("player") as VolleyballPlayer
+	_check(
+		winner != null and winner.id == 902,
+		"and a viable teammate takes the ball the compromised body cannot",
 	)
 
 

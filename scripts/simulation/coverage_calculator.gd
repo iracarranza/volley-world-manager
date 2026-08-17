@@ -188,7 +188,22 @@ static func evaluate_arrival(
 	## The step allowance is one stride, not a sprint. A defender does move their
 	## feet for a ball at their edge, and a lock that only fired for a ball
 	## arriving exactly at the sternum would never fire.
-	var immediate_control := distance <= base_reach + IMMEDIATE_CONTROL_STEP_METERS
+	##
+	## **And a body that cannot act does not control anything.** This was
+	## geometry alone, so a voli owing more recovery than the ball's entire
+	## flight still "immediately controlled" a ball landing on them, and the lock
+	## then handed it to them over a fully available teammate. Measured: at 1.24 s
+	## of debt against a 1.25 s ball -- one hundredth of a second of usable time --
+	## the compromised defender still won the claim. See
+	## `docs/review/SHORT_BALL_RESPONSIBILITY.md`.
+	##
+	## `available_time` is the ball's flight less this voli's recovery debt
+	## (subtracted by `choose_claimant` before the call), their reaction and their
+	## turn. No threshold is introduced: the test is whether any time exists at
+	## all. How *much* time a landing body needs to make a controlled contact is a
+	## different question, and an unmeasured one.
+	var immediate_control := available_time > 0.0 \
+		and distance <= base_reach + IMMEDIATE_CONTROL_STEP_METERS
 	## Named for what it is. This is a *distance* -- how much further this
 	## player could have reached than the ball actually needed them to -- and it
 	## was called `arrival_margin`, which is the name the rest of the engine uses

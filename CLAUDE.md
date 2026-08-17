@@ -12,10 +12,15 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on the home-wall repair:
-**2,129 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on the short-ball sweep:
+**2,131 checks pass**. Treat any test failure as a regression.
 
-That is 2,126 plus exactly the three checks written -- a *repair* that moved a
+That is 2,129 plus exactly the two checks written, on a change that moved no
+outcome at all -- the mix over 600 rallies came back byte-identical, because no
+live claim ever reaches the condition the repair added. A repair can be correct
+and latent at the same time, and the count says nothing about which.
+
+Before it, 2,126 plus exactly the three checks written -- a *repair* that moved a
 population hard (the home wall's "no wall" rows fell 134 to 42 on the matched
 block-band fixture) and still moved the count by precisely what it wrote, because
 none of the sampling gates draw on the block census. Which is the reminder worth
