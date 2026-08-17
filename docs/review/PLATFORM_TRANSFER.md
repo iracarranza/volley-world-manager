@@ -250,10 +250,58 @@ Suite: **2,146 checks, no failures.**
 
 ---
 
+---
+
+## 7. One repair taken on the way: the continuation dig's empty arrival
+
+§4b traced a second defect and stopped at tracing it:
+
+> **The continuation dig passes `arrival = {}`.** Empty, so `reach_margin`
+> defaults to 0.0 and `stretched` computes `(0.25 − 0.0) / 0.85 = 0.294` — a 29%
+> stretch fabricated on every continuation dig.
+
+**Not a design question.** `cont_defense` carries the arrival and the two lines
+above the call already read it. Measured first, over 600 rallies
+(`tools/run_continuation_dig_arrival.gd`):
+
+| | before | after |
+|---|---:|---:|
+| resolved continuation passes | 9 | 9 |
+| published reach margin, min / p50 / max | −0.160 / 0.338 / 1.866 | unchanged |
+| stretch that margin implies, p50 | **0.000** | — |
+| stretch actually used | **0.294, constant** | the margin's |
+| spoil, p50 | 0.400 | **0.341** |
+| pass apex, p50 | 3.345 | **3.445** |
+| destination error, p50 | 0.821 | **0.701** |
+
+8 of the 9 were charged a stretch penalty for a ball they reached comfortably.
+The direction is systematic — margins on this path are mostly *positive*, so a
+constant 0.294 makes every one of them worse than it was.
+
+**And the outcome mix over 600 rallies is unchanged**: 290 home points, 3,887
+events, every terminal count equal. Nine contacts, none of which flipped a
+rally. Stated plainly rather than dressed up: this repair is correct and its
+consequence is small.
+
+The suite is the one place it did register. It went from 2,146 to 2,146 while
+**one check was added**, so a sampling gate drew one fewer — the signature of a
+real behaviour change, and the opposite of slice 1's exactly-what-was-written.
+
+### Why there is no caller-level gate
+
+The check added here is an **invariant** — that `_dig_pass_result`'s arrival is
+load-bearing, so passing `{}` costs something. The gate that would actually have
+caught this defect has to run at the *call site*, and with nine samples in 600
+rallies a sampling gate over that population would be noise. Recorded rather
+than papered over with a weak test.
+
+---
+
 ## Re-running
 
 ```bash
 godot --headless --path . --script res://tools/run_platform_transfer_probe.gd
+godot --headless --path . --script res://tools/run_continuation_dig_arrival.gd
 ```
 
 Deterministic.

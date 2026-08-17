@@ -11043,6 +11043,28 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 		"a dig thrown four times as far leaves at exactly the same height",
 	)
 
+	## And the arrival parameter is load-bearing, which is what makes passing `{}`
+	## a real loss rather than a harmless omission. **An invariant, not a gate**:
+	## `_dig_pass_result` was always correct here and the continuation call site
+	## was not, so this passes before and after that repair. It is here so the
+	## next caller tempted to pass an empty dictionary has something that says
+	## what it costs. `docs/review/PLATFORM_TRANSFER.md` §7 records why the
+	## caller-level version is not worth writing: nine contacts in 600 rallies.
+	var settled: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": 0.90},
+		"planted", gentle, 1.10, setter, 2.40,
+	)
+	var scrambled: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": -0.40},
+		"planted", gentle, 1.10, setter, 2.40,
+	)
+	_check(
+		float(scrambled["spoil"]) > float(settled["spoil"]) + 0.03
+			and float(scrambled["pass_apex_meters"])
+				< float(settled["pass_apex_meters"]),
+		"a dig's arrival reaches its spoil, so an empty arrival is a real loss",
+	)
+
 
 ## An incoming flight of a chosen pace, shaped like what `_ball_trajectory`
 ## publishes. Only the three fields `_incoming_ball_speed` reads are needed, and

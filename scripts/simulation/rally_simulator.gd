@@ -7311,7 +7311,21 @@ func _resolve_home_continuation(
 	if dug:
 		cont_dig_pass = _dig_pass_result(
 			opponent_defender, attack_target, cont_desired_target,
-			cont_dig_control, {}, str(last_dig_posture),
+			cont_dig_control,
+			## The arrival, which was `{}` -- so `reach_margin` defaulted to 0.0 and
+			## `stretched` computed a constant 0.294 on every continuation dig,
+			## whatever the defender actually did. `PLATFORM_CONTACT.md` section 4b
+			## traced it and stopped; it is not a design question, because
+			## `cont_defense` carries the arrival and the two lines above already
+			## read it.
+			##
+			## Measured over 600 rallies before the repair: 9 resolved continuation
+			## passes, reach margins spanning -0.160 to 1.866, and the stretch they
+			## imply is **0.000 at the median** -- so 8 of the 9 were charged a
+			## stretch penalty for a ball they reached comfortably. A term that
+			## cannot vary is not a weak term; it is an absent one wearing a weight.
+			Dictionary(cont_defense.get("arrival", {})),
+			str(last_dig_posture),
 			continuation_arriving_trajectory,
 			transition_defender_start.distance_to(transition_defender_reach)
 				* CourtConstants.COURT_WIDTH_METERS,

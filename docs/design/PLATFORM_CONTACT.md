@@ -564,7 +564,15 @@ not read.
 
 **The continuation dig passes `arrival = {}`.** Empty, so `reach_margin` defaults
 to 0.0 and `stretched` computes `(0.25 − 0.0) / 0.85 = 0.294` — a 29% stretch
-fabricated on every continuation dig. That is precisely the defect that
+fabricated on every continuation dig.
+
+> **Repaired 2026-08-17.** Not a design question: `cont_defense` carries the
+> arrival and the two lines above the call already read it. Measured first —
+> 9 resolved continuation passes in 600 rallies, reach margins spanning −0.160 to
+> 1.866, and the stretch they imply is 0.000 at the median, so 8 of the 9 were
+> charged for a ball they reached comfortably. Spoil p50 0.400 → 0.341,
+> destination error p50 0.821 → 0.701, outcome mix unchanged.
+> `docs/review/PLATFORM_TRANSFER.md` §7. That is precisely the defect that
 disqualified coverage from owning its ball, already live on one of the three
 controlled-dig sites.
 
