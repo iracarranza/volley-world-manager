@@ -142,6 +142,47 @@ a value computed correctly and dropped.
 
 ---
 
+## 4a. And the launch angle, which nothing chooses — T2's version of the same question
+
+T2 is "the reachable platform-angle range from body/contact circumstance", and it
+is unauthored. The same question part 4 asked of T1: **what angle does the
+shipped model produce?** It is not chosen anywhere. Rise comes from an apex band
+and the destination from a target expression, and the two never see each other,
+so the angle between them is a by-product.
+
+| family | n | min° | p50° | max° | rise per metre travelled |
+|---|---:|---:|---:|---:|---:|
+| reception | 484 | 33.7 | **60.9** | 88.8 | 0.51 |
+| dig | 87 | 65.2 | **83.3** | 89.2 | **2.48** |
+| coverage | 24 | 74.3 | 74.3 | 74.3 | 1.86 |
+
+The reception's 61° over 5.7 m is roughly what a pass looks like. **The dig's
+83° is not a pass, it is a bucket** — 2.5 m of rise for 0.97 m of travel, because
+the apex band gives it up to 3 m of height and the target expression gives it
+0.97 m of court. Neither number is wrong on its own terms and together they are
+not a volleyball contact.
+
+### The two terms are not merely independent, they are inverted
+
+| family | r(pass distance, apex rise) |
+|---|---:|
+| reception | **−0.3658** |
+| dig | **−0.4848** |
+| coverage | −0.0000 |
+
+A ball thrown further needs more rise to arrive, so a physical model shows a
+strong *positive* here. The engine shows a strong negative, and the mechanism is
+plain once measured: both terms are driven by the same quality scalar in opposite
+senses. A spoiled dig gets a *lower* apex (`lerpf(1.35, 3.05, 1.0 − spoil)`) and
+a *larger* drift off its target, so it goes further and lower at once.
+
+> **§13.9 lists these as two separate hidden preferences — item 2, the apex band,
+> and item 3, the target offset — without noticing they contradict each other.**
+> They are not two preferences. They are one missing relation, and the negative
+> correlation is the shape of its absence.
+
+---
+
 ## 5. What this settles for slice 3, and what it does not
 
 **Settles.** T1 is not a recalibration. There is no `outgoing = f(incoming, …)`
@@ -165,16 +206,26 @@ discriminate a plausible transfer relation from the existing bands, the honest
 outcome is to say so and stop." What this pass adds is that there are no existing
 bands *in this dimension* to discriminate against.
 
-**Does not settle.** T2, the reachable platform-angle range. This probe measures
-speed and height, not angle, and the current model has no angle representation at
-all — the destination is chosen and the drift is applied to it.
+**Does not settle.** T2's *shape* — the reachable platform-angle range. §4a
+measures the angle the shipped model emits and finds it unbounded and, on the
+dig, unphysical; it says nothing about what a body can actually do, which is what
+T2 has to state. Nothing in this repository carries a shoulder range of motion,
+and M3's `contact_offset_meters` gives where the platform is, not which way it
+can face.
 
 ---
 
-## 6. Tests — three checks, and they are characterisation, not invariants
+## 6. Tests — four checks, and they are characterisation, not invariants
 
 `_test_the_incoming_ball_reaches_no_platform_launch`. Two incoming flights over
-the same line, one four times as fast as the other, through both resolvers.
+the same line, one four times as fast as the other, through both resolvers; then
+one dig target a stride away against one six metres away.
+
+The fourth check holds §4a's finding at the **mechanism** rather than at the
+correlation — a correlation is a sampling quantity and would make a brittle gate.
+The apex expression does not read the target, so a dig thrown four times as far
+leaves at exactly the same height, and that is the whole of the −0.485 stated
+deterministically.
 
 They hold a **gap** open rather than a behaviour correct, and they are labelled
 that way in the source. When slice 3 promotes a real transfer relation they must
@@ -195,7 +246,7 @@ The first check exists so the other two cannot pass on a degenerate fixture: it
 asserts the two flights really do differ by nearly four times before asking
 whether anything downstream noticed.
 
-Suite: **2,145 checks, no failures.**
+Suite: **2,146 checks, no failures.**
 
 ---
 

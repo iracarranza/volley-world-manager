@@ -44,6 +44,7 @@ func _initialize() -> void:
 	_by_posture(rows)
 	_incoming_against_outgoing(rows)
 	_coverage(rows)
+	_launch_angle(rows)
 	quit()
 
 
@@ -115,6 +116,10 @@ func _row(event: RallyEvent, family: String) -> Dictionary:
 		"apex_rise": rise,
 		"duration": duration,
 		"distance": horizontal_meters,
+		## The angle the ball left the platform at, which nothing in the engine
+		## chooses -- it is whatever the apex band and the destination happen to
+		## imply, and the two are computed independently of each other.
+		"angle_degrees": rad_to_deg(atan2(vertical, maxf(horizontal, 0.0001))),
 		"target_error": float(event.metadata.get("target_error_meters", -1.0)),
 	}
 
@@ -173,6 +178,7 @@ func _by_family(rows: Array) -> void:
 			["apex rise m", "apex_rise"],
 			["flight duration s", "duration"],
 			["pass distance m", "distance"],
+			["launch angle deg", "angle_degrees"],
 		]:
 			var stats := _stats(_column(subset, str(entry[1])))
 			print("    %-22s %-9.3f %-9.3f %-9.3f %-9.3f" % [
@@ -371,3 +377,53 @@ func _pearson(xs: Array, ys: Array) -> float:
 	if variance_x <= 0.0 or variance_y <= 0.0:
 		return 0.0
 	return covariance / sqrt(variance_x * variance_y)
+
+
+## ----------------------------------------------------------------- part five
+##
+## T2 is "the reachable platform-angle range", and it is unauthored. Before
+## authoring one, the same question part 3 asked of T1: what angle does the
+## shipped model produce? It is not chosen anywhere -- it falls out of an apex
+## band and a destination computed with no reference to each other -- so this is
+## the first time the quantity has been looked at.
+func _launch_angle(rows: Array) -> void:
+	print("\n" + "=".repeat(78))
+	print("PART 5 -- the launch angle nobody chose")
+	print("=".repeat(78))
+	print("  Rise and destination are decided by separate expressions that never")
+	print("  see one another: the dig's apex is `lerpf(1.35, 3.05, 1 - spoil)` and")
+	print("  its target is `contact + (0.04, -0.03)`. The angle between them is a")
+	print("  consequence of that independence, and nothing bounds it.\n")
+	print("  %-14s %-7s %-9s %-9s %-9s %-14s" % [
+		"family", "n", "min deg", "p50 deg", "max deg", "rise / travel",
+	])
+	for family in _families(rows):
+		var subset: Array = rows.filter(func(row): return row["family"] == family)
+		var angles := _stats(_column(subset, "angle_degrees"))
+		var ratios: Array = []
+		for row in subset:
+			ratios.append(float(row["apex_rise"]) / maxf(float(row["distance"]), 0.01))
+		print("  %-14s %-7d %-9.1f %-9.1f %-9.1f %-14.2f" % [
+			family, subset.size(), angles.min, angles.p50, angles.max,
+			_stats(ratios).p50,
+		])
+	print("")
+	print("  The right-hand column is metres of rise per metre travelled, at the")
+	print("  median. A pass to a setter is a ball that goes up *and across*; a")
+	print("  ratio well above one is a ball that goes up and stays.")
+	print("")
+	print("  And the two terms are uncoupled, which is the finding rather than the")
+	print("  angle itself:\n")
+	for family in _families(rows):
+		var subset: Array = rows.filter(func(row): return row["family"] == family)
+		if subset.size() < 12:
+			continue
+		print("  %-14s r(pass distance, apex rise) = %+.4f" % [
+			family, _pearson(_column(subset, "distance"), _column(subset, "apex_rise")),
+		])
+	print("")
+	print("  A ball thrown further needs more rise to arrive, so a physical model")
+	print("  would show a clear positive here. What the sign and size actually are")
+	print("  is what says whether the apex band and the target are one decision or")
+	print("  two -- and section 13.9 lists them as two separate hidden preferences,")
+	print("  items 2 and 3, without noticing they contradict each other.")

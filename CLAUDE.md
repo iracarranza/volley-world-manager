@@ -13,9 +13,9 @@ godot --headless --path . --script res://tests/test_runner.gd
 ```
 
 Current branch baseline, verified 2026-08-17 on M4 slice 2's first half:
-**2,145 checks pass**. Treat any test failure as a regression.
+**2,146 checks pass**. Treat any test failure as a regression.
 
-That is 2,142 plus exactly the three checks written, and those three are
+That is 2,142 plus exactly the four checks written, and those four are
 **characterisation checks rather than invariants** -- they hold open the finding
 that the incoming ball's speed reaches no platform launch, and slice 3 is
 supposed to make them fail. Adding a two-line transfer term moved the count to

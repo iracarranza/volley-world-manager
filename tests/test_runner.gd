@@ -11015,6 +11015,34 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 		"and a reception's height is set by execution, never by the ball's pace",
 	)
 
+	## The second gap, and it is the sharper one. A ball thrown further needs more
+	## rise to arrive, so `r(pass distance, apex rise)` should be strongly
+	## positive. Measured, it is **−0.485 on the dig and −0.366 on the reception**:
+	## the further the ball has to travel, the *lower* it is thrown, because both
+	## terms are driven by the same quality scalar in opposite senses.
+	##
+	## Held at the mechanism rather than at the correlation, which is a sampling
+	## quantity and would make a brittle gate: the apex expression does not read
+	## the target, so a target six metres away and one a stride away leave at
+	## exactly the same height.
+	var near_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, contact + Vector2(0.03, -0.04), 0.62,
+		{"reach_margin_meters": 0.30}, "planted", gentle, 1.10, setter, 2.40,
+	)
+	var far_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, Vector2(0.50, 0.58), 0.62,
+		{"reach_margin_meters": 0.30}, "planted", gentle, 1.10, setter, 2.40,
+	)
+	_check(
+		float(far_dig["destination"].distance_to(contact))
+			> float(near_dig["destination"].distance_to(contact)) * 3.0
+			and is_equal_approx(
+				float(near_dig["pass_apex_meters"]),
+				float(far_dig["pass_apex_meters"]),
+			),
+		"a dig thrown four times as far leaves at exactly the same height",
+	)
+
 
 ## An incoming flight of a chosen pace, shaped like what `_ball_trajectory`
 ## publishes. Only the three fields `_incoming_ball_speed` reads are needed, and
