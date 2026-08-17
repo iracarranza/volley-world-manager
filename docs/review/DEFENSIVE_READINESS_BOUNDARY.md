@@ -3,11 +3,21 @@
 Run: 2026-08-16, from `7e1bb2e`. Instrument:
 `tools/run_defensive_readiness_probe.gd`. **One production repair, then BLOCKED.**
 
-Audit step 0 came back NO and the pass stops there for everything downstream of
-*stance*. But step 1 — blocker landing/recovery propagation — turned out not to
-be downstream of stance at all, and it was a live defect. It is repaired; §5
-carries it. The first draft of this document stopped the whole walk on list
-order rather than on causality, which was wrong.
+Audit step 0 came back NO. Everything downstream of **stance** stops there — and
+that turns out to be a much smaller set than the first draft of this document
+claimed.
+
+Two corrections to that draft, both of which came from being pushed on it:
+
+1. **Step 1 — blocker landing/recovery — is not downstream of stance at all.** It
+   was a live defect and is repaired; §5 carries it.
+2. **Gates C–H are audits of the *existing* selector, not builds on a future
+   one.** Missing stance changes arrival *magnitudes*; it does not change the
+   *ordering rules* the policy states. Run, they all **PASS**: §§0–10 of the
+   policy are already implemented. §6 carries them.
+
+So the honest headline is not "defence is blocked". It is: **the responsibility
+policy already holds; only ready stance is missing.**
 
 The question, from the policy's §12:
 
@@ -215,28 +225,66 @@ getting up who goes up anyway keeps the longer debt.
 
 ---
 
-## 6. Ledger
+## 6. Gates C–H — the policy's ordering rules already hold
+
+Driven directly against `CoverageCalculator.choose_claimant`, the function both
+sides' floor defence calls. Deterministic; no rally resolved.
+
+The selector turns out to have the policy's shape written into it already. Two
+structures do the work, and neither is a weighted sum:
+
+```gdscript
+if not bool(arrival.get("reachable", false)):
+    continue                      ## §0's hard gate, before any score
+...
+## "The lock, applied before the score is consulted at all. If the ball is
+##  arriving inside somebody's immediate envelope it is theirs, and the
+##  weighted claim cannot take it off them."
+var deciding := owners if not owners.is_empty() else reachable_evaluations
+```
+
+| gate | fixture | result |
+|---|---|---|
+| **C** §7 anti-steal | ball on voli 1; voli 2 elite, 3.08 m away | **PASS** — lock decides, not the 0.620/0.575 score |
+| **D** §5 transfer | responsible voli stranded 13.5 m away, reach margin −10.3 to −12.4 | **PASS** at every ball time 1.40 → 0.35 s |
+| **E** §§2, 4 short ball | assigned short defender vs elite deep defender whose reach margin is **larger** (1.275 vs 0.818) | **PASS** — short defender holds it |
+| **F** §1 overlap | identical distance, only `zone.priority` differs | **PASS both ways** — 1.032 vs 0.552, flips with the field |
+| **G** §0 floor | both volis 13–14 m away, ball in 0.25 s | **PASS** — returns no claimant, caller falls back |
+| **H** §9 spacing | two bodies at 0.10 → 5.00 m | **PASS** — reports 0.077 / 0.336 / 0.931 m honestly |
+
+Gate E is the one worth dwelling on: the deep defender has the **better raw reach
+margin** and still does not get the ball, because the short defender's immediate
+lock fires first. That is §4 working without any deep-defender penalty existing.
+
+**One observation from gate H, not a defect:** `nearest_teammate_meters` reads
+`1000.0` once the other body is out of reach, because the spacing is measured
+only across *reachable* candidates. A sentinel inside a metres field is the shape
+the second-contact audit flagged for `claim_margin`. Defensible — an unreachable
+team-mate is not interfering with your platform — but a consumer that averages
+this field will average a sentinel.
+
+---
+
+## 7. Ledger
 
 | audit step | verdict |
 |---|---|
 | **0 — resting-defender facing** | **BLOCKED — missing physical state** |
 | **1 — blocker landing/recovery propagation** | **REPAIRED** |
 | 2 — velocity/facing into defensive arrival | **BLOCKED** by step 0 — would propagate a constant (§3) |
-| 3 — feasibility gate + no-feasible fallback | blocked behind step 2 |
-| 4 — immediate possession → short/zone precedence | blocked behind step 3 |
-| 5 — fallback ordering | blocked behind step 3 |
-| 6 — coefficient calibration | blocked behind step 3 |
+| **3 — feasibility gate + no-feasible fallback** | **PASS** — already a hard gate (gates D, G) |
+| **4 — immediate possession → short/zone precedence** | **PASS** — gates C, E, F |
+| **5 — fallback ordering** | **PASS** — gate D |
+| 6 — coefficient calibration | **not required** — no gate failed |
 
-Steps 2–6 are not "untested"; they are **downstream of a term that does not yet
-carry information**. §11 places ready stance in feasibility/arrival *before*
-responsibility ranking, so building the feasibility gate now would bake a
-direction-blind arrival into it and require redoing it once preparation exists.
+Policy sections, as implemented today:
 
-Nothing was calibrated and no claimant weight was touched. Gates C–H (immediate
-possession, transfer, short-ball ownership, overlap priority, no-feasible
-fallback, crowding) all sit downstream of the feasibility gate and were not run,
-because a gate built on a direction-blind arrival would be measuring the wrong
-thing.
+| §§0–10 responsibility and ordering | **already hold** |
+| §§11–13 ready stance | **BLOCKED** on step 0 |
+
+Nothing was calibrated and no claimant weight was touched. Step 2 remains the
+only wiring left, and it is worthless until step 0 has an answer: propagating a
+facing that is always route-aligned would add a term that never varies.
 
 ---
 

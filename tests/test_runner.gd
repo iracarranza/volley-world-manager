@@ -5,6 +5,9 @@ const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const RALLY_MOVEMENT_SYSTEM_SCRIPT := preload(
 	"res://scripts/simulation/rally_movement_system.gd"
 )
+const COVERAGE_CALCULATOR_SCRIPT := preload(
+	"res://scripts/simulation/coverage_calculator.gd"
+)
 const READY_STANCE_SCRIPT := preload("res://scripts/data/ready_stance.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
@@ -284,6 +287,7 @@ func _initialize() -> void:
 	_test_every_swing_publishes_the_ball_it_struck()
 	_test_movement_model_prices_facing()
 	_test_landing_blocker_is_unavailable()
+	_test_defensive_claim_precedence()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10152,6 +10156,118 @@ func _test_landing_blocker_is_unavailable() -> void:
 		digs > 0 and digs_with_a_body_down > 0,
 		"the airborne debt reaches the floor-defence claim search",
 	)
+
+
+
+## The defensive claimant's ordering rules, against the policy.
+##
+## **Invariant tests, not repair evidence.** All four pass on the pre-pass
+## resolver: `choose_claimant` already filters infeasible candidates before
+## scoring, and already applies an immediate-possession lock ahead of the
+## weighted claim. Sections 0 through 10 of the policy were found already
+## implemented; only the ready-stance sections are blocked. These exist so the
+## structure cannot be quietly refactored into a single weighted sum, which is
+## the shape the policy explicitly rejects.
+func _test_defensive_claim_precedence() -> void:
+	var ball := Vector2(0.30, 0.78)
+
+	## Section 7: a ball already inside somebody's envelope is theirs, and an
+	## elite teammate three metres away cannot buy it.
+	var near := _claim_voli(1)
+	var elite := _claim_voli(2, 99)
+	var chosen := _claim_winner(
+		[near, elite],
+		{1: _claim_zone(1, ball, 1), 2: _claim_zone(2, Vector2(0.62, 0.72), 1)},
+		{1: ball + Vector2(0.008, 0.004), 2: Vector2(0.62, 0.72)}, ball, 1.10,
+	)
+	_check(
+		chosen == 1,
+		"a ball inside a defender's envelope is not bought by a better teammate",
+	)
+
+	## Sections 2 and 4: the assigned short defender holds a short ball against a
+	## quicker deep defender whose raw reach margin is actually larger.
+	var short_defender := _claim_voli(1)
+	var deep := _claim_voli(2, 99)
+	var short_ball := _claim_winner(
+		[short_defender, deep],
+		{1: _claim_zone(1, ball, 3), 2: _claim_zone(2, Vector2(0.34, 0.92), 1)},
+		{1: Vector2(0.28, 0.72), 2: Vector2(0.34, 0.88)}, ball, 0.95,
+	)
+	_check(
+		short_ball == 1,
+		"a deep defender does not take a short ball off the assigned one",
+	)
+
+	## Section 1: overlapping zones resolve on the existing priority field, and
+	## it must work in both directions -- a one-way check would pass on a
+	## selector that simply always preferred the first candidate.
+	var origins := {1: Vector2(0.30, 0.86), 2: Vector2(0.30, 0.70)}
+	var first := _claim_winner(
+		[_claim_voli(1), _claim_voli(2)],
+		{1: _claim_zone(1, ball, 3), 2: _claim_zone(2, ball, 1)}, origins, ball, 1.10,
+	)
+	var second := _claim_winner(
+		[_claim_voli(1), _claim_voli(2)],
+		{1: _claim_zone(1, ball, 1), 2: _claim_zone(2, ball, 3)}, origins, ball, 1.10,
+	)
+	_check(
+		first == 1 and second == 2,
+		"overlapping zones are resolved by the existing priority field, both ways",
+	)
+
+	## Section 0: nobody feasible returns no claimant, so the caller's existing
+	## emergency fallback is what produces one.
+	_check(
+		_claim_winner(
+			[_claim_voli(1), _claim_voli(2)],
+			{1: _claim_zone(1, ball, 1), 2: _claim_zone(2, ball, 1)},
+			{1: Vector2(0.96, 0.06), 2: Vector2(0.92, 0.10)}, ball, 0.25,
+		) == -1,
+		"an unreachable ball yields no claimant rather than a nearest-wins pick",
+	)
+
+
+func _claim_voli(player_id: int, spike: int = 50) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	for attribute in [
+		"anticipation", "lateral_speed", "acceleration", "reception",
+		"dig_control", "ball_control", "composure", "work_rate", "stamina",
+	]:
+		player.set(attribute, 50)
+	for attribute in ["anticipation", "lateral_speed", "acceleration"]:
+		player.set(attribute, spike)
+	player.fatigue = 0.0
+	return player
+
+
+func _claim_zone(player_id: int, centre: Vector2, priority: int) -> Resource:
+	var zone: Resource = DefensiveZone.new()
+	zone.player_id = player_id
+	zone.zone_type = DefensiveZone.ZoneType.FLOOR_DEFENSE
+	zone.center = centre
+	zone.radius_meters = 3.0
+	zone.priority = priority
+	zone.enabled = true
+	return zone
+
+
+func _claim_winner(
+	players: Array,
+	zones: Dictionary,
+	origins: Dictionary,
+	ball: Vector2,
+	seconds: float,
+) -> int:
+	var typed: Array[VolleyballPlayer] = []
+	for entry in players:
+		typed.append(entry as VolleyballPlayer)
+	var claim: Dictionary = COVERAGE_CALCULATOR_SCRIPT.choose_claimant(
+		typed, zones, ball, seconds, "reception", {}, origins
+	)
+	var winner := claim.get("player") as VolleyballPlayer
+	return winner.id if winner != null else -1
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

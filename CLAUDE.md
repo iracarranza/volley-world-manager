@@ -13,9 +13,9 @@ godot --headless --path . --script res://tests/test_runner.gd
 ```
 
 Current branch baseline, verified 2026-08-16 on the defensive-readiness
-boundary: **2,107 checks pass**. Treat any test failure as a regression.
+boundary: **2,111 checks pass**. Treat any test failure as a regression.
 
-That is 2,106 plus seven checks written *minus six*: a landing blocker is now
+That is 2,106 plus eleven checks written *minus six*: a landing blocker is now
 unavailable to the floor-defence claim search, so rallies resolve differently and
 several sampling gates drew fewer checks. A negative delta with checks added is
 exactly what a real behaviour change looks like. See
