@@ -1314,6 +1314,22 @@ func resolve(
 		float(canonical_serve.get("apex_rise_meters", 0.0)),
 		-1.0, NAN, NAN,
 		float(canonical_serve.get("contact_height_meters", NAN)),
+		## **`end_height` stays NAN, and that is a ruling rather than a gap.**
+		##
+		## Publishing a real one was tried: `out_reason` already says whether this
+		## serve stopped at the tape or reached the floor, so the flight's own
+		## endpoint is a fact and not a choice. The suite refused it -- 60 of 120
+		## serves -- and the refusal was correct. `end_height_meters` is not read
+		## as this flight's endpoint. `BallFlight.from_trajectory` reads it as the
+		## height of the **next contact**, and the comment inside
+		## `_ball_trajectory` already names the conflict: *"Those are different
+		## numbers and choosing between them is `CONTACT_AND_BALL_FLIGHT.md`'s
+		## unresolved item 5, not something to settle as a side effect of owning
+		## the launch."*
+		##
+		## So the 1.000 m default is a placeholder standing in for an unresolved
+		## design question, not a bug to repair. See
+		## `docs/review/BODY_CENTRE_SCOPE.md` section 6.
 	)
 	_stamp_launch_state(serve_trajectory, canonical_serve)
 	## Where this server belongs once the ball is gone: their own defensive spot,

@@ -240,24 +240,57 @@ Placing a body against that would have been a physical geometry built on a
 placeholder — the failure mode this repository exists to catch, committed rather
 than caught. The wiring was removed and the reason written at the call site.
 
-## 6. The next dependency, and it is a bug rather than a decision
+## 6. The next dependency is not a bug — it is `CONTACT_AND_BALL_FLIGHT.md` item 5
 
-**Publish the serve's real arrival height.** `height_source` already records
-which trajectories know theirs and which took the default, so the gap is
-countable today. Once a reception's flight carries a true `end_height_meters`,
-the two arguments are already there, the relation is already derived and tested,
-and the promotion is one line at the call site plus a certified before/after.
+The obvious reading of §5 is that a placeholder wants replacing. It was tried,
+and the suite refused it — correctly.
 
-Two further consequences follow from the same input and are named rather than
-built:
+`out_reason` already says whether a serve stopped at the tape or reached the
+floor, so **the flight's own endpoint is a fact, not a choice**, and it was
+published: `NET_HEIGHT_METERS` for a net serve, floor for everything else. Sixty
+of a hundred and twenty serves failed *"every serve is struck from the server's
+real reach"* immediately.
 
-- **Posture.** The shoulder anchor here is the *standing* one. A passer squats,
-  which lowers it — and `UNIVERSAL_RATIOS` carries `hip_y` 0.545 as the other end
-  of that travel. Whether the stand-off should read a posture-adjusted shoulder
-  is a real question, and `body_state` now survives the leg boundary
-  (`ACTOR_CONTINUITY.md`) so the input for it exists.
-- **Net encroachment**, the milestone's fourth clause, is the same relation read
-  toward the tape and needs nothing further once a contact height is real.
+The refusal was right, and the reason is in `_ball_trajectory`'s own comment:
 
-Suite: **2,136 checks, no failures** — 2,133 plus exactly the three written for
-the derivation.
+> `end_height_meters` is read by `BallFlight.from_trajectory` as the height of
+> the **next contact**, while the serve's own flight solves to the floor. Those
+> are different numbers and choosing between them is
+> `CONTACT_AND_BALL_FLIGHT.md`'s unresolved item 5, **not something to settle as
+> a side effect of owning the launch.**
+
+And item 5 itself:
+
+> **Serve endpoint semantics** — floor landing or reception contact — unresolved
+> until §4/§5 are represented… publishing either one silently would move the
+> receiver's read for a reason nobody chose.
+
+So the field carries **one name for two quantities**, and which one it should
+mean is open design rather than a defect. The 1.000 m is a marker standing where
+a decision has not been taken, and `height_source` exists to keep that countable.
+Publishing the geometric endpoint would have moved every receiver's read as a
+side effect of an M3 stand-off — the precise thing item 5 forbids.
+
+### The smallest decision
+
+**Does `end_height_meters` mean the flight's own endpoint, or the height of the
+next contact?**
+
+- **Endpoint.** The serve solves to the floor; a receiver asks
+  `height_at_time(contact_time)` for the height they play it at. Physically clean
+  and it is what M5's "free flight ≠ realized segment" is heading toward, but it
+  changes what every existing consumer of `end_height_meters` receives.
+- **Next contact.** Keeps every consumer, and needs the reception's contact time
+  and height decided first — which is M4 slice 3's business, not M3's.
+
+Either answer unblocks the M3 promotion immediately: `_reached_point` already
+takes the two arguments, `_body_behind_contact` already computes the offset, and
+the relation is derived and tested. Nothing else is missing.
+
+**This is a STOP under "materially different volleyball/design semantics with no
+governing policy"**, and it is one the repository had already written down and
+declined to settle twice. It is not a value to measure — both candidates are
+exactly computable — it is a question about what a published field means.
+
+Suite: **2,136 checks, no failures** — the reverted attempt leaves the count and
+the outcome mix exactly where the derivation left them.
