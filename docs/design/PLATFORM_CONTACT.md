@@ -1001,6 +1001,15 @@ coverage has none and the other two have half of one.
 > available envelope — is still the right one, but it can no longer be answered
 > as "the bands are approximately right/wrong". There is nothing in this
 > dimension to be approximately anything.
+>
+> **And T1's form turned out to be already shipped.** `BlockDeflectionModel`
+> spends incoming speed as `outgoing = incoming × PACE_KEPT`, one fraction per
+> contact kind with a departure angle beside it, magnitudes rebased against a
+> measured swing-pace band. Slice 3 therefore has a representation to copy, not
+> one to invent — what it must still author is four to six numbers. The range
+> they have to be argued within is measured: the reception implies 0.508–1.530
+> (p50 0.656), the dig's *planted* posture implies 0.139–4.228, and 63 of 571
+> contacts currently return the ball faster than it arrived.
 
 It
 also carries the gate measurement §4b asks for: **what fraction of controlled
