@@ -76,8 +76,19 @@ func _initialize() -> void:
 		"a viable non-intended voli can intercept the ball en route",
 	)
 	_gate(
-		int(physical.unresolved_overpasses) == 0,
-		"this controlled rollout does not reach unresolved overpass semantics",
+		_terminal_reason(Vector2(0.50, 0.80), Vector3(1.0, 2.0, 0.0)) \
+			== "floor",
+		"an uncontrolled in-court launch terminates on the floor",
+	)
+	_gate(
+		_terminal_reason(Vector2(0.95, 0.80), Vector3(8.0, 2.0, 0.0)) \
+			== "out",
+		"an uncontrolled launch crossing a court boundary terminates out",
+	)
+	_gate(
+		_terminal_reason(Vector2(0.50, 0.55), Vector3(0.0, 0.0, -4.0)) \
+			== "net",
+		"an uncontrolled launch below tape height terminates at the net",
 	)
 	if failures == 0:
 		print("\nPASS: physical controlled-dig rollout gates")
@@ -268,7 +279,7 @@ func _print_contacts(legacy: Dictionary, physical: Dictionary) -> void:
 	])
 	print("  intended setter misses:      %d" % physical.intended_misses)
 	print("  alternate interceptors:      %d" % physical.alternate_interceptors)
-	print("  uncontrolled terminals:      %s" % _counts_text(
+	print("  uncontrolled terminals (observed, not exhaustive): %s" % _counts_text(
 		physical.terminal_reasons
 	))
 	print("  intent simultaneously met:  %d / %d" % [
@@ -324,6 +335,15 @@ func _same_launch(free_flight: Dictionary, realised: Dictionary) -> bool:
 	)).is_equal_approx(Vector3(realised.get(
 		"launch_velocity_mps", Vector3(-INF, -INF, -INF)
 	)))
+
+
+func _terminal_reason(contact: Vector2, velocity: Vector3) -> String:
+	var free_flight := FreeFlightInterception.from_launch(
+		"probe", contact, 0.95, velocity, 0.0,
+		"terminal:%s:%s" % [str(contact), str(velocity)],
+	)
+	var physical := FreeFlightInterception.opportunities(free_flight, [])
+	return str(Dictionary(physical.get("terminal", {})).get("reason", "missing"))
 
 
 func _stats_text(values: Array) -> String:

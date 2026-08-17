@@ -1083,14 +1083,17 @@ does not wait on the selection pass. That is what keeps slice 2 where it is.
 state and the worst current model, and because it is where the `id % 2` rule
 lives. One context, measured, before any other moves.
 
-> **PRODUCTION PROMOTED AFTER M5, 2026-08-17.** The independent rollout first
-> proved that every successful controlled dig receives one shared physical
-> launch and no failed dig receives a ball. M5 then made that launch an
-> authoritative free flight and selected only physically reachable contacts
-> along it. In the 600-rally production gate, 31 intended setters had no
+> **M5 DEVELOPMENT BUILT; PRODUCTION CLOSED, 2026-08-17.** The independent
+> rollout proves that every successful controlled dig receives one shared
+> physical launch and no failed dig receives a ball. M5 made that launch an
+> authoritative free flight and selected only physically reachable same-side
+> contacts along it. In 600 paired rallies, 31 intended setters had no
 > opportunity, 33 balls were taken by another viable voli, six reached the
 > floor uncontrolled, and all 83 realised contacts were exact prefixes with an
-> unchanged launch. See `docs/review/FREE_FLIGHT_INTERCEPTION.md`.
+> unchanged launch. A broader six-rotation census observed no overpasses, but a
+> valid T1--T3 narrow-envelope contact does clear the net; the opposing action is
+> not governed. Production therefore remains closed at that policy boundary.
+> See `docs/review/FREE_FLIGHT_INTERCEPTION.md`.
 
 **Slice 4 — coverage's contact state.** Resolve arrival, posture and contact
 height at the three coverage sites from values already in scope (§4). All class

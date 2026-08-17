@@ -4216,7 +4216,11 @@ func _resolve_opponent_transition(
 			if terminal_reason == "crossed_net_unresolved":
 				return _finish(result, "m5_unresolved_overpass", true,
 					first_contact_player_id, {})
-			return _finish(result, "kill", true, first_contact_player_id, {})
+			var home_attacker := _latest_attack_credit(result, "home")
+			return _finish(
+				result, "kill", true, int(home_attacker.id),
+				{"hitter": str(home_attacker.name)},
+			)
 		opponent_setter_position = Vector2(physical_choice.contact_position)
 		second_contact_window = float(physical_choice.contact_time) \
 			- float(incoming_pass_trajectory.get("start_time", 0.0))
@@ -6235,9 +6239,11 @@ func _resolve_home_continuation(
 				return _finish(result, "m5_unresolved_overpass", false, defender.id, {
 					"hitter": defender.display_name,
 				})
-			return _finish(result, "opponent_kill", false, defender.id, {
-				"hitter": defender.display_name,
-			})
+			var opponent_attacker := _latest_attack_credit(result, "opponent")
+			return _finish(
+				result, "opponent_kill", false, int(opponent_attacker.id),
+				{"hitter": str(opponent_attacker.name)},
+			)
 	# Preserve contact continuity: the transition set begins where the dig
 	# actually finishes instead of teleporting the ball to center court.
 	var set_contact := Vector2(physical_choice.get(
@@ -12570,6 +12576,21 @@ static func _kill_key(active_play: OffensivePlay, result: Resource) -> String:
 ## simulator to ask.
 func _factor(key: String) -> String:
 	return ExplanationText.factor(key, narration)
+
+
+## A physical dig can put a real ball up that nobody reaches. The point is still
+## credited to the attack that forced that unplayable contact, never to the
+## defender whose platform launched it. Read the event lineage rather than
+## threading another identity through every continuation call.
+func _latest_attack_credit(result: Resource, side: String) -> Dictionary:
+	if result != null:
+		for index in range(result.events.size() - 1, -1, -1):
+			var event := result.events[index] as RallyEvent
+			if event != null \
+					and event.event_type == RallyEventModel.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == side:
+				return {"id": event.actor_id, "name": event.actor_name}
+	return {"id": -1, "name": "the attacker"}
 
 
 func _finish(

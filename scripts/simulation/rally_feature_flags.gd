@@ -14,14 +14,15 @@ const ALLOW_DEVELOPMENT_ATTACK_OVERRIDE: bool = true
 const ENABLE_CONTINUOUS_BLOCK_EVENTS: bool = false
 const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 
-## M4 slice 3 + M5: the shared T1--T3 platform relation owns a successful
-## controlled dig's launch, and free-flight interception owns what happens next.
-## Production opened only after the paired rollout proved that the intended
-## setter can miss, another viable voli can intercept en route, an uncontrolled
-## ball reaches its physical terminal, and every played segment remains a prefix
-## of the unchanged authoritative launch. Reception and coverage remain separate
-## promotions; coverage still lacks its keep-alive decision preference.
-const ENABLE_PHYSICAL_PLATFORM_DIG: bool = true
+## M4 slice 3 + M5 development authority. The paired rollout proves truthful
+## same-side continuation: the intended setter can miss, another viable voli can
+## intercept en route, and every played segment is a prefix of one unchanged
+## launch. Production remains closed because a valid authored platform launch
+## can clear the net. Deciding which opponent may play that overpass, and whether
+## their action is an attack, set or first contact, is materially different
+## volleyball semantics rather than a physics default. See
+## `docs/review/FREE_FLIGHT_INTERCEPTION.md`.
+const ENABLE_PHYSICAL_PLATFORM_DIG: bool = false
 const ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE: bool = true
 
 ## Gate E: the geometric attack. Where the other rollouts promote one *contact*,

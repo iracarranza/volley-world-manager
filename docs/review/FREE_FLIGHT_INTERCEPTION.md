@@ -1,6 +1,6 @@
 # M5 — authoritative free flight and second-contact interception
 
-Built and certified 2026-08-17 from `170b205`.
+Built in development and audited 2026-08-17 from `170b205`.
 
 ## Authority
 
@@ -48,11 +48,12 @@ override:
 | digger duplicated as second contact | 0 |
 | next-contact actor mismatches | 0 |
 | unreachable intended setter terminating flight | 0 |
-| unresolved overpasses in this population | 0 |
+| unresolved overpasses in this fixed population | 0 |
 
-The production arm's terminal outcomes are reported only as integration effects;
-none is a calibration target. The retired arm remains available so this protocol
-can validate future changes rather than becoming stale when production opens.
+The development arm's terminal outcomes are reported only as integration
+effects; none is a calibration target. The retired arm remains available so this
+protocol can validate future changes rather than becoming stale when production
+eventually opens.
 
 M4 attribute leverage remains monotone on identical ball/body/intent/draws:
 stability 20→80 raises the easy T1 ceiling 6.48→10.14 m/s and the hard ceiling
@@ -62,16 +63,27 @@ not biomechanical measurements.
 
 ## Production boundary and next blocker
 
-The physical controlled-dig path is production-authoritative after this gate.
-Reception and coverage are not implicitly promoted with it.
+The same-side interception contracts pass, but they do not certify every launch
+the authored T1--T3 model can produce. Production therefore remains closed.
+
+`tools/run_m5_overpass_census.gd` found no overpass in 1,200 ordinary rallies
+across all six rotations (244 physical digs: 234 intercepted, 10 floor
+terminals). That is population evidence, not impossibility. A contact made at
+0.62 court depth from a plausible 24.4 m/s descending attack, using the authored
+0.8 circumstance severity and the ordinary shared platform resolver, launches
+at `(-0.262, 5.502, -3.731)` m/s and clears the net at 2.493 m. No new constant
+or enum-specific band is involved.
+
+The current system names that state `crossed_net_unresolved` and stops at the
+net. Proceeding needs one materially different semantic decision: when a dig
+becomes an overpass, which opposing volis are eligible, what contact actions they
+may choose (attack, set, or first contact), and how the existing responsibility
+and attack-choice policies arbitrate them. Assigning a winner or silently
+calling it a reception would manufacture policy. Controlled-dig production,
+reception promotion and coverage promotion remain closed until this is governed.
 
 Coverage now has complete contact/body state but no governed preference for
 choosing among feasible keep-alive launches. Its missing rule is decision policy,
 not physics: there is no target height, recipient or timing anchor from which a
-minimal selection can be derived. M5 does not invent one, and no coverage launch
-is promoted until that materially different volleyball decision is authored.
-
-An overpass is also named rather than guessed: a free flight crossing the net
-above the tape reports `crossed_net_unresolved`. It did not occur in the fixed
-controlled-dig population. If a later contact family reaches it, resolving which
-opponent may play it and as what action is a separate semantic policy boundary.
+minimal selection can be derived. It is the next known policy question after the
+overpass boundary, not the current one.
