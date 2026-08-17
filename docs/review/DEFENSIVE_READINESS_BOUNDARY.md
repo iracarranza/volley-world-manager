@@ -243,14 +243,46 @@ if not bool(arrival.get("reachable", false)):
 var deciding := owners if not owners.is_empty() else reachable_evaluations
 ```
 
-| gate | fixture | result |
-|---|---|---|
-| **C** §7 anti-steal | ball on voli 1; voli 2 elite, 3.08 m away | **PASS** — lock decides, not the 0.620/0.575 score |
-| **D** §5 transfer | responsible voli stranded 13.5 m away, reach margin −10.3 to −12.4 | **PASS** at every ball time 1.40 → 0.35 s |
-| **E** §§2, 4 short ball | assigned short defender vs elite deep defender whose reach margin is **larger** (1.275 vs 0.818) | **PASS** — short defender holds it |
-| **F** §1 overlap | identical distance, only `zone.priority` differs | **PASS both ways** — 1.032 vs 0.552, flips with the field |
-| **G** §0 floor | both volis 13–14 m away, ball in 0.25 s | **PASS** — returns no claimant, caller falls back |
-| **H** §9 spacing | two bodies at 0.10 → 5.00 m | **PASS** — reports 0.077 / 0.336 / 0.931 m honestly |
+### The complete gate table
+
+Gates A and B belong in it too; the first draft listed only C–H, which left the
+two most important verdicts implicit.
+
+| gate | fixture | verdict | fails on old behaviour? |
+|---|---|---|---|
+| **A** §§11–12 stance | resting defender facing toward / across / away | **PASS at the movement model, BLOCKED at the claimant** — see below | **no — invariant** |
+| **B** §§3, 10 landing blocker | blocker airborne when the ball comes down | **REPAIRED** | **YES** — 0 of 151 → 72 of 155 |
+| **C** §7 anti-steal | ball on voli 1; voli 2 elite, 3.08 m away | **PASS** — lock decides, not the 0.620/0.575 score | no — invariant |
+| **D** §5 transfer | responsible voli stranded 13.5 m away, reach margin −10.3 to −12.4 | **PASS** at every ball time 1.40 → 0.35 s | no — invariant |
+| **E** §§2, 4 short ball | assigned short defender vs elite deep defender whose reach margin is **larger** (1.275 vs 0.818) | **PASS** — short defender holds it | no — invariant |
+| **F** §1 overlap | identical distance, only `zone.priority` differs | **PASS both ways** — 1.032 vs 0.552, flips with the field | no — invariant |
+| **G** §0 floor | both volis 13–14 m away, ball in 0.25 s | **PASS** — returns no claimant, caller falls back | no — invariant |
+| **H** §9 spacing | two bodies at 0.10 → 5.00 m | **PASS** — reports 0.077 / 0.336 / 0.931 m honestly | no — invariant |
+
+**Gate A's verdict is two-part, and that split is the whole finding.**
+
+- *At the movement model* it **passes**, and is gated in the suite by
+  `_test_movement_model_prices_facing` (three checks): facing fit reads the angle,
+  a body prepared the wrong way pays a turn cost and arrives later, and
+  preparation does not change top speed. §1's table is that gate's measurement.
+- *At the defensive claimant* it is **unrunnable**, because `evaluate_arrival`
+  takes no actor and therefore no facing. §1 layer 3 is the demonstration: four
+  balls, four directions, one answer.
+
+**Only gate B fails on old behaviour.** A–H otherwise pass identically before and
+after, and are invariant tests by the goal's own definition — the responsibility
+structure was already correct, and gate A's model-level half was already correct
+too. There is no "before" for gate A to fail against, because this pass made no
+production change to the movement model; claiming otherwise would be
+manufacturing evidence.
+
+**Per-candidate terms** — responsibility source and priority, position,
+velocity/facing, ball time, turn/startup cost, arrival and reach margin,
+recovery, obstruction/crowding, ability refinement and the final claimant with
+its reason — are printed for every fixture by
+`tools/run_defensive_claim_gates.gd`, one row per candidate, with the
+`immediate_lock` / owner count and chosen id on the summary line. The stance
+columns read as constants there, which is the boundary rather than an omission.
 
 Gate E is the one worth dwelling on: the deep defender has the **better raw reach
 margin** and still does not get the ball, because the short defender's immediate
