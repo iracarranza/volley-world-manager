@@ -283,6 +283,7 @@ func _initialize() -> void:
 	_test_set_feasibility_then_execution()
 	_test_every_swing_publishes_the_ball_it_struck()
 	_test_movement_model_prices_facing()
+	_test_landing_blocker_is_unavailable()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10073,6 +10074,84 @@ func _facing_profile(
 		"maximum_speed": float(profile.maximum_speed),
 		"seconds": float(traversal.seconds),
 	}
+
+
+
+## A blocker who has just jumped is not a standing body.
+##
+## `_note_recovery` is called at five sites, every one of them a platform
+## contact, so nothing in the engine recorded that somebody was in the air.
+## `_recovery_time_penalties` is handed to `CoverageModel.choose_claimant` for
+## the floor defence, and for a front-row blocker it was always empty: the claim
+## search offered them the ball's whole flight, starting from two feet off the
+## ground.
+##
+## Measured over 300 rallies before the repair: **0 of 151 defensive contacts**
+## happened with any body registered as unavailable. After: 72 of 155.
+##
+## Nothing was invented. `block_jump_timing` already published `hang_seconds` and
+## whether the jump went up late, and `hang_seconds` is `2*sqrt(2*leap/g)`.
+func _test_landing_blocker_is_unavailable() -> void:
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 606
+	var blocker := VolleyballPlayer.new()
+	blocker.id = 8181
+	blocker.explosiveness = 50
+	blocker.work_rate = 50
+
+	## Straight out of the published shape: a 0.60 m leap hangs
+	## 2*sqrt(2*0.60/9.81) = 0.6996 s, so a perfectly timed jump lands half a hang
+	## after contact.
+	var hang := 2.0 * sqrt(2.0 * 0.60 / 9.81)
+	simulator._note_block_airborne(
+		{8181: {"hang_seconds": hang, "timing_error_seconds": 0.0, "late": false}},
+		[blocker], 1.00,
+	)
+	var owed: Dictionary = simulator._recovery_time_penalties(1.00)
+	_check(
+		owed.has(8181) and absf(float(owed[8181]) - hang * 0.5) < 0.0005,
+		"a blocker still in the air owes the claim search the rest of their hang",
+	)
+	## And they are available again once they have landed -- an airborne debt is
+	## not a lingering penalty.
+	_check(
+		not simulator._recovery_time_penalties(1.00 + hang).has(8181),
+		"that debt expires when they land rather than persisting",
+	)
+	## A floor recovery already owed must not be shortened by jumping.
+	simulator.player_recovery[8181] = {
+		"state": "fall", "ready_at": 9.00, "delay": 0.95,
+	}
+	simulator._note_block_airborne(
+		{8181: {"hang_seconds": hang, "timing_error_seconds": 0.0, "late": false}},
+		[blocker], 1.00,
+	)
+	_check(
+		is_equal_approx(float(simulator.player_recovery[8181].ready_at), 9.00),
+		"a jump never shortens a floor recovery the blocker already owed",
+	)
+
+	## In situ: the debt reaches the claim search that reads it.
+	var digs := 0
+	var digs_with_a_body_down := 0
+	for serving_home in [false, true]:
+		for seed_value in range(90000, 90060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				for event in rally.events:
+					if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DIG:
+						continue
+					digs += 1
+					if int(event.metadata.get("recovering_count", 0)) > 0:
+						digs_with_a_body_down += 1
+			manager.free()
+	_check(
+		digs > 0 and digs_with_a_body_down > 0,
+		"the airborne debt reaches the floor-defence claim search",
+	)
 
 
 func _test_gate_twenty_two_setter_progression() -> void:

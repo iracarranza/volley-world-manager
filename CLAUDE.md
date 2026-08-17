@@ -13,10 +13,12 @@ godot --headless --path . --script res://tests/test_runner.gd
 ```
 
 Current branch baseline, verified 2026-08-16 on the defensive-readiness
-boundary: **2,109 checks pass**. Treat any test failure as a regression.
+boundary: **2,107 checks pass**. Treat any test failure as a regression.
 
-That is 2,106 plus exactly the three checks written, and that pass changed **no
-production code at all** -- it stopped at a missing physical state. See
+That is 2,106 plus seven checks written *minus six*: a landing blocker is now
+unavailable to the floor-defence claim search, so rallies resolve differently and
+several sampling gates drew fewer checks. A negative delta with checks added is
+exactly what a real behaviour change looks like. See
 `docs/review/DEFENSIVE_READINESS_BOUNDARY.md`.
 
 The pass before it moved 2,104 → 2,106: two checks written and, again, no
