@@ -298,6 +298,7 @@ func _initialize() -> void:
 	_test_compromised_bodies_survive_the_boundary()
 	_test_contact_offset_is_derived_geometry()
 	_test_platform_arrival_places_the_body_behind_contact()
+	_test_platform_attributes_retain_leverage_after_the_physical_gate()
 	_test_platform_contacts_state_an_intent()
 	_test_the_incoming_ball_reaches_no_platform_launch()
 	_test_play_validation_and_serialization()
@@ -10851,6 +10852,91 @@ func _test_platform_arrival_places_the_body_behind_contact() -> void:
 	_check(
 		beaten.is_equal_approx(start),
 		"the platform stand-off does not teleport a body that never arrived",
+	)
+
+
+## Attribute-leverage certification. The body and ball are identical between
+## tiers, and both are inside the feasible-contact gate. Skill must therefore
+## improve the contact that reality permits rather than grant permission to
+## contact a ball the body cannot reach.
+func _test_platform_attributes_retain_leverage_after_the_physical_gate() -> void:
+	var simulator: RefCounted = RALLY_SIMULATOR_SCRIPT.new()
+	var low := _orientation_voli(917)
+	var high := _orientation_voli(918)
+	for attribute in [
+		"reception", "ball_control", "composure",
+		"reception_balance", "reception_stability",
+	]:
+		low.set(attribute, 20)
+		high.set(attribute, 80)
+	var setter := _orientation_voli(919)
+	setter.tempo_control = 65
+	setter.hand_control = 65
+	setter.composure = 65
+	var start := Vector2(0.23, 0.84)
+	var contact := Vector2(0.36, 0.73)
+	var target := Vector2(0.52, 0.64)
+	var origin := Vector2(0.71, -0.04)
+	var arrival := {
+		"reach_margin_meters": 0.72,
+		"edge_ratio": 0.24,
+		"assigned_reach_meters": 2.4,
+		"distance_meters": 0.58,
+	}
+	var incoming := _incoming_flight(origin, contact, 0.78)
+	simulator.rng.seed = 77117
+	var low_pass: Dictionary = simulator._reception_pass_result(
+		low, start, contact, target, origin, 0.25, arrival, 0.50,
+		0.51, 0.98, incoming, setter,
+	)
+	simulator.rng.seed = 77117
+	var high_pass: Dictionary = simulator._reception_pass_result(
+		high, start, contact, target, origin, 0.25, arrival, 0.50,
+		0.51, 0.98, incoming, setter,
+	)
+	var low_error := COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+		Vector2(low_pass.destination), target
+	)
+	var high_error := COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+		Vector2(high_pass.destination), target
+	)
+	_check(
+		simulator._reception_skill(high) > simulator._reception_skill(low)
+			and float(high_pass.platform_feasibility)
+				> float(low_pass.platform_feasibility)
+			and high_error < low_error,
+		"platform ratings improve a feasible reception under the same draw",
+	)
+
+	## Floor defence owns a different production chain today. Exercise that
+	## actual chain instead of claiming the reception helper is already shared.
+	for attribute in ["reception", "anticipation", "dig_control", "lateral_speed"]:
+		low.set(attribute, 20)
+		high.set(attribute, 80)
+	var low_terms: Dictionary = simulator._defense_terms(low, 0.78, 0.0, 0.02, 0)
+	var high_terms: Dictionary = simulator._defense_terms(high, 0.78, 0.0, 0.02, 0)
+	simulator.rng.seed = 77118
+	var low_dig: Dictionary = simulator._dig_outcome(
+		low, float(low_terms.quality), 0.08
+	)
+	simulator.rng.seed = 77118
+	var high_dig: Dictionary = simulator._dig_outcome(
+		high, float(high_terms.quality), 0.08
+	)
+	var low_out: Dictionary = simulator._dig_pass_result(
+		low, contact, target, float(low_dig.control), arrival, "planted",
+		incoming, 0.55, setter, 1.0,
+	)
+	var high_out: Dictionary = simulator._dig_pass_result(
+		high, contact, target, float(high_dig.control), arrival, "planted",
+		incoming, 0.55, setter, 1.0,
+	)
+	_check(
+		bool(low_dig.dug) and bool(high_dig.dug)
+			and float(high_dig.control) > float(low_dig.control)
+			and float(high_out.target_error_meters)
+				< float(low_out.target_error_meters),
+		"platform ratings improve a feasible floor dig under the same draw",
 	)
 
 
