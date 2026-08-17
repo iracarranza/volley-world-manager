@@ -2856,10 +2856,25 @@ with it never written. The failures are first-tempo balls -- set flight p50 0.12
 against 0.284 s where the wall forms -- against a body displaced 1.3 m from its
 slot with 0.43 s to cover 1.0 m.
 
-The repair is two decisions and neither is taken: how to de-compound (slot anchor
-loses legitimate live displacement; first-call-only preserves it), and whether the
-pull should reach the body at all, which is a block-symmetry question this list
-already owns above.
+**De-compounded and certified.** `_form_home_block` takes an
+`applied_setter_pull` so the re-formation neither recomputes nor re-writes the
+drift the pre-release call applied. Matched population: **no wall 134 -> 42** on
+all three intents, displacement at close time 1.105 m -> 0.608 m, and terminal
+block outcomes essentially unmoved (stuff 14/12/8 -> 15/12/8) -- which is the
+figure to read if anyone suspects a balance change wearing a bug fix's clothes.
+The 92 recovered rows became `over` and `around`: a wall that exists being beaten.
+
+First-call-only was chosen over slot-anchoring to preserve live displacement, and
+measured, **the two are identical on this fixture** -- over 909 formations a
+front-row blocker's live position at first-formation time equals their rotation
+slot every time, zero counterexamples. So the preservation is real but latent, and
+the entire 1.3 m displacement was the setter pull applied twice with nothing else
+contributing.
+
+**Still open, and still #63's**: whether the pull should mutate a body at all,
+home/opponent/both/neither. The 42 remaining rows are exactly one honest
+application against a first-tempo ball -- set flight p50 0.101 s against 0.221 s
+where the wall forms.
 
 ### One defect this instrumentation introduced
 

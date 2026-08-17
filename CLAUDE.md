@@ -12,10 +12,17 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on the readiness-removal pass:
-**2,126 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on the home-wall repair:
+**2,129 checks pass**. Treat any test failure as a regression.
 
-That is 2,123 plus exactly the three checks written, and 2,123 was itself 2,117
+That is 2,126 plus exactly the three checks written -- a *repair* that moved a
+population hard (the home wall's "no wall" rows fell 134 to 42 on the matched
+block-band fixture) and still moved the count by precisely what it wrote, because
+none of the sampling gates draw on the block census. Which is the reminder worth
+keeping: a count that behaves says nothing about whether the population under it
+moved. Read the FAIL line, then read the probe.
+
+Before it, 2,123 plus exactly the three checks written, and 2,123 was itself 2,117
 plus exactly the six before it. Two consecutive passes that moved the count by
 precisely what they wrote -- which says only that neither disturbed a sampling
 population, never that either was correct. The second of them *deleted a field*

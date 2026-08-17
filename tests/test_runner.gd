@@ -291,6 +291,8 @@ func _initialize() -> void:
 	_test_ready_orientation()
 	_test_moving_orientation()
 	_test_readiness_is_body_state()
+	_test_block_setter_pull_applies_once()
+	_test_setter_release_is_a_run()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10532,6 +10534,99 @@ func _test_readiness_is_body_state() -> void:
 		float(quick.get("required_takeoff_time_seconds", 0.0))
 			< float(slow.get("required_takeoff_time_seconds", 0.0)) - 0.001,
 		"a cleaner run-up still reserves less stationary takeoff preparation",
+	)
+
+
+## One misread must not move the same body twice.
+##
+## `_form_home_block` runs twice per opponent transition -- once before the set
+## is released and once re-formed with the achieved tempo -- and it wrote its
+## setter pull into `live_positions` on both. The second call then read the
+## already-pulled position as its start and pulled again. Measured over the
+## matched block-band population that was 92 of the 134 swings on which the home
+## wall failed to form at all. See `docs/review/HOME_WALL_FORMATION.md`.
+##
+## Check 1 fails on the pre-pass resolver. Check 2 is an invariant and is
+## labelled as one.
+func _test_block_setter_pull_applies_once() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var players: Array[VolleyballPlayer] = manager.players
+	var plan: Resource = manager.defensive_plans.get(
+		lineup.rotation_number
+	) if manager.defensive_plans.has(lineup.rotation_number) else null
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	simulator.live_positions = {}
+	## `_form_home_block` is called here directly rather than through a rally, so
+	## the identity terms it reads have to be supplied the same way
+	## `simulate_rally` supplies them.
+	simulator.home_principles = manager.team.principles
+	## The opponent setter stands well off centre, so a pull toward them is a
+	## movement large enough to see rather than a rounding difference.
+	var setter_x := 0.78
+	var first: Dictionary = simulator._form_home_block(
+		players, lineup, plan, 0.30, 2, 0.72, setter_x, 0.42, 0.9, null, 0.0,
+	)
+	var after_first := {}
+	for player_id in lineup.front_row_player_ids():
+		after_first[int(player_id)] = Vector2(
+			simulator.live_positions.get(int(player_id), Vector2.ZERO)
+		)
+	var second: Dictionary = simulator._form_home_block(
+		players, lineup, plan, 0.30, 2, 0.72, setter_x, 0.42, 0.9, null, 0.0,
+		Dictionary(first.get("setter_pull", {})),
+	)
+	var moved_again := false
+	for player_id in after_first:
+		if not Vector2(
+			simulator.live_positions.get(int(player_id), Vector2.ZERO)
+		).is_equal_approx(after_first[player_id]):
+			moved_again = true
+	_check(
+		not moved_again
+			and Dictionary(second.get("setter_pull", {})) == Dictionary(
+				first.get("setter_pull", {})
+			),
+		"re-forming the wall does not pull the same blocker a second time",
+	)
+
+	## 2 -- **invariant.** The first application still happens, and still moves
+	## somebody. Without this the check above would pass just as well on a wall
+	## that had stopped drifting at all -- which is the block-symmetry question
+	## task #63 owns and is deliberately not answered here.
+	var pulled := false
+	for player_id in first.get("setter_pull", {}):
+		if float(first["setter_pull"][player_id]) > 0.0001:
+			pulled = true
+	_check(
+		pulled,
+		"the first formation still drifts a blocker toward the opposing setter",
+	)
+
+
+## A setter's release is an opened-up run, so its leg is priced as one.
+##
+## Purpose decides the movement form, never distance. The resolver had exactly
+## one setter movement classified `lateral` -- the fallback taken when the second
+## contact transferred away from the designated setter -- and what it computes is
+## still a release. **Invariant**: this guards that the two forms remain
+## distinguishable, so a future pass cannot quietly make the classification moot.
+func _test_setter_release_is_a_run() -> void:
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var start := Vector2(0.80, 0.86)
+	var setting_position := Vector2(0.56, 0.62)
+	var as_run: Dictionary = simulator._travel(
+		_orientation_voli(), start, setting_position, "transition",
+	)
+	var as_shuffle: Dictionary = simulator._travel(
+		_orientation_voli(), start, setting_position, "lateral",
+	)
+	_check(
+		float(as_run.seconds) < float(as_shuffle.seconds) - 0.001,
+		"a release run and a defensive shuffle are not the same movement",
 	)
 
 

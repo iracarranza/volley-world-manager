@@ -1,7 +1,7 @@
 # The home wall's missing quarter: one write, applied twice
 
-Run: 2026-08-17, from `cefcb04`. Instrument:
-`tools/run_home_wall_diagnosis.gd`. **Diagnosis only — no behaviour changed.**
+Run: 2026-08-17, from `cefcb04`; repaired and certified from `dc971b9`.
+Instruments: `tools/run_home_wall_diagnosis.gd`, `tools/run_block_band_probe.gd`.
 
 `docs/BACKLOG.md` recorded the figure and named the next step:
 
@@ -118,7 +118,7 @@ downstream behaviour rather than a saved ball.
 
 ---
 
-## 4. What was changed here: nothing but publication
+## 4. What the diagnosis pass changed: nothing but publication
 
 Two additions, both forwarding values that were already computed:
 
@@ -130,30 +130,91 @@ Two additions, both forwarding values that were already computed:
 - `start_x` and `slot_x` on `_blocker_close_terms`, so a close deficit can be
   attributed to displacement rather than only to time.
 
-Suite: **2,126 checks, no failures** — unchanged, which is what a
-publication-only change must do.
+Suite at that point: **2,126 checks, no failures** — unchanged, which is what a
+publication-only change must do. With the repairs and their three checks it is
+**2,129**.
 
 ---
 
-## 5. The repair is two decisions, not one
+## 5. REPAIRED — one application, and the two candidate plumbings are equivalent
 
-**The compounding is a bug under any design.** Nobody intends a drift applied
-twice because a function is called twice; the second call is a *re-formation of
-the same wall* with better information, not a second drift event. Fixing it needs
-one choice: whether the de-compounded pull anchors on the rotation slot (simple,
-idempotent, but discards legitimate live displacement such as a blocker who has
-just landed from their own swing) or is applied once by the first call only
-(preserves live displacement, needs the pull moved out of the former).
+**The compounding is a bug under any design**, so it was fixed without touching
+the symmetry question. `_form_home_block` gained a final `applied_setter_pull`
+parameter: the pre-release call computes and applies the drift, the re-formation
+is handed what was already applied and neither recomputes nor re-writes it. The
+former stays the only place the pull is expressed, the reported magnitude stays
+the one actually applied, and nothing here decides whether the pull *should*
+mutate a body at all — task #63 still owns that.
 
-**Whether the pull should reach the body at all is a symmetry question**, and it
-is one of the ones task #63 already owns. Today one wall pays for its own misread
-and the other does not, on identical arithmetic. Making the opponent pay it
-weakens their wall; making neither pay it deletes a modelled consequence of
-`tactical_discipline` and `anticipation` for blockers. Both are balance
-decisions, and defensive calibration is deferred behind the locomotion rework.
+**First-call-only was chosen over slot-anchoring to preserve live displacement.
+On this fixture the two are provably identical, and it is worth knowing why.**
+Instrumented over 909 formations across two roster seeds and both serving sides,
+the front-row blocker's live position at first-formation time equals their
+rotation slot **every time**, to six decimal places, with zero counterexamples.
+So there is no live displacement for either variant to preserve or erase yet, and
+the choice is currently a distinction without a difference. It is still the right
+one — it preserves displacement the moment any exists, such as a blocker who has
+just landed from their own swing in a longer rally — but it must not be reported
+as having preserved anything today.
 
-Neither is taken here. The diagnosis is what was asked for and the numbers above
-are what a decision should be made against.
+That also sharpens §3's attribution: **the entire 1.3 m displacement was the
+setter pull itself**, applied twice. There was nothing else moving those bodies.
+The earlier phrasing — "one honest application plus whatever else has displaced
+the body" — was wrong and is corrected here.
+
+### Certification, matched `run_block_band_probe` population
+
+| | before | after |
+|---|---:|---:|
+| **no wall** (Seal / Balanced / Funnel) | 134 / 134 / 135 | **42 / 42 / 42** |
+| over | 105 / 117 / 130 | 155 / 169 / 183 |
+| around | 75 / 73 / 70 | 119 / 113 / 105 |
+| stuff | 14 / 12 / 8 | 15 / 12 / 8 |
+| touch | 3 / 5 / 4 | 5 / 5 / 5 |
+| funnel | 40 / 32 / 24 | 32 / 27 / 23 |
+| miss | 316 / 325 / 339 | 317 / 326 / 335 |
+| contest margin p50 | −0.386 / −0.388 / −0.382 | −0.215 / −0.216 / −0.216 |
+| metres over the top p50 | +0.776 / +0.859 / +0.906 | +0.216 / +0.313 / +0.371 |
+
+Displacement at close time halved, which is the signature of one application
+rather than two: **1.105 m → 0.608 m** where the wall forms, **1.299 m → 0.812 m**
+where it does not.
+
+**Observations, not targets.** Terminal block outcomes barely moved — stuff
+14/12/8 → 15/12/8, touch 3/5/4 → 5/5/5 — which is what "no block-rate tuning"
+requires and is the number to read if anyone suspects this was a balance change
+wearing a bug fix's clothes. The 92 recovered rows per intent went to `over` and
+`around`: a wall that now exists is being beaten, rather than a ball being saved.
+`contest_margin` and `metres over the top` moved sharply because the swing now
+faces a wall at all.
+
+**42 rows remain**, and they are exactly one honest application of the pull
+against a first-tempo ball: set flight p50 0.221 s where the wall forms against
+**0.101 s** where it does not, and a body 0.81 m from its slot with 0.146 s of
+usable time. Whether that single application should happen is the deferred
+question.
+
+---
+
+## 6. Setter classification — REPAIRED
+
+Not part of the wall, but found in the same sweep and closed under the same
+ruling: **a release is a run.**
+
+`_spatial_setter_choice` — the selector both sides and the shadow systems go
+through — resolves a release as `transition` at both of its movement sites
+(`:11223`, `:11237`). Exactly one setter movement in the resolver disagreed:
+`:4123`, the fallback taken when the second contact transferred away from the
+designated setter, which computes the designated setter travelling from where
+they stand to the setting position — still a release. Now `transition`.
+
+Purpose decides the form, never distance. A setter opening up and running to the
+ball is the same movement whether or not they end up being the one who sets it.
+
+**The ruling's other half has no site.** "An established setter adjusting to a
+realized pass is `lateral`" is sound, and there is nowhere in the resolver that
+represents it — there is one setter movement, base to setting position. Recorded
+rather than given a site it does not have.
 
 ---
 

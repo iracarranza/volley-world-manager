@@ -4117,10 +4117,26 @@ func _resolve_opponent_transition(
 			opponent_setter, setter_start, opponent_setter_position,
 			opponent_second_contact.starts,
 		)
+	## **A release is a run, so this leg is `transition`.**
+	##
+	## It was `lateral`, and it was the only setter movement in the engine that
+	## was: `_spatial_setter_choice` -- the selector both sides and the shadow
+	## systems go through -- resolves a release as `transition` at both of its
+	## movement sites. This is the fallback taken when the second contact
+	## transferred away from the designated setter, and what it computes is still
+	## a *release*: the designated setter travelling from where they stand to the
+	## setting position. Purpose decides the form, not distance. A setter opening
+	## up and running to the ball is the same movement whether or not they end up
+	## being the one who sets it.
+	##
+	## The policy's other half -- an established setter *adjusting* to a realized
+	## pass is `lateral` -- has no site in the resolver today. There is one setter
+	## movement, base to setting position. Recorded rather than given a site it
+	## does not have. See `docs/review/HOME_WALL_FORMATION.md`.
 	var setter_move_time: float = float(opponent_setter_choice.travel_time) \
 		if setter_choice_matches \
 		else _movement_time(
-			opponent_setter, setter_start, opponent_setter_position, "lateral",
+			opponent_setter, setter_start, opponent_setter_position, "transition",
 			opponent_detour["corner"] if opponent_detour != null else null,
 		)
 	## The same quantity the home setter is scored on: how much of the pass
@@ -4820,6 +4836,9 @@ func _resolve_opponent_transition(
 		opponent_setter_position.x, set_flight_time,
 		opponent_second_contact_window + opponent_release_interval,
 		opponent_hitter, opponent_set_height_extra,
+		## The drift the pre-release call already applied. This is a re-formation
+		## of the same wall with better information, not a second misread.
+		Dictionary(home_block_formation.get("setter_pull", {})),
 	)
 	home_block_read_tags = [
 		"attack:%s" % str(attack_choice.get("attack_type", "Attack"))
@@ -12781,15 +12800,34 @@ func _form_home_block(
 	preset_window_seconds: float = 0.0,
 	opponent_hitter: VolleyballPlayer = null,
 	set_height_extra_meters: float = 0.0,
+	## **The drift this wall has already been given, if any.**
+	##
+	## This former runs *twice* per opponent transition -- once before the set is
+	## released and once re-formed with the achieved tempo -- and it used to
+	## write the setter pull into `live_positions` on both. The second call then
+	## read the already-pulled position as its start and pulled again from it, so
+	## one misread moved the same body twice. Measured over the matched block-band
+	## population that was 92 of the 134 swings the home wall failed to form on.
+	##
+	## Passing the first call's result in says "this drift already happened".
+	## The body keeps whatever live displacement it genuinely has, the reported
+	## magnitude stays the one that was actually applied, and nothing here decides
+	## whether the pull *should* mutate a body at all -- that is the block-symmetry
+	## question task #63 owns, and it stays open. See
+	## `docs/review/HOME_WALL_FORMATION.md`.
+	applied_setter_pull: Dictionary = {},
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
-	var setter_pull := {}
+	var re_forming := not applied_setter_pull.is_empty()
+	var setter_pull := applied_setter_pull.duplicate() if re_forming else {}
 	for player_id in lineup.front_row_player_ids():
 		var player := _player_by_id(players, player_id)
 		var assignment: Resource = defensive_plan.assignment_for(player_id) \
 			if defensive_plan != null else null
 		if player != null and (assignment == null or bool(assignment.block_participation)):
 			front_blockers.append(player)
+			if re_forming:
+				continue
 			var slot_number := lineup.slot_for_player(player.id)
 			var start: Vector2 = live_positions.get(
 				player.id, CourtConstants.slot_position(slot_number)
