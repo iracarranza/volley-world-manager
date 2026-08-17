@@ -384,7 +384,6 @@ static func _evaluate_candidate(
 		"resolved_contact_time": contact_time,
 		"true_arrival_balance": true_opportunity.arrival_balance,
 		"true_physical_feasibility": true_opportunity.physical_feasibility,
-		"final_readiness": actor.readiness,
 		"final_balance": actor.balance,
 		"moments": moments,
 		"windows": window_dicts,

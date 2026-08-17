@@ -13077,9 +13077,15 @@ func _blocker_close_terms(
 	## Blocking closes through the shared locomotion model like every other
 	## movement in the engine. It used to carry its own `lerpf(1.25, 4.40,
 	## lateral_speed)` -- a fourth private copy of the speed curve -- so none of
-	## the stride, cadence or limb-turnover work reached blocking at all. Side is
-	## irrelevant here: `movement_profile()` reads the player, facing and
-	## velocity, never which half of the court they stand on.
+	## the stride, cadence or limb-turnover work reached blocking at all.
+	##
+	## `&"home"` for an opponent blocker too, and that is now a claim rather than
+	## an oversight: `create()` derives the ready facing from the side, so the two
+	## sides are set at `(0, -1)` and `(0, +1)`. A close runs *along* the net, so
+	## the route is +/-x and the dot product with either facing is zero --
+	## `facing_fit` is 0.5 for both sides and the turn cost is identical. It stops
+	## being irrelevant the moment a close is given any component toward the net,
+	## which is why it is written down here instead of left to be rediscovered.
 	var closing_actor := RallyPlayerState.create(
 		blocker, &"home", slot_number, start_position
 	)

@@ -12,10 +12,18 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the ready-orientation pass:
-**2,117 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on the readiness-removal pass:
+**2,126 checks pass**. Treat any test failure as a regression.
 
-That is 2,111 plus five checks written plus one: defenders now pay a turn cost
+That is 2,123 plus exactly the three checks written, and 2,123 was itself 2,117
+plus exactly the six before it. Two consecutive passes that moved the count by
+precisely what they wrote -- which says only that neither disturbed a sampling
+population, never that either was correct. The second of them *deleted a field*
+and the outcome mix over 600 rallies came back byte-identical, which is what an
+exactly-folded constant has to look like. See `docs/review/MOVING_ORIENTATION.md`
+and `docs/review/READINESS_REMOVAL.md`.
+
+Before them, 2,111 plus five checks written plus one: defenders now pay a turn cost
 when the ball is behind them, so rallies resolve differently and a sampling gate
 drew one more. See `docs/review/READY_ORIENTATION.md`.
 

@@ -7066,7 +7066,7 @@ itself, which no default produces.
 
 ---
 
-## What is a defender oriented toward while they wait?
+## ~~What is a defender oriented toward while they wait?~~ CLOSED, twice over
 
 `docs/review/DEFENSIVE_READINESS_BOUNDARY.md` stopped the defensive-responsibility
 pass at its first question, and this is the sentence that unblocks it.
@@ -7105,3 +7105,60 @@ would propagate a value that never varies, and the whole defensive-responsibilit
 policy -- feasibility gate, immediate-possession precedence, short-ball
 ownership, fallback ordering -- sits downstream of it. The policy itself is
 written and agreed; only this input is missing.
+
+**Closed in two passes.** `f93a78b` gave a resting body a side-relative
+preparation and wired it into the claimant, replacing the identical 1.0840 m
+above with 1.2665 front / 1.0004 sides / 0.7344 behind. The follow-up
+(`docs/review/MOVING_ORIENTATION.md`) made it survive movement: the movement
+**form** decides, so IDLE, LATERAL, BLOCK_CLOSE and RECOVERY preserve
+orientation and only APPROACH and TRANSITION establish it from the route. Of the
+three candidate rules above, **option 3 was taken and sharpened** -- and the
+"arbitrary constant" objection to it dissolved when the constant turned out to
+be side-relative and toward the net, which is a real preparation rather than an
+arbitrary one. Options 1 and 2 were both rejected as orienting a body toward
+information it has not yet been tested against.
+
+`readiness` is closed too, by deletion: `docs/review/READINESS_REMOVAL.md`. It
+was never written anywhere, so its two envelope consumers were a folded constant
+and an identity, and a threshold at 0.45 sat on a distribution that was a single
+point at 1.0.
+
+## Carry a rally actor between legs, so a moved body's orientation reaches the resolver
+
+Orientation now evolves honestly everywhere an actor is carried -- through
+`project_toward`, the four live integrators and the opportunity system. The
+legacy resolver is the one consumer that still cannot see it:
+`_ready_facings` hands the defensive claim a **stationary** side-relative facing
+for every defender, because there is no persistent actor to read a moved one
+from. `RallyPlayerState.create` appears exactly twice in `rally_simulator.gd`,
+both constructing a fresh actor for a single leg.
+
+That is why the moving-orientation pass left the outcome mix over 600 rallies
+byte-identical. The repair is real in the model and invisible in a match, and
+it will stay invisible until an actor survives from one leg to the next.
+
+The same missing structure is what makes `ContactEnvelopeSystem`'s new AIRBORNE
+takeoff exclusion currently unreachable, and it is what a future readiness
+relation would need before it could be measured at all. One piece of plumbing,
+three consequences.
+
+## Two relations the defensive form comparison needs, and nobody has measured
+
+`docs/review/MOVING_ORIENTATION.md` §4 stopped the *retain facing + LATERAL* vs
+*turn/open + TRANSITION* comparison on two independent grounds. Both are
+missing relations rather than missing wiring:
+
+1. **What a hip turn costs.** `LocomotionModel.direction_change_seconds`
+   normalises each mode against its own reference cadence, so the mode cancels:
+   the largest LATERAL-vs-TRANSITION difference across every facing fit is
+   0.000024 s. The engine prices changing *direction* and does not price
+   changing *form*.
+2. **A defender's per-form top speed.** `ENABLE_UNIFIED_SPEED_MODEL` is false,
+   so `evaluate_arrival` runs on one legacy ceiling with no mode in it.
+   Switching it moves every defensive arrival by up to 39% before any form is
+   compared.
+
+Worth knowing before either is attempted: inside a normal defensive window
+(~0.53 s) neither form reaches its own ceiling, so the comparison is worth
+almost nothing for the balls a defender actually plays and only pays on long
+pursuits.

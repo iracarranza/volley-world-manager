@@ -41,6 +41,12 @@ static func apply(
 	var velocity := Vector2(repeated.get(
 		"projected_velocity_mps", Vector2.ZERO
 	))
+	## Ready footwork, and it stays ready footwork even when it travels backward:
+	## `RallyOpportunitySystem` resolved every step of this pursuit in LATERAL, so
+	## the arrival is classified the way the movement that produced it was. The
+	## receiver keeps the orientation they were set in rather than acquiring the
+	## direction of their own last shuffle.
+	receiver.movement_mode = RallyPlayerState.MovementMode.LATERAL
 	receiver.apply_position(center_position, velocity)
 	var action := str(contact.get("action", "emergency_keep_alive"))
 	receiver.body_state = RallyPlayerState.BodyState.DIVING \

@@ -28,7 +28,6 @@ static func classify(candidate: Dictionary) -> Dictionary:
 		"required_takeoff_time_seconds", 0.0
 	))
 	var available_time := float(candidate.get("final_available_time_seconds", 0.0))
-	var readiness := float(candidate.get("final_readiness", 1.0))
 	var balance := float(candidate.get("final_balance", 1.0))
 	var first_delay := float(candidate.get("first_decision_delay_seconds", 0.0))
 	var time_after_read := float(candidate.get(
@@ -45,7 +44,11 @@ static func classify(candidate: Dictionary) -> Dictionary:
 	elif contact_height > standing_reach + 0.001 \
 			and required_takeoff > available_time + 0.001:
 		causes.append("takeoff_timing")
-	if readiness < 0.45 or balance < 0.38:
+	## `readiness` was the other half of this test and could never fire: the
+	## field it came from was never written, so `final_readiness` arrived as 1.0
+	## on every candidate the engine has ever classified. Balance is the whole of
+	## this cause today and was already the whole of it in practice.
+	if balance < 0.38:
 		causes.append("body_state")
 	if first_delay >= 0.22 and first_delay > time_after_read * 0.42:
 		causes.append("recognition_delay")
@@ -87,7 +90,6 @@ static func classify(candidate: Dictionary) -> Dictionary:
 			"standing_reach_meters": standing_reach,
 			"vertical_margin_meters": vertical_margin,
 			"required_takeoff_time_seconds": required_takeoff,
-			"readiness": readiness,
 			"balance": balance,
 		},
 	}

@@ -90,6 +90,13 @@ static func evaluate_reception_timeline(
 			var target := Vector2(sample.get(
 				"perceived_destination", actor.position
 			))
+			## Ready footwork, stated before the step rather than by the
+			## `set_intent` below it. The first perception moment would otherwise
+			## apply movement while the actor still carried the state builder's
+			## IDLE, and a defender pursuing a ball behind them must stay square
+			## because of what this movement *is*, not because of which default
+			## happened to be in the field.
+			actor.movement_mode = RallyPlayerState.MovementMode.LATERAL
 			actor.apply_position(
 				Vector2(sample.get("projected_position", actor.position)),
 				Vector2(sample.get("projected_velocity_mps", actor.velocity)),

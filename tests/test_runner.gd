@@ -289,6 +289,8 @@ func _initialize() -> void:
 	_test_landing_blocker_is_unavailable()
 	_test_defensive_claim_precedence()
 	_test_ready_orientation()
+	_test_moving_orientation()
+	_test_readiness_is_body_state()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10349,6 +10351,187 @@ func _test_ready_orientation() -> void:
 			),
 		),
 		"an untracked facing charges nothing and stays direction-blind",
+	)
+
+
+## The pass after it: does that orientation survive the body *moving*?
+##
+## `apply_position` used to assign `facing = velocity` for every movement alike,
+## which says a backpedalling defender faces away from the net and a shuffling
+## blocker faces down the net rather than across it. The movement **form** now
+## decides: IDLE, LATERAL, BLOCK_CLOSE and RECOVERY preserve; APPROACH and
+## TRANSITION establish the route. No angle, distance or turn-rate constant was
+## added -- the mode enum already describes the physical movement.
+##
+## Checks 1, 2, 4 and 5 fail on the pre-pass resolver; check 3 passes on both and
+## is labelled an invariant. See `docs/review/MOVING_ORIENTATION.md`.
+func _test_moving_orientation() -> void:
+	## 1 -- ready footwork keeps its preparation, travelling backward or sideways.
+	var net_ward := RallyPlayerState.side_relative_ready_facing(&"home")
+	var backpedal := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	backpedal.movement_mode = RallyPlayerState.MovementMode.LATERAL
+	backpedal.apply_position(Vector2(0.50, 0.85), Vector2(0.0, 1.5))
+	_check(
+		backpedal.facing.is_equal_approx(net_ward)
+			and backpedal.facing.dot(Vector2(0.0, 1.0)) < 0.0,
+		"a backpedalling defender travels backward and stays square to the net",
+	)
+
+	## 2 -- a block close runs along the net without turning down it.
+	var closing := RallyPlayerState.create(
+		_orientation_voli(), &"home", 3, Vector2(0.34, 0.52)
+	)
+	closing.movement_mode = RallyPlayerState.MovementMode.BLOCK_CLOSE
+	closing.apply_position(Vector2(0.62, 0.52), Vector2(3.1, 0.0))
+	_check(
+		closing.facing.is_equal_approx(net_ward),
+		"a closing blocker stays square to the net rather than facing along it",
+	)
+
+	## 3 -- and the two opened-up forms still take the route. **Invariant**: the
+	## old universal rule also produced this, so it cannot fail on the old
+	## resolver. It guards the other direction -- that the repair did not simply
+	## freeze facing everywhere.
+	var run := Vector2(0.55, -0.84).normalized() * 3.6
+	for mode in [
+		RallyPlayerState.MovementMode.APPROACH,
+		RallyPlayerState.MovementMode.TRANSITION,
+	]:
+		var runner := RallyPlayerState.create(
+			_orientation_voli(), &"home", 2, Vector2(0.50, 0.80)
+		)
+		runner.movement_mode = mode
+		runner.apply_position(Vector2(0.56, 0.62), run)
+		_check(
+			runner.facing.is_equal_approx(run.normalized()),
+			"%s establishes orientation from its own committed route"
+				% RallyPlayerState.MovementMode.keys()[mode],
+		)
+
+	## 4 -- a projected leg is classified by the leg being applied, not by the
+	## one the body had just finished. `project_toward` set the mode *after* the
+	## position, so an approach projected from a shuffling body was classified as
+	## a shuffle.
+	var shuffling := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	shuffling.movement_mode = RallyPlayerState.MovementMode.LATERAL
+	var lateral_leg: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT.project_toward(
+		shuffling, Vector2(0.66, 0.88), 0.9,
+		RallyPlayerState.MovementMode.LATERAL, true,
+	)
+	var shuffled := lateral_leg.get("actor") as RallyPlayerState
+	var run_leg: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT.project_toward(
+		shuffling, Vector2(0.66, 0.40), 0.9,
+		RallyPlayerState.MovementMode.TRANSITION, true,
+	)
+	var ran := run_leg.get("actor") as RallyPlayerState
+	_check(
+		shuffled.facing.is_equal_approx(net_ward)
+			and not ran.facing.is_equal_approx(net_ward)
+			and ran.movement_mode == RallyPlayerState.MovementMode.TRANSITION,
+		"a projected leg adopts its route only when its own form justifies it",
+	)
+
+	## 5 -- and the consequence: what a defender did beforehand changes what the
+	## next equal ball costs them. Three histories, three answers. On the old
+	## rule every history faced its own velocity, so the shuffle and the run in
+	## the same direction were indistinguishable and only two answers existed.
+	var zone: Resource = DEFENSIVE_ZONE_SCRIPT.new()
+	zone.player_id = 901
+	zone.zone_type = DEFENSIVE_ZONE_SCRIPT.ZoneType.FLOOR_DEFENSE
+	zone.center = Vector2(0.50, 0.80)
+	zone.radius_meters = 3.2
+	zone.enabled = true
+	var sideways_ball := Vector2(0.50 + 1.2 / 9.0, 0.80)
+	var margins: Array[float] = []
+	for entry in [
+		[RallyPlayerState.MovementMode.LATERAL, Vector2(1.4, 0.0)],
+		[RallyPlayerState.MovementMode.TRANSITION, Vector2(3.2, 0.0)],
+		[RallyPlayerState.MovementMode.TRANSITION, Vector2(-3.2, 0.0)],
+	]:
+		var actor := RallyPlayerState.create(
+			_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+		)
+		actor.movement_mode = entry[0]
+		actor.apply_position(Vector2(0.50, 0.80), Vector2(entry[1]))
+		var arrival: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+			_orientation_voli(), zone, sideways_ball, 1.10, "dig_control",
+			Vector2(0.50, 0.80), -1.0, actor.facing,
+		)
+		margins.append(float(arrival.get("reach_margin_meters", 0.0)))
+	_check(
+		margins[1] > margins[0] + 0.001 and margins[0] > margins[2] + 0.001,
+		"prior movement leaves a defender genuinely better or worse prepared",
+	)
+
+
+## `readiness` was removed, not given semantics.
+##
+## The field was declared 1.0 and written by nothing, so its two envelope
+## consumers were a folded constant and an identity, and its classifier
+## threshold at 0.45 acted on a distribution that was a single point at 1.0.
+## Every input a preload scalar could have derived from already reaches the two
+## consequences it was permitted to touch. See
+## `docs/review/READINESS_REMOVAL.md`.
+##
+## Checks 1 and 2 fail on the pre-pass engine; check 3 is an invariant and is
+## labelled as one.
+func _test_readiness_is_body_state() -> void:
+	var voli := _orientation_voli()
+	voli.set("explosiveness", 50)
+	voli.set("approach_timing", 50)
+	voli.set("set_balance", 50)
+
+	## 1 -- a body already off the floor cannot take off again. The gate named
+	## DIVING and RECOVERING and omitted AIRBORNE, while the posture table ten
+	## lines below already treated an airborne body as compromised.
+	var heights := {}
+	for state_name in ["BALANCED", "AIRBORNE", "DIVING", "RECOVERING"]:
+		var actor := RallyPlayerState.create(voli, &"home", 1, Vector2(0.50, 0.60))
+		actor.body_state = RallyPlayerState.BodyState[state_name]
+		var envelope: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+			actor, &"attack", 3.10, 1.20, true,
+		)
+		heights[state_name] = float(envelope.get(
+			"maximum_contact_height_meters", 0.0
+		)) - float(envelope.get("standing_reach_meters", 0.0))
+	_check(
+		heights["BALANCED"] > 0.001
+			and is_zero_approx(heights["AIRBORNE"])
+			and is_zero_approx(heights["DIVING"])
+			and is_zero_approx(heights["RECOVERING"]),
+		"a body off the floor or on it cannot take off for a second contact",
+	)
+
+	## 2 -- and the scalar itself is gone rather than pinned. `get` on a missing
+	## property returns null, so this is a real absence check.
+	var actor := RallyPlayerState.create(voli, &"home", 1, Vector2(0.50, 0.60))
+	_check(
+		actor.get("readiness") == null,
+		"no free-running readiness meter survives beside the body state",
+	)
+
+	## 3 -- **invariant.** Takeoff preparation is bought by explosiveness and by
+	## the run-up, and by nothing else. Both were already true before the
+	## removal; this guards against a future pass reintroducing a third factor
+	## spending the same preparation a second time.
+	var slow := CONTACT_ENVELOPE_SCRIPT.evaluate(
+		RallyPlayerState.create(
+			_orientation_voli(), &"home", 1, Vector2(0.50, 0.60)
+		), &"attack", 3.10, 1.20, true, {"runup_quality": 0.0},
+	)
+	var quick := CONTACT_ENVELOPE_SCRIPT.evaluate(
+		RallyPlayerState.create(
+			_orientation_voli(), &"home", 1, Vector2(0.50, 0.60)
+		), &"attack", 3.10, 1.20, true, {"runup_quality": 1.0},
+	)
+	_check(
+		float(quick.get("required_takeoff_time_seconds", 0.0))
+			< float(slow.get("required_takeoff_time_seconds", 0.0)) - 0.001,
+		"a cleaner run-up still reserves less stationary takeoff preparation",
 	)
 
 

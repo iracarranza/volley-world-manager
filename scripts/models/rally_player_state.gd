@@ -43,7 +43,14 @@ var facing: Vector2 = Vector2(0.0, -1.0)
 var movement_mode: MovementMode = MovementMode.IDLE
 var body_state: BodyState = BodyState.BALANCED
 var balance: float = 1.0
-var readiness: float = 1.0
+## `readiness` used to sit here, declared 1.0 and never written by anything.
+##
+## It was removed rather than given semantics. Every input a preload scalar
+## could have been derived from already reaches the two consequences it was
+## permitted to touch: DIVING, RECOVERING and AIRBORNE gate takeoff directly in
+## `ContactEnvelopeSystem`, `balance` and `body_state` drive horizontal reach
+## there, and the run-up's own quality drives both takeoff time and jump height.
+## See `docs/review/READINESS_REMOVAL.md`.
 
 var intent: StringName = &"idle"
 var intent_target: Vector2 = Vector2.ZERO
@@ -106,13 +113,38 @@ func set_intent(
 	movement_mode = mode
 
 
+## Which movement forms physically establish where the body is set.
+##
+## **The form decides, not the angle.** A shuffle, a block close and a standing
+## body keep the orientation they already had -- that is what ready footwork
+## *is*, and it is precisely why a defender may travel sideways or backward
+## while staying square to the net. An approach and a transition run are opened
+## up: the torso turns and the legs run, so the route *is* the orientation.
+## Recovery invents nothing; it keeps the last orientation some real movement or
+## action established.
+##
+## This replaces `facing = velocity` applied to every mode alike, which claimed a
+## backpedalling defender was facing away from the net and a shuffling blocker
+## was facing down the net rather than across it. See
+## `docs/review/MOVING_ORIENTATION.md`.
+func movement_establishes_facing() -> bool:
+	return movement_mode in [
+		MovementMode.APPROACH, MovementMode.TRANSITION,
+	]
+
+
 func apply_position(new_position: Vector2, new_velocity: Vector2) -> void:
 	position = Vector2(
 		clampf(new_position.x, 0.0, 1.0),
 		clampf(new_position.y, 0.0, 1.0),
 	)
 	velocity = new_velocity
-	if velocity.length_squared() > 0.0001:
+	## A caller that means "this body opened up and ran" says so by being in the
+	## mode that describes that movement. It must be in that mode *before* the
+	## position is applied, because this is the leg being applied, not the next
+	## one; `RallyMovementSystem.project_toward` used to set it afterwards and
+	## therefore classified every projection by the mode of the previous leg.
+	if movement_establishes_facing() and velocity.length_squared() > 0.0001:
 		facing = velocity.normalized()
 
 
@@ -123,7 +155,6 @@ func snapshot() -> RallyPlayerState:
 	copy.movement_mode = movement_mode
 	copy.body_state = body_state
 	copy.balance = balance
-	copy.readiness = readiness
 	copy.intent = intent
 	copy.intent_target = intent_target
 	copy.committed_until = committed_until

@@ -324,11 +324,16 @@ static func project_toward(
 	var arrival_velocity := direction * ending_speed
 	if reached_target and not carry_through:
 		arrival_velocity = Vector2.ZERO
+	## The mode is set *before* the position, because it describes the leg being
+	## applied. `apply_position` now asks it whether this movement establishes an
+	## orientation, and setting it afterwards handed that question the mode of
+	## whatever leg the actor had finished previously -- so an approach projected
+	## from a body that had been shuffling was classified as a shuffle.
+	projected.movement_mode = mode
 	projected.apply_position(
 		target if reached_target else actor.position + court_delta,
 		arrival_velocity,
 	)
-	projected.movement_mode = mode
 	projected.intent = &"receive"
 	projected.intent_target = target
 	return {
