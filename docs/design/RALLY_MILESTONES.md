@@ -25,8 +25,8 @@ The governing fidelity milestone remains the one in
 |---|---|---|---|
 | **M0 — authoritative rally skeleton** | **DONE** | One causal rally chain: serve → receive → set → approach → attack → block → defence → dig → same set loop. No parallel transition architecture or hidden replacement ball. | Review chain in `docs/review/`; especially [`FORWARD_WALK_ATTACK_CHAIN.md`](../review/FORWARD_WALK_ATTACK_CHAIN.md) |
 | **M1 — responsibility and defensive ownership** | **DONE** | Feasibility gates ownership; immediate possession, short/zone responsibility, transfer and fallback ordering are explicit; landing blockers carry real recovery debt. | `docs/review/DEFENSIVE_READINESS_BOUNDARY.md` and later readiness reviews |
-| **M2 — physical preparation state** | **IN PROGRESS** | Facing/readiness describe real body preparation. Stationary orientation is side-relative and reaches defensive arrival; moving orientation and the separate meaning of `readiness` must close without arbitrary thresholds or double-spending state. | [`READY_ORIENTATION.md`](../review/READY_ORIENTATION.md), `RallyPlayerState`, `LocomotionModel`, `ContactEnvelopeSystem` |
-| **M3 — body centre vs contact geometry** | **NEXT** | A voli's body location is distinct from the point where hands/platform contact the ball. Reach, wingspan, body type and net encroachment use one physical geometry instead of placing the sternum on the ball. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md), platform-offset measurement history, [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md) |
+| **M2 — physical preparation state** | **DONE, with one relation deferred** | Facing describes real body preparation and evolves by movement **form** — IDLE/LATERAL/BLOCK_CLOSE/RECOVERY preserve, APPROACH/TRANSITION establish the route — with no angle, distance or turn-rate constant anywhere. `readiness` was **removed**: nothing wrote it, so its two envelope consumers were a folded constant and an identity. Deferred and named rather than fudged: the defensive form comparison (§8) needs two unmeasured relations — what a hip turn costs, and a per-form top speed — and belongs to the locomotion rework. | [`READY_ORIENTATION.md`](../review/READY_ORIENTATION.md), [`MOVING_ORIENTATION.md`](../review/MOVING_ORIENTATION.md), [`READINESS_REMOVAL.md`](../review/READINESS_REMOVAL.md) |
+| **M3 — body centre vs contact geometry** | **NEXT**, behind one piece of plumbing | A voli's body location is distinct from the point where hands/platform contact the ball. Reach, wingspan, body type and net encroachment use one physical geometry instead of placing the sternum on the ball. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md), platform-offset measurement history, [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md) |
 | **M4 — physical platform contact** | **DESIGNED** | Reception, controlled dig, emergency dig and attack coverage produce an outgoing ball from incoming ball + body/contact state + intent/selection + execution, not from event-specific apex bands. | [`PLATFORM_CONTACT.md`](PLATFORM_CONTACT.md) |
 | **M5 — free-flight and interception authority** | **PLANNED** | Outgoing launch exists independently of who later intercepts it. Intended recipient ≠ physical endpoint; free flight ≠ realized segment; shanks may be intercepted en route; gameplay physics no longer depends on presentation reconstruction. | [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md), `OUTSTANDING.md` second-contact/shank section |
 | **M6 — all-contact consistency audit** | **PLANNED** | Serve, set, attack, block and platform families obey one ownership rubric: incoming ball → physical feasibility → intent/selection where applicable → execution → one authoritative outgoing ball. Reopen a certified family only on controlled proof of an authority break. | [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md), review ledgers |
@@ -34,6 +34,30 @@ The governing fidelity milestone remains the one in
 | **M8 — canonical side-out certification** | **PLANNED** | On neutral hand-authored rosters and without debug captions, an ordinary medium-float side-out is visibly convincing from serve receive through transition. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md) §§2–4 |
 | **M9 — tactical A/B certification** | **PLANNED** | Manager instructions create the predicted visible volleyball differences through voli interpretation and physical feasibility, not merely hidden coefficient movement. | `TACTICS_AND_TRAINING.md`, platform-contact tactical audit |
 | **M10 — presentation and legibility cleanup** | **PLANNED** | Presentation reports the certified simulation cleanly: cogniticons coalesce and persist semantically, waiting belongs to pre-serve, ready state is visibly legible, and remaining block/contact poses expose real intent/state without inventing simulation facts. | `OUTSTANDING.md`, `READABLE_BODIES.md`, presentation review docs |
+
+## The plumbing M3 is behind
+
+Two correctness repairs are certified and **latent**, and both wait on the same
+missing structure: `ContactEnvelopeSystem`'s AIRBORNE takeoff exclusion
+(`READINESS_REMOVAL.md` §3) and the immediate-control lock's usable-time
+requirement (`SHORT_BALL_RESPONSIBILITY.md` §4). Each is correct, each fires in a
+deliberately constructed fixture, and neither changes a live rally.
+
+Located precisely, and it is smaller than "carry an actor between legs":
+`rally_simulator.gd` never calls `ContactEnvelopeSystem` at all — the envelope is
+reached only from the shadow systems, which read `RallyState` actors. The
+resolver **rebuilds a fresh `RallyState` per phase** and seeds it from
+`live_positions` and `live_velocities` only. `player_recovery` already carries a
+per-rally `"state"` field, and `_note_block_airborne` already writes `"airborne"`
+into it — so the compromised state survives the leg and simply is not read back
+into the actor the envelope sees.
+
+Minimum continuity is therefore: seed each freshly built phase state's actors
+from the recovery state already carried. Plumbing only; no new policy, no new
+value. Facing rides along but is expected **inert** while §8 is blocked — every
+defensive leg is LATERAL and LATERAL preserves, measured at 2 of 796 defensive
+contacts made by a body that had run — so its inertness is not a failure and
+must not be reported as a consequence.
 
 ## Platform-contact sub-milestones
 
