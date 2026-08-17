@@ -26,7 +26,7 @@ The governing fidelity milestone remains the one in
 | **M0 — authoritative rally skeleton** | **DONE** | One causal rally chain: serve → receive → set → approach → attack → block → defence → dig → same set loop. No parallel transition architecture or hidden replacement ball. | Review chain in `docs/review/`; especially [`FORWARD_WALK_ATTACK_CHAIN.md`](../review/FORWARD_WALK_ATTACK_CHAIN.md) |
 | **M1 — responsibility and defensive ownership** | **DONE** | Feasibility gates ownership; immediate possession, short/zone responsibility, transfer and fallback ordering are explicit; landing blockers carry real recovery debt. | `docs/review/DEFENSIVE_READINESS_BOUNDARY.md` and later readiness reviews |
 | **M2 — physical preparation state** | **DONE, with one relation deferred** | Facing describes real body preparation and evolves by movement **form** — IDLE/LATERAL/BLOCK_CLOSE/RECOVERY preserve, APPROACH/TRANSITION establish the route — with no angle, distance or turn-rate constant anywhere. `readiness` was **removed**: nothing wrote it, so its two envelope consumers were a folded constant and an identity. Deferred and named rather than fudged: the defensive form comparison (§8) needs two unmeasured relations — what a hip turn costs, and a per-form top speed — and belongs to the locomotion rework. | [`READY_ORIENTATION.md`](../review/READY_ORIENTATION.md), [`MOVING_ORIENTATION.md`](../review/MOVING_ORIENTATION.md), [`READINESS_REMOVAL.md`](../review/READINESS_REMOVAL.md) |
-| **M3 — body centre vs contact geometry** | **SCOPED, blocked on one relation** | A voli's body location is distinct from the point where hands/platform contact the ball. Reach, wingspan, body type and net encroachment use one physical geometry instead of placing the sternum on the ball. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md), platform-offset measurement history, [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md) |
+| **M3 — body centre vs contact geometry** | **RELATION DERIVED, promotion pending** | A voli's body location is distinct from the point where hands/platform contact the ball. Reach, wingspan, body type and net encroachment use one physical geometry instead of placing the sternum on the ball. | [`VOLLEYBALL_FIDELITY.md`](VOLLEYBALL_FIDELITY.md), platform-offset measurement history, [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md) |
 | **M4 — physical platform contact** | **DESIGNED** | Reception, controlled dig, emergency dig and attack coverage produce an outgoing ball from incoming ball + body/contact state + intent/selection + execution, not from event-specific apex bands. | [`PLATFORM_CONTACT.md`](PLATFORM_CONTACT.md) |
 | **M5 — free-flight and interception authority** | **PLANNED** | Outgoing launch exists independently of who later intercepts it. Intended recipient ≠ physical endpoint; free flight ≠ realized segment; shanks may be intercepted en route; gameplay physics no longer depends on presentation reconstruction. | [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md), `OUTSTANDING.md` second-contact/shank section |
 | **M6 — all-contact consistency audit** | **PLANNED** | Serve, set, attack, block and platform families obey one ownership rubric: incoming ball → physical feasibility → intent/selection where applicable → execution → one authoritative outgoing ball. Reopen a certified family only on controlled proof of an authority break. | [`CONTACT_AND_BALL_FLIGHT.md`](CONTACT_AND_BALL_FLIGHT.md), review ledgers |
@@ -58,6 +58,41 @@ value. Facing rides along but is expected **inert** while §8 is blocked — eve
 defensive leg is LATERAL and LATERAL preserves, measured at 2 of 796 defensive
 contacts made by a body that had run — so its inertness is not a failure and
 must not be reported as a consequence.
+
+**Built and certified: [`ACTOR_CONTINUITY.md`](../review/ACTOR_CONTINUITY.md).**
+Gates C1–C6 pass, including that one actor exists per player per phase and that
+the carried state reaches the envelope. It fires 46 times in 300 rallies (42 of
+them landing blockers) and changes no outcome, because `recovery_until` was
+already excluding those bodies upstream — the clock was right and the body was
+not.
+
+## M3: the relation was already in the repository
+
+Measured and derived: [`BODY_CENTRE_SCOPE.md`](../review/BODY_CENTRE_SCOPE.md).
+The gap is one line — `_reached_point` returns the ball's landing point as the
+body's position, five of five trips at 0.0000 m — and both reach models already
+carry build.
+
+What was missing was the **shoulder anchor**, and `BodyTypeModels.UNIVERSAL_RATIOS`
+already carries it: `shoulder_y` 0.815, authored once as the shared figure every
+body type is a pull away from, with its basis recorded in its own comment. Arm
+length is then `standing_reach − shoulder`, which carries each voli's own
+wingspan, and the offset is Pythagoras from the contact height every family
+already has.
+
+The cross-check is what validates it: the shared figure's own arm length and the
+derived one agree to **5 mm** at the median — two independently authored parts of
+the repository describing one skeleton and agreeing about it.
+
+`VolleyballPlayer.contact_offset_meters` gives 0.449 m at the thigh, 0.642 m at
+the waist, 0.786 m at the chest, and zero above the shoulder and at the floor,
+both boundaries geometric rather than authored. **Nothing is authored in it.**
+
+Still open, and plumbing rather than policy: it is consumed by nothing. Promoting
+it means `_reached_point` standing the body off instead of returning `target`,
+which needs the contact height plumbed to each defensive site and a certified
+before/after — moving every defensive body by half a metre deserves its own
+measurement rather than riding along with the derivation.
 
 ## Platform-contact sub-milestones
 

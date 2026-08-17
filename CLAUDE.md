@@ -12,10 +12,11 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on the actor-continuity pass:
-**2,133 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-17 on the M3 contact-geometry pass:
+**2,136 checks pass**. Treat any test failure as a regression.
 
-That is 2,131 plus exactly the two checks written. Three consecutive passes have
+That is 2,133 plus exactly the three checks written, and 2,133 was 2,131 plus
+two. Four consecutive passes have
 now moved the count by precisely what they wrote while moving populations by
 wildly different amounts -- one halved the home wall's failure rows, two changed
 no outcome at all -- so the count is measuring test authorship and nothing else.
