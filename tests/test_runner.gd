@@ -61,6 +61,7 @@ const LIGHT_UI_THEME := preload("res://scenes/themes/light_theme.tres")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
 const RALLY_MOMENT_SCRIPT := preload("res://scripts/models/rally_moment.gd")
+const BODY_TYPE_MODELS_SCRIPT := preload("res://scripts/data/body_type_models.gd")
 const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_state_builder.gd")
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
@@ -295,6 +296,7 @@ func _initialize() -> void:
 	_test_setter_release_is_a_run()
 	_test_immediate_control_needs_a_usable_body()
 	_test_compromised_bodies_survive_the_boundary()
+	_test_contact_offset_is_derived_geometry()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10749,6 +10751,55 @@ func _test_compromised_bodies_survive_the_boundary() -> void:
 	_check(
 		is_zero_approx(airborne_jump) and clean_jump > 0.001,
 		"and the carried state reaches the envelope that refuses a second takeoff",
+	)
+
+
+## M3's missing relation, derived rather than authored.
+##
+## The arm is a segment of known length anchored at a known shoulder; a ball met
+## at a known height fixes the angle; the horizontal offset is Pythagoras. Every
+## term already existed: `BodyTypeModels.UNIVERSAL_RATIOS.shoulder_y` is the
+## shared figure the whole roster is drawn from, and `standing_reach_cm()`
+## carries this voli's own wingspan. See `docs/review/BODY_CENTRE_SCOPE.md`.
+func _test_contact_offset_is_derived_geometry() -> void:
+	var voli := _orientation_voli()
+	voli.height_cm = 192.0
+	voli.wingspan_cm = 204.0
+
+	## 1 -- the two independent routes to arm length agree. This is what says the
+	## shoulder ratio is being read correctly rather than merely being read.
+	var shared := voli.height_cm / 100.0 * (
+		float(BODY_TYPE_MODELS_SCRIPT.UNIVERSAL_RATIOS.get("shoulder_y", 0.815))
+		- float(BODY_TYPE_MODELS_SCRIPT.UNIVERSAL_RATIOS.get("hand_y", 0.395))
+	)
+	_check(
+		absf(voli.arm_length_meters() - shared) < 0.03,
+		"arm length from this voli's reach agrees with the shared figure",
+	)
+
+	## 2 -- the offset is real through the platform range and zero outside it,
+	## and both boundaries are geometry rather than authored bands.
+	var thigh := voli.contact_offset_meters(0.90)
+	var waist := voli.contact_offset_meters(1.10)
+	var overhead := voli.contact_offset_meters(1.80)
+	var floor_ball := voli.contact_offset_meters(0.30)
+	_check(
+		thigh > 0.05 and waist > thigh and is_zero_approx(overhead)
+			and is_zero_approx(floor_ball),
+		"a contact in front of the body grows toward the shoulder and stops at it",
+	)
+
+	## 3 -- and it is a body, not a constant: a longer-armed voli of the same
+	## height reaches further in front.
+	var longer := _orientation_voli(902)
+	longer.height_cm = 192.0
+	longer.wingspan_cm = 218.0
+	_check(
+		longer.contact_offset_meters(1.10) > waist + 0.005
+			and is_equal_approx(
+				longer.shoulder_height_meters(), voli.shoulder_height_meters()
+			),
+		"a longer arm reaches further in front from the same shoulder",
 	)
 
 

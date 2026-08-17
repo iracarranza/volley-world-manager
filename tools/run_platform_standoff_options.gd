@@ -20,6 +20,7 @@ extends SceneTree
 
 const CoverageCalculator := preload("res://scripts/simulation/coverage_calculator.gd")
 const PlayerGenerator := preload("res://scripts/systems/player_generator.gd")
+const BodyTypeModels := preload("res://scripts/data/body_type_models.gd")
 
 const COURT_WIDTH_METERS: float = 9.0
 const COURT_LENGTH_METERS: float = 18.0
@@ -189,47 +190,67 @@ func _what_it_is_worth(roster: Array) -> void:
 
 ## ----------------------------------------------------------------- decision
 ##
-## An attempt that failed, kept because the failure is the finding.
+## **Decided, and nothing was invented.** Two attempts are kept above because
+## both failed and the failures are the finding: every ratio candidate needed a
+## number, and the Pythagoras form built on `standing_reach - height` returned
+## zero across the whole platform range because that quantity is not arm length.
 ##
-## The candidates above each need one ratio. A geometric form appeared to need
-## none: the arms are a segment of known length anchored at the shoulder, a ball
-## met at a known height fixes the angle, and the horizontal offset is Pythagoras.
-## It was implemented and measured, and it returns **zero across the entire
-## platform range**, because `standing_reach - height` is not arm length. It is
-## the ~0.45 m the arms add *above the head*, and a 0.45 m segment anchored at a
-## 1.47 m shoulder cannot reach a ball at the waist at all.
-##
-## So the geometry needs the shoulder anchor, and the body model does not carry
-## one. That is the whole of the remaining decision, and it is one number.
+## What was missing was the shoulder anchor, and the repository already commits
+## to one -- `BodyTypeModels.UNIVERSAL_RATIOS.shoulder_y`, authored once as the
+## shared figure with its basis recorded. Reading it makes the simulation and the
+## drawn body the same body, which is M3's own exit condition.
 func _decided(roster: Array) -> void:
 	print("\n" + "=".repeat(78))
-	print("THE DECISION, REDUCED TO ONE NUMBER")
+	print("DECIDED -- the shoulder anchor was already in the repository")
 	print("=".repeat(78))
-	var spans: Array = []
+	print("  `BodyTypeModels.UNIVERSAL_RATIOS`: shoulder_y %.3f, hand_y %.3f." % [
+		float(BodyTypeModels.UNIVERSAL_RATIOS.get("shoulder_y", 0.0)),
+		float(BodyTypeModels.UNIVERSAL_RATIOS.get("hand_y", 0.0)),
+	])
+	print("  Its own comment states the basis: \"against roughly 0.82 on a human\".")
+	print("")
+	print("  Two independent routes to arm length, as a cross-check:\n")
+	var derived: Array = []
+	var shared: Array = []
 	for player in roster:
-		spans.append((float(player.standing_reach_cm()) - float(player.height_cm)) / 100.0)
-	var span := _stats(spans)
-	print("  standing_reach - height, p50 %.3f m -- which is *not* arm length." % span.p50)
-	print("  It is what raising the arms adds above the head: the arm minus the")
-	print("  distance from shoulder to crown, plus the shoulder's own lift.\n")
-	print("  A real arm is most of a metre. The quantity the model carries is")
-	print("  less than half of one, so any geometry built on it concludes that a")
-	print("  voli cannot reach their own waist. Measured, before it was believed.")
-	print("")
-	print("  What is missing is therefore **the shoulder anchor**: where the")
-	print("  shoulder sits as a fraction of standing height. With it:")
-	print("")
-	print("      arm_length = standing_reach - shoulder_height")
-	print("      drop       = shoulder_height - contact_height")
-	print("      offset     = sqrt(arm_length^2 - drop^2)")
-	print("")
-	print("  -- and every contact family follows from the contact height it is")
-	print("  already given, with nothing further authored. Net encroachment is the")
-	print("  same relation read toward the tape.")
-	print("")
-	print("  One anthropometric ratio, of the same kind as the `1.215` and `0.32`")
-	print("  already inside `standing_reach_cm()` and the `0.43` inside")
-	print("  `default_stride_length_m()`. It is a body proportion with a stated")
-	print("  basis, not a balance dial, and the tables above bound what it is")
-	print("  worth: the whole plausible range of answers spans about 0.29 m")
-	print("  against a reach tolerance of 1.23 m.")
+		derived.append(player.arm_length_meters())
+		shared.append(float(player.height_cm) / 100.0 * (
+			float(BodyTypeModels.UNIVERSAL_RATIOS.get("shoulder_y", 0.815))
+			- float(BodyTypeModels.UNIVERSAL_RATIOS.get("hand_y", 0.395))
+		))
+	var a := _stats(derived)
+	var b := _stats(shared)
+	print("  %-46s %-9s %-9s %-9s" % ["route", "min m", "p50 m", "max m"])
+	print("  %-46s %-9.3f %-9.3f %-9.3f" % [
+		"standing_reach - shoulder (this voli's wingspan)", a.min, a.p50, a.max,
+	])
+	print("  %-46s %-9.3f %-9.3f %-9.3f" % [
+		"(shoulder_y - hand_y) x height (shared figure)", b.min, b.p50, b.max,
+	])
+	print("  %-46s %-9.3f" % ["median disagreement", absf(a.p50 - b.p50)])
+	print("\n  The individual route is the one used, so a long-armed voli gets a")
+	print("  long arm. The shared figure is the check, not the source.\n")
+
+	print("  %-34s %-9s %-9s %-9s %-12s" % [
+		"contact height", "min m", "p50 m", "max m", "share of reach",
+	])
+	for entry in [
+		["0.30 -- shin, off the floor", 0.30],
+		["0.60 -- knee, a low dig", 0.60],
+		["0.90 -- thigh, a driven ball", 0.90],
+		["1.10 -- waist, the platform pass", 1.10],
+		["1.40 -- chest, a high float", 1.40],
+		["1.80 -- overhead, not a platform", 1.80],
+	]:
+		var values: Array = []
+		for player in roster:
+			values.append(player.contact_offset_meters(float(entry[1])))
+		var stats := _stats(values)
+		print("  %-34s %-9.3f %-9.3f %-9.3f %-12.1f%%" % [
+			str(entry[0]), stats.min, stats.p50, stats.max,
+			stats.p50 / 1.227 * 100.0,
+		])
+	print("\n  Zero above the shoulder and zero at the floor, both because the")
+	print("  geometry says so rather than because a band was drawn. The platform")
+	print("  range comes out where a passer actually takes the ball, and it stays")
+	print("  inside the 1.23 m reach tolerance it has to live within.")

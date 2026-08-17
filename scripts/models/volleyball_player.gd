@@ -590,6 +590,59 @@ func standing_reach_cm() -> float:
 	return height_cm * 1.215 + (wingspan_cm - height_cm) * 0.32
 
 
+## Where this voli's shoulder sits, in metres off the floor.
+##
+## **The repository already commits to this**, once, in
+## `BodyTypeModels.UNIVERSAL_RATIOS` -- the shared figure every body type is a
+## pull away from, authored with its basis recorded: *"Feli's shoulders sat at
+## 0.745 of its height and Avi's at 0.750, against roughly 0.82 on a human."*
+## Reading it here rather than authoring a second one is what makes the
+## simulation and the drawn body the same body, which is M3's own exit condition.
+func shoulder_height_meters() -> float:
+	return height_cm / 100.0 * float(
+		BodyTypeModels.UNIVERSAL_RATIOS.get("shoulder_y", 0.815)
+	)
+
+
+## Arm length, in metres, from the shoulder to the fingertips.
+##
+## Derived rather than authored, and individual rather than shared: a raised arm
+## puts the fingertips at `standing_reach`, so the arm is what remains above the
+## shoulder. `standing_reach_cm()` already carries this voli's own wingspan, so a
+## long-armed voli gets a long arm without a second opinion about their build.
+##
+## The shared figure is the check rather than the source. `UNIVERSAL_RATIOS` puts
+## the fingertips at 0.395 of height and the shoulder at 0.815, so its arm is
+## 0.420 of height -- and for an average build this derivation lands within a
+## centimetre of that. Two independent routes to one number agreeing is what says
+## the shoulder ratio is being read correctly.
+func arm_length_meters() -> float:
+	return maxf(standing_reach_cm() / 100.0 - shoulder_height_meters(), 0.0)
+
+
+## **How far in front of the body a contact at this height is taken**, in metres.
+##
+## M3's missing relation, and every term in it already existed. The arm is a
+## segment of known length anchored at a known shoulder; a ball met at a known
+## height fixes the angle; the horizontal offset is Pythagoras. Nothing is
+## authored here -- not a ratio, not a distance.
+##
+## Zero above the shoulder, because an overhead contact is taken above the body
+## rather than in front of it, and zero again once the ball is further below the
+## shoulder than the arm is long -- a ball at the ankles is not reached in front
+## of a standing body at all, it is reached by leaving the feet, which is a
+## posture question the contact envelope owns. Neither boundary was placed; both
+## are what the geometry does. See `docs/review/BODY_CENTRE_SCOPE.md`.
+func contact_offset_meters(contact_height_meters: float) -> float:
+	var arm := arm_length_meters()
+	if arm <= 0.0:
+		return 0.0
+	var drop := shoulder_height_meters() - contact_height_meters
+	if drop <= 0.0 or drop >= arm:
+		return 0.0
+	return sqrt(arm * arm - drop * drop)
+
+
 
 ## How high this player can actually touch a ball, in centimetres: standing
 ## reach (height plus arm length) plus what their leap adds.

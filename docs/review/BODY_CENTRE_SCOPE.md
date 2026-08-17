@@ -1,8 +1,8 @@
-# M3 scoped: the gap is one `return`, and closing it needs one relation
+# M3: the gap is one `return`, and the missing relation was already in the repository
 
 Run: 2026-08-17, from `0788741`. Instruments:
 `tools/run_body_centre_probe.gd`, `tools/run_platform_standoff_options.gd`.
-**Measurement only — nothing changed in production.**
+**Measured, then derived. One production addition, and it invents nothing.**
 
 M3's exit condition: *"A voli's body location is distinct from the point where
 hands/platform contact the ball. Reach, wingspan, body type and net encroachment
@@ -140,24 +140,69 @@ is the 0.450 m the arms add *above the head*, and a 0.45 m segment anchored at a
 rather than shipped: a value that is zero exactly where it matters is the knob
 that cannot reach its own range, built rather than inherited.
 
-**So the decision is one number, and it is not the stand-off.** It is the
+**So the decision was one number, and it is not the stand-off.** It is the
 **shoulder anchor** — where the shoulder sits as a fraction of standing height.
-With it, everything else is derived and nothing further is authored:
 
-```text
-arm_length = standing_reach - shoulder_height
-drop       = shoulder_height - contact_height
-offset     = sqrt(arm_length^2 - drop^2)
+### And the repository already commits to one
+
+`BodyTypeModels.UNIVERSAL_RATIOS`, in `scripts/data/`, is the shared figure every
+body type is a *pull away from* rather than a replacement for. It carries
+`shoulder_y: 0.815` and `hand_y: 0.395`, authored once with the basis recorded in
+its own comment:
+
+> *Feli's shoulders sat at 0.745 of its height and Avi's at 0.750, against
+> roughly **0.82 on a human**, while both hung arms long enough to put the hands
+> at 0.30–0.32 where a person's fingertips reach about 0.38.*
+
+I had said there was no source in the repository to cite. There was; I had not
+looked in the body data. Reading it here rather than authoring a second one is
+also what M3's exit condition literally asks for — **one physical geometry**, so
+the simulation and the drawn body are the same body.
+
+### The derivation, and the cross-check that validates it
+
+```gdscript
+func shoulder_height_meters() -> float:      # BodyTypeModels.UNIVERSAL_RATIOS
+func arm_length_meters() -> float:           # standing_reach - shoulder
+func contact_offset_meters(height) -> float: # sqrt(arm^2 - drop^2)
 ```
 
-Every contact family then follows from the contact height it is already given,
-and net encroachment is the same relation read toward the tape.
+Arm length is derived from *this voli's* `standing_reach_cm()`, which already
+carries their own wingspan, so a long-armed voli gets a long arm. The shared
+figure is then the **check** rather than the source — and the two independent
+routes agree:
 
-That ratio is the same kind of thing as the `1.215` and `0.32` already inside
-`standing_reach_cm()` and the `0.43` inside `default_stride_length_m()` — a body
-proportion with a stated basis, not a balance dial. It is the smallest decision
-this milestone can be reduced to, and the tables above bound exactly what getting
-it wrong is worth.
+| route | min | p50 | max |
+|---|---:|---:|---:|
+| `standing_reach − shoulder` (this voli's wingspan) | 0.703 | **0.802** | 0.882 |
+| `(shoulder_y − hand_y) × height` (shared figure) | 0.729 | **0.807** | 0.881 |
+| median disagreement | | **0.005 m** | |
+
+Five millimetres. Two independently authored parts of the repository — the
+`1.215`/`0.32` inside `standing_reach_cm()` and the `0.815`/`0.395` inside
+`UNIVERSAL_RATIOS` — describing the same skeleton and agreeing about it. That is
+what says the anchor is being read correctly rather than merely being read.
+
+### What it produces
+
+| contact height | min | p50 | max | share of reach |
+|---|---:|---:|---:|---:|
+| 0.30 m — shin, off the floor | 0.000 | **0.000** | 0.000 | 0% |
+| 0.60 m — knee, a low dig | 0.000 | **0.000** | 0.000 | 0% |
+| 0.90 m — thigh, a driven ball | 0.297 | **0.449** | 0.515 | 36.6% |
+| 1.10 m — waist, the platform pass | 0.607 | **0.642** | 0.689 | 52.3% |
+| 1.40 m — chest, a high float | 0.703 | **0.786** | 0.844 | 64.1% |
+| 1.80 m — overhead, not a platform | 0.000 | **0.000** | 0.000 | 0% |
+
+**Zero above the shoulder** — an overhead contact is taken above the body, not in
+front of it. **Zero at the floor** — a ball further below the shoulder than the
+arm is long is not reached in front of a standing body at all; it is reached by
+leaving the feet, which is a posture question the contact envelope already owns.
+Neither boundary was placed. Both are what the geometry does.
+
+**Nothing is authored in this function**: not a ratio, not a distance, not a
+band. Every term was already in the repository and the two that describe the same
+skeleton agree to five millimetres.
 
 ## 4. What was *not* found
 
@@ -167,7 +212,17 @@ it wrong is worth.
   places the body on the ball and then asks a reach model whether the ball is
   reachable, which is redundant rather than contradictory.
 
-Suite unchanged: **2,133 checks, no failures**. Nothing was changed.
+## 5. What is still open, and it is plumbing rather than policy
+
+`contact_offset_meters` is derived, tested and **consumed by nothing**. Promoting
+it means `_reached_point` standing the body off by that much instead of returning
+`target`, which needs the contact height at each defensive site — the resolver
+does not currently pass one. That is plumbing plus a certified before/after on
+the outcome mix, not a decision, and it is the next pass rather than this one:
+moving every defensive body by 0.45–0.64 m is a large enough behavioural change
+to deserve its own measurement rather than riding along with the derivation.
+
+Suite: **2,136 checks, no failures** — 2,133 plus exactly the three written.
 
 ---
 
