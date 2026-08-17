@@ -54,6 +54,13 @@ static func evaluate_arrival(
 	contact_skill: String,
 	origin: Variant = null,
 	unassigned_reach_meters: float = -1.0,
+	## Which way this body is set, independent of where the ball is.
+	##
+	## `Vector2.ZERO` means the caller does not track it, and then nothing is
+	## charged -- exactly the behaviour every caller had before preparation
+	## existed here. A body that *is* tracked pays the turn its own locomotion
+	## already prices, out of the same clock the ball gives it.
+	facing: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
 	if player == null:
 		return {"reachable": false, "claim_score": -1000.0}
@@ -64,7 +71,36 @@ static func evaluate_arrival(
 	var distance := court_distance_meters(from_point, landing_point)
 	var anticipation := float(player.anticipation) / 100.0
 	var reaction_delay := lerpf(0.56, 0.18, anticipation)
-	var available_time := maxf(ball_time_seconds - reaction_delay, 0.0)
+	## **What it costs to be set the wrong way**, spent out of the ball's clock
+	## rather than off the top speed.
+	##
+	## `reaction_delay` above is omnidirectional -- one scalar per voli, the same
+	## for a ball in front and a ball behind -- so until this existed a standing
+	## defender was equally prepared in every direction. The turn itself is not a
+	## new relation: `LocomotionModel.direction_change_seconds` is the same
+	## function `_movement_profile` uses for every other body in the engine, fed
+	## the same `facing_fit`, and the bounds are `RallyMovementSystem`'s own.
+	##
+	## Charged against time, never against `movement_speed` below. Preparation
+	## buys a cheaper first step; it does not make anybody faster.
+	var facing_fit := 1.0
+	var turn_delay := 0.0
+	var to_ball := Vector2(
+		(landing_point.x - from_point.x) * COURT_WIDTH_METERS,
+		(landing_point.y - from_point.y) * COURT_LENGTH_METERS,
+	)
+	if facing.length_squared() > 0.001 and to_ball.length_squared() > 0.001:
+		facing_fit = clampf(
+			(facing.normalized().dot(to_ball.normalized()) + 1.0) * 0.5, 0.0, 1.0
+		)
+		turn_delay = LocomotionModel.direction_change_seconds(
+			player, RallyPlayerState.MovementMode.LATERAL, facing_fit,
+			MovementModel.TURN_DELAY_WORST_SECONDS,
+			MovementModel.TURN_DELAY_BEST_SECONDS,
+		)
+	var available_time := maxf(
+		ball_time_seconds - reaction_delay - turn_delay, 0.0
+	)
 	var speed_rating := float(player.lateral_speed) / 100.0
 	var acceleration_rating := float(player.acceleration) / 100.0
 	## See `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL`. The legacy ceiling runs
@@ -191,6 +227,8 @@ static func evaluate_arrival(
 		"edge_ratio": edge_ratio,
 		"claim_score": claim_score,
 		"origin_position": from_point,
+		"facing_fit": facing_fit,
+		"turn_delay_seconds": turn_delay,
 		"immediate_control": immediate_control,
 		"immediate_control_reach_meters": base_reach
 			+ IMMEDIATE_CONTROL_STEP_METERS,
@@ -216,6 +254,9 @@ static func choose_claimant(
 	## Reach credited to a voli with no zone for this contact. Negative keeps the
 	## old behaviour of excluding them outright.
 	unassigned_reach_meters: float = -1.0,
+	## Which way each body is set, keyed by id. Omit it and nobody is charged a
+	## turn, which is what every caller did before preparation reached here.
+	facings: Dictionary = {},
 ) -> Dictionary:
 	var best := {
 		"player": null, "arrival": {}, "support_count": 0,
@@ -234,6 +275,7 @@ static func choose_claimant(
 			contact_skill,
 			origins.get(player.id),
 			unassigned_reach_meters,
+			Vector2(facings.get(player.id, Vector2.ZERO)),
 		)
 		if not bool(arrival.get("reachable", false)):
 			continue

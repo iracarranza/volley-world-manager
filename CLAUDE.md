@@ -12,8 +12,12 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the defensive-readiness
-boundary: **2,111 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the ready-orientation pass:
+**2,117 checks pass**. Treat any test failure as a regression.
+
+That is 2,111 plus five checks written plus one: defenders now pay a turn cost
+when the ball is behind them, so rallies resolve differently and a sampling gate
+drew one more. See `docs/review/READY_ORIENTATION.md`.
 
 That is 2,106 plus eleven checks written *minus six*: a landing blocker is now
 unavailable to the floor-defence claim search, so rallies resolve differently and

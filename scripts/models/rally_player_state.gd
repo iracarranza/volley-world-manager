@@ -26,6 +26,18 @@ var rotation_slot: int = -1
 
 var position: Vector2 = Vector2.ZERO
 var velocity: Vector2 = Vector2.ZERO
+## Which way the feet and hips are set -- **preparation orientation, not gaze and
+## not a route.**
+##
+## The class default is the home side's, and that was the whole of the state
+## until `create()` learned to mirror it: every voli on both sides began facing
+## -y, so an opponent defender was initialised facing away from the net. See
+## `docs/review/READY_ORIENTATION.md`.
+##
+## Zero is legitimate and means **unknown**, not "aligned": `_movement_profile`
+## leaves `facing_fit` at 1.0 when it cannot read a direction, which is exactly
+## the behaviour every caller had before facing was carried at all. A caller that
+## has no orientation to offer must pass zero rather than guess one.
 var facing: Vector2 = Vector2(0.0, -1.0)
 
 var movement_mode: MovementMode = MovementMode.IDLE
@@ -58,7 +70,24 @@ static func create(
 	state.position = start_position
 	state.intent_target = start_position
 	state.tactical_home = start_position
+	state.facing = side_relative_ready_facing(side)
 	return state
+
+
+## Where a body is set before anything has happened, per side.
+##
+## **Toward the net, and mirrored** -- the two sides stand on opposite halves of
+## the same axis, so one world-space constant cannot describe both. The home
+## side occupies high `y` and attacks toward low `y`, which is the convention
+## `_set_geometry`'s `square_up_sign` and `SetPathReadModel`'s
+## `attacking_negative_y` already encode; the opponent is its mirror.
+##
+## Toward the *net*, deliberately, and not toward the ball. A body orienting
+## itself at the live ball would be preparation gaining information from the
+## action it is about to be tested against, which is the one thing preparation
+## must not do. The net does not move.
+static func side_relative_ready_facing(side: StringName) -> Vector2:
+	return Vector2(0.0, 1.0) if side == &"opponent" else Vector2(0.0, -1.0)
 
 
 func is_available(at_time: float) -> bool:

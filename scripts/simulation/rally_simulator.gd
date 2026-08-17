@@ -5684,6 +5684,11 @@ func _resolve_opponent_transition(
 		## Anyone still getting up from the last ball has that long less to reach
 		## this one.
 		_recovery_time_penalties(rally_clock),
+		floor_phase_positions,
+		-1.0,
+		## And which way each of them is set. A ball arriving behind a defender
+		## costs them the turn their own locomotion prices.
+		_ready_facings(floor_phase_positions.keys(), &"home"),
 	)
 	var defender := defense_claim.get("player") as VolleyballPlayer
 	var defender_arrived := defender != null
@@ -7990,6 +7995,8 @@ func _choose_opponent_defender(
 	var claim := CoverageModel.choose_claimant(
 		defenders, zones, target, flight_time, "reception",
 		_recovery_time_penalties(rally_clock),
+		opponent_live_positions, -1.0,
+		_ready_facings(opponent_live_positions.keys(), &"opponent"),
 	)
 	var claimant := claim.get("player") as VolleyballPlayer
 	var arrival: Dictionary = claim.get("arrival", {})
@@ -8856,6 +8863,9 @@ func _travel(
 	movement_kind: String,
 	waypoint: Variant = null,
 	entry_velocity: Vector2 = Vector2.ZERO,
+	## The orientation this body is actually set in, independent of where it is
+	## being asked to go. `Vector2.ZERO` means the caller does not track it.
+	entry_facing: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
 	if player == null:
 		return {"seconds": 4.0, "exit_velocity": Vector2.ZERO}
@@ -8866,12 +8876,21 @@ func _travel(
 	## amortises away on long ones. It now asks the same model.
 	var actor := RallyPlayerState.create(player, &"home", -1, start)
 	actor.velocity = entry_velocity
-	var opening := RallyKinematicsModel.court_delta_meters(start, target)
-	if opening.length() > 0.0001:
-		## The resolver does not track facing at this point, and charging a full
-		## reorientation the player may not need would reintroduce a second
-		## disagreement. Face the route; the turn floor still applies.
-		actor.facing = opening.normalized()
+	## **The route no longer chooses the orientation.**
+	##
+	## This used to read `actor.facing = opening.normalized()` -- face the way you
+	## are going -- which made every movement in the engine perfectly prepared by
+	## construction. `facing_fit` was 1.0 for every voli on every leg, so the turn
+	## cost the locomotion model computes could never fire, and a defender caught
+	## flat-footed with the ball behind them was timed as though they were already
+	## squared to it.
+	##
+	## Zero means **unknown**, and `_movement_profile` leaves `facing_fit` at 1.0
+	## for an unreadable facing -- so a caller that has nothing to say keeps
+	## exactly the behaviour it had, and only a caller that actually knows the
+	## body's orientation pays for it. That is what makes this safe to land before
+	## every caller has been migrated.
+	actor.facing = entry_facing
 	return RallyMovementSystemModel.traversal_result(
 		actor, target, _movement_mode_for_kind(movement_kind), waypoint
 	)
@@ -10731,6 +10750,25 @@ func _note_block_airborne(
 			"ready_at": landing,
 			"delay": owed,
 		}
+
+
+## Which way each of these bodies is set, for the claim search.
+##
+## **Side-relative and toward the net**, which is where a voli waiting for the
+## other team's attack stands -- and it is mirrored, because the two sides face
+## opposite ways down the same axis. Not toward the ball: preparation must not
+## gain information from the action it is about to be tested against.
+##
+## This is the *standing* case, and it is the honest one for a defender who has
+## not moved since the rally reset them. A defender who has chased a ball has no
+## established post-movement orientation anywhere in this engine -- see
+## `docs/review/READY_ORIENTATION.md` for why that transition is the boundary
+## this pass stops at, and why guessing it here would be inventing a turn model.
+func _ready_facings(player_ids: Array, side: StringName) -> Dictionary:
+	var facings := {}
+	for raw_id in player_ids:
+		facings[int(raw_id)] = RallyPlayerState.side_relative_ready_facing(side)
+	return facings
 
 func _recovery_time_penalties(at_time: float) -> Dictionary:
 	var penalties := {}

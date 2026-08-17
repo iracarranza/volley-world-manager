@@ -288,6 +288,7 @@ func _initialize() -> void:
 	_test_movement_model_prices_facing()
 	_test_landing_blocker_is_unavailable()
 	_test_defensive_claim_precedence()
+	_test_ready_orientation()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10268,6 +10269,109 @@ func _claim_winner(
 	)
 	var winner := claim.get("player") as VolleyballPlayer
 	return winner.id if winner != null else -1
+
+
+
+## Preparation orientation: initialised per side, preserved at rest, never
+## manufactured by the route, and now visible to the defensive claimant.
+##
+## `facing` is physical feet/body preparation -- not gaze, not a predicted
+## landing point, not the route being evaluated. Before this pass it was a single
+## world-space constant that `_travel` overwrote with the direction of travel on
+## every leg, so `facing_fit` was 1.0 for every voli on every trip and the
+## claimant had no direction at all.
+func _test_ready_orientation() -> void:
+	## A1 -- the two sides are mirrored, and neither is a shared default.
+	var home := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	var away := RallyPlayerState.create(
+		_orientation_voli(902), &"opponent", 1, Vector2(0.50, 0.20)
+	)
+	_check(
+		home.facing.is_equal_approx(-away.facing) and home.facing.length() > 0.5,
+		"the two sides initialise with mirrored, meaningful preparation",
+	)
+
+	## A2 -- standing still does not reset or recompute it.
+	var resting := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	var before := resting.facing
+	resting.apply_position(Vector2(0.50, 0.80), Vector2.ZERO)
+	_check(
+		resting.facing.is_equal_approx(before),
+		"zero movement preserves preparation orientation",
+	)
+
+	## A4 -- the route cannot prepare itself. A body set away from where it is
+	## being sent must take longer than one set toward it.
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var start := Vector2(0.50, 0.80)
+	var target := Vector2(0.62, 0.66)
+	var opening := RallyKinematics.court_delta_meters(start, target).normalized()
+	var toward: Dictionary = simulator._travel(
+		_orientation_voli(), start, target, "lateral", null, Vector2.ZERO, opening
+	)
+	var away_leg: Dictionary = simulator._travel(
+		_orientation_voli(), start, target, "lateral", null, Vector2.ZERO, -opening
+	)
+	_check(
+		float(away_leg.seconds) > float(toward.seconds) + 0.01,
+		"a route cannot make itself perfectly prepared by facing its own direction",
+	)
+
+	## A7 -- the defensive claimant is no longer direction-blind. Same defender,
+	## same distance, same clock; only where the ball comes from moves.
+	var zone: Resource = DefensiveZone.new()
+	zone.player_id = 901
+	zone.zone_type = DefensiveZone.ZoneType.FLOOR_DEFENSE
+	zone.center = Vector2(0.50, 0.80)
+	zone.radius_meters = 3.0
+	zone.enabled = true
+	var facing := RallyPlayerState.side_relative_ready_facing(&"home")
+	var in_front := _orientation_margin(zone, Vector2(0.50, 0.80 - 2.5 / 18.0), facing)
+	var behind := _orientation_margin(zone, Vector2(0.50, 0.80 + 2.5 / 18.0), facing)
+	_check(
+		in_front > behind + 0.05,
+		"a ball behind a set defender costs more than the same ball in front",
+	)
+	## And the cost is startup, not speed: an untracked facing charges nothing,
+	## which is what keeps un-migrated callers on their old behaviour.
+	_check(
+		is_equal_approx(
+			_orientation_margin(
+				zone, Vector2(0.50, 0.80 + 2.5 / 18.0), Vector2.ZERO
+			),
+			_orientation_margin(
+				zone, Vector2(0.50, 0.80 - 2.5 / 18.0), Vector2.ZERO
+			),
+		),
+		"an untracked facing charges nothing and stays direction-blind",
+	)
+
+
+func _orientation_voli(player_id: int = 901) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	for attribute in [
+		"acceleration", "lateral_speed", "transition_speed", "stamina",
+		"work_rate", "anticipation", "composure",
+	]:
+		player.set(attribute, 50)
+	player.fatigue = 0.0
+	return player
+
+
+func _orientation_margin(
+	zone: Resource, landing: Vector2, facing: Vector2
+) -> float:
+	var arrival: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+		_orientation_voli(), zone, landing, 1.60, "reception",
+		Vector2(0.50, 0.80), -1.0, facing,
+	)
+	return float(arrival.get("reach_margin_meters", 0.0))
 
 
 func _test_gate_twenty_two_setter_progression() -> void:
