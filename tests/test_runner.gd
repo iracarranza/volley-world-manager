@@ -297,6 +297,7 @@ func _initialize() -> void:
 	_test_immediate_control_needs_a_usable_body()
 	_test_compromised_bodies_survive_the_boundary()
 	_test_contact_offset_is_derived_geometry()
+	_test_platform_contacts_state_an_intent()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -10812,6 +10813,125 @@ func _test_contact_offset_is_derived_geometry() -> void:
 				longer.shoulder_height_meters(), voli.shoulder_height_meters()
 			),
 		"a longer arm reaches further in front from the same shoulder",
+	)
+
+
+## M4 slice 1 -- `PLATFORM_CONTACT.md` section 11, plus the two source markers
+## section 13.10 asks for.
+##
+## Every platform contact now says what it was *for*, and **nothing reads it**.
+## The slice's own acceptance criterion is that rallies come back byte-identical,
+## verified separately at 600 rallies against the stashed tree
+## (`docs/review/PLATFORM_INTENT.md`); what these checks hold is that the record
+## is complete, that its absence markers are absences rather than placeholders,
+## and that its two derived anchors are derived from the body rather than dialled.
+func _test_platform_contacts_state_an_intent() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var platform_types := [
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.DIG,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
+	]
+	var required := [
+		"purpose", "target_anchor", "anchor_source", "intended_recipient_id",
+		"height_anchor_meters", "arrival_floor_seconds", "preference_source",
+	]
+	var contacts := 0
+	var complete := 0
+	var receptions := 0
+	var seated_receptions := 0
+	for seed_value in range(23000, 23040):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		for entry in rally.events:
+			var event := entry as RallyEvent
+			if event == null or event.event_type not in platform_types:
+				continue
+			contacts += 1
+			var record: Dictionary = event.metadata.get("platform_intent", {})
+			var missing := false
+			for field in required:
+				if not record.has(field):
+					missing = true
+			if not missing:
+				complete += 1
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+				continue
+			receptions += 1
+			## A reception is the one context that aims at a manager-set seat, and
+			## it is the whole content of `anchor_source`: everything else in this
+			## engine aims a stride from itself and calls it a pass.
+			if str(record.get("anchor_source", "")) == "release_seat" \
+					and int(record.get("intended_recipient_id", -1)) >= 0 \
+					and record.get("height_anchor_meters") is float \
+					and record.get("arrival_floor_seconds") is float:
+				seated_receptions += 1
+	_check(
+		contacts > 0 and complete == contacts,
+		"every platform contact publishes a complete intent record",
+	)
+	_check(
+		receptions > 0 and seated_receptions == receptions,
+		"a reception aims at the release seat, at a person, with both anchors derived",
+	)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+
+	## Coverage aims at nobody, so there is no release height to anchor to and no
+	## arrival to floor. `unset` is a **String** deliberately: a sentinel float
+	## would be indistinguishable from an anchor sitting at the default, which is
+	## `FAILURE_MODES.md` section 0 in one line.
+	var coverage: Dictionary = simulator._platform_intent(
+		"attack_coverage", Vector2(0.44, 0.72), "contact_offset",
+		null, Vector2(0.44, 0.72),
+	)
+	_check(
+		int(coverage.get("intended_recipient_id", 0)) == -1
+			and coverage.get("height_anchor_meters") is String
+			and coverage.get("arrival_floor_seconds") is String
+			and str(coverage.get("preference_source", "")) == "none",
+		"coverage carries absences, and they cannot be misread as numbers",
+	)
+
+	## And the height anchor is the setter's own body. **The census cannot show
+	## this**: the vertical slice's two setters are both 185/188, so all 761
+	## stated anchors came back at 2.190 m, and a derivation that ignored the body
+	## would have looked identical. Two bodies separate them.
+	var shorter := _orientation_voli(9401)
+	shorter.height_cm = 176.0
+	shorter.wingspan_cm = 179.0
+	var taller := _orientation_voli(9402)
+	taller.height_cm = 198.0
+	taller.wingspan_cm = 205.0
+	var low: Dictionary = simulator._platform_intent(
+		"serve_reception", Vector2(0.50, 0.60), "release_seat",
+		shorter, Vector2(0.50, 0.60),
+	)
+	var high: Dictionary = simulator._platform_intent(
+		"serve_reception", Vector2(0.50, 0.60), "release_seat",
+		taller, Vector2(0.50, 0.60),
+	)
+	_check(
+		float(high["height_anchor_meters"]) - float(low["height_anchor_meters"])
+			> 0.15,
+		"the height anchor is the setter's own release height, not a constant",
+	)
+
+	## The arrival bound is a floor with no ceiling, and a setter already at the
+	## anchor is *slack* rather than urgent -- section 3a's own worked example.
+	## Zero seconds does not mean the ball must arrive in zero seconds; it means
+	## the setter has stopped constraining it.
+	var distant: Dictionary = simulator._platform_intent(
+		"serve_reception", Vector2(0.50, 0.60), "release_seat",
+		taller, Vector2(0.10, 0.92),
+	)
+	_check(
+		is_zero_approx(float(high["arrival_floor_seconds"]))
+			and float(distant["arrival_floor_seconds"]) > 0.5,
+		"the arrival floor is the setter's own journey, and goes slack at the seat",
 	)
 
 

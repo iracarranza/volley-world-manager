@@ -1617,6 +1617,17 @@ func resolve(
 	var preferred_release: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id()) \
 		if defensive_plan != null else Vector2(0.50, 0.60)
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
+	var home_reception_setter := _player_by_id(players, lineup.active_setter_id())
+	## Captured before the pass resolves, because the anchor is what this contact
+	## was aimed at and the destination is where it went. Conflating them is how
+	## an intent record comes to be unfalsifiable.
+	var home_reception_intent := _platform_intent(
+		"serve_reception", desired_pass_target, "release_seat",
+		home_reception_setter,
+		Vector2(live_positions.get(
+			lineup.active_setter_id(), preferred_release
+		)),
+	)
 	var reception_pass := _reception_pass_result(
 		receiver, receiver_start, serve_landing, desired_pass_target,
 		opponent_serve_origin, serve_quality, arrival,
@@ -1676,6 +1687,7 @@ func resolve(
 			_arrival_phrase(arrival, receiver_arrived, support_count) \
 			+ (" Equal-priority passers hesitated at the seam." if seam_conflict else ""),
 		], {"side": "home", "landing": serve_landing,
+			"platform_intent": home_reception_intent,
 			## Where the home six stand to receive this serve.
 			##
 			## On the *reception* event rather than the serve, because playback
@@ -3390,6 +3402,13 @@ func resolve(
 			"%d%% recycle control from the assigned attack-coverage shape." % roundi(
 				coverage_quality * 100.0
 			), {"side": "home", "coverage": "attack",
+				## `unset` on both derived fields, and it is a true statement
+				## rather than a placeholder: coverage aims at nobody, so there is
+				## no release height to anchor to and no arrival to floor.
+				"platform_intent": _platform_intent(
+					"attack_coverage", coverage_pass_target, "contact_offset",
+					null, coverage_pass_target,
+				),
 				"blocked_hitter_id": hitter.id,
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
@@ -3523,6 +3542,19 @@ func resolve(
 		float(opponent_defense.distance_meters),
 	)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
+	## The anchor as aimed, captured before `opponent_pass_target` is overwritten
+	## with where the ball actually went. The recipient is the setter and the
+	## anchor is a stride from the digger, and the two disagreeing is the point:
+	## it is section 13.9's item 3 made countable instead of anecdotal.
+	var opponent_dig_setter := opponent_team.setter() as VolleyballPlayer
+	var opponent_dig_intent := _platform_intent(
+		"controlled_dig", opponent_pass_target, "contact_offset",
+		opponent_dig_setter,
+		Vector2(opponent_live_positions.get(
+			opponent_dig_setter.id if opponent_dig_setter != null else -1,
+			opponent_pass_target,
+		)),
+	)
 	## When the ball actually reaches the defender, which is the end of the
 	## swing's own arc. The transition that follows builds its second-contact
 	## window from `rally_clock`, so the clock has to arrive here too -- left at
@@ -3561,6 +3593,7 @@ func resolve(
 			str(attack_choice.direction), float(opponent_defense.distance_meters),
 			" Scouting anticipated this lane." if floor_defense_bonus >= 0.035 else "",
 		], {"side": "opponent", "dig_terms": opponent_dig_terms,
+			"platform_intent": opponent_dig_intent,
 			"movement_start": opponent_defense.start,
 			"movement_duration": opponent_defense.travel_time,
 			"reach_margin_meters": opponent_defense.reach_margin_meters,
@@ -3838,6 +3871,15 @@ func _resolve_home_serve(
 	## further down -- two independent draws, so the pass that was drawn and the
 	## pass that was played landed in different places. The home side has always
 	## used one result for both.
+	var opponent_reception_setter := _opponent_setter(opponent_team)
+	var opponent_reception_intent := _platform_intent(
+		"serve_reception", opponent_setter_release, "release_seat",
+		opponent_reception_setter,
+		Vector2(opponent_live_positions.get(
+			opponent_reception_setter.id if opponent_reception_setter != null else -1,
+			opponent_setter_release,
+		)),
+	)
 	var opponent_pass := _reception_pass_result(
 		receiver, receiver_start, opponent_landing, opponent_setter_release,
 		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
@@ -3865,6 +3907,7 @@ func _resolve_home_serve(
 			_arrival_phrase(opponent_arrival, receiver_arrived, support_count),
 			" Scouting anticipated this target." if serve_receive_bonus >= 0.035 else "",
 		], {"side": "opponent", "landing": opponent_landing,
+			"platform_intent": opponent_reception_intent,
 			## The other side's receive shape, on the same event and for the same
 			## reason as the home one above.
 			"opponent_phase_targets": _receive_formation_map(
@@ -5650,6 +5693,10 @@ func _resolve_opponent_transition(
 			),
 			{
 				"side": "opponent", "coverage": "attack",
+				"platform_intent": _platform_intent(
+					"attack_coverage", coverage_pass_target, "contact_offset",
+					null, coverage_pass_target,
+				),
 				"blocked_hitter_id": opponent_hitter.id,
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
@@ -5884,6 +5931,14 @@ func _resolve_opponent_transition(
 	)
 	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
+	var home_dig_setter := _player_by_id(players, lineup.active_setter_id())
+	var home_dig_intent := _platform_intent(
+		"controlled_dig", defense_pass_target, "contact_offset",
+		home_dig_setter,
+		Vector2(live_positions.get(
+			lineup.active_setter_id(), defense_pass_target
+		)),
+	)
 	## See the mirrored site on the home swing: the continuation's second-contact
 	## window is measured from `rally_clock`, so the clock has to reach the dig.
 	var home_arriving_trajectory := home_block_trajectory \
@@ -5915,6 +5970,7 @@ func _resolve_opponent_transition(
 			_responsibility_phrase(defensive_plan, defender.id, attack_type),
 			_arrival_phrase(defense_arrival, defender_arrived, support_count),
 		], {"side": "home", "dig_terms": home_dig_terms,
+			"platform_intent": home_dig_intent,
 			"attack_type": attack_type,
 			## The same pair the reception publishes: nearest against winner.
 			"nearest_id": int(defense_claim.get("nearest_id", -1)),
@@ -7096,6 +7152,10 @@ func _resolve_home_continuation(
 			],
 			{
 				"side": "home", "coverage": "attack",
+				"platform_intent": _platform_intent(
+					"attack_coverage", coverage_pass_target, "contact_offset",
+					null, coverage_pass_target,
+				),
 				"blocked_hitter_id": hitter.id,
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
@@ -7238,6 +7298,15 @@ func _resolve_home_continuation(
 	))
 	rally_clock = maxf(rally_clock, cont_dig_time)
 	var cont_desired_target := attack_target + Vector2(0.04, -0.03)
+	var cont_dig_setter := opponent_team.setter() as VolleyballPlayer
+	var cont_dig_intent := _platform_intent(
+		"controlled_dig", cont_desired_target, "contact_offset",
+		cont_dig_setter,
+		Vector2(opponent_live_positions.get(
+			cont_dig_setter.id if cont_dig_setter != null else -1,
+			cont_desired_target,
+		)),
+	)
 	var cont_dig_pass := {}
 	if dug:
 		cont_dig_pass = _dig_pass_result(
@@ -7255,6 +7324,7 @@ func _resolve_home_continuation(
 		"Opponent dig · exchange %d" % exchange_number,
 		"Contact 1 of 3 · %d%% control." % roundi(cont_dig_control * 100.0),
 		{"side": "opponent",
+			"platform_intent": cont_dig_intent,
 			"incoming_trajectory": continuation_arriving_trajectory,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
@@ -9871,6 +9941,74 @@ func _stamp_launch_state(trajectory: Dictionary, resolved: Dictionary) -> void:
 	trajectory["launch_vertical_mps"] = float(launch.get("vertical_speed_mps", 0.0))
 	trajectory["launch_gravity_mps2"] = float(launch.get("gravity_mps2", 0.0))
 	trajectory["launch_source"] = "resolver"
+
+
+## The marker a platform-contact intent field carries when there is genuinely no
+## intent to state, rather than an intent whose policy is missing.
+##
+## A string, deliberately, so it cannot be read as a number by anything that
+## forgets to check. A sentinel float would be indistinguishable from an anchor
+## that happens to sit at the default, which is `docs/FAILURE_MODES.md` section 0
+## in one line.
+const PLATFORM_INTENT_UNSET: String = "unset"
+
+
+## What a platform contact was *for*, published beside what it did.
+##
+## `PLATFORM_CONTACT.md` section 11, slice 1, plus the two source markers section
+## 13.10 asks for. **Nothing reads any of it.** The slice's own acceptance
+## criterion is that rallies come back byte-identical, and publishing it inert is
+## the point: it makes countable, for the first time, how many platform contacts
+## in this engine have any stated intent at all.
+##
+## The three shapes are not a stylistic choice and section 3a is the reasoning.
+## The target and the height have derived *anchors* and no derived widths; the
+## arrival has a derived *floor* and no derived ceiling. A uniform representation
+## would have had to invent whatever the uniformity demanded and the data does not
+## supply -- four of five bounds, by section 3a's own count.
+##
+## `anchor_source` separates the two kinds of target this engine actually has: a
+## manager-set release seat, which is steerable, and a fixed offset off the
+## contact point, which is a tactical *non*-decision baked as geometry. They are
+## the same type today and indistinguishable in the data, which is what makes
+## section 13.9's item 3 anecdotal rather than countable.
+func _platform_intent(
+	purpose: String,
+	target_anchor: Vector2,
+	anchor_source: String,
+	## Who the ball is aimed at. **Intent and nothing else** -- it may not
+	## terminate a flight and it may not pick the second contact, because the
+	## actual second-contact actor differs from the designated setter on about
+	## 22.8% of successful digs. It exists so that aiming can be wrong.
+	recipient: VolleyballPlayer,
+	## Where the recipient is now, from whichever live map owns their side. Passed
+	## rather than looked up, because the two sides keep separate maps and a
+	## helper that guessed which one would be right half the time.
+	recipient_position: Vector2,
+) -> Dictionary:
+	var record := {
+		"purpose": purpose,
+		"target_anchor": target_anchor,
+		"anchor_source": anchor_source,
+		"intended_recipient_id": recipient.id if recipient != null else -1,
+		"height_anchor_meters": PLATFORM_INTENT_UNSET,
+		"arrival_floor_seconds": PLATFORM_INTENT_UNSET,
+		## Honest current value. Nothing supplies a tactical preference yet, and
+		## publishing the field with an absence marker is what stops the schema
+		## changing when tactics arrive: the marker takes a new value, the record
+		## does not grow a new shape.
+		"preference_source": "none",
+	}
+	if recipient == null:
+		return record
+	## Both class C -- computed from models that already exist, reading neither the
+	## dig's apex band nor its outgoing trajectory.
+	record["height_anchor_meters"] = \
+		GeometricAttackPromotionModel.set_contact_height_meters(recipient, false)
+	record["arrival_floor_seconds"] = _movement_time(
+		recipient, recipient_position, target_anchor, "transition"
+	)
+	return record
 
 
 func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -> Vector2:

@@ -100,8 +100,11 @@ M4 already has its own implementation order in
 [`PLATFORM_CONTACT.md`](PLATFORM_CONTACT.md). Keep that order rather than expanding
 M4 into parallel rewrites here:
 
-1. **Slice 1 — intent publication.** Publish the intent/state that already exists;
-outcome-neutral.
+1. **Slice 1 — intent publication. DONE**, 2026-08-17. Seven fields on all eight
+platform-contact events; nothing reads any of them and the outcome mix over 600
+rallies is byte-identical against the stashed tree. 785 contacts carry a record,
+761 name a recipient and two derived anchors, and **484 of 785 aim anywhere a
+manager can reach**. See [`../review/PLATFORM_INTENT.md`](../review/PLATFORM_INTENT.md).
 2. **Slice 2 — shadow physical envelope.** Measure T1–T3 and intent
 satisfiability without changing rallies.
 3. **Slice 3 — controlled dig.** First promoted platform context.

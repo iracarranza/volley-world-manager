@@ -930,6 +930,14 @@ as a physical constant in the launch solver.
 **Slice 1 — publish the intent that already exists, and mark the intent that does
 not.** Narrower than the first draft said, and the narrowing is the point.
 
+> **BUILT, 2026-08-17.** Seven fields — the five below plus §13.10's two source
+> markers — on all eight platform-contact events. The prediction at the end of
+> this section held: coverage has none, and the other two turned out to carry a
+> recipient and both derived anchors while only the reception's *target* came
+> from anywhere a manager can reach. The dig naming the setter and then aiming a
+> stride from the digger is now two adjacent fields rather than a paragraph.
+> `docs/review/PLATFORM_INTENT.md` has the census and the byte-identical check.
+
 **Restated after §3a**, which changed the field list and moved one field from
 "must be authored" to "already derivable":
 
