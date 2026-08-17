@@ -1,7 +1,8 @@
 # M3 scoped: the gap is one `return`, and closing it needs one relation
 
-Run: 2026-08-17, from `0788741`. Instrument:
-`tools/run_body_centre_probe.gd`. **Measurement only — nothing changed.**
+Run: 2026-08-17, from `0788741`. Instruments:
+`tools/run_body_centre_probe.gd`, `tools/run_platform_standoff_options.gd`.
+**Measurement only — nothing changed in production.**
 
 M3's exit condition: *"A voli's body location is distinct from the point where
 hands/platform contact the ball. Reach, wingspan, body type and net encroachment
@@ -103,30 +104,60 @@ would also not be a small error: at the ~1.1 m scale `_base_reach_meters` alread
 operates on, a stand-off chosen half a metre wrong changes who can reach what
 across the whole floor defence.
 
-### The smallest decision
+### The smallest decision — reduced to one number, by trying it
 
-**One relation, for the platform family first:** how far in front of the body
-centre the platform contact point sits, as a function of what already exists
-(`wingspan_cm`, `standing_reach_cm`, posture). Everything else in M3 — the set,
-the dig, net encroachment — follows the same shape once one family is authored
-and can copy its structure rather than re-deciding it.
+Two sourcing options were named at first, and naming is not measuring. Measured
+(`tools/run_platform_standoff_options.gd`, six generated rosters):
 
-Two ways to source it that do not involve taste:
+| candidate basis | min | p50 | max | share of reach |
+|---|---:|---:|---:|---:|
+| overhead extension × 1.00 | 0.381 | 0.450 | 0.506 | 36.7% |
+| overhead extension × 0.75 | 0.286 | 0.337 | 0.379 | 27.5% |
+| overhead extension × 0.50 | 0.190 | 0.225 | 0.253 | 18.3% |
+| overhead extension × 0.35 | 0.133 | 0.157 | 0.177 | 12.8% |
+| *wingspan / 2 (upper bound, a dive)* | 0.882 | 1.019 | 1.124 | — |
 
-1. **Derive it from the body model.** `VolleyballPlayer` already carries
-   `wingspan_cm` and `standing_reach_cm`; a platform contact in front of the
-   waist is a fixed fraction of arm length, and arm length is derivable from
-   wingspan. This introduces one ratio rather than one distance, and the ratio is
-   anatomical rather than tactical.
-2. **Author it from reference**, the way `BALL_LAUNCH_KINEMATICS.md` and the
-   locomotion bands were authored — a measured figure with the source recorded.
+against `_base_reach_meters` at p50 **1.227 m**. So the entire plausible range of
+answers spans about **0.29 m against a 1.23 m tolerance** — a body placement,
+not a rebalance of the floor defence, and a smaller error than the shortfall term
+already applies for a misread.
 
-Option 1 needs one number that is a body proportion; option 2 needs a source.
-Neither is a balance dial, and both are smaller than the milestone's text
-suggests. **This is the boundary, and it is a required unmeasured physical
-relation rather than an implementation question.**
+**A third form appeared to need no ratio at all, and was implemented to find
+out.** The arms are a segment of known length anchored at the shoulder; a ball
+met at a known height fixes the angle; the offset is Pythagoras:
 
----
+```gdscript
+var reach_span := (standing_reach_cm() - height_cm) / 100.0
+var shoulder := height_cm / 100.0 - reach_span
+var drop := shoulder - contact_height_meters
+return sqrt(reach_span * reach_span - drop * drop)
+```
+
+Measured, it returns **0.000 m across the entire platform range** — 0.30 m,
+0.60 m and 0.90 m all zero. `standing_reach − height` is **not arm length**. It
+is the 0.450 m the arms add *above the head*, and a 0.45 m segment anchored at a
+1.47 m shoulder cannot reach a ball at the waist at all. The function was removed
+rather than shipped: a value that is zero exactly where it matters is the knob
+that cannot reach its own range, built rather than inherited.
+
+**So the decision is one number, and it is not the stand-off.** It is the
+**shoulder anchor** — where the shoulder sits as a fraction of standing height.
+With it, everything else is derived and nothing further is authored:
+
+```text
+arm_length = standing_reach - shoulder_height
+drop       = shoulder_height - contact_height
+offset     = sqrt(arm_length^2 - drop^2)
+```
+
+Every contact family then follows from the contact height it is already given,
+and net encroachment is the same relation read toward the tape.
+
+That ratio is the same kind of thing as the `1.215` and `0.32` already inside
+`standing_reach_cm()` and the `0.43` inside `default_stride_length_m()` — a body
+proportion with a stated basis, not a balance dial. It is the smallest decision
+this milestone can be reduced to, and the tables above bound exactly what getting
+it wrong is worth.
 
 ## 4. What was *not* found
 

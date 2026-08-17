@@ -590,6 +590,7 @@ func standing_reach_cm() -> float:
 	return height_cm * 1.215 + (wingspan_cm - height_cm) * 0.32
 
 
+
 ## How high this player can actually touch a ball, in centimetres: standing
 ## reach (height plus arm length) plus what their leap adds.
 ##
