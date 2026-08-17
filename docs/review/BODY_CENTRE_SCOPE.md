@@ -212,24 +212,52 @@ skeleton agree to five millimetres.
   places the body on the ball and then asks a reach model whether the ball is
   reachable, which is redundant rather than contradictory.
 
-## 5. What is still open, and it is plumbing rather than policy
+## 5. Promotion attempted, and reverted on measurement
 
-`contact_offset_meters` is derived, tested and **consumed by nothing**. Promoting
-it means `_reached_point` standing the body off by that much instead of returning
-`target`, which needs the contact height at each defensive site — the resolver
-does not currently pass one. That is plumbing plus a certified before/after on
-the outcome mix, not a decision, and it is the next pass rather than this one:
-moving every defensive body by 0.45–0.64 m is a large enough behavioural change
-to deserve its own measurement rather than riding along with the derivation.
+`_reached_point` now takes `contact_height_meters` and `incoming_direction`, and
+`_body_behind_contact` places the body behind the ball along its own line of
+travel — a passer gets behind the ball and plays it in front of their platform.
+Both default to nothing, so an un-migrated caller keeps exactly its old arrival,
+the same shape `entry_facing` used before every caller was migrated.
 
-Suite: **2,136 checks, no failures** — 2,133 plus exactly the three written.
+**Then it was wired at the reception, measured, and unwired.** The outcome mix
+came back byte-identical, which prompted the question that mattered: is the
+stand-off firing at all? It was — 0.575 m for a reference voli — but on an input
+that is not real.
 
----
+**The serve's arrival height is the 1.0 m default on all 120 serves sampled**, to
+three decimal places, because `_ball_trajectory` is passed `NAN` for `end_height`
+at the serve. That default is not an oversight anyone needs to discover; the
+parameter's own comment already names it:
 
-## Re-running
+> `BallTrajectory.create` has taken these since it was written and no caller ever
+> passed them, so every published trajectory in the game carried the 1.0 m
+> defaults… on seed 20010's dig the record answered 1.000 m at the far end where
+> the ball really arrives at 2.190 — **a metre and a fifth of fiction**, in the
+> exact methods a future interception resolver has to trust.
 
-```bash
-godot --headless --path . --script res://tools/run_body_centre_probe.gd
-```
+Placing a body against that would have been a physical geometry built on a
+placeholder — the failure mode this repository exists to catch, committed rather
+than caught. The wiring was removed and the reason written at the call site.
 
-Deterministic; no rally is resolved and no RNG is drawn.
+## 6. The next dependency, and it is a bug rather than a decision
+
+**Publish the serve's real arrival height.** `height_source` already records
+which trajectories know theirs and which took the default, so the gap is
+countable today. Once a reception's flight carries a true `end_height_meters`,
+the two arguments are already there, the relation is already derived and tested,
+and the promotion is one line at the call site plus a certified before/after.
+
+Two further consequences follow from the same input and are named rather than
+built:
+
+- **Posture.** The shoulder anchor here is the *standing* one. A passer squats,
+  which lowers it — and `UNIVERSAL_RATIOS` carries `hip_y` 0.545 as the other end
+  of that travel. Whether the stand-off should read a posture-adjusted shoulder
+  is a real question, and `body_state` now survives the leg boundary
+  (`ACTOR_CONTINUITY.md`) so the input for it exists.
+- **Net encroachment**, the milestone's fourth clause, is the same relation read
+  toward the tape and needs nothing further once a contact height is real.
+
+Suite: **2,136 checks, no failures** — 2,133 plus exactly the three written for
+the derivation.

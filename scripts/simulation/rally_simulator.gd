@@ -1564,6 +1564,18 @@ func resolve(
 	var receiver_reach := _reached_point(
 		receiver, receiver_start, serve_landing, serve_time, "lateral",
 		float(arrival.get("read_error_meters", 0.0)),
+		## **M3 is deliberately not wired here yet, and the reason is measured.**
+		##
+		## The stand-off needs the height the ball is met at, and this flight does
+		## not know it: `_ball_trajectory` was passed NAN for `end_height`, so
+		## `end_height_meters` is the 1.0 m default on all 120 serves sampled --
+		## the value its own comment calls "a metre and a fifth of fiction". A
+		## body placed against that would be placed against a placeholder, which
+		## is the failure this repository exists to catch rather than commit.
+		##
+		## `_reached_point` takes the two arguments and `_body_behind_contact`
+		## computes the offset; both are inert until a real arrival height is
+		## published here. See `docs/review/BODY_CENTRE_SCOPE.md` section 6.
 	)
 	if not using_live_reception:
 		## Short of the ball is where a beaten passer actually is, and it is what
@@ -8226,6 +8238,17 @@ func _reached_point(
 	## and defaulted to nothing so the approach and coverage sites keep the exact
 	## arrival they have always had.
 	shortfall_meters: float = 0.0,
+	## **Where the ball is met, and where it came from.** M3: a voli does not
+	## stand on the ball, they get behind it and play it in front of their own
+	## body. `VolleyballPlayer.contact_offset_meters` says how far in front, from
+	## the shoulder anchor the body data already carries and this voli's own arm;
+	## `incoming_direction` says which way "behind" is, in court space.
+	##
+	## Both default to nothing, and with either absent the arrival is exactly the
+	## one every caller had before -- the same shape `entry_facing` used to land
+	## before every caller was migrated. See `docs/review/BODY_CENTRE_SCOPE.md`.
+	contact_height_meters: float = 0.0,
+	incoming_direction: Vector2 = Vector2.ZERO,
 ) -> Vector2:
 	## **Every journey in the game passes through here**, which is what makes this
 	## the honest place to charge for one. Charged on the distance *asked for*
@@ -8251,7 +8274,9 @@ func _reached_point(
 		## short of it` was written to catch, and it caught it. A defender who
 		## went to the wrong place is drawn at the wrong place.
 		if shortfall_meters <= 0.0:
-			return target
+			return _body_behind_contact(
+				mover, target, contact_height_meters, incoming_direction
+			)
 		var lane := target - start
 		if lane.length_squared() < 0.000001:
 			return target
@@ -8270,6 +8295,40 @@ func _reached_point(
 		else:
 			high = middle
 	return start.lerp(target, low)
+
+
+## **Where the body stands, given where the contact is.**
+##
+## M3's whole content in one place. A passer gets *behind* the ball -- further
+## along its own line of travel -- and plays it in front of their platform, so
+## the body sits `contact_offset_meters` beyond the contact point along the
+## incoming direction. The offset is Pythagoras from the shoulder anchor
+## `BodyTypeModels.UNIVERSAL_RATIOS` already authors and this voli's own arm, and
+## it is zero above the shoulder and zero at the floor because the geometry says
+## so rather than because a band was drawn.
+##
+## Returns the contact point unchanged when either input is absent, which is what
+## keeps an un-migrated caller on exactly its old arrival.
+func _body_behind_contact(
+	mover: VolleyballPlayer,
+	contact: Vector2,
+	contact_height_meters: float,
+	incoming_direction: Vector2,
+) -> Vector2:
+	if mover == null or contact_height_meters <= 0.0:
+		return contact
+	if incoming_direction.length_squared() < 0.000001:
+		return contact
+	var offset := mover.contact_offset_meters(contact_height_meters)
+	if offset <= 0.0:
+		return contact
+	var heading := incoming_direction.normalized()
+	## Metres out, court units back: the offset is a real distance and the court
+	## is not square, so it cannot be added to a normalised position directly.
+	return Vector2(
+		clampf(contact.x + heading.x * offset / CourtConstants.COURT_WIDTH_METERS, 0.0, 1.0),
+		clampf(contact.y + heading.y * offset / CourtConstants.COURT_LENGTH_METERS, 0.0, 1.0),
+	)
 
 
 func _choose_opponent_attack(
