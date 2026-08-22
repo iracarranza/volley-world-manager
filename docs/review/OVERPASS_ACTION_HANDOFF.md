@@ -102,17 +102,60 @@ The two current live exits are `rally_simulator.gd` around lines 4216 and 6238, 
   `_overpass_control_contact` end to end: actors from live maps, one authoritative
   outgoing ball as contact 1, incoming launch byte-identical after resolution.
 
-**Still open:**
-1. **Attack branch** — when the contest selects `attack`, both exits currently
-   fall through to the old terminal. Wiring it needs `execute_attack` +
-   the defending side's block/floor-defence classification (kill / blocked /
-   dug → that side's transition). `execute_attack`'s `resolve_swing` already
-   accounts for blockers/defenders from positions, so no fabricated set
-   parameters are required — it is plumbing, not a policy question.
-2. **Home-side live fixture** — the control fixture exercises the opponent-side
-   helper path; a symmetric home-side fixture should follow.
-3. **M5 roadmap + physical-dig promotion** reassessment, once the attack branch
-   lands.
+## Progress after the checkpoint — attack branch wired, M5 architecture DONE
+
+**Attack branch: live-integrated at both exits and certified.** Commits
+`c6fed2e` (initial wiring), `7d003cd` (attack enters the real block path).
+
+- When the overpass contest selects `attack`, `_resolve_overpass_attack` now
+  forms the **defending** side's real block from live front-row state and the
+  overpass flight window (home defends → `_form_home_block`; opponent defends →
+  `_form_opponent_block`), turns it into a wall via
+  `GeometricAttackPromotion.block_wall`, and swings through `execute_attack`.
+  No set parameters are fabricated: `preset_window_seconds = 0.0` is true (the
+  attack is off an overpass, not a set), tempo/set_quality/setter_x enter only
+  as neutral minor read-cues, and the wall geometry is driven by the real
+  `attack_x`, the real flight window, and live positions. `WALL_JOIN_CLOSE`
+  naturally yields an **empty** wall when nobody can physically close — a
+  viable block enters the real block path, an unreachable one does not, and
+  neither is a policy decision.
+- Swing outcomes are classified symmetrically: net/out → attack error;
+  stuff/monster → blocked (home) / counter-block (opponent, blocker id from the
+  formation primary); tool/block_crush/high_hands → kill; and in/touch/recycle
+  route the outgoing ball into the **defending** side's
+  `_resolve_overpass_into_*`, so a live block deflection or a dug ball
+  continues the rally rather than terminating it. A `null` swing degrades to a
+  kill, never a hidden replacement ball.
+- The receiving attack is contact #1, exactly one outgoing ball is produced,
+  and the incoming launch is asserted byte-identical after resolution.
+
+**Certification.** Focused overpass probe PASS; three constructed live fixtures
+(`_test_overpass_control_wires_live`, `_test_overpass_attack_selects_and_launches_live`,
+`_test_overpass_attack_forms_real_block`) exercise both branches and the
+real-block formation end to end; full suite **2170 PASS** at `7d003cd`. The
+exit still fires **0× in 1,200 ordinary rallies**, so all overpass wiring is
+byte-neutral to production and exercised only by constructed fixtures.
+
+**M5 marked DONE (architecture).** Every exit criterion is met and certified —
+launch authoritative/immutable, intended recipient ≠ endpoint/interceptor,
+realised segment an exact prefix, truthful same-side terminals, legal crossing
+→ opponent ordinary first-contact choice, control + attack live/symmetric with
+the launch invariant asserted. This is an architecture condition and does not
+require flipping production authority. `ENABLE_PHYSICAL_PLATFORM_DIG` stays
+`false`. See `docs/design/RALLY_MILESTONES.md`.
+
+**Still open (downstream of M5, not blocking it):**
+1. **Physical-dig production promotion** — a *separate M4-migration
+   evaluation*, not part of the M5 architecture exit. Its stated blocker (an
+   ungoverned overpass) is cleared, but flipping the flag moves the outcome
+   distribution. The correct instrument is a paired legacy/new census read as
+   **observation only** — no outcome fitting, no silent flag flip.
+2. **Coverage keep-alive selection** — the next known policy boundary. Coverage
+   has complete contact/body state and the shared T1–T3 feasible envelope but no
+   governed preference for choosing among physically feasible keep-alive
+   launches. This is decision policy, not physics, and is a genuine STOP: it
+   must not be resolved by inventing a fixed apex/pop, a forced recipient, a
+   coverage-specific trajectory band, a new coefficient, or arbitrary weights.
 
 ## Files intended for this checkpoint
 
