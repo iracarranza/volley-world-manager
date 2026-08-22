@@ -1,4 +1,7 @@
-# Part 5 — Career and Player Development
+# Legacy Part 5 — Management
 
-1. [Career, Roster, and Training](01_career_roster_and_training.md)
-2. [Connecting Development to Match Options](02_development_to_match_options.md)
+Status: **HISTORICAL TEXTBOOK v1**
+
+This older management summary is retained for reference. Current player/career data is taught in [`../part_03_data/README.md`](../part_03_data/README.md); current management loops are in [`../part_06_management/README.md`](../part_06_management/README.md).
+
+See [`../LEGACY.md`](../LEGACY.md).
