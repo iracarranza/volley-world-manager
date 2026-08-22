@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scenes/components/player_actor_3d.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://scenes/components/signature_surge_3d.tscn" id="2_surge"]
-[ext_resource type="Script" path="res://scenes/components/surface_mark_renderer_3d.gd" id="3_surface_marks"]
+[ext_resource type="Script" path="res://scenes/components/high_contrast_surface_mark_renderer_3d.gd" id="3_surface_marks"]
 
 [sub_resource type="CapsuleMesh" id="TorsoMesh"]
 radius = 0.31
