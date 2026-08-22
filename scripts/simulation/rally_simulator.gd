@@ -48,6 +48,9 @@ const PlatformContactModel := preload(
 const FreeFlightInterceptionModel := preload(
 	"res://scripts/simulation/free_flight_interception_system.gd"
 )
+const OverpassActionModel := preload(
+	"res://scripts/simulation/overpass_action_system.gd"
+)
 const GeometricAttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
@@ -4214,6 +4217,15 @@ func _resolve_opponent_transition(
 				"terminal", {}
 			)).get("reason", "unresolved"))
 			if terminal_reason == "crossed_net_unresolved":
+				## The opponent's ball crossed back: home makes the ordinary first
+				## team contact. Falls through to the old terminal when the overpass
+				## is not a control contact this checkpoint wires.
+				var home_overpass := _resolve_overpass_into_home(
+					result, incoming_pass_trajectory, players, lineup,
+					opponent_team, defensive_plan, exchange_number, incoming_quality,
+				)
+				if home_overpass != null:
+					return home_overpass
 				return _finish(result, "m5_unresolved_overpass", true,
 					first_contact_player_id, {})
 			var home_attacker := _latest_attack_credit(result, "home")
@@ -6236,6 +6248,14 @@ func _resolve_home_continuation(
 				"terminal", {}
 			)).get("reason", "unresolved"))
 			if terminal_reason == "crossed_net_unresolved":
+				## The home ball crossed over: the opponent makes the ordinary first
+				## team contact. Symmetric to the home path; old terminal on fall-through.
+				var opponent_overpass := _resolve_overpass_into_opponent(
+					result, players, lineup, incoming_pass_trajectory, opponent_team,
+					defensive_plan, exchange_number, incoming_quality, defender,
+				)
+				if opponent_overpass != null:
+					return opponent_overpass
 				return _finish(result, "m5_unresolved_overpass", false, defender.id, {
 					"hitter": defender.display_name,
 				})
@@ -11976,6 +11996,209 @@ func _second_contact_actor_states(
 			actor.movement_mode = RallyPlayerState.MovementMode.RECOVERY
 		actors.append(actor)
 	return actors
+
+
+## The receiving side's ordinary first team contact on a ball that crossed the
+## net unresolved -- an overpass.
+##
+## `OVERPASS_ACTION_HANDOFF.md`: the governed policy is a shared action-choice
+## contest (attack / controlled first contact / emergency first contact) over the
+## physically and legally feasible actions, producing one outgoing ball as the
+## receiving team's contact 1. This helper wires the **control** half only; the
+## attack half is a separate checkpoint (§ below). Returns the executed control
+## contact merged with its choice geometry, or `{}` when the overpass is not a
+## control contact this pass can resolve -- in which case the caller keeps its
+## existing terminal, so no live rally regresses.
+##
+## The legacy resolver drives no persistent `RallyState`, so this uses
+## `OverpassActionSystem.choose()`/`execute_control()` (which need none) and hands
+## the generated free flight to the existing transition machinery, rather than
+## `apply_first_contact()`, which is built for the live-integrator `RallyState`.
+func _overpass_control_contact(
+	free_flight: Dictionary,
+	receiving_players: Array,
+	receiving_side: StringName,
+	lineup: RotationLineup,
+	principles: Resource,
+	setter: VolleyballPlayer,
+	setter_release_seat: Vector2,
+	setter_position: Vector2,
+) -> Dictionary:
+	if setter == null or lineup == null:
+		return {}
+	## The whole receiving six, at their live positions when the ball crosses.
+	## `OverpassActionSystem` applies its own eligibility and rotation legality;
+	## this only has to present every actor with authoritative state.
+	var typed: Array[VolleyballPlayer] = []
+	var starts := {}
+	var positions: Dictionary = opponent_live_positions \
+		if receiving_side == &"opponent" else live_positions
+	for entry in receiving_players:
+		var player := entry as VolleyballPlayer
+		if player == null:
+			continue
+		typed.append(player)
+		starts[player.id] = Vector2(positions.get(
+			player.id, Vector2(free_flight.get("start_position", Vector2.ZERO))
+		))
+	## `expected_area = Vector2.ZERO` disables the pre-contact projection: an
+	## overpass is reacted to from where the body actually is, not walked toward a
+	## known seat, because nobody called this ball to anyone.
+	var launch_time := float(free_flight.get("start_time", rally_clock))
+	var actors := _second_contact_actor_states(
+		typed, starts, receiving_side, Vector2.ZERO, 0.0, launch_time
+	)
+	var choice := OverpassActionModel.choose(
+		free_flight, actors, lineup, receiving_side, principles
+	)
+	if not bool(choice.get("available", false)):
+		return {}
+	## Attack is a later checkpoint. Selecting it here would need the opposing
+	## block+floor continuation, which is inlined per side and parameterised on a
+	## set an overpass never had; wiring it deserves its own certified step.
+	if str(choice.get("action", "")) == "attack":
+		return {}
+	## The receiving side's own release anchors, all class C -- the same seat and
+	## contact height every reception and dig already use. `arrival_floor_seconds`
+	## is the setter's own journey to the seat; slack means the ball is not rushed.
+	var intent := {
+		"target_anchor": setter_release_seat,
+		"height_anchor_meters": GeometricAttackPromotionModel \
+			.set_contact_height_meters(setter),
+		"arrival_floor_seconds": _movement_time(
+			setter, setter_position, setter_release_seat, "transition"
+		),
+	}
+	## Derived, not drawn from `rng`: perturbing the rally RNG here would move every
+	## downstream draw on a path that is meant to be inert until it fires.
+	var seed_value := rally_seed + 90_000 + int(choice.get("player_id", 0))
+	var execution := OverpassActionModel.execute_control(choice, intent, seed_value)
+	if not bool(execution.get("available", false)):
+		return {}
+	execution["contact_position"] = Vector2(choice.get(
+		"contact_position", setter_release_seat
+	))
+	execution["contact_time"] = float(choice.get("contact_time", launch_time))
+	execution["realised_trajectory"] = choice.get("realised_trajectory", {})
+	execution["platform_intent"] = intent
+	return execution
+
+
+## Home receives an overpass (the ball crossed back to the home court). Publishes
+## the first-team contact and enters the home transition, or returns `null` so the
+## caller keeps its terminal. `null` covers both "not a control contact this pass
+## resolves" and the exchange cap: an overpass is a net crossing, and resolving it
+## past `MAX_EXCHANGES` would run one set-and-swing beyond the rally's own bound.
+func _resolve_overpass_into_home(
+	result: Resource,
+	free_flight: Dictionary,
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	opponent_team: Resource,
+	defensive_plan: Resource,
+	exchange_number: int,
+	incoming_quality: float,
+) -> Resource:
+	if exchange_number >= MAX_EXCHANGES or defensive_plan == null:
+		return null
+	var setter := _player_by_id(players, lineup.active_setter_id())
+	if setter == null:
+		return null
+	var seat: Vector2 = defensive_plan.setter_release_target(
+		lineup.active_setter_id()
+	)
+	var contact := _overpass_control_contact(
+		free_flight, players, &"home", lineup, home_principles, setter, seat,
+		Vector2(live_positions.get(setter.id, seat)),
+	)
+	if contact.is_empty():
+		return null
+	var actor := _player_by_id(players, int(contact.get("actor_id", -1)))
+	var generated: Dictionary = contact.get("outgoing_trajectory", {})
+	if actor == null or generated.is_empty():
+		return null
+	var contact_pos := Vector2(contact.get("contact_position", seat))
+	live_positions[actor.id] = contact_pos
+	_add_event(
+		result, RallyEventModel.EventType.RECEPTION, actor.id, actor.display_name,
+		Vector2(free_flight.get("start_position", contact_pos)), contact_pos,
+		true, incoming_quality, "%s plays the overpass" % actor.display_name,
+		"Home first contact on a ball that crossed the net.",
+		_overpass_event_metadata(&"home", contact),
+	)
+	return _resolve_home_continuation(
+		result, players, lineup, actor, contact_pos, opponent_team,
+		defensive_plan, exchange_number + 1, incoming_quality, 0.0, 0.0, generated,
+	)
+
+
+## Opponent receives an overpass (the ball crossed to the opponent court).
+## Symmetric to the home path; enters the opponent transition.
+func _resolve_overpass_into_opponent(
+	result: Resource,
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	free_flight: Dictionary,
+	opponent_team: Resource,
+	defensive_plan: Resource,
+	exchange_number: int,
+	incoming_quality: float,
+	original_hitter: VolleyballPlayer,
+) -> Resource:
+	if exchange_number >= MAX_EXCHANGES or opponent_team == null:
+		return null
+	var setter := _opponent_setter(opponent_team)
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	if setter == null or opponent_lineup == null:
+		return null
+	var seat := _opponent_setter_release_target(opponent_team)
+	var contact := _overpass_control_contact(
+		free_flight, opponent_team.on_court_players(), &"opponent",
+		opponent_lineup, opponent_principles, setter, seat,
+		Vector2(opponent_live_positions.get(setter.id, seat)),
+	)
+	if contact.is_empty():
+		return null
+	var actor_id := int(contact.get("actor_id", -1))
+	var actor: VolleyballPlayer = null
+	for entry in opponent_team.on_court_players():
+		var candidate := entry as VolleyballPlayer
+		if candidate != null and candidate.id == actor_id:
+			actor = candidate
+			break
+	var generated: Dictionary = contact.get("outgoing_trajectory", {})
+	if actor == null or generated.is_empty():
+		return null
+	var contact_pos := Vector2(contact.get("contact_position", seat))
+	opponent_live_positions[actor.id] = contact_pos
+	_add_event(
+		result, RallyEventModel.EventType.RECEPTION, actor.id, actor.display_name,
+		Vector2(free_flight.get("start_position", contact_pos)), contact_pos,
+		true, incoming_quality, "%s plays the overpass" % actor.display_name,
+		"Opponent first contact on a ball that crossed the net.",
+		_overpass_event_metadata(&"opponent", contact),
+	)
+	return _resolve_opponent_transition(
+		result, players, lineup, original_hitter, contact_pos, opponent_team,
+		defensive_plan, exchange_number + 1, incoming_quality, false, actor.id,
+		NAN, 0.0, generated, 0.0,
+	)
+
+
+## The first-contact event's metadata, in the shape a continuation and playback
+## already read. `team_contact_number = 1` because crossing the net is a change
+## of possession; `overpass = true` marks the contact for the census.
+func _overpass_event_metadata(side: StringName, contact: Dictionary) -> Dictionary:
+	return {
+		"side": str(side),
+		"overpass": true,
+		"team_contact_number": 1,
+		"outgoing_trajectory": contact.get("outgoing_trajectory", {}),
+		"realised_trajectory": contact.get("realised_trajectory", {}),
+		"platform_intent": contact.get("platform_intent", {}),
+		"platform_contact": contact.get("platform_contact", {}),
+		"first_contact_action": str(contact.get("action", "")),
+	}
 
 
 ## Apply the existing second-contact responsibility policy to physically
