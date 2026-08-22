@@ -1979,6 +1979,21 @@ func resolve(
 			## only the legacy spatial arm reaches this.
 			Vector2.ZERO,
 		)
+	## **The height this setter actually takes the ball at.** Under a physical
+	## reception the pass has no authored endpoint, so the height is a property of
+	## the interception rather than of the launch: `_stamp_free_flight_resolution`
+	## has already published exactly this value onto the reception event, and the
+	## capability read below has to consume the same one or the two describe
+	## different contacts. The legacy arm keeps the pass's own delivered height.
+	var delivered_set_contact_height := float(physical_choice.get(
+		"contact_height_meters", NAN
+	)) if not physical_choice.is_empty() \
+		else float(reception_pass.get(
+			"set_contact_height_meters",
+			SetterCapabilityModel.pass_contact_height_meters(
+				float(result.reception_quality), rng.randf()
+			),
+		))
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
@@ -2093,6 +2108,12 @@ func resolve(
 	result.key_factors.append(_factor(
 		"good_pass" if result.reception_quality >= 0.58 else "poor_pass"
 	))
+	## When this ball actually reaches the setter's hands: the interception the
+	## flight was resolved to, or the authored pass's own landing when there was no
+	## flight to intercept.
+	var set_decision_moment := float(physical_choice.contact_time) \
+		if not physical_choice.is_empty() \
+		else _contact_time(pass_trajectory, rally_clock)
 	_add_event(result, RallyEventModel.EventType.SET_DECISION, setter.id, setter.display_name,
 		Vector2(0.50, 0.67), Vector2(0.50, 0.60), true,
 		result.reception_quality,
@@ -2105,9 +2126,17 @@ func resolve(
 			"first_contact_id": receiver.id,
 			## The decision is taken when the ball reaches the setter, and the
 			## window runs from there.
-			"event_time": _contact_time(pass_trajectory, rally_clock),
-			"deadline": _contact_time(pass_trajectory, rally_clock)
-				+ second_contact_window,
+			##
+			## **Which moment that is depends on who ends the flight.** A legacy pass
+			## is authored to land on the setter, so its `end_time` *is* the arrival.
+			## A physical pass is not: its `end_time` is where the untouched ball
+			## would have hit the floor, which is strictly later than the point a
+			## body actually met it. Reading the flight's end there stamped the
+			## decision after the set it precedes, and the causality floor spent 33
+			## corrections putting it back -- the one remaining place where the
+			## untouched endpoint still stood in for the interception.
+			"event_time": set_decision_moment,
+			"deadline": set_decision_moment + second_contact_window,
 			"incoming_trajectory": pass_trajectory})
 
 	## What this setter can do with the ball they are about to receive, and what
@@ -2124,18 +2153,14 @@ func resolve(
 	)
 	var setter_capability := SetterCapabilityModel.evaluate(
 		setter, assignment.tempo, float(result.reception_quality),
-		## The height the pass actually delivered, not a second guess at it.
+		## The height this contact actually happens at, not a second guess at it.
 		## `SetterCapabilitySystem.pass_contact_height_meters` drew this from a
 		## table against a random sail value -- a third model of a fact the pass
 		## itself now computes from its own apex under gravity, and one whose floor
 		## sat above every setter's forehead, so the underhand set it was meant to
-		## produce could never happen.
-		float(reception_pass.get(
-			"set_contact_height_meters",
-			SetterCapabilityModel.pass_contact_height_meters(
-				float(result.reception_quality), rng.randf()
-			),
-		)),
+		## produce could never happen. Resolved once above, so the legacy arm reads
+		## the pass's delivered height and the physical arm reads the interception's.
+		delivered_set_contact_height,
 		setter_approach_quality,
 	)
 	var resolved_tempo := int(setter_capability.resolved_tempo)
@@ -2270,7 +2295,23 @@ func resolve(
 	var release_interval := _release_interval(release_profile, float(result.set_quality))
 	## The instant the ball leaves the setter's hands. The set flight, the SET
 	## event, and the hitter's approach window are all timed from this one value.
-	var set_contact_time := rally_clock + second_contact_window + release_interval
+	##
+	## **The two arms measure from different origins, and only one of them can add
+	## a duration to `rally_clock`.** On the home first ball the clock is never
+	## advanced to the reception -- the reception derives its own moment from the
+	## serve's `end_time` instead -- so `rally_clock` sits behind the pass. The
+	## legacy window is a duration measured from that same lagging origin, so the
+	## sum stays self-consistent. A physical interception is not: its `contact_time`
+	## is an absolute moment on the free flight's own timeline, and adding the
+	## interval between two absolute moments back onto the lagging clock lands the
+	## set *before* the reception that fed it -- which is what the causality floor
+	## was correcting. Read the interception's own moment instead. The transition
+	## paths reach the identical quantity by the other route, because there the
+	## clock has already been advanced to the feeding contact.
+	var set_contact_time := (
+		float(physical_choice.contact_time) + release_interval
+	) if not physical_choice.is_empty() \
+		else rally_clock + second_contact_window + release_interval
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
 		float(set_arc.apex_height_meters),
@@ -2305,6 +2346,23 @@ func resolve(
 			"set_terms": home_set_terms, "emergency_setter": emergency_setter,
 			"first_contact_id": receiver.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
+			## **The leg this setter was actually timed on**, published on the same
+			## terms the opponent first ball and the home continuation already
+			## publish theirs. `movement_duration` under a physical interception is
+			## the travel to the *body* contact -- a reach short of the ball -- and
+			## it is charged against a setter who is already moving. An instrument
+			## that reads the ball position and rebuilds the body at rest is
+			## therefore comparing a different leg against a different assumption,
+			## which is the whole of the movement-agreement residual on this path.
+			## Both values come from the interception that was selected; the legacy
+			## spatial arm falls back to the ball contact and a standing start,
+			## exactly as before.
+			"body_contact_position": Vector2(physical_choice.get(
+				"body_contact_position", set_contact
+			)),
+			"movement_entry_velocity": Vector2(physical_choice.get(
+				"entry_velocity_mps", Vector2.ZERO
+			)),
 			"arrival_margin": setter_arrival_margin,
 			"deadline": set_contact_time,
 			"event_time": set_contact_time,
@@ -4793,9 +4851,17 @@ func _resolve_opponent_transition(
 	)
 	var opponent_set_contact_time := rally_clock \
 		+ opponent_second_contact_window + opponent_release_interval
+	## **The set begins where the setter actually touched the ball.**
+	## `dig_position` is where the feeding contact was *aimed*; under a physical
+	## interception `opponent_setter_position` is where a body actually met the
+	## flight, and the two are different points. The event's own start position has
+	## to be the second one, or the displayed contact, the published flight origin
+	## and the setter's marker describe three different places. Identical to
+	## `dig_position` on the legacy arm, where the setter is placed on the pass
+	## destination by construction.
 	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
 		opponent_setter.display_name,
-		dig_position, opponent_contact, true, opponent_set_quality,
+		opponent_setter_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
 		{"side": "opponent",
@@ -12785,6 +12851,14 @@ func _stamp_free_flight_resolution(
 		feeding_event.end_position = Vector2(choice.get(
 			"contact_position", feeding_event.end_position
 		))
+		## A contact that publishes where its ball was actually played to keeps that
+		## field in step with the endpoint above: under a physical launch the pass
+		## has no authored destination, so "where it went" is the interception, not
+		## the floor the untouched flight would have reached. Written only when the
+		## key already exists, so the families that never published one keep their
+		## metadata shape exactly.
+		if feeding_event.metadata.has("actual_pass_target"):
+			feeding_event.metadata["actual_pass_target"] = feeding_event.end_position
 		feeding_event.metadata["realised_interceptor_id"] = int(choice.get(
 			"player_id", -1
 		))
@@ -12802,6 +12876,8 @@ func _stamp_free_flight_resolution(
 		feeding_event.end_position = Vector2(terminal.get(
 			"position", feeding_event.end_position
 		))
+		if feeding_event.metadata.has("actual_pass_target"):
+			feeding_event.metadata["actual_pass_target"] = feeding_event.end_position
 	feeding_event.metadata["free_flight_resolution"] = str(terminal.get(
 		"reason", "unresolved"
 	))

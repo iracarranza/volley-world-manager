@@ -67,6 +67,14 @@ the chain hold by identity and is strictly more truthful — it is a correction 
 the invariant's inputs, not a weakening of the invariant. `run_coverage_chain_diag.gd`
 confirms zero chain mismatches across the identity fixtures' seeds.
 
+> **Superseded on the reception question.** Reception has since been reconciled
+> and promoted; the blocker described below turned out to be four more stale
+> endpoints plus one instrument-bookkeeping gap, all derivable from existing
+> authority, and the movement-agreement gate passes unchanged. See
+> [`PLATFORM_RECEPTION_PROMOTION.md`](PLATFORM_RECEPTION_PROMOTION.md). The
+> section is kept because the diagnosis it records is how the reconciliation was
+> found. **M4 is DONE.**
+
 ## Remaining M4 migration — reception: built and dev-certified, production blocked
 
 Dig and coverage feed a **continuation or transition** set, and both are

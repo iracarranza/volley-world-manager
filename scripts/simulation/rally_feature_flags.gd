@@ -47,17 +47,29 @@ const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 const ENABLE_PHYSICAL_PLATFORM_DIG: bool = true
 const ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE: bool = true
 
-## Reception is the third and last platform family to move onto the shared
-## physical authority. It is staged behind its own production gate -- like every
-## rollout before it -- because the home first-ball reception->set path is a
-## pre-M5 inline resolver (it chooses the setter spatially against the pass
-## destination and has no authoritative-free-flight/interception branch), so the
-## migration is a retrofit rather than a wiring change and is certified before it
-## goes live. The development override reuses the dig's `platform_dig_development_open`
-## field, so the existing paired-census machinery exercises reception physics too;
-## production stays legacy until this flag flips with the same evidence discipline
-## the dig promotion used. See `PLATFORM_DIG_PROMOTION.md` (remaining M4 migration).
-const ENABLE_PHYSICAL_RECEPTION: bool = false
+## Reception is the third and last platform family on the shared physical
+## authority, and the hardest: the home first-ball reception->set path was a
+## pre-M5 inline resolver that chose the setter spatially against the pass
+## destination, so this was a retrofit rather than a wiring change. It now runs
+## the same shape as the other two -- T1--T3 launch, one authoritative free
+## flight, M5 interception deciding the second contact, realised prefix into the
+## SET -- with the intended setter as soft intent only.
+##
+## Its development override is its own (`development_physical_reception` ->
+## `platform_reception_development_open`), deliberately not the dig's field, so a
+## paired census can open one family without the other. The shared legacy-force
+## still forces every family back to legacy together.
+##
+## Promoting it required reconciling four places where the *authored pass
+## endpoint* was still standing in for the *actual interception*: the setter's
+## capability height, the published pass target, the opponent set's displayed
+## contact, and the SET_DECISION moment (which read the untouched flight's floor
+## and so stamped the decision after the set it precedes -- 33 causality-floor
+## corrections). One instrument gap rode along: the first-ball SET never
+## published `body_contact_position` or `movement_entry_velocity`, which the
+## other two set paths already did, so the movement-agreement gate was comparing
+## a longer leg against a standing start. See `PLATFORM_RECEPTION_PROMOTION.md`.
+const ENABLE_PHYSICAL_RECEPTION: bool = true
 
 ## Gate E: the geometric attack. Where the other rollouts promote one *contact*,
 ## this one replaces how an attack is decided and resolved end to end -- course,

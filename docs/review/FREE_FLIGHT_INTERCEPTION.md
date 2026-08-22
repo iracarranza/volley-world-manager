@@ -74,10 +74,14 @@ field. Physics is unchanged; only the unit label is corrected.
 
 ## Production boundary — now open
 
-Production is **open**: `ENABLE_PHYSICAL_PLATFORM_DIG` is `true`. The path below
-records the boundary that held it closed and how each part was cleared; see
-[`PLATFORM_DIG_PROMOTION.md`](PLATFORM_DIG_PROMOTION.md) for the promotion
-evidence.
+Production is **open for all three platform families**:
+`ENABLE_PHYSICAL_PLATFORM_DIG` and `ENABLE_PHYSICAL_RECEPTION` are both `true`,
+so reception, controlled dig and attack coverage each launch one authoritative
+free flight and let M5 decide the next contact. The path below records the
+boundary that held the dig closed and how each part was cleared; see
+[`PLATFORM_DIG_PROMOTION.md`](PLATFORM_DIG_PROMOTION.md) and
+[`PLATFORM_RECEPTION_PROMOTION.md`](PLATFORM_RECEPTION_PROMOTION.md) for the
+promotion evidence. **M4 is DONE.**
 
 The same-side interception contracts passed but did not certify every launch the
 authored T1--T3 model can produce — specifically, a launch that clears the net.

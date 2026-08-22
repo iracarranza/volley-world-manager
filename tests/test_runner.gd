@@ -13471,20 +13471,45 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var first: Resource = manager.resolve_active_rally(770012)
-	var trace: Dictionary = first.analysis.get("shadow_reception", {})
-	var record: Dictionary = Dictionary(trace.get("summary", {})).get(
-		"geometric_attack", {}
-	)
+	## **The rally has to contain a swing before it can carry a swing's record.**
+	## This stood on the single seed 770012, which stopped swinging when reception
+	## became physical: its pass is one no setter can run down, so the rally now
+	## ends truthfully at the floor with no attack at all, and a gate that asks
+	## whether an attack was measured geometrically had nothing to measure. That is
+	## a stale sample, not a lost property -- the assertion below is unchanged and
+	## still demands an available record, a named outcome and a real speed. Scan a
+	## short span for the first rally that actually swings, and hold every later
+	## check on that same seed so the determinism pair still compares like with
+	## like.
+	var geometric_seed := 770012
+	var first: Resource = null
+	var record := {}
+	for candidate_seed in range(770012, 770052):
+		var candidate: Resource = manager.resolve_active_rally(candidate_seed)
+		if candidate == null:
+			continue
+		var candidate_trace: Dictionary = candidate.analysis.get(
+			"shadow_reception", {}
+		)
+		var candidate_record: Dictionary = Dictionary(
+			candidate_trace.get("summary", {})
+		).get("geometric_attack", {})
+		if bool(candidate_record.get("available", false)):
+			geometric_seed = candidate_seed
+			first = candidate
+			record = candidate_record
+			break
 	_check(
-		bool(record.get("available", false))
+		first != null
+			and bool(record.get("available", false))
 			and not str(record.get("outcome", "")).is_empty()
 			and float(record.get("speed_mps", 0.0)) > 0.0,
 		"a live rally resolves its attack geometrically alongside the legacy swing",
 	)
-	var repeat: Resource = manager.resolve_active_rally(770012)
+	var repeat: Resource = manager.resolve_active_rally(geometric_seed)
 	_check(
-		str(repeat.terminal_outcome) == str(first.terminal_outcome)
+		first != null
+			and str(repeat.terminal_outcome) == str(first.terminal_outcome)
 			and repeat.events.size() == first.events.size(),
 		"the shadow geometric swing leaves the rally it measures untouched",
 	)
