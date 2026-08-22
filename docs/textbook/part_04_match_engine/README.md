@@ -1,13 +1,9 @@
-# Part 4 — The Match and Rally Engine
+# Legacy Part 4 — Match Engine
 
-This is the central technical section.
+Status: **HISTORICAL TEXTBOOK v1**
 
-For active continuation work, read the
-[Fresh-Agent Handoff](../FRESH_AGENT_HANDOFF.md) before these chapters.
+This directory documents the earlier Gate/shadow/persistent-rally migration and is valuable history, but it is no longer the current rally guide.
 
-1. [Current Rally Pipeline](01_current_rally_pipeline.md)
-2. [Persistent Rally State](02_persistent_rally_state.md)
-3. [Ball Time, Movement, and Actions](03_ball_time_movement_and_actions.md)
-4. [Tactics, Information, and Progression](04_tactics_information_and_progression.md)
-5. [Migration Plan and Visible Proof](05_migration_and_visible_proof.md)
-6. [Adjusting and Extending Live Match Systems](06_adjusting_and_extending_live_systems.md)
+Read [`../part_04_rally/README.md`](../part_04_rally/README.md) for current architecture and [`../part_05_rally_history/README.md`](../part_05_rally_history/README.md) for the migration narrative.
+
+See [`../LEGACY.md`](../LEGACY.md).
