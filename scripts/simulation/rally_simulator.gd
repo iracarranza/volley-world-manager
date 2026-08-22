@@ -12619,8 +12619,23 @@ func _resolve_overpass_attack(
 	var defending_positions: Array = []
 	for value in defence_map.values():
 		defending_positions.append(Vector2(value))
-	var contact_pos := Vector2(choice.get("contact_position", attacker.position \
-		if attacker != null else Vector2(0.5, 0.5)))
+	## The attacker's own live position, read from the map for the side they are
+	## actually on -- `defence_map` above is the *defending* side's.
+	##
+	## The previous fallback was `attacker.position`, which could never return
+	## anything: a `VolleyballPlayer` is a Resource carrying attributes and has
+	## never had a `position`. Two failures, not one. `Dictionary.get` evaluates
+	## its default eagerly, so that access ran on *every* call and pushed an error
+	## even when `choice` carried a perfectly good contact position; and on the
+	## path it was written for it produced `Vector2(null)`, putting a first-ball
+	## overpass swing in the corner of the court instead of under the attacker.
+	## A fallback that cannot reach its own stated range, failing silently in the
+	## one case it exists for.
+	var attack_map: Dictionary = opponent_live_positions if defending_home \
+		else live_positions
+	var attacker_at := Vector2(0.5, 0.5) if attacker == null \
+		else Vector2(attack_map.get(attacker.id, Vector2(0.5, 0.5)))
+	var contact_pos := Vector2(choice.get("contact_position", attacker_at))
 	## The wall the defence can actually form against a *no-set* first-contact
 	## attack. Its geometry comes only from live inputs: the attack lane
 	## (`contact_pos.x`) and the closure window, which is the incoming overpass
