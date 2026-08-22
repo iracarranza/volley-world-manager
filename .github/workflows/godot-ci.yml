@@ -40,12 +40,6 @@ jobs:
           set -euo pipefail
           godot --headless --path . --editor --quit
 
-      - name: Run foundation suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path . --script tests/test_runner.gd
-
       - name: Render surface-mark gallery
         shell: bash
         run: |
@@ -62,3 +56,9 @@ jobs:
           path: artifacts/mark-previews/*.png
           if-no-files-found: error
           retention-days: 14
+
+      - name: Run foundation suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --script tests/test_runner.gd
