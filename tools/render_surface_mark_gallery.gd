@@ -132,4 +132,4 @@ func _foreground_sample_count(image: Image) -> int:
 				+ absf(pixel.b - BACKGROUND.b)
 			if delta > 0.10:
 				count += 1
-		return count
+	return count
