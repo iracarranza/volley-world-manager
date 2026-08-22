@@ -76,6 +76,44 @@ The two current live exits are `rally_simulator.gd` around lines 4216 and 6238, 
 6. Add symmetric live-path tests for both receiving sides and rerun the full suite and relevant balance/resolution probes.
 7. Keep overhead/set-like first contact excluded until the set contact form can be generalized without inheriting second-contact intent, hitter-selection, or contact-count assumptions.
 
+## Progress after the checkpoint — control branch wired
+
+**Control branch: live-integrated at both exits and certified.** Commits
+`c147c30` (wiring) and `f766cf9` (live fixture).
+
+- Both `crossed_net_unresolved` exits now route the receiving side's ordinary
+  first contact through `OverpassActionSystem` when the chosen action is a
+  controlled/emergency first contact, and fall through to the old
+  `m5_unresolved_overpass` terminal otherwise. `_resolve_overpass_into_home`
+  feeds `_resolve_home_continuation`; `_resolve_overpass_into_opponent` feeds
+  `_resolve_opponent_transition`; both at `exchange_number + 1`, both guarded by
+  `MAX_EXCHANGES`.
+- The legacy resolver drives no persistent `RallyState`, so this uses
+  `choose()`/`execute_control()` (which need none) and hands the generated
+  authoritative free flight to the existing transition machinery, **not**
+  `apply_first_contact()`. Receiving actors are built from the authoritative live
+  maps via the existing `_second_contact_actor_states` recipe. The control intent
+  uses the receiving side's own release seat / set-contact height / setter
+  movement time — all class C.
+- Certification: focused overpass probe still PASS; full suite **2160 with the
+  change and 2160 with it stashed** — byte-neutral, because the exit fires **0
+  times in 1,200 ordinary rallies** (`run_m5_overpass_census`). A constructed
+  live fixture (`_test_overpass_control_wires_live`, suite 2160 → 2164) exercises
+  `_overpass_control_contact` end to end: actors from live maps, one authoritative
+  outgoing ball as contact 1, incoming launch byte-identical after resolution.
+
+**Still open:**
+1. **Attack branch** — when the contest selects `attack`, both exits currently
+   fall through to the old terminal. Wiring it needs `execute_attack` +
+   the defending side's block/floor-defence classification (kill / blocked /
+   dug → that side's transition). `execute_attack`'s `resolve_swing` already
+   accounts for blockers/defenders from positions, so no fabricated set
+   parameters are required — it is plumbing, not a policy question.
+2. **Home-side live fixture** — the control fixture exercises the opponent-side
+   helper path; a symmetric home-side fixture should follow.
+3. **M5 roadmap + physical-dig promotion** reassessment, once the attack branch
+   lands.
+
 ## Files intended for this checkpoint
 
 ```text
