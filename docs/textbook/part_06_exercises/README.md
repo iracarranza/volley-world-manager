@@ -1,7 +1,9 @@
-# Part 6 — Guided Exercises
+# Legacy Part 6 — Exercises
 
-These are learning exercises, not the active implementation roadmap. For current
-work, begin with [FRESH_AGENT_HANDOFF.md](../FRESH_AGENT_HANDOFF.md).
+Status: **HISTORICAL TEXTBOOK v1**
 
-1. [Guided Exercises](01_guided_exercises.md)
-2. [Beginner Project Ladder](02_beginner_project_ladder.md)
+The exercises are retained as optional practice, but they were written against an earlier project snapshot. Use textbook v2 for current architecture and verify any source path/symbol before following an old exercise.
+
+For current practice, start with [`../part_01_foundations/06_first_safe_change.md`](../part_01_foundations/06_first_safe_change.md) and the reading/graduation exercises embedded throughout v2.
+
+See [`../LEGACY.md`](../LEGACY.md).
