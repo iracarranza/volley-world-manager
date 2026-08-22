@@ -1044,6 +1044,10 @@ var platform_dig_development_open: bool = false
 ## promoted one. This preserves the validation protocol after production opens;
 ## ordinary callers never set it and cannot disable production authority.
 var platform_dig_development_force_legacy: bool = false
+## Reception's own development-open, decoupled from the dig's so a probe can open
+## physical reception without the dig's dev override reaching it (or vice versa).
+## The legacy-force above is shared: forcing legacy forces it for every family.
+var platform_reception_development_open: bool = false
 ## The opponent's defensive plan for this rally, built on first use.
 var opponent_plan: Resource = null
 var rally_clock: float = 0.0
@@ -1185,6 +1189,7 @@ func resolve(
 	serve_context: Dictionary = {},
 	match_flow: float = 0.0,
 	development_legacy_platform_dig: bool = false,
+	development_physical_reception: bool = false,
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
@@ -1205,6 +1210,7 @@ func resolve(
 	geometric_serves = {}
 	geometric_development_open = development_continuous_reception
 	platform_dig_development_open = development_physical_platform_dig
+	platform_reception_development_open = development_physical_reception
 	platform_dig_development_force_legacy = development_legacy_platform_dig \
 		and OS.is_debug_build()
 	opponent_plan = null
@@ -1804,6 +1810,12 @@ func resolve(
 			)),
 			"persistent_state_update": live_reception_integration.duplicate(true) \
 				if using_live_reception else {}})
+	## The shared platform record, only when the physical reception launched one --
+	## the legacy scatter carries none, so the key is absent and the event metadata
+	## is unchanged with the flag off.
+	if reception_pass.has("platform_contact"):
+		(result.events[-1] as RallyEvent).metadata["platform_contact"] = \
+			reception_pass.platform_contact
 	if seam_conflict:
 		result.key_factors.append(_factor("seam_conflict"))
 	if not reception_success:
@@ -1901,39 +1913,72 @@ func resolve(
 		home_second_contact.candidates, defensive_plan,
 		lineup.active_setter_id(), receiver.id,
 	)
-	var set_contact: Vector2 = reception_pass.destination
-	var second_contact_window := float(pass_trajectory.get("duration", 0.68))
-	var setter_choice := _spatial_setter_choice(
-		home_second_contact.candidates, home_second_contact.starts,
-		defensive_plan, lineup.active_setter_id(), receiver.id, setter,
-		set_contact, second_contact_window,
-		## The serve's own flight. A setter releases toward their target when the
-		## ball is struck, not when the platform touches it -- so this is the run
-		## they have already made by the time the pass exists, and it is the
-		## first of the overlapping timelines `OUTSTANDING` §1 asks for.
-		float(serve_trajectory.get("duration", 0.0)),
-		## **Held, with the reason measured.** This should pass the plan's
-		## `setter_release_target` -- the zone the setter is supposed to set
-		## from, which exists before the serve is struck -- because running them
-		## at `set_contact` is running them at the resolved pass destination,
-		## a coordinate that does not exist yet. That is precognition and the
-		## handoff is right to call it out.
-		##
-		## Passing it turns the movement-agreement gate red, and the direction
-		## says why: SET falls from 0.8344 to 0.7466 and the perceptible-leg
-		## rate goes 0.0579 to 0.1294. A setter who has already reached their
-		## zone has a *short* remaining leg, and a short leg is where the
-		## resolver's allotted duration and the stepped movement model disagree
-		## most -- the fixed costs, the standing start and the turn, are a much
-		## larger share of two tenths of a second than of one and a half.
-		##
-		## So the correct change exposes a real instrument limit rather than
-		## causing a regression, and widening that band a second time to admit
-		## it would be the thing this repository keeps being told not to do.
-		## `OUTSTANDING` §1 carries it: the short-leg timing wants fixing first,
-		## and then this line becomes one word.
-		Vector2.ZERO,
-	)
+	## When the reception published an authoritative free flight, the second
+	## contact is chosen by physical interception -- the same M5 machinery the
+	## transition set uses -- not by `_spatial_setter_choice` against the pass
+	## destination. The intended setter is soft intent; the actual interceptor owns
+	## contact two, may be an emergency setter, and consumes the realised prefix.
+	## A pass no teammate can reach terminates truthfully (floor/net/out gives the
+	## serving team the point; a legal crossing is the opponent's ordinary first
+	## contact). Legacy feeds carry no free flight and keep the spatial choice, so
+	## the flag-off path is unchanged.
+	var physical_choice := {}
+	if str(pass_trajectory.get("trajectory_role", "")) \
+			== "authoritative_free_flight":
+		physical_choice = _physical_second_contact_choice(
+			pass_trajectory, home_second_contact.candidates,
+			home_second_contact.starts, defensive_plan,
+			lineup.active_setter_id(), receiver.id, setter, &"home",
+			defensive_plan.setter_release_target(lineup.active_setter_id()),
+			GeometricAttackPromotionModel.set_contact_height_meters(setter),
+			float(serve_trajectory.get("duration", 0.0)),
+		)
+		_stamp_free_flight_resolution(result, physical_choice)
+		if physical_choice.get("player") == null:
+			var terminal_reason := str(Dictionary(physical_choice.get(
+				"terminal", {}
+			)).get("reason", "unresolved"))
+			if terminal_reason == "crossed_net_unresolved":
+				## The received ball crossed the net unplayed: the opponent makes
+				## their ordinary first team contact, symmetric to every other exit.
+				var opponent_overpass := _resolve_overpass_into_opponent(
+					result, players, lineup, pass_trajectory, opponent_team,
+					defensive_plan, 1, float(result.reception_quality), receiver,
+				)
+				if opponent_overpass != null:
+					return opponent_overpass
+				return _finish(result, "m5_unresolved_overpass", false, receiver.id, {
+					"hitter": receiver.display_name,
+				})
+			## Nobody on the receiving side could set the pass: the point goes to
+			## the serving side. No prior attack exists on a first ball, so the
+			## credit falls back to a bare opponent point.
+			var opponent_attacker := _latest_attack_credit(result, "opponent")
+			return _finish(
+				result, "opponent_kill", false, int(opponent_attacker.id),
+				{"hitter": str(opponent_attacker.name)},
+			)
+	var set_contact := Vector2(physical_choice.get(
+		"contact_position", reception_pass.destination
+	))
+	var second_contact_window := float(physical_choice.get(
+		"contact_time", 0.0
+	)) - float(pass_trajectory.get("start_time", 0.0)) \
+		if not physical_choice.is_empty() \
+		else float(pass_trajectory.get("duration", 0.68))
+	var setter_choice := physical_choice if not physical_choice.is_empty() \
+		else _spatial_setter_choice(
+			home_second_contact.candidates, home_second_contact.starts,
+			defensive_plan, lineup.active_setter_id(), receiver.id, setter,
+			set_contact, second_contact_window,
+			## The serve's own flight. A setter releases toward their target when
+			## the ball is struck, not when the platform touches it -- the run they
+			## have already made by the time the pass exists.
+			float(serve_trajectory.get("duration", 0.0)),
+			## Held for the short-leg timing reason recorded in `OUTSTANDING` §1;
+			## only the legacy spatial arm reaches this.
+			Vector2.ZERO,
+		)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
@@ -2285,6 +2330,17 @@ func resolve(
 	(result.events[-1] as RallyEvent).metadata["height_difficulty"] = set_height_difficulty
 	var set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(set_event, setter_choice)
+	## The ball this set was struck against is the realised prefix that actually
+	## reached the setter, not the full free flight to the floor -- the same
+	## segment stamped onto the reception. This holds the reception-to-set chain by
+	## identity; the legacy spatial arm carries no realised segment and keeps the
+	## pass as stamped above.
+	if set_event != null and not physical_choice.is_empty():
+		var reception_realised := Dictionary(physical_choice.get(
+			"realised_trajectory", {}
+		))
+		if not reception_realised.is_empty():
+			set_event.metadata["incoming_trajectory"] = reception_realised
 	## Which posture this set was released from, and why it was not the other
 	## one. `reason` is diagnostic rather than narratable -- a rushed setter
 	## should read as a setter with their feet on the floor, not as a caption --
@@ -4051,6 +4107,11 @@ func _resolve_home_serve(
 			"incoming_speed_mps": opponent_pass.get("incoming_speed_mps", 0.0),
 			"setter_release_target": opponent_setter_release,
 			"actual_pass_target": opponent_pass_destination})
+	## The shared platform record, only when the physical reception launched one;
+	## absent (and byte-neutral) on the legacy scatter.
+	if opponent_pass.has("platform_contact"):
+		(result.events[-1] as RallyEvent).metadata["platform_contact"] = \
+			opponent_pass.platform_contact
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
 	## `opponent_setter_release` is resolved above, before the pass, because the
@@ -10740,7 +10801,11 @@ func _physical_platform_dig_enabled() -> bool:
 ## the paired reception census; production stays legacy until this const flips.
 func _physical_platform_reception_enabled() -> bool:
 	return not platform_dig_development_force_legacy \
-		and RallyFeatureFlagsModel.ENABLE_PHYSICAL_RECEPTION
+		and (RallyFeatureFlagsModel.ENABLE_PHYSICAL_RECEPTION \
+		or (
+			platform_reception_development_open and OS.is_debug_build()
+			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
+		))
 
 
 ## The keep-alive ball a successful attack-coverage contact launches.

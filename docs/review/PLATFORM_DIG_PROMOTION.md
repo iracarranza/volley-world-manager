@@ -67,20 +67,59 @@ the chain hold by identity and is strictly more truthful — it is a correction 
 the invariant's inputs, not a weakening of the invariant. `run_coverage_chain_diag.gd`
 confirms zero chain mismatches across the identity fixtures' seeds.
 
-## Remaining M4 migration — reception
+## Remaining M4 migration — reception: built and dev-certified, production blocked
 
-Dig and coverage are the two platform families that feed a **continuation or
-transition** set, and both are now physical. Reception is the third and it is
-not yet migrated: `_reception_pass_result` still computes a legacy scatter/apex
-pass, because reception feeds the **first-ball** set path, which — unlike the
-transition resolvers — has no `authoritative_free_flight` / M5 interception
-branch today (it resolves the setter spatially against the pass destination via
-`_spatial_setter_choice`). Migrating reception therefore reuses the dig's
-launch recipe (designated-setter intent → T1–T3 → free flight) but also needs M5
-interception, terminal/overpass handling and realised-prefix reporting added to
-the first-ball path — a slice on the order of the overpass and coverage work,
-not a mechanical edit. It is the next M4 step and does not require a new authored
-magnitude.
+Dig and coverage feed a **continuation or transition** set, and both are
+physical. Reception is the third family. Its physical path is now **built and
+certified in development**, behind its own gate `ENABLE_PHYSICAL_RECEPTION`
+(default false, production byte-neutral at 2161):
+
+- `_reception_pass_result` overlays one authoritative launch on the legacy
+  result when `_physical_platform_reception_enabled()`, reusing the shared
+  `_physical_platform_dig_result` with a `reception` family label. The intended
+  setter is the designated setter's release seat — soft intent only.
+- The **home first-ball path** was retrofitted with the M5 branch it lacked:
+  `_physical_second_contact_choice` selects the interceptor, terminals resolve
+  truthfully (floor/net/out gives the serving side the point; a legal crossing
+  is the opponent's ordinary first contact), and the SET consumes the realised
+  intercepted prefix by identity. The **opponent** side needed no retrofit — it
+  already funnels through `_resolve_opponent_transition`'s M5 branch.
+- `tools/run_reception_rollout_probe.gd` (paired, 2,800 rallies) is **14/14**:
+  1,117/1,117 owned launches, 0 launch mutations, 0 prefix failures, 0 chain
+  breaks, intended setter ≠ interceptor (32 alternates, 164 intended misses),
+  T1–T3 bounds held, both serving sides, truthful terminals (floor 130, net 4,
+  overpass 3).
+
+**Production promotion is blocked**, and not by distribution movement. Flipping
+`ENABLE_PHYSICAL_RECEPTION` true fails several *explicit* suite invariants that
+the transition families never tripped, because the first-ball set is now timed
+and placed against the **interception** (a short leg) rather than the full pass:
+
+1. *Allotted duration and the movement model agree for every phase type* — the
+   **movement-agreement gate**. This is the short-leg timing instrument limit
+   `_spatial_setter_choice` already documents ("the short-leg timing wants
+   fixing first … widening that band a second time would be the thing this
+   repository keeps being told not to do"). Physical reception makes the setter's
+   remaining leg short, which is exactly where the resolver's allotted duration
+   and the stepped movement model disagree most.
+2. *The causality floor never has to correct a derived moment* (34 fired) and
+   *two blockers on one wall recognise at their own moments* — related timing,
+   downstream of the same short-leg interception moments.
+3. *The height a first-ball setter is read against is the height their own pass
+   delivered* — under M5 the reception's `set_contact_height_meters` is NaN (the
+   interception supplies the real contact height), so the delivered-height
+   invariant needs the set to read the M5 interception height, not the pass's.
+4. *Setter contact follows the generated reception destination* — encodes the
+   legacy spatial assumption that the setter stands on the pass endpoint; under
+   M5 the setter stands at the interception point on the flight.
+
+(3) and (4) are semantic reconciliations of the kind the dig promotion already
+made (report the realised interception, not the legacy endpoint). (1) and (2)
+are the **deferred short-leg movement-timing work** the codebase flagged and
+must not be worked around by widening the gate — a materially separate piece,
+possibly needing a movement-model change rather than a reporting fix. Reception
+production therefore stays gated until that short-leg timing is resolved on its
+own terms. The build and its certification stand; only the flag flip waits.
 
 ## Not deleted
 
