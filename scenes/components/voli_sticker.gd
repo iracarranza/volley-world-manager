@@ -268,12 +268,13 @@ const CACHE_LIMIT: int = 900
 ## line weight, colour steps, the shape of a shoulder -- and none of that shows up
 ## in a job. A hand-bumped version constant would work exactly as often as
 ## somebody remembered to bump it, which for a cache that fails silently and
-## looks fine is not often enough. So the fingerprint is the digest of the three
-## files that decide what a sticker looks like: change any of them and every
-## cached sticker stops matching, at no cost to anyone who did not.
+## looks fine is not often enough. The fingerprint therefore digests every source
+## that can change the baked body's geometry or surface treatment.
 const FINGERPRINT_SOURCES: Array[String] = [
 	"res://scenes/components/voli_sticker.gd",
 	"res://scenes/components/player_actor_3d.gd",
+	"res://scenes/components/player_actor_3d.tscn",
+	"res://scenes/components/surface_mark_renderer_3d.gd",
 	"res://scripts/data/body_type_models.gd",
 ]
 static var _fingerprint: String = ""
