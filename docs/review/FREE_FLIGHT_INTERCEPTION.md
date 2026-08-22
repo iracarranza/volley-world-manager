@@ -85,16 +85,20 @@ terminals). That is population evidence, not impossibility. A contact made at
 at `(-0.262, 5.502, -3.731)` m/s and clears the net at 2.493 m. No new constant
 or enum-specific band is involved.
 
-The current system names that state `crossed_net_unresolved` and stops at the
-net. Proceeding needs one materially different semantic decision: when a dig
-becomes an overpass, which opposing volis are eligible, what contact actions they
-may choose (attack, set, or first contact), and how the existing responsibility
-and attack-choice policies arbitrate them. Assigning a winner or silently
-calling it a reception would manufacture policy. Controlled-dig production,
-reception promotion and coverage promotion remain closed until this is governed.
+That `crossed_net_unresolved` state is **no longer a dead end**: M5 now resolves
+it as the receiving side's ordinary first team contact through
+`OverpassActionSystem`, in both the control and attack branches, at both live
+exits (see [`OVERPASS_ACTION_HANDOFF.md`](OVERPASS_ACTION_HANDOFF.md)). The
+overpass boundary that gated controlled-dig, reception and coverage promotion is
+therefore cleared. Promotion of the physical dig to production authority is now
+a paired-census balance question, not a governance one — the distribution moves
+when the flag flips, and that movement is observed, never fitted.
 
-Coverage now has complete contact/body state but no governed preference for
-choosing among feasible keep-alive launches. Its missing rule is decision policy,
-not physics: there is no target height, recipient or timing anchor from which a
-minimal selection can be derived. It is the next known policy question after the
-overpass boundary, not the current one.
+Coverage's keep-alive selection is now governed and built. It owns no recipient
+policy of its own: the intended actor is exactly the one the existing
+second-contact policy (`_second_contact_setter`) names, with the coverer
+excluded, and from there it is the shared physical platform contact producing
+one authoritative free flight routed through M5 interception. It is gated behind
+the same `ENABLE_PHYSICAL_PLATFORM_DIG` flag as the dig and is byte-neutral to
+production while the flag is closed. See
+[`COVERAGE_KEEP_ALIVE.md`](COVERAGE_KEEP_ALIVE.md).

@@ -3417,7 +3417,53 @@ func resolve(
 		)
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
+		## Coverage happens when the blocked ball comes back down, which is the
+		## end of the deflection's own arc. `rally_clock` here is still the set's
+		## contact time -- earlier than the block itself -- so reading the
+		## deflection's end is what stops the cover stamping before the touch it
+		## covers.
+		var coverage_contact_time := float(opponent_block_trajectory.get(
+			"end_time", rally_clock + float(set_flight_time)
+		))
+		var home_coverage_second := _home_second_contact_candidates(players, lineup)
+		var coverage_flight := _coverage_keep_alive_flight(
+			coverer, recycle_target, opponent_block_trajectory,
+			coverage_contact_state.get("arrival", {}),
+			_platform_body_velocity(
+				coverer_start, coverer_reach, coverer_move_time,
+				float(opponent_block_trajectory.get("duration", 0.24)),
+			),
+			coverage_contact_time,
+			home_coverage_second.candidates, home_coverage_second.starts,
+			defensive_plan, lineup.active_setter_id(),
+			defensive_plan.setter_release_target(lineup.active_setter_id()),
+		)
 		var coverage_pass_target := recycle_target + Vector2(0.04, -0.05)
+		## `unset` recipient only on the legacy fabricated ball; the physical
+		## keep-alive names the actor the second-contact policy chose. Either way
+		## it is intent, never the endpoint.
+		var coverage_intent: Dictionary = _platform_intent(
+			"attack_coverage", coverage_pass_target, "contact_offset",
+			null, coverage_pass_target,
+		)
+		var coverage_incoming := {}
+		if not coverage_flight.is_empty():
+			coverage_pass_target = Vector2(coverage_flight.destination)
+			coverage_intent = coverage_flight.platform_intent
+			coverage_incoming = coverage_flight.authoritative_free_flight
+		var coverage_meta := {"side": "home", "coverage": "attack",
+			"platform_intent": coverage_intent,
+			"blocked_hitter_id": hitter.id,
+			"movement_start": coverer_start,
+			"movement_target": coverer_reach,
+			"movement_duration": coverer_move_time,
+			"arrival": coverage_contact_state.arrival,
+			"contact_posture": coverage_contact_state.posture,
+			"pass_contact_height_meters": coverage_contact_state.contact_height,
+			"incoming_trajectory": opponent_block_trajectory,
+			"event_time": coverage_contact_time}
+		if not coverage_flight.is_empty():
+			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
 		_add_event(result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Attack coverage",
@@ -3428,33 +3474,8 @@ func resolve(
 			),
 			"%d%% recycle control from the assigned attack-coverage shape." % roundi(
 				coverage_quality * 100.0
-			), {"side": "home", "coverage": "attack",
-				## `unset` on both derived fields, and it is a true statement
-				## rather than a placeholder: coverage aims at nobody, so there is
-				## no release height to anchor to and no arrival to floor.
-				"platform_intent": _platform_intent(
-					"attack_coverage", coverage_pass_target, "contact_offset",
-					null, coverage_pass_target,
-				),
-				"blocked_hitter_id": hitter.id,
-				"movement_start": coverer_start,
-				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time,
-				"arrival": coverage_contact_state.arrival,
-				"contact_posture": coverage_contact_state.posture,
-				"pass_contact_height_meters": coverage_contact_state.contact_height,
-				"incoming_trajectory": opponent_block_trajectory,
-				## Coverage happens when the blocked ball comes back down, which
-				## is the end of the deflection's own arc. `rally_clock` here is
-				## still the set's contact time -- earlier than the block itself,
-				## so this stamped the cover as happening before the touch it
-				## covers.
-				"event_time": float(opponent_block_trajectory.get(
-					"end_time", rally_clock + float(set_flight_time)
-				))})
-		rally_clock = maxf(rally_clock, float(opponent_block_trajectory.get(
-			"end_time", rally_clock + float(set_flight_time)
-		)))
+			), coverage_meta)
+		rally_clock = maxf(rally_clock, coverage_contact_time)
 		if not coverage_success:
 			return _finish(result, "blocked", false, hitter.id, {
 				"hitter": hitter.display_name,
@@ -3463,13 +3484,20 @@ func resolve(
 		## A ball that came off the block is not a clean one. The coverage
 		## contact's own control is what the setter has to work with, and a
 		## formed wall degrades it further -- which is the only channel a
-		## blocker has to the result other than a stuff.
+		## blocker has to the result other than a stuff. When the physical path is
+		## open the setter is now reached against the coverage ball's own flight;
+		## the trailing arguments are the defaults otherwise, so the legacy call is
+		## unchanged.
 		return _resolve_home_continuation(
 			result, players, lineup, coverer, coverage_pass_target,
 			opponent_team, defensive_plan, 1,
 			coverage_quality * lerpf(
 				1.0, BLOCK_DEFLECTION_CARRY, clampf(block_strength, 0.0, 1.0)
 			),
+			float(coverage_flight.get("duration", 0.0)),
+			float(opponent_block_trajectory.get("duration", 0.0)) \
+				if not coverage_flight.is_empty() else 0.0,
+			coverage_incoming,
 		)
 
 	## A deflected ball reaches the floor slower, and the defence gets that time.
@@ -5787,10 +5815,48 @@ func _resolve_opponent_transition(
 		)
 		if coverer != null:
 			opponent_live_positions[coverer.id] = coverer_reach
-		var coverage_pass_target := home_block_target + Vector2(0.04, 0.05)
 		var coverage_contact_time := float(home_block_trajectory.get(
 			"end_time", rally_clock + coverage_time
 		))
+		var opponent_coverage_second := _opponent_second_contact_candidates(
+			opponent_team
+		)
+		var coverage_flight := _coverage_keep_alive_flight(
+			coverer, home_block_target, home_block_trajectory,
+			coverage_contact_state.get("arrival", {}),
+			_platform_body_velocity(
+				coverer_start, coverer_reach, coverer_move_time, coverage_time,
+			),
+			coverage_contact_time,
+			opponent_coverage_second.candidates, opponent_coverage_second.starts,
+			opponent_coverage_plan, int(opponent_team.setter_id),
+			_opponent_setter_release_target(opponent_team),
+		)
+		var coverage_pass_target := home_block_target + Vector2(0.04, 0.05)
+		var coverage_intent: Dictionary = _platform_intent(
+			"attack_coverage", coverage_pass_target, "contact_offset",
+			null, coverage_pass_target,
+		)
+		var coverage_incoming := {}
+		if not coverage_flight.is_empty():
+			coverage_pass_target = Vector2(coverage_flight.destination)
+			coverage_intent = coverage_flight.platform_intent
+			coverage_incoming = coverage_flight.authoritative_free_flight
+		var coverage_meta := {
+			"side": "opponent", "coverage": "attack",
+			"platform_intent": coverage_intent,
+			"blocked_hitter_id": opponent_hitter.id,
+			"movement_start": coverer_start,
+			"movement_target": coverer_reach,
+			"movement_duration": coverer_move_time,
+			"arrival": coverage_contact_state.arrival,
+			"contact_posture": coverage_contact_state.posture,
+			"pass_contact_height_meters": coverage_contact_state.contact_height,
+			"incoming_trajectory": home_block_trajectory,
+			"event_time": coverage_contact_time,
+		}
+		if not coverage_flight.is_empty():
+			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
 		_add_event(
 			result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
@@ -5803,22 +5869,7 @@ func _resolve_opponent_transition(
 			"%d%% control on opponent attack coverage." % roundi(
 				coverage_quality * 100.0
 			),
-			{
-				"side": "opponent", "coverage": "attack",
-				"platform_intent": _platform_intent(
-					"attack_coverage", coverage_pass_target, "contact_offset",
-					null, coverage_pass_target,
-				),
-				"blocked_hitter_id": opponent_hitter.id,
-				"movement_start": coverer_start,
-				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time,
-				"arrival": coverage_contact_state.arrival,
-				"contact_posture": coverage_contact_state.posture,
-				"pass_contact_height_meters": coverage_contact_state.contact_height,
-				"incoming_trajectory": home_block_trajectory,
-				"event_time": coverage_contact_time,
-			},
+			coverage_meta,
 		)
 		rally_clock = maxf(rally_clock, coverage_contact_time)
 		if not coverage_success:
@@ -5844,6 +5895,7 @@ func _resolve_opponent_transition(
 				1.0, BLOCK_DEFLECTION_CARRY, clampf(home_block, 0.0, 1.0)
 			),
 			false, coverer.id if coverer != null else -1,
+			NAN, 0.0, coverage_incoming,
 		)
 	if block_outcome == "touch":
 		result.key_factors.append(_factor("block_touch"))
@@ -7332,10 +7384,46 @@ func _resolve_home_continuation(
 		)
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
-		var coverage_pass_target := block_event_end + Vector2(0.04, -0.05)
 		var coverage_contact_time := float(cont_block_trajectory.get(
 			"end_time", rally_clock + coverage_time
 		))
+		var cont_coverage_second := _home_second_contact_candidates(players, lineup)
+		var coverage_flight := _coverage_keep_alive_flight(
+			coverer, block_event_end, cont_block_trajectory,
+			coverage_contact_state.get("arrival", {}),
+			_platform_body_velocity(
+				coverer_start, coverer_reach, coverer_move_time, coverage_time,
+			),
+			coverage_contact_time,
+			cont_coverage_second.candidates, cont_coverage_second.starts,
+			defensive_plan, lineup.active_setter_id(),
+			defensive_plan.setter_release_target(lineup.active_setter_id()),
+		)
+		var coverage_pass_target := block_event_end + Vector2(0.04, -0.05)
+		var coverage_intent: Dictionary = _platform_intent(
+			"attack_coverage", coverage_pass_target, "contact_offset",
+			null, coverage_pass_target,
+		)
+		var coverage_incoming := {}
+		if not coverage_flight.is_empty():
+			coverage_pass_target = Vector2(coverage_flight.destination)
+			coverage_intent = coverage_flight.platform_intent
+			coverage_incoming = coverage_flight.authoritative_free_flight
+		var coverage_meta := {
+			"side": "home", "coverage": "attack",
+			"platform_intent": coverage_intent,
+			"blocked_hitter_id": hitter.id,
+			"movement_start": coverer_start,
+			"movement_target": coverer_reach,
+			"movement_duration": coverer_move_time,
+			"arrival": coverage_contact_state.arrival,
+			"contact_posture": coverage_contact_state.posture,
+			"pass_contact_height_meters": coverage_contact_state.contact_height,
+			"incoming_trajectory": cont_block_trajectory,
+			"event_time": coverage_contact_time,
+		}
+		if not coverage_flight.is_empty():
+			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
 		_add_event(
 			result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
@@ -7348,22 +7436,7 @@ func _resolve_home_continuation(
 			"%d%% recycle control in exchange %d." % [
 				roundi(coverage_quality * 100.0), exchange_number,
 			],
-			{
-				"side": "home", "coverage": "attack",
-				"platform_intent": _platform_intent(
-					"attack_coverage", coverage_pass_target, "contact_offset",
-					null, coverage_pass_target,
-				),
-				"blocked_hitter_id": hitter.id,
-				"movement_start": coverer_start,
-				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time,
-				"arrival": coverage_contact_state.arrival,
-				"contact_posture": coverage_contact_state.posture,
-				"pass_contact_height_meters": coverage_contact_state.contact_height,
-				"incoming_trajectory": cont_block_trajectory,
-				"event_time": coverage_contact_time,
-			},
+			coverage_meta,
 		)
 		rally_clock = maxf(rally_clock, coverage_contact_time)
 		if not coverage_success:
@@ -7387,8 +7460,9 @@ func _resolve_home_continuation(
 			coverage_quality * lerpf(
 				1.0, BLOCK_DEFLECTION_CARRY, clampf(block_quality, 0.0, 1.0)
 			),
-			coverage_time,
+			float(coverage_flight.get("duration", coverage_time)),
 			float(continuation_visible_attack_trajectory.get("duration", 0.0)),
+			coverage_incoming,
 		)
 	## A transition dig is the same act as any other; the defender is simply
 	## already in the rally rather than reading a first-ball swing. It was not
@@ -10618,6 +10692,82 @@ func _physical_platform_dig_enabled() -> bool:
 			platform_dig_development_open and OS.is_debug_build()
 			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
 		))
+
+
+## The keep-alive ball a successful attack-coverage contact launches.
+##
+## **Coverage owns no recipient policy of its own.** The intended target is
+## exactly the actor the existing second-contact policy names --
+## `_second_contact_setter`, the one selector every dig and transition already
+## goes through -- with the coverer excluded as its `first_contact_player_id`, so
+## a coverer is never named their own recipient and an unavailable designated
+## setter falls to that selector's existing emergency-setter branch. Coverage
+## adds no ranking, no weight and no coefficient here; it reuses the policy whole.
+##
+## From that intent this is the shared physical platform contact and nothing
+## bespoke: the authoritative incoming ball, the coverer's own body/contact
+## state, and the T1--T3 model produce one authoritative free flight. The launch
+## selects nothing about who touches the ball next -- M5 interception decides that
+## against the flight, so the intended actor may miss, a teammate may intercept,
+## or the ball may floor, sail or cross the net untouched.
+##
+## Returns `{}` when the physical platform path is closed (the same flag and
+## development override `_dig_pass_result` gates on), when the policy can name no
+## available second-contact actor besides the coverer, or when the model declines
+## the contact. The caller then keeps its legacy fabricated trajectory, so
+## production is byte-unchanged until the flag opens.
+func _coverage_keep_alive_flight(
+	coverer: VolleyballPlayer,
+	contact_position: Vector2,
+	incoming_trajectory: Dictionary,
+	arrival: Dictionary,
+	body_velocity_mps: Vector2,
+	contact_time: float,
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
+	plan: Resource,
+	designated_setter_id: int,
+	release_seat: Vector2,
+) -> Dictionary:
+	if not _physical_platform_dig_enabled() or coverer == null:
+		return {}
+	var intent_actor := _second_contact_setter(
+		candidates, plan, designated_setter_id, coverer.id
+	)
+	if intent_actor == null:
+		return {}
+	## The aim point is the team's own set-up seat -- the same anchor the dig and
+	## the downstream M5 second-contact chooser both target -- so the keep-alive
+	## and the set it feeds converge on one point rather than two. Height and the
+	## arrival floor track the named actor, which is where the soft intent lives.
+	var recipient_position := Vector2(starts.get(intent_actor.id, release_seat))
+	var intent := _platform_intent(
+		"attack_coverage", release_seat, "release_seat",
+		intent_actor, recipient_position,
+	)
+	var physical := _physical_platform_dig_result(
+		coverer, contact_position, incoming_trajectory,
+		arrival, body_velocity_mps, intent, contact_time,
+	)
+	if physical.is_empty():
+		return {}
+	physical["platform_intent"] = intent
+	return physical
+
+
+## Stamp a coverage event with the physical keep-alive's own ball, the same keys
+## the DIG event carries, so the setter and the drawing share one object instead
+## of the coverage contact inventing a second flight afterwards.
+func _merge_coverage_flight_metadata(meta: Dictionary, flight: Dictionary) -> void:
+	meta["outgoing_trajectory"] = flight.get("trajectory", {})
+	meta["platform_contact"] = flight.get("platform_contact", {})
+	meta["pass_apex_meters"] = flight.get("pass_apex_meters", 0.0)
+	meta["pass_contact_height_meters"] = flight.get(
+		"pass_contact_height_meters", 0.0
+	)
+	meta["set_contact_height_meters"] = flight.get("set_contact_height_meters", 0.0)
+	meta["pass_duration_seconds"] = flight.get("duration", 0.0)
+	meta["target_error_meters"] = flight.get("target_error_meters", 0.0)
 
 
 ## Body velocity is a derived journey, in the same court frame as the incoming
