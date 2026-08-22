@@ -305,6 +305,7 @@ func _initialize() -> void:
 	_test_platform_contacts_state_an_intent()
 	_test_the_incoming_ball_reaches_no_platform_launch()
 	_test_overpass_control_wires_live()
+	_test_overpass_attack_selects_and_launches_live()
 	_test_shared_platform_shadow_contract()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
@@ -11323,6 +11324,81 @@ func _test_overpass_control_wires_live() -> void:
 	_check(
 		free_flight == frozen,
 		"resolving the overpass leaves the incoming authoritative launch unmutated",
+	)
+
+
+## M5 overpass attack branch, live-wired. Certifies that `_overpass_choice`
+## (actors from the live maps) selects the attack action for an attack-favouring
+## fixture and that `execute_attack` yields exactly one authoritative outgoing
+## ball with the incoming launch left intact. The `_resolve_overpass_attack`
+## routing (in-play swing -> defending side's first contact, else a kill) is a
+## thin hand-off over already-certified transition functions and is covered by
+## the full-suite regression rather than reconstructed here.
+func _test_overpass_attack_selects_and_launches_live() -> void:
+	## Front-row hitter with a strong attack and a decisive team; a low-control
+	## partner so control cannot outscore the swing.
+	var hitter := _overpass_voli(203, 42, 94)
+	var partner := _overpass_voli(204, 66, 38)
+	var lineup := RotationLineup.new()
+	lineup.setter_id = partner.id
+	lineup.designated_setter_ids = [partner.id]
+	lineup.assign_slot(3, hitter.id)
+	lineup.assign_slot(6, partner.id)
+	var principles := TeamPrinciples.new()
+	principles.decisiveness = 0.95
+	principles.transition_commitment = 0.95
+
+	var contact := Vector2(0.50, 0.62)
+	var resolved: Dictionary = PlatformContactModel.evaluate({
+		"incoming_velocity_mps": Vector3(0.0, -20.0, 14.0),
+		"contact_position": contact, "contact_height_meters": 0.95,
+		"body_velocity_mps": Vector2.ZERO, "circumstance_severity": 0.8,
+		"stability_ability": 1.0, "technique_ability": 0.8,
+		"intent_target_anchor": Vector2(0.50, 0.52),
+		"intent_height_anchor_meters": 2.35,
+		"intent_arrival_floor_seconds": 0.45, "seed": 88421,
+	})
+	_check(
+		resolved.has("realised_velocity_mps"),
+		"the attack overpass fixture yields a shared-model launch",
+	)
+	var free_flight: Dictionary = FreeFlightInterceptionSystem.from_launch(
+		"dig", contact, 0.95, Vector3(resolved.realised_velocity_mps), 0.0,
+		"live-overpass-attack",
+	)
+	var frozen := free_flight.duplicate(true)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.opponent_principles = principles
+	simulator.opponent_live_positions = {
+		hitter.id: Vector2(0.50, 0.43), partner.id: Vector2(0.50, 0.30),
+	}
+	simulator.opponent_live_velocities = {}
+	simulator.player_facing = {}
+	simulator.player_recovery = {}
+
+	var choice: Dictionary = simulator._overpass_choice(
+		free_flight, [hitter, partner], &"opponent", lineup, principles
+	)
+	_check(
+		bool(choice.get("available", false))
+			and str(choice.get("action", "")) == "attack",
+		"an attack-favouring overpass selects the attack action from live state",
+	)
+	var execution: Dictionary = OverpassActionSystem.execute_attack(
+		choice, [], [], principles.decisiveness, 0.0, 91_203,
+	)
+	var out_flight: Dictionary = execution.get("outgoing_trajectory", {})
+	_check(
+		bool(execution.get("available", false))
+			and str(out_flight.get("trajectory_role", "")) == "authoritative_free_flight"
+			and int(execution.get("team_contact_number", -1)) == 1,
+		"the overpass attack produces one authoritative outgoing ball as contact 1",
+	)
+	_check(
+		free_flight == frozen,
+		"the overpass attack leaves the incoming authoritative launch unmutated",
 	)
 
 

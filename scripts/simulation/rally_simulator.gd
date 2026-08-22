@@ -11998,33 +11998,25 @@ func _second_contact_actor_states(
 	return actors
 
 
-## The receiving side's ordinary first team contact on a ball that crossed the
-## net unresolved -- an overpass.
+## The receiving side's shared action-choice contest on a ball that crossed the
+## net unresolved -- an overpass. Builds the whole receiving six as actors from
+## the authoritative live maps (position/velocity/facing/recovery/commitment via
+## the existing `_second_contact_actor_states` recipe, never presentation) and
+## asks `OverpassActionSystem.choose()` which physically and legally feasible
+## action wins. Returns the choice dict, or `{}` when nothing is feasible.
 ##
-## `OVERPASS_ACTION_HANDOFF.md`: the governed policy is a shared action-choice
-## contest (attack / controlled first contact / emergency first contact) over the
-## physically and legally feasible actions, producing one outgoing ball as the
-## receiving team's contact 1. This helper wires the **control** half only; the
-## attack half is a separate checkpoint (§ below). Returns the executed control
-## contact merged with its choice geometry, or `{}` when the overpass is not a
-## control contact this pass can resolve -- in which case the caller keeps its
-## existing terminal, so no live rally regresses.
-##
-## The legacy resolver drives no persistent `RallyState`, so this uses
-## `OverpassActionSystem.choose()`/`execute_control()` (which need none) and hands
-## the generated free flight to the existing transition machinery, rather than
+## The legacy resolver drives no persistent `RallyState`, so the wrappers use
+## `choose()`/`execute_control()`/`execute_attack()` (which need none) and hand the
+## generated free flight to the existing transition machinery, rather than
 ## `apply_first_contact()`, which is built for the live-integrator `RallyState`.
-func _overpass_control_contact(
+func _overpass_choice(
 	free_flight: Dictionary,
 	receiving_players: Array,
 	receiving_side: StringName,
 	lineup: RotationLineup,
 	principles: Resource,
-	setter: VolleyballPlayer,
-	setter_release_seat: Vector2,
-	setter_position: Vector2,
 ) -> Dictionary:
-	if setter == null or lineup == null:
+	if lineup == null:
 		return {}
 	## The whole receiving six, at their live positions when the ball crosses.
 	## `OverpassActionSystem` applies its own eligibility and rotation legality;
@@ -12048,19 +12040,24 @@ func _overpass_control_contact(
 	var actors := _second_contact_actor_states(
 		typed, starts, receiving_side, Vector2.ZERO, 0.0, launch_time
 	)
-	var choice := OverpassActionModel.choose(
+	return OverpassActionModel.choose(
 		free_flight, actors, lineup, receiving_side, principles
 	)
-	if not bool(choice.get("available", false)):
+
+
+## Execute a chosen controlled/emergency first contact. The intent is the
+## receiving side's own release anchors, all class C -- the same seat and contact
+## height every reception and dig already use. `arrival_floor_seconds` is the
+## setter's own journey to the seat; slack means the ball is not rushed. Returns
+## `{}` when the platform model cannot realise a launch.
+func _overpass_execute_control(
+	choice: Dictionary,
+	setter: VolleyballPlayer,
+	setter_release_seat: Vector2,
+	setter_position: Vector2,
+) -> Dictionary:
+	if setter == null:
 		return {}
-	## Attack is a later checkpoint. Selecting it here would need the opposing
-	## block+floor continuation, which is inlined per side and parameterised on a
-	## set an overpass never had; wiring it deserves its own certified step.
-	if str(choice.get("action", "")) == "attack":
-		return {}
-	## The receiving side's own release anchors, all class C -- the same seat and
-	## contact height every reception and dig already use. `arrival_floor_seconds`
-	## is the setter's own journey to the seat; slack means the ball is not rushed.
 	var intent := {
 		"target_anchor": setter_release_seat,
 		"height_anchor_meters": GeometricAttackPromotionModel \
@@ -12078,17 +12075,42 @@ func _overpass_control_contact(
 	execution["contact_position"] = Vector2(choice.get(
 		"contact_position", setter_release_seat
 	))
-	execution["contact_time"] = float(choice.get("contact_time", launch_time))
+	execution["contact_time"] = float(choice.get("contact_time", 0.0))
 	execution["realised_trajectory"] = choice.get("realised_trajectory", {})
 	execution["platform_intent"] = intent
 	return execution
 
 
-## Home receives an overpass (the ball crossed back to the home court). Publishes
-## the first-team contact and enters the home transition, or returns `null` so the
-## caller keeps its terminal. `null` covers both "not a control contact this pass
-## resolves" and the exchange cap: an overpass is a net crossing, and resolving it
-## past `MAX_EXCHANGES` would run one set-and-swing beyond the rally's own bound.
+## Backwards-compatible composition used by the focused live-wiring gate: choose,
+## then execute the control half. `{}` when the contest picks an attack or nothing
+## is feasible.
+func _overpass_control_contact(
+	free_flight: Dictionary,
+	receiving_players: Array,
+	receiving_side: StringName,
+	lineup: RotationLineup,
+	principles: Resource,
+	setter: VolleyballPlayer,
+	setter_release_seat: Vector2,
+	setter_position: Vector2,
+) -> Dictionary:
+	var choice := _overpass_choice(
+		free_flight, receiving_players, receiving_side, lineup, principles
+	)
+	if not bool(choice.get("available", false)) \
+			or str(choice.get("action", "")) == "attack":
+		return {}
+	return _overpass_execute_control(
+		choice, setter, setter_release_seat, setter_position
+	)
+
+
+## Home receives an overpass (the ball crossed back to the home court). Runs the
+## shared contest and either plays the first team contact into the home
+## transition (control) or swings and hands the ball to the opponent defence
+## (attack), or returns `null` so the caller keeps its terminal. `null` also
+## covers the exchange cap: an overpass is a net crossing, and resolving it past
+## `MAX_EXCHANGES` would run a contact beyond the rally's own bound.
 func _resolve_overpass_into_home(
 	result: Resource,
 	free_flight: Dictionary,
@@ -12101,21 +12123,30 @@ func _resolve_overpass_into_home(
 ) -> Resource:
 	if exchange_number >= MAX_EXCHANGES or defensive_plan == null:
 		return null
+	var choice := _overpass_choice(
+		free_flight, players, &"home", lineup, home_principles
+	)
+	if not bool(choice.get("available", false)):
+		return null
+	var actor := _player_by_id(players, int(choice.get("player_id", -1)))
+	if actor == null:
+		return null
+	if str(choice.get("action", "")) == "attack":
+		return _resolve_overpass_attack(
+			result, choice, actor, &"home", players, lineup, opponent_team,
+			defensive_plan, exchange_number, incoming_quality,
+		)
 	var setter := _player_by_id(players, lineup.active_setter_id())
 	if setter == null:
 		return null
 	var seat: Vector2 = defensive_plan.setter_release_target(
 		lineup.active_setter_id()
 	)
-	var contact := _overpass_control_contact(
-		free_flight, players, &"home", lineup, home_principles, setter, seat,
-		Vector2(live_positions.get(setter.id, seat)),
+	var contact := _overpass_execute_control(
+		choice, setter, seat, Vector2(live_positions.get(setter.id, seat))
 	)
-	if contact.is_empty():
-		return null
-	var actor := _player_by_id(players, int(contact.get("actor_id", -1)))
 	var generated: Dictionary = contact.get("outgoing_trajectory", {})
-	if actor == null or generated.is_empty():
+	if contact.is_empty() or generated.is_empty():
 		return null
 	var contact_pos := Vector2(contact.get("contact_position", seat))
 	live_positions[actor.id] = contact_pos
@@ -12133,7 +12164,7 @@ func _resolve_overpass_into_home(
 
 
 ## Opponent receives an overpass (the ball crossed to the opponent court).
-## Symmetric to the home path; enters the opponent transition.
+## Symmetric to the home path.
 func _resolve_overpass_into_opponent(
 	result: Resource,
 	players: Array[VolleyballPlayer],
@@ -12147,27 +12178,38 @@ func _resolve_overpass_into_opponent(
 ) -> Resource:
 	if exchange_number >= MAX_EXCHANGES or opponent_team == null:
 		return null
-	var setter := _opponent_setter(opponent_team)
 	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
-	if setter == null or opponent_lineup == null:
+	if opponent_lineup == null:
 		return null
-	var seat := _opponent_setter_release_target(opponent_team)
-	var contact := _overpass_control_contact(
+	var choice := _overpass_choice(
 		free_flight, opponent_team.on_court_players(), &"opponent",
-		opponent_lineup, opponent_principles, setter, seat,
-		Vector2(opponent_live_positions.get(setter.id, seat)),
+		opponent_lineup, opponent_principles
 	)
-	if contact.is_empty():
+	if not bool(choice.get("available", false)):
 		return null
-	var actor_id := int(contact.get("actor_id", -1))
+	var actor_id := int(choice.get("player_id", -1))
 	var actor: VolleyballPlayer = null
 	for entry in opponent_team.on_court_players():
 		var candidate := entry as VolleyballPlayer
 		if candidate != null and candidate.id == actor_id:
 			actor = candidate
 			break
+	if actor == null:
+		return null
+	if str(choice.get("action", "")) == "attack":
+		return _resolve_overpass_attack(
+			result, choice, actor, &"opponent", players, lineup, opponent_team,
+			defensive_plan, exchange_number, incoming_quality,
+		)
+	var setter := _opponent_setter(opponent_team)
+	if setter == null:
+		return null
+	var seat := _opponent_setter_release_target(opponent_team)
+	var contact := _overpass_execute_control(
+		choice, setter, seat, Vector2(opponent_live_positions.get(setter.id, seat))
+	)
 	var generated: Dictionary = contact.get("outgoing_trajectory", {})
-	if actor == null or generated.is_empty():
+	if contact.is_empty() or generated.is_empty():
 		return null
 	var contact_pos := Vector2(contact.get("contact_position", seat))
 	opponent_live_positions[actor.id] = contact_pos
@@ -12182,6 +12224,94 @@ func _resolve_overpass_into_opponent(
 		result, players, lineup, original_hitter, contact_pos, opponent_team,
 		defensive_plan, exchange_number + 1, incoming_quality, false, actor.id,
 		NAN, 0.0, generated, 0.0,
+	)
+
+
+## The attack half of the overpass contest. The receiving side swings on the
+## first ball; the outgoing swing is an authoritative free flight, and the
+## DEFENDING side meets it through the same first-contact mechanism -- a dig or
+## an emergency play, or a kill when nobody can reach it. No pre-formed block is
+## modelled: a direct attack off a first contact gives the block no set to form
+## against, and forming one would require the `tempo`/`set_quality`/setter inputs
+## `_form_*_block` needs and an overpass has none of -- see
+## `OVERPASS_ACTION_HANDOFF.md`. `blockers = []` accordingly, and "opportunity is
+## not an automatic kill" holds because an in-play swing is routed to the defence.
+func _resolve_overpass_attack(
+	result: Resource,
+	choice: Dictionary,
+	attacker: VolleyballPlayer,
+	attacking_side: StringName,
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	opponent_team: Resource,
+	defensive_plan: Resource,
+	exchange_number: int,
+	incoming_quality: float,
+) -> Resource:
+	var defending_home := attacking_side == &"opponent"
+	var defending_positions: Array = []
+	var defence_map: Dictionary = live_positions if defending_home \
+		else opponent_live_positions
+	for value in defence_map.values():
+		defending_positions.append(Vector2(value))
+	var attacking_principles: Resource = home_principles \
+		if attacking_side == &"home" else opponent_principles
+	var decisiveness := 0.5
+	if attacking_principles != null:
+		var raw: Variant = attacking_principles.get("decisiveness")
+		decisiveness = 0.5 if raw == null else clampf(float(raw), 0.0, 1.0)
+	var seed_value := rally_seed + 91_000 + int(choice.get("player_id", 0))
+	var execution := OverpassActionModel.execute_attack(
+		choice, [], defending_positions, decisiveness, 0.0, seed_value
+	)
+	if not bool(execution.get("available", false)):
+		return null
+	var swing: Dictionary = execution.get("swing", {})
+	var outgoing: Dictionary = execution.get("outgoing_trajectory", {})
+	if outgoing.is_empty():
+		return null
+	var contact_pos := Vector2(choice.get("contact_position", attacker.position \
+		if attacker != null else Vector2(0.5, 0.5)))
+	var landing := Vector2(swing.get("landing", contact_pos))
+	var outcome := str(swing.get("outcome", "in"))
+	var errored := outcome in ["net", "out"]
+	_add_event(
+		result, RallyEventModel.EventType.ATTACK, attacker.id, attacker.display_name,
+		contact_pos, landing, not errored, float(choice.get("score", 0.5)),
+		"%s attacks the overpass" % attacker.display_name,
+		"First-contact attack on a ball that crossed the net.",
+		{
+			"side": str(attacking_side), "overpass": true,
+			"team_contact_number": 1, "outgoing_trajectory": outgoing,
+			"swing_outcome": outcome, "first_contact_action": "attack",
+		},
+	)
+	if errored:
+		return _finish(
+			result, "attack_error" if attacking_side == &"home" \
+				else "opponent_attack_error",
+			attacking_side == &"opponent", attacker.id,
+			{"hitter": attacker.display_name},
+		)
+	## In play: the defending side plays the crossed swing as its own first
+	## contact. A returned rally means they controlled it; `null` means nobody
+	## could -- the swing lands, which is the attacker's point.
+	var defence: Resource = null
+	if attacking_side == &"home":
+		defence = _resolve_overpass_into_opponent(
+			result, players, lineup, outgoing, opponent_team, defensive_plan,
+			exchange_number + 1, 0.6, attacker,
+		)
+	else:
+		defence = _resolve_overpass_into_home(
+			result, outgoing, players, lineup, opponent_team, defensive_plan,
+			exchange_number + 1, 0.6,
+		)
+	if defence != null:
+		return defence
+	return _finish(
+		result, "kill" if attacking_side == &"home" else "opponent_kill",
+		attacking_side == &"home", attacker.id, {"hitter": attacker.display_name},
 	)
 
 
