@@ -14,15 +14,37 @@ const ALLOW_DEVELOPMENT_ATTACK_OVERRIDE: bool = true
 const ENABLE_CONTINUOUS_BLOCK_EVENTS: bool = false
 const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 
-## M4 slice 3 + M5 development authority. The paired rollout proves truthful
-## same-side continuation: the intended setter can miss, another viable voli can
-## intercept en route, and every played segment is a prefix of one unchanged
-## launch. Production remains closed because a valid authored platform launch
-## can clear the net. Deciding which opponent may play that overpass, and whether
-## their action is an attack, set or first contact, is materially different
-## volleyball semantics rather than a physics default. See
-## `docs/review/FREE_FLIGHT_INTERCEPTION.md`.
-const ENABLE_PHYSICAL_PLATFORM_DIG: bool = false
+## M4/M5 physical platform contact -- **promoted to production.**
+##
+## The paired rollout proves truthful same-side continuation: the intended setter
+## can miss, another viable voli can intercept en route, and every played segment
+## is a prefix of one unchanged launch. Production was held closed for one
+## remaining reason -- a valid authored platform launch can clear the net, and
+## deciding which opponent plays that overpass and how is materially different
+## volleyball semantics rather than a physics default. **That blocker is cleared:**
+## M5 now resolves a legal net crossing as the receiving side's ordinary first
+## team contact through `OverpassActionSystem`, in both the control and attack
+## branches, at both live exits (M5 DONE). Attack coverage -- the last platform
+## family still fabricating its outgoing ball -- now launches through this same
+## shared resolver, its intended recipient named by the existing second-contact
+## policy.
+##
+## Promoted on measured evidence, not distribution comfort. With this open the
+## full suite is 2161/2161 (down nine from the flag-off 2170 purely as sampling
+## gates draw differently -- no acceptance bound fails), the paired dig and
+## coverage rollouts still PASS every invariant, and `run_rally_balance_probe`
+## reads swing balance 1.032, stuff 0.120 (in band), dig 0.353 (in band). Two
+## reporting corrections rode along and are not cosmetic: a set fed by a physical
+## interception now reports the **realised prefix** that actually reached the
+## setter as its incoming ball, not the full flight to the floor, so the
+## dig-to-set one-ball chain holds by identity and the setter's window is the
+## interception time it was resolved against. See
+## `docs/review/FREE_FLIGHT_INTERCEPTION.md` and `PLATFORM_DIG_PROMOTION.md`.
+##
+## The legacy apex/spoil dig arm is retired from production but kept behind the
+## development override so the paired census stays a live protocol, not a stale
+## one. Flipping this back to `false` restores it.
+const ENABLE_PHYSICAL_PLATFORM_DIG: bool = true
 const ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE: bool = true
 
 ## Gate E: the geometric attack. Where the other rollouts promote one *contact*,

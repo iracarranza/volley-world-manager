@@ -51,9 +51,12 @@ intercept, or the ball may floor, sail or cross untouched.
 
 The physical keep-alive is gated behind the same `_physical_platform_dig_enabled()`
 the controlled dig uses (`ENABLE_PHYSICAL_PLATFORM_DIG`, or the development
-override in a debug build). With the flag `false` — production today — coverage
-keeps its legacy fabricated trajectory exactly, and the full suite is unchanged
-at **2,170 checks**. Nothing is promoted by this checkpoint.
+override in a debug build). At the checkpoint that built it the flag was `false`,
+coverage kept its legacy fabricated trajectory exactly, and the full suite was
+unchanged at **2,170 checks** — nothing was promoted by building coverage
+itself. The flag was subsequently flipped to `true` alongside the controlled
+dig; see [`PLATFORM_DIG_PROMOTION.md`](PLATFORM_DIG_PROMOTION.md) for that
+promotion and its evidence.
 
 ## Certification
 

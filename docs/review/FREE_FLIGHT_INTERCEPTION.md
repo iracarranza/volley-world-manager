@@ -72,10 +72,15 @@ angular unit. The model does expose a true angle, `execution_error_degrees`, but
 no leverage probe aggregates it, so the number reported here was never that
 field. Physics is unchanged; only the unit label is corrected.
 
-## Production boundary and next blocker
+## Production boundary — now open
 
-The same-side interception contracts pass, but they do not certify every launch
-the authored T1--T3 model can produce. Production therefore remains closed.
+Production is **open**: `ENABLE_PHYSICAL_PLATFORM_DIG` is `true`. The path below
+records the boundary that held it closed and how each part was cleared; see
+[`PLATFORM_DIG_PROMOTION.md`](PLATFORM_DIG_PROMOTION.md) for the promotion
+evidence.
+
+The same-side interception contracts passed but did not certify every launch the
+authored T1--T3 model can produce — specifically, a launch that clears the net.
 
 `tools/run_m5_overpass_census.gd` found no overpass in 1,200 ordinary rallies
 across all six rotations (244 physical digs: 234 intercepted, 10 floor
@@ -90,15 +95,13 @@ it as the receiving side's ordinary first team contact through
 `OverpassActionSystem`, in both the control and attack branches, at both live
 exits (see [`OVERPASS_ACTION_HANDOFF.md`](OVERPASS_ACTION_HANDOFF.md)). The
 overpass boundary that gated controlled-dig, reception and coverage promotion is
-therefore cleared. Promotion of the physical dig to production authority is now
-a paired-census balance question, not a governance one — the distribution moves
-when the flag flips, and that movement is observed, never fitted.
+therefore cleared, and the physical dig has been promoted — the distribution
+moved when the flag flipped, and that movement was observed, never fitted.
 
-Coverage's keep-alive selection is now governed and built. It owns no recipient
+Coverage's keep-alive selection is governed and live. It owns no recipient
 policy of its own: the intended actor is exactly the one the existing
 second-contact policy (`_second_contact_setter`) names, with the coverer
 excluded, and from there it is the shared physical platform contact producing
-one authoritative free flight routed through M5 interception. It is gated behind
-the same `ENABLE_PHYSICAL_PLATFORM_DIG` flag as the dig and is byte-neutral to
-production while the flag is closed. See
+one authoritative free flight routed through M5 interception. It ships on the
+same `ENABLE_PHYSICAL_PLATFORM_DIG` flag as the dig. See
 [`COVERAGE_KEEP_ALIVE.md`](COVERAGE_KEEP_ALIVE.md).

@@ -4785,8 +4785,21 @@ func _resolve_opponent_transition(
 		## a dig to its set can be proven by identity rather than by two
 		## endpoints happening to be close. Empty for feeds that publish no
 		## physical flight, which is what makes the remaining gaps countable.
+		##
+		## Under a physical interception the ball that reached this setter is the
+		## **realised prefix**, not the full authoritative flight to the floor --
+		## the very segment `_stamp_free_flight_resolution` wrote onto the feeding
+		## contact as its outgoing ball. Report that same object here, so the
+		## dig-to-set chain holds by identity and the setter's window is the
+		## interception time it was actually resolved against, rather than the time
+		## the untouched ball would have taken to land. Legacy and spatial feeds
+		## carry no realised segment and fall through to the full flight unchanged.
+		var opponent_set_incoming := Dictionary(
+			opponent_setter_choice.get("realised_trajectory", {})
+		)
 		opponent_set_event.metadata["incoming_pass_trajectory"] = \
-			incoming_pass_trajectory
+			opponent_set_incoming if not opponent_set_incoming.is_empty() \
+			else incoming_pass_trajectory
 		opponent_set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			opponent_setter, bool(opponent_jump_set.jumping)
 		)
@@ -6591,9 +6604,17 @@ func _resolve_home_continuation(
 			)})
 	## Lineage, as on the opponent side: the flight this set was resolved
 	## against, so a probe can prove the chain instead of comparing endpoints.
+	## Under a physical interception that flight is the realised prefix that
+	## actually reached the setter -- the same segment stamped onto the feeding
+	## contact -- not the full authoritative flight to the floor. Legacy feeds
+	## carry no realised segment and fall through unchanged.
 	if not result.events.is_empty():
+		var cont_set_incoming := Dictionary(
+			physical_choice.get("realised_trajectory", {})
+		)
 		result.events[-1].metadata["incoming_pass_trajectory"] = \
-			incoming_pass_trajectory
+			cont_set_incoming if not cont_set_incoming.is_empty() \
+			else incoming_pass_trajectory
 	var cont_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(cont_set_event, setter_choice)
 	if cont_set_event != null:
