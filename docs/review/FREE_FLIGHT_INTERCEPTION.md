@@ -57,9 +57,20 @@ eventually opens.
 
 M4 attribute leverage remains monotone on identical ball/body/intent/draws:
 stability 20→80 raises the easy T1 ceiling 6.48→10.14 m/s and the hard ceiling
-5.71→7.06 m/s; technique 20→80 lowers easy angular error 0.696→0.140 degrees
-and hard error 1.507→0.151 degrees. The values are authored game abstractions,
+5.71→7.06 m/s; technique 20→80 lowers the easy spatial error 0.696→0.140 m and
+the hard spatial error 1.507→0.151 m. The values are authored game abstractions,
 not biomechanical measurements.
+
+The leverage figures are a **spatial destination error in metres**, not an angle.
+Earlier drafts of this line called them radians and a later edit relabelled them
+degrees; both were wrong. Traced to the sole producer,
+`run_platform_shadow_probe.gd::_leverage_measure`, whose `mean_error` accumulates
+`realised.spatial_error_meters` — a distance on the court, not a rotation. The
+magnitude confirms it: 0.14–1.5 is right for metres of pass placement and
+implausible as the mean of the model's 1.5°–7.0° execution sigma in either
+angular unit. The model does expose a true angle, `execution_error_degrees`, but
+no leverage probe aggregates it, so the number reported here was never that
+field. Physics is unchanged; only the unit label is corrected.
 
 ## Production boundary and next blocker
 
