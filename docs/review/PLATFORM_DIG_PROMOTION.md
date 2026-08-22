@@ -67,6 +67,21 @@ the chain hold by identity and is strictly more truthful — it is a correction 
 the invariant's inputs, not a weakening of the invariant. `run_coverage_chain_diag.gd`
 confirms zero chain mismatches across the identity fixtures' seeds.
 
+## Remaining M4 migration — reception
+
+Dig and coverage are the two platform families that feed a **continuation or
+transition** set, and both are now physical. Reception is the third and it is
+not yet migrated: `_reception_pass_result` still computes a legacy scatter/apex
+pass, because reception feeds the **first-ball** set path, which — unlike the
+transition resolvers — has no `authoritative_free_flight` / M5 interception
+branch today (it resolves the setter spatially against the pass destination via
+`_spatial_setter_choice`). Migrating reception therefore reuses the dig's
+launch recipe (designated-setter intent → T1–T3 → free flight) but also needs M5
+interception, terminal/overpass handling and realised-prefix reporting added to
+the first-ball path — a slice on the order of the overpass and coverage work,
+not a mechanical edit. It is the next M4 step and does not require a new authored
+magnitude.
+
 ## Not deleted
 
 The legacy dig's apex/spoil bands (`_dig_pass_result`) remain in the tree behind
