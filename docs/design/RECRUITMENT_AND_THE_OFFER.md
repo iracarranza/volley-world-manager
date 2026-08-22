@@ -170,6 +170,13 @@ The simulation is the record. Where a promise genuinely has no simulated
 consequence — *you'll start* — the reaction belongs to playing time actually
 observed, not to a remembered sentence.
 
+This does **not** prohibit the interview pad from carrying a visible
+`Promises` section. That is the manager's human-readable note of an explicit
+commitment made in this conversation, not a generic trust score or a hidden
+numeric ledger. It records *what was said*; simulation consequences should
+still come from the relevant expectation and the club's later behaviour rather
+than from a universal `promise_points` system.
+
 ### 3.5 Why the interview is the next build
 
 It is the **second manager appointment**. The drill session
@@ -177,6 +184,178 @@ It is the **second manager appointment**. The drill session
 shared temporal contract — start block, duration, manager occupation,
 interruption and cancellation behaviour — can be *extracted from two working
 systems* rather than invented in advance. See `THE_DAY_AND_THE_CLOCK.md` §11.
+
+### 3.6 The screen must look like an interview
+
+The interview is a **distinct conversational scene**, not the scouting
+spreadsheet with a dialogue box attached to one side. The current exchange and
+the person across the table are the primary visual objects. Previous exchanges
+may recede; the player should not be surrounded by permanent CA/PA, attribute,
+interest or personality panels while somebody is speaking.
+
+The useful model is an across-the-table visit:
+
+```
+                         recruit
+
+                  current exchange
+
+            dossier   housing   offer
+
+                         manager
+
+                  questions / replies
+```
+
+The papers are not decorative. They divide kinds of knowledge:
+
+- **documents** show facts the manager can actually check — a room, an occupant,
+  a training schedule, an offer term;
+- **conversation** shows what either person says, asks, accepts, resists or does
+  not know.
+
+When housing becomes relevant, pull the housing sheet forward. When role becomes
+relevant, the manager can consult the dossier or rotation information. Do not
+leave those data permanently open around the dialogue. The interview is a
+conversation that occasionally needs management information, not a management
+screen that happens to contain a conversation.
+
+The candidate also owns turns. They can change the subject, ask a question,
+return to something unresolved, or force the manager to answer rather than
+letting the player drive an uninterrupted questionnaire.
+
+### 3.7 The interview pad shows conversation state, not success
+
+The player needs enough explicit state to manage the interview without being
+told how the simulation evaluates it. A small interview pad is the primary
+legibility device.
+
+Use four marks:
+
+| mark | meaning |
+|---|---|
+| `□` | not discussed |
+| `✓` | discussed; there is a clear shared understanding / acceptance |
+| `?` | discussed; unresolved, conditional or genuinely uncertain |
+| `×` | discussed; an explicit objection or disagreement remains |
+
+`×` does **not** mean "the recruit is unhappy" and `✓` does not mean "good
+answer". Both report what happened in the exchange. If the recruit says a
+competitive role is reasonable, that topic can close with `✓`. If they say they
+will only move as a guaranteed starter and the manager will not offer that,
+`×` is truthful. If neither person can answer yet, `?` stays `?`.
+
+Example:
+
+```
+ROLE
+✓ Primary position — Opposite
+? Playing time — wants regular role
+□ Position flexibility
+
+LIFE HERE
+✓ Housing — Bunkhouse 6, private room
+? Distance from home
+□ Food
+
+PROMISES
+• Playing time — regular starter
+• Primary position — opposite
+```
+
+The `Promises` block is deliberately separate from the topic marks. A topic can
+be settled without a promise (`✓ Playing time — understands role is
+competitive`), and a promise records something the manager actively put on the
+table. Ordinary facts do not become promises.
+
+Do not add labels such as `YOU TOLD THEM`, `THEY WERE EXPLICIT`, `CONCERN
+RESOLVED` or `INTERVIEW GOING WELL` when the mark and the note already show it.
+The pad should resemble operational shorthand an interviewer would plausibly
+write, not a translated transcript or a diagnostic overlay.
+
+### 3.8 No interview-success meter
+
+Do not expose:
+
+- interview success / completion percentage;
+- signing probability produced by the interview;
+- trust, interest or relationship deltas;
+- `+/-` feedback after a line;
+- green/red "correct" responses;
+- hidden-variable tooltips explaining what a reply changed.
+
+Mechanically important feedback comes from several weaker but truthful signals
+working together:
+
+- the recruit's actual language;
+- which questions they choose to ask next;
+- whether they return to a subject;
+- the pad's `□ / ✓ / ? / ×` state;
+- pauses, posture and expression as secondary emphasis.
+
+Expression must not become a meter encoded in animation. A smile is not `+5`;
+crossed arms are not a universal failure state. The words and the direction of
+the conversation carry the important information, while performance gives it
+texture.
+
+A recruit shifting from *whether this works* to concrete logistics — arrival,
+housing, training — can be meaningful evidence that the conversation changed,
+but it still is not an omniscient declaration that they will sign.
+
+### 3.9 The checklist is not a completion objective
+
+Nothing should reward the player for mechanically turning every `□` into a
+`✓`. The interview is bounded by the manager appointment and by the other
+person's participation, not by an arbitrary visible `questions remaining`
+counter.
+
+An interview occupies real manager time. The player can spend that time going
+deep on one subject or broad across several, while the recruit also consumes the
+conversation with their own questions and answers. The exact within-block pacing
+belongs to the appointment implementation; the UI should not expose a question
+budget merely because a bound exists.
+
+Some `?` states are **genuinely irresolvable today**:
+
+- the recruit does not yet know whether living far from home will suit them;
+- playing time depends on preseason or another signing;
+- the manager cannot yet name a roommate;
+- the recruit is considering two clubs and has not decided what matters most.
+
+Repeating a question does not roll again for more truth. The recruit may refer
+back to what they already said or ask why the manager is circling it. A useful
+follow-up asks a genuinely different thing; repetition cannot farm certainty.
+
+A later interview can matter when something changed — the room is now known,
+another player signed, preseason clarified a role, the recruit asks to speak
+again. With no new context, a second visit should not reset the conversation or
+turn uncertainty into information by persistence alone.
+
+The intended managerial decision is therefore not *have I completed the
+interview?* It is:
+
+> I know these things, these remain uncertain, and we disagree here. Is that
+> enough for me to make an offer, wait, or walk away?
+
+There is no interview-completeness percentage.
+
+### 3.10 Clear speech is still not ground truth
+
+A `✓` means the conversation reached a clear understanding; it does not mean a
+hidden personality variable has been revealed with certainty. A recruit can
+sincerely say they are comfortable competing for a place and later discover
+that being benched bothers them. They can think communal housing will be fine
+and be wrong about themselves.
+
+Keep three things distinct:
+
+1. **facts** the club can inspect in its own records;
+2. **claims / expectations** the recruit or manager states in the interview;
+3. **beliefs** held by scouts, staff or the club about the person.
+
+The interview improves what the manager knows because another person has told
+them something and because concrete club facts have been discussed. It does not
+turn a person into a fully revealed database row.
 
 ---
 
@@ -195,10 +374,11 @@ signing is expensive, the region unfamiliar, the housing need unusual, a role
 conversion is involved, an allergy is claimed, the personality is uncertain, or
 the roommate situation is complicated.
 
-Because interviews are usually skipped, **the offer sheet is the primary
-surface** and the interview *unlocks topics on it* rather than being a parallel
-flow with its own presentation. Same content, one screen, and the skip case
-costs nothing.
+Because interviews are usually skipped, **the offer sheet remains the primary
+signing surface**. The interview is nevertheless its own conversational scene:
+it does not duplicate the offer sheet as a second spreadsheet. It establishes
+questions, answers, disagreements and commitments; the player then returns to
+the offer with whatever the conversation actually established.
 
 ---
 
