@@ -1,7 +1,8 @@
-[gd_scene load_steps=13 format=3 uid="uid://7pan3nabw3c3"]
+[gd_scene load_steps=14 format=3 uid="uid://7pan3nabw3c3"]
 
 [ext_resource type="Script" path="res://scenes/components/player_actor_3d.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://scenes/components/signature_surge_3d.tscn" id="2_surge"]
+[ext_resource type="Script" path="res://scenes/components/surface_mark_renderer_3d.gd" id="3_surface_marks"]
 
 [sub_resource type="CapsuleMesh" id="TorsoMesh"]
 radius = 0.31
@@ -65,6 +66,9 @@ ring_segments = 8
 
 [node name="PlayerActor3D" type="Node3D"]
 script = ExtResource("1_player")
+
+[node name="SurfaceMarkRenderer3D" type="Node" parent="."]
+script = ExtResource("3_surface_marks")
 
 [node name="Shadow" type="MeshInstance3D" parent="."]
 position = Vector3(0, 0.012, 0)
