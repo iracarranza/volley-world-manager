@@ -1,23 +1,20 @@
 class_name SurfaceMarkRenderer3D
 extends Node
 
-## Paints a voli's identity markings as colour on the existing skin meshes.
+## Paints a voli's identity markings as colour on existing body surfaces.
 ##
-## `BodyTypeModels` predates this renderer and still describes tabby bars, spots,
-## blazes, patches, speckles and scars as tiny cosmetic meshes. That was useful
-## for proving the marking vocabulary, but it made pigmentation change silhouette:
-## a spot was literally a flattened sphere bolted onto an arm, then the ink pass
-## grew another hull around it. At an oblique camera angle those read as bumps,
-## plates and scars with thickness.
+## `BodyTypeModels` still describes the original tabby bars, spots, blazes,
+## patches, speckles and scars as cosmetic meshes for compatibility. Those meshes
+## are hidden here and the same deterministic marking choice is redrawn with a
+## material overlay instead, so pigmentation cannot change silhouette or cast a
+## little mark-shaped shadow.
 ##
-## This component is deliberately downstream of that data. It keeps the existing
-## deterministic marking choice and weighting, hides only the legacy mark meshes,
-## and redraws the same coat family in a material overlay on Head / arm skin.
-## Anatomy (ears, muzzle, beak, crown, tail, lobes, etc.) remains real geometry.
+## Anatomy remains geometry. Coat / skin identity remains surface colour. Animal
+## marks live on the head and exposed arms; Vegi also paint applicable marks onto
+## their produce torso, because that is their dominant exposed body surface.
 ##
-## The rig faces -Z. Head marks therefore live on the -Z hemisphere, matching the
-## expression system's own `_surface()` convention rather than the old +Z mark
-## placement, which had quietly put "face" markings on the back of the skull.
+## The rig faces -Z. Face and torso masks therefore use the -Z hemisphere, matching
+## the expression system's own surface convention.
 
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 
@@ -28,6 +25,10 @@ const PATTERN_BLAZE: int = 3
 const PATTERN_PATCH: int = 4
 const PATTERN_SPECKLE: int = 5
 const PATTERN_SCAR: int = 6
+
+const PART_HEAD: int = 0
+const PART_ARM: int = 1
+const PART_TORSO: int = 2
 
 const LEGACY_MARK_PREFIXES: Array[String] = [
 	"Tabby", "Spot", "Blaze", "Patch", "Speckle", "Scar",
@@ -58,11 +59,8 @@ func _sync() -> void:
 	if silhouette.is_empty():
 		return
 
-	## Hide the compatibility geometry every frame. This is intentionally cheap:
-	## old marks only ever live directly under BodyPivot or either shoulder root,
-	## so this walks three short child lists rather than the whole actor tree. It
-	## also catches an actor reconfigured to the same player/marking, where the
-	## semantic signature is unchanged but `_build_cosmetics()` made new nodes.
+	## Compatibility mark meshes may be rebuilt when an actor is reconfigured, so
+	## suppress them every frame even when the semantic marking signature is stable.
 	_hide_legacy_mark_geometry(actor)
 
 	var head := actor.get_node_or_null("BodyPivot/Head") as MeshInstance3D
@@ -74,9 +72,8 @@ func _sync() -> void:
 			_suppressed_for_mask = true
 		return
 	if _suppressed_for_mask:
-		## `VoliSticker` restores the real palette immediately after its black /
-		## white arm-mask read. Rebuild on the next frame so the colour bake keeps
-		## the markings while the contour mask never sees them.
+		## `VoliSticker` restores the real palette immediately after its binary
+		## contour-mask read. Rebuild the colour overlays on the next frame.
 		_suppressed_for_mask = false
 		_signature = ""
 
@@ -91,8 +88,9 @@ func _sync() -> void:
 	)
 	var skin: Color = silhouette.get("skin", Color("d6a06c"))
 	var flat := bool(actor.get("flat_shading"))
-	var next_signature := "%d|%s|%s|%s|%s" % [
-		player_id, body_type, marking, skin.to_html(true), str(flat),
+	var produce := str(silhouette.get("produce", ""))
+	var next_signature := "%d|%s|%s|%s|%s|%s" % [
+		player_id, body_type, produce, marking, skin.to_html(true), str(flat),
 	]
 	if next_signature == _signature:
 		return
@@ -107,6 +105,7 @@ func _sync() -> void:
 	var seed_offset := absi(hash("coat:%d" % player_id))
 	var mark_side := 1.0 if (seed_offset & 1) == 0 else -1.0
 	var scar_arm_side := -1.0 if (seed_offset & 1) == 0 else 1.0
+	var seed := float(seed_offset % 10007)
 	var ink := skin.darkened(0.34) if skin.get_luminance() > 0.22 \
 		else skin.lightened(0.30)
 	if marking == "scar":
@@ -115,13 +114,22 @@ func _sync() -> void:
 		ink = skin.lightened(0.30).lerp(Color("f2e6c8"), 0.35)
 
 	_apply_overlay(
-		head, pattern, 0, 0.0, 0, mark_side, scar_arm_side,
-		float(seed_offset % 10007), ink, flat,
+		head, pattern, PART_HEAD, 0.0, 0, mark_side, scar_arm_side,
+		seed, ink, flat,
 	)
-	## The two-bone arm means a surface pattern follows the elbow for free. The
-	## old cosmetic marks were parented to the shoulder even when placed halfway
-	## down the full arm, so a bent elbow could leave a "forearm" mark floating
-	## beside the forearm. Each segment now carries its own part of the coat.
+
+	## A Vegi's produce is its body, not a shirt. Put non-scar coat variation on
+	## the torso as well as the small face so the marking reads at roster distance.
+	## Scars stay local marks rather than becoming a stripe across the whole fruit.
+	if body_type == "Vegi" and marking != "scar":
+		var torso := actor.get_node_or_null("BodyPivot/Torso") as MeshInstance3D
+		if torso != null:
+			_apply_overlay(
+				torso, pattern, PART_TORSO, 0.0, 0,
+				mark_side, scar_arm_side, seed, ink, flat,
+			)
+
+	## Each arm bone owns its overlay, so the surface pattern follows the elbow.
 	for side_info in [
 		["BodyPivot/LeftArm", -1.0],
 		["BodyPivot/RightArm", 1.0],
@@ -136,13 +144,13 @@ func _sync() -> void:
 			fore = elbow.get_node_or_null("Mesh") as MeshInstance3D
 		if upper != null:
 			_apply_overlay(
-				upper, pattern, 1, float(side_info[1]), 0,
-				mark_side, scar_arm_side, float(seed_offset % 10007), ink, flat,
+				upper, pattern, PART_ARM, float(side_info[1]), 0,
+				mark_side, scar_arm_side, seed, ink, flat,
 			)
 		if fore != null:
 			_apply_overlay(
-				fore, pattern, 1, float(side_info[1]), 1,
-				mark_side, scar_arm_side, float(seed_offset % 10007), ink, flat,
+				fore, pattern, PART_ARM, float(side_info[1]), 1,
+				mark_side, scar_arm_side, seed, ink, flat,
 			)
 
 
@@ -185,11 +193,12 @@ func _hide_legacy_mark_geometry(actor: Node) -> void:
 			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func _skin_meshes(actor: Node) -> Array[MeshInstance3D]:
+func _markable_meshes(actor: Node) -> Array[MeshInstance3D]:
 	var meshes: Array[MeshInstance3D] = []
-	var head := actor.get_node_or_null("BodyPivot/Head") as MeshInstance3D
-	if head != null:
-		meshes.append(head)
+	for path in ["BodyPivot/Head", "BodyPivot/Torso"]:
+		var mesh := actor.get_node_or_null(path) as MeshInstance3D
+		if mesh != null:
+			meshes.append(mesh)
 	for root_path in ["BodyPivot/LeftArm", "BodyPivot/RightArm"]:
 		var root := actor.get_node_or_null(root_path) as Node3D
 		if root == null:
@@ -207,7 +216,7 @@ func _skin_meshes(actor: Node) -> Array[MeshInstance3D]:
 
 
 func _clear_overlays(actor: Node) -> void:
-	for mesh in _skin_meshes(actor):
+	for mesh in _markable_meshes(actor):
 		var overlay := mesh.material_overlay
 		if overlay != null and overlay.has_meta("voli_surface_mark"):
 			mesh.material_overlay = null
@@ -215,8 +224,7 @@ func _clear_overlays(actor: Node) -> void:
 
 func _mask_pass_active(actor: Node, head: MeshInstance3D) -> bool:
 	## `VoliSticker` paints the whole body exact black, then the arms exact white,
-	## to recover an arm contour. A surface overlay must disappear for that one
-	## render or its coat colour becomes a false island in the binary mask.
+	## to recover an arm contour. Surface colour must disappear for that render.
 	if not bool(actor.get("flat_shading")):
 		return false
 	var material := head.material_override as StandardMaterial3D
@@ -299,46 +307,68 @@ float soft_disc(vec2 p, vec2 centre, float radius) {
 }
 
 float head_pattern(vec3 q) {
-	// The rig and the expression system both face -Z.
+	// The actor faces -Z; this also prevents marks bleeding onto the back of head.
 	float front = 1.0 - smoothstep(-0.22, 0.08, q.z);
 	float m = 0.0;
 	if (pattern == 1) {
-		// Three brow bars with tiny deterministic changes in slope/height.
+		// Three short, tapered forehead slashes. They sit above the eye line rather
+		// than spanning the whole face as a dark visor.
 		for (int i = 0; i < 3; i++) {
-			float fi = float(i);
-			float y0 = 0.43 - fi * 0.24 + (hash11(10.0 + fi) - 0.5) * 0.045;
-			float slope = (hash11(20.0 + fi) - 0.5) * 0.16;
-			float line = abs(q.y - (y0 + slope * q.x));
-			float stroke = 1.0 - smoothstep(0.043, 0.066, line);
-			float width = 1.0 - smoothstep(0.46, 0.72, abs(q.x));
-			m = max(m, stroke * width * front);
+			float fi = float(i) - 1.0;
+			float cx = fi * 0.215 + (hash11(10.0 + float(i)) - 0.5) * 0.030;
+			float cy = 0.50 + (hash11(20.0 + float(i)) - 0.5) * 0.035;
+			float lean = fi * 0.20 + (hash11(30.0 + float(i)) - 0.5) * 0.08;
+			float py = q.y - cy;
+			float line = abs((q.x - cx) - lean * py);
+			float stroke = 1.0 - smoothstep(0.026, 0.050, line);
+			float half_length = 0.24 - abs(fi) * 0.045;
+			float extent = 1.0 - smoothstep(half_length * 0.72, half_length, abs(py));
+			m = max(m, stroke * extent * front);
 		}
 	} else if (pattern == 2) {
 		// One facial spot; the rest of this coat lives around the arms.
 		vec2 centre = vec2(0.48 * mark_side, -0.16);
 		m = soft_disc(q.xy, centre, 0.18) * front;
 	} else if (pattern == 3) {
-		// A blaze is a field of coat, not a raised capsule: broad at the brow,
-		// tapering toward the muzzle and following the skull automatically.
-		float width = mix(0.13, 0.22, clamp((q.y + 0.62) / 1.25, 0.0, 1.0));
-		float stripe = 1.0 - smoothstep(width, width + 0.035, abs(q.x));
-		float vertical = smoothstep(-0.70, -0.50, q.y) * (1.0 - smoothstep(0.72, 0.86, q.y));
+		// Organic blaze: asymmetric centre line, variable width and soft tapered
+		// ends. The surface curvature supplies the rest of the shape.
+		float phase = seed_value * 0.013;
+		float t = clamp((q.y + 0.62) / 1.34, 0.0, 1.0);
+		float centre = 0.035 * mark_side
+			+ 0.032 * sin(q.y * 5.0 + phase)
+			+ 0.016 * sin(q.y * 11.0 + phase * 0.63);
+		float width = mix(0.085, 0.165, t)
+			+ 0.014 * sin(q.y * 7.0 + phase * 1.17);
+		width = max(width, 0.070);
+		float stripe = 1.0 - smoothstep(width, width + 0.035, abs(q.x - centre));
+		float vertical = smoothstep(-0.72, -0.51, q.y)
+			* (1.0 - smoothstep(0.72, 0.86, q.y));
 		m = stripe * vertical * front;
 	} else if (pattern == 4) {
-		// Eye patch. The face solids remain above it, so the eye is still legible.
-		vec2 p = vec2(q.x - 0.40 * mark_side, q.y - 0.18);
-		p.x *= 1.08;
-		p.y *= 0.88;
-		m = (1.0 - smoothstep(0.30, 0.35, length(p))) * front;
+		// Irregular eye-side coat patch: a union of unequal lobes with a small
+		// notch toward the nose. The eye can sit inside it without defining it.
+		vec2 c = vec2(0.39 * mark_side, 0.15);
+		float a = soft_disc(q.xy, c, 0.235);
+		float b = soft_disc(q.xy, c + vec2(0.10 * mark_side, -0.17), 0.175);
+		float d = soft_disc(q.xy, c + vec2(-0.08 * mark_side, 0.19), 0.145);
+		float patch = max(a, max(b, d));
+		float notch = soft_disc(q.xy, c + vec2(-0.19 * mark_side, 0.05), 0.105);
+		m = patch * (1.0 - notch * 0.72) * front;
 	} else if (pattern == 5) {
-		// Actual speckling: many tiny pigment islands rather than five beads.
-		for (int i = 0; i < 13; i++) {
+		// Small cheek / temple clusters, deliberately leaving the eye band and
+		// centre of the face quiet. Sizes vary enough to avoid a freckle grid.
+		for (int i = 0; i < 10; i++) {
 			float fi = float(i);
-			vec2 centre = vec2(
-				hash11(40.0 + fi * 3.1) * 1.12 - 0.56,
-				hash11(80.0 + fi * 5.3) * 0.92 - 0.34
-			);
-			float radius = 0.035 + hash11(120.0 + fi) * 0.028;
+			float side = mod(fi, 2.0) < 1.0 ? -1.0 : 1.0;
+			float xmag = 0.34 + hash11(40.0 + fi * 3.1) * 0.24;
+			float cy = 0.0;
+			if (i < 6) {
+				cy = -0.30 + hash11(80.0 + fi * 5.3) * 0.22;
+			} else {
+				cy = 0.42 + hash11(80.0 + fi * 5.3) * 0.15;
+			}
+			vec2 centre = vec2(side * xmag, cy);
+			float radius = 0.027 + hash11(120.0 + fi) * 0.024;
 			m = max(m, soft_disc(q.xy, centre, radius) * front);
 		}
 	} else if (pattern == 6) {
@@ -373,7 +403,7 @@ float arm_pattern(vec3 q) {
 			float cy = fract(sin(local_seed * 0.021 + fi * 7.91) * 24634.6345) * 1.50 - 0.75;
 			float radius = 0.11 + fract(sin(local_seed + fi * 9.3) * 15731.743) * 0.055;
 			float dx = abs(angle - cx);
-			dx = min(dx, 2.0 - dx); // seam-safe around the cylinder.
+			dx = min(dx, 2.0 - dx);
 			m = max(m, 1.0 - smoothstep(radius * 0.76, radius, length(vec2(dx, q.y - cy))));
 		}
 	} else if (pattern == 6 && segment_index == 1 && abs(arm_side - scar_arm_side) < 0.1) {
@@ -386,6 +416,55 @@ float arm_pattern(vec3 q) {
 	return m;
 }
 
+float torso_pattern(vec3 q) {
+	float front = 1.0 - smoothstep(-0.18, 0.16, q.z);
+	float angle = atan(q.x, -q.z) / PI_F;
+	float m = 0.0;
+	if (pattern == 3) {
+		// Vegi blaze: the same language as the facial blaze, enlarged for the
+		// produce body and allowed a little more lateral drift.
+		float phase = seed_value * 0.013;
+		float centre = 0.055 * mark_side
+			+ 0.045 * sin(q.y * 4.2 + phase)
+			+ 0.020 * sin(q.y * 9.1 + phase * 0.71);
+		float width = 0.14 + 0.035 * (0.5 + 0.5 * sin(q.y * 5.6 + phase * 1.11));
+		float stripe = 1.0 - smoothstep(width, width + 0.045, abs(q.x - centre));
+		float vertical = smoothstep(-0.95, -0.78, q.y)
+			* (1.0 - smoothstep(0.82, 0.98, q.y));
+		m = stripe * vertical * front;
+	} else if (pattern == 5) {
+		// Produce speckling wraps around the body, so a profile still reads as
+		// mottled produce rather than a face-only freckle treatment.
+		for (int i = 0; i < 18; i++) {
+			float fi = float(i);
+			float cx = hash11(210.0 + fi * 4.7) * 1.70 - 0.85;
+			float cy = hash11(260.0 + fi * 6.1) * 1.52 - 0.76;
+			float radius = 0.045 + hash11(310.0 + fi * 2.3) * 0.045;
+			float dx = abs(angle - cx);
+			dx = min(dx, 2.0 - dx);
+			m = max(m, 1.0 - smoothstep(radius * 0.72, radius, length(vec2(dx, q.y - cy))));
+		}
+	} else if (pattern == 2) {
+		// Future-safe if a Vegi palette ever admits spots: broad, sparse mottling.
+		for (int i = 0; i < 6; i++) {
+			float fi = float(i);
+			float cx = hash11(360.0 + fi * 5.7) * 1.55 - 0.775;
+			float cy = hash11(410.0 + fi * 7.1) * 1.30 - 0.65;
+			float radius = 0.12 + hash11(460.0 + fi) * 0.07;
+			float dx = abs(angle - cx);
+			dx = min(dx, 2.0 - dx);
+			m = max(m, 1.0 - smoothstep(radius * 0.76, radius, length(vec2(dx, q.y - cy))));
+		}
+	} else if (pattern == 4) {
+		// Future-safe irregular flank patch; currently not a generated Vegi mark.
+		vec2 p = vec2(angle - 0.30 * mark_side, q.y - 0.05);
+		float a = soft_disc(p, vec2(0.0), 0.29);
+		float b = soft_disc(p, vec2(0.12 * mark_side, -0.19), 0.20);
+		m = max(a, b);
+	}
+	return m;
+}
+
 void vertex() {
 	mark_local = VERTEX;
 }
@@ -393,14 +472,19 @@ void vertex() {
 void fragment() {
 	vec3 safe_half = max(bounds_half, vec3(0.0001));
 	vec3 q = (mark_local - bounds_center) / safe_half;
-	float mask = part_kind == 0 ? head_pattern(q) : arm_pattern(q);
+	float mask = head_pattern(q);
+	if (part_kind == 1) {
+		mask = arm_pattern(q);
+	} else if (part_kind == 2) {
+		mask = torso_pattern(q);
+	}
 	if (mask < 0.38) {
 		discard;
 	}
 	ROUGHNESS = 0.78;
 	if (flat_mode) {
-		// Sticker bake: reproduce the actor's unshaded colour regions without
-		// forcing the live court actor to become unlit too.
+		// Sticker bake: reproduce unshaded colour regions without forcing the live
+		// court actor to become unlit too.
 		ALBEDO = vec3(0.0);
 		EMISSION = mark_color.rgb;
 	} else {
