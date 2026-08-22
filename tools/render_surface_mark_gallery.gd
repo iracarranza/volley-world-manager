@@ -18,6 +18,7 @@ const VIEWS := {
 }
 
 const OUTPUT_DIR := "res://artifacts/mark-previews"
+const BACKGROUND := Color("d8d6cf")
 
 
 func _initialize() -> void:
@@ -38,7 +39,7 @@ func _run() -> void:
 	viewport.world_3d = world
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("d8d6cf")
+	environment.background_color = BACKGROUND
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("ffffff")
 	environment.ambient_light_energy = 0.72
@@ -48,8 +49,12 @@ func _run() -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.size = 2.75
 	camera.position = Vector3(0.0, 1.18, -4.2)
-	camera.look_at(Vector3(0.0, 1.16, 0.0), Vector3.UP)
 	viewport.add_child(camera)
+	camera.look_at(Vector3(0.0, 1.16, 0.0), Vector3.UP)
+	## A SubViewport can render its environment without ever selecting a camera.
+	## Make the diagnostic's authority explicit so a background-only frame cannot
+	## masquerade as a successful appearance test.
+	camera.current = true
 
 	var key := DirectionalLight3D.new()
 	key.rotation_degrees = Vector3(-38.0, -28.0, 0.0)
@@ -100,6 +105,10 @@ func _run() -> void:
 				marking,
 				str(view_name),
 			]
+			if _foreground_sample_count(image) < 200:
+				push_error("Blank/near-blank mark preview: %s" % path)
+				quit(1)
+				return
 			var err := image.save_png(path)
 			if err != OK:
 				push_error("Could not save %s: %s" % [path, error_string(err)])
@@ -108,3 +117,19 @@ func _run() -> void:
 
 	print("Rendered %d surface-mark preview images to %s" % [CASES.size() * VIEWS.size(), OUTPUT_DIR])
 	quit()
+
+
+## Cheap guard against a diagnostic that rendered only its environment. Sampling
+## every fourth pixel is enough to find a body this large without turning a
+## visual probe into an image-processing benchmark.
+func _foreground_sample_count(image: Image) -> int:
+	var count := 0
+	for y in range(0, image.get_height(), 4):
+		for x in range(0, image.get_width(), 4):
+			var pixel := image.get_pixel(x, y)
+			var delta := absf(pixel.r - BACKGROUND.r) \
+				+ absf(pixel.g - BACKGROUND.g) \
+				+ absf(pixel.b - BACKGROUND.b)
+			if delta > 0.10:
+				count += 1
+		return count
