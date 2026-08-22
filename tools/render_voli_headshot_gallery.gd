@@ -4,7 +4,8 @@ extends SceneTree
 ##
 ## These are not generated illustrations and not reconstructed 2D avatars. Each
 ## PNG is the real PlayerActor3D rig, materials, anatomy and surface markings,
-## viewed through a tighter camera suitable for dialogue, reports and roster UI.
+## viewed through a tight head-and-shoulders camera suitable for dialogue,
+## reports and roster UI.
 
 const ACTOR_SCENE := preload("res://scenes/components/player_actor_3d.tscn")
 
@@ -27,6 +28,8 @@ const VIEWS := {
 
 const OUTPUT_DIR := "res://artifacts/headshot-previews"
 const BAKE_SIZE := Vector2i(512, 512)
+const HEADSHOT_FOCUS := Vector3(0.0, 1.82, 0.0)
+const HEADSHOT_WORLD_HEIGHT: float = 0.92
 
 
 func _initialize() -> void:
@@ -55,10 +58,10 @@ func _run() -> void:
 
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 1.40
-	camera.position = Vector3(0.0, 1.66, -4.2)
+	camera.size = HEADSHOT_WORLD_HEIGHT
+	camera.position = HEADSHOT_FOCUS + Vector3(0.0, 0.0, -4.2)
 	viewport.add_child(camera)
-	camera.look_at(Vector3(0.0, 1.66, 0.0), Vector3.UP)
+	camera.look_at(HEADSHOT_FOCUS, Vector3.UP)
 	camera.current = true
 
 	var key := DirectionalLight3D.new()
