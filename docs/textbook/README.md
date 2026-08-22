@@ -4,7 +4,7 @@ Book ID: `VWM-TEXTBOOK`
 
 Audience: a programmer who may have **zero prior Godot or GDScript experience**, but wants to become capable of reading, debugging, modifying, and eventually extending Volley World Manager without needing another person or AI to translate the codebase first.
 
-This is not a generic Godot course and not a dump of project notes. It teaches Godot, GDScript, and software architecture **through the systems that actually exist in VWM**.
+This is not a generic Godot course and not a dump of project notes. It teaches Godot, GDScript, and software architecture **through systems that actually exist in VWM**.
 
 ## Learning rule
 
@@ -12,129 +12,122 @@ The book uses **causal learning**:
 
 > explain a language/engine concept when its purpose becomes visible in a real VWM system; use it again later with shorter reminders; gradually remove the scaffolding as the reader becomes fluent.
 
-A chapter about buttons therefore teaches the relevant parts of `Control`, themes, signals, and callbacks while tracing a real VWM button. A chapter about voli stickers teaches `SubViewport`, `await`, scene instantiation, image readback, and caching while following the actual sticker bake. A rally chapter teaches state, Resources, typed functions, static systems, vectors, and mutation while following the actual rally.
+Important concepts therefore recur naturally. The first important appearance may explain syntax closely; later chapters remind you briefly; eventually normal project code is used without translation.
 
-Do **not** front-load ten generic Godot definitions before the reader can see why they matter. Do **not** assume a term is permanently remembered because it was defined once. Important recurring ideas get brief textbook-style reminders.
+See [EDITORIAL_STANDARD.md](EDITORIAL_STANDARD.md) for the authoring standard.
 
 ## What this book should let you do
 
-With time and source inspection, a reader should be able to:
+With time and source inspection, you should be able to:
 
-- navigate the Godot editor and locate the scene/resource/script behind a feature;
-- read ordinary GDScript syntax and function signatures without translation;
-- distinguish a scene from a runtime instance, a Node from a Resource, and presentation from simulation authority;
-- trace a UI action, management action, or rally decision across files;
-- recognize where state is created, mutated, carried, serialized, or reconstructed;
-- make a bounded change and know which tests/probes should prove it;
+- navigate Godot and locate the scene/resource/script behind a feature;
+- read ordinary GDScript and function signatures without translation;
+- distinguish scenes, runtime Nodes, Resources, models, systems, managers and presentation;
+- trace UI, management and rally behavior across files;
+- recognize where state is created, mutated, carried, serialized or reconstructed;
+- make bounded changes and design the fixture/probe that should prove them;
 - understand why important VWM systems have their present architecture;
-- extend an existing system without casually bypassing its authority boundaries.
+- extend an existing system without bypassing its authority boundaries.
 
 ## Truth labels
 
-- **VERIFIED** — directly supported by current source and/or a named certification.
-- **PARTIALLY IMPLEMENTED** — real code exists but does not yet own the complete live path.
+- **VERIFIED** — directly supported by current source and/or named certification.
+- **PARTIALLY IMPLEMENTED** — real code exists but does not own the complete path.
 - **PROPOSED** — design direction, not current runtime behavior.
-- **EXAMPLE** — teaching code; not necessarily source copied verbatim.
-- **HISTORICAL** — explains an earlier architecture or migration step.
-- **DEPRECATED** — still present but intentionally not part of current development.
-- **UNVERIFIED** — claim requiring fresh inspection or measurement.
+- **EXAMPLE** — teaching code; not necessarily verbatim production source.
+- **HISTORICAL** — earlier architecture/migration evidence.
+- **DEPRECATED** — still present but intentionally not current development.
+- **UNVERIFIED** — requires fresh source inspection or measurement.
 
-Current behavior must be checked against source and the canonical design/review docs. Historical gate notes are evidence, not automatic present-day authority.
+Current behavior must be checked against source and canonical design/review docs. Historical Gate notes are evidence, not present-day authority.
 
-## Reading order — v2
+# Contents
 
-### Part I — Reading and Writing VWM
+## Part I — Reading and Writing VWM
 
-1. What VWM is and how the repository is organized
-2. Using the Godot editor
-3. GDScript: the language needed to read VWM
-4. Godot's object model: Nodes, scenes, Resources, signals, and runtime instances
-5. Tracing code through the project
-6. Making a first safe change
+1. [What VWM Is and How the Repository Is Organized](part_01_foundations/01_project_and_repository.md)
+2. [Using the Godot Editor](part_01_foundations/02_using_the_godot_editor.md)
+3. [GDScript: The Language Needed to Read VWM](part_01_foundations/03_gdscript_for_vwm.md)
+4. [Godot's Object Model](part_01_foundations/04_godot_object_model.md)
+5. [Tracing Code Through VWM](part_01_foundations/05_tracing_code_through_vwm.md)
+6. [Making a First Safe Change](part_01_foundations/06_first_safe_change.md)
 
-### Part II — Interface and Visual Architecture
+## Part II — Interface and Visual Architecture
 
-7. Screens, Controls, and layout
-8. Buttons, themes, and interaction states
-9. Paper windows, cards, tabs, and reusable components
-10. The desk and diegetic UI architecture
-11. Voli stickers: 3D rig → off-screen render → 2D bake
-12. Shaders, ink, paper, and surface effects
-13. Visual probes and render validation
+7. [Controls, Buttons, Themes, and Interaction States](part_02_interface/01_controls_buttons_and_themes.md)
+8. [Screens, Controls, and Layout](part_02_interface/02_screens_controls_and_layout.md)
+9. [Paper Windows, Cards, Tabs, and Reusable Components](part_02_interface/03_paper_components.md)
+10. [The Desk and Diegetic UI](part_02_interface/04_desk_and_diegetic_ui.md)
+11. [Voli Stickers: 3D Rig → 2D Bake](part_02_interface/05_voli_sticker_bake.md)
+12. [Shaders, Ink, Paper, and Surface Effects](part_02_interface/06_shaders_ink_paper_surfaces.md)
+13. [Visual Probes and Render Validation](part_02_interface/07_visual_probes_and_validation.md)
 
-### Part III — Game Data and Players
+## Part III — Game Data and Players
 
-14. Data models and Resources
-15. Players, attributes, and roles
-16. Body types and physical measurements
-17. Generation, potential, and development
-18. Regions, clubs, and tactical identity
-19. Career state, managers, saving, and persistence
+14. [Data Models and Resources](part_03_data/01_data_models_and_resources.md)
+15. [Players, Attributes, and Roles](part_03_data/02_players_attributes_and_roles.md)
+16. [Body Types and Physical Measurements](part_03_data/03_body_types_and_measurements.md)
+17. [Generation, Potential, and Development](part_03_data/04_generation_potential_development.md)
+18. [Regions, Clubs, and Tactical Identity](part_03_data/05_regions_clubs_and_identity.md)
+19. [Career State, Managers, Saving, and Persistence](part_03_data/06_career_state_and_persistence.md)
 
-### Part IV — Rally Architecture
+## Part IV — Current Rally Architecture
 
-20. One rally from serve to terminal ball
-21. `RallySimulator`, event records, and authoritative state
-22. Ball contact and authoritative free flight
-23. Player state, movement, and continuity
-24. Perception, responsibility, and action choice
-25. Physical feasibility and contact geometry
-26. Serve, set, and attack
-27. Blocking and ball interaction
-28. Platform contacts and T1–T3
-29. Interception, shanks, overpasses, and continuation
-30. Action choice across team contacts
-31. The M0–M10 rally roadmap
+20. [One Rally from Serve to Terminal Ball](part_04_rally/01_one_rally_end_to_end.md)
+21. [RallySimulator, Event Records, and Authoritative State](part_04_rally/02_rally_simulator_events_state.md)
+22. [Ball Contact and Authoritative Free Flight](part_04_rally/03_ball_contact_and_free_flight.md)
+23. [Player State, Movement, and Continuity](part_04_rally/04_player_state_movement_continuity.md)
+24. [Perception, Responsibility, and Action Choice](part_04_rally/05_perception_responsibility_action_choice.md)
+25. [Physical Feasibility and Contact Geometry](part_04_rally/06_physical_feasibility_contact_geometry.md)
+26. [Serve, Set, and Attack](part_04_rally/07_serve_set_attack.md)
+27. [Blocking and Ball Interaction](part_04_rally/08_blocking_and_ball_interaction.md)
+28. [Platform Contacts and T1–T3](part_04_rally/09_platform_contacts_t1_t3.md)
+29. [Interception, Shanks, Overpasses, and Continuation](part_04_rally/10_interception_shanks_overpasses.md)
+30. [Action Choice Across Team Contacts](part_04_rally/11_action_choice_across_contacts.md)
+31. [The M0–M10 Rally Roadmap](part_04_rally/12_m0_m10_roadmap.md)
 
-### Part V — How the Rally Engine Got Here
+## Part V — How the Rally Engine Got Here
 
-32. The original phase resolver
-33. Shadow systems and guarded development rollout
-34. Major `RallySimulator` migrations
-35. Measurement, failed hypotheses, and removed models
+32. [The Original Phase Resolver](part_05_rally_history/01_original_phase_resolver.md)
+33. [Shadow Systems and Guarded Rollout](part_05_rally_history/02_shadow_systems_and_rollout.md)
+34. [Major RallySimulator Migrations](part_05_rally_history/03_major_rally_migrations.md)
+35. [Measurement, Failed Hypotheses, and Removed Models](part_05_rally_history/04_measurement_and_failed_hypotheses.md)
 
-### Part VI — Management Systems
+## Part VI — Management Systems
 
-36. Career loop
-37. Roster and recruitment
-38. Training and development
-39. Club operations and desk systems
-40. How management decisions reach match behavior
+36. [The Career Loop](part_06_management/01_career_loop.md)
+37. [Roster, Scouting, Recruitment, and Offers](part_06_management/02_roster_recruitment.md)
+38. [Training and Development](part_06_management/03_training_and_development.md)
+39. [Club Operations and the Desk](part_06_management/04_club_operations_and_desk.md)
+40. [How Management Decisions Reach Match Behavior](part_06_management/05_management_to_match.md)
 
-### Part VII — Working on VWM Safely
+## Part VII — Working on VWM Safely
 
-41. Tests, deterministic fixtures, and probes
-42. Derived vs measured vs authored values
-43. Certification and production promotion
-44. Debugging Godot and GDScript
-45. Safely extending an existing system
+41. [Tests, Deterministic Fixtures, and Probes](part_07_working_safely/01_tests_fixtures_and_probes.md)
+42. [Derived vs Measured vs Authored Values](part_07_working_safely/02_derived_measured_authored.md)
+43. [Certification and Production Promotion](part_07_working_safely/03_certification_and_promotion.md)
+44. [Debugging Godot and GDScript](part_07_working_safely/04_debugging_godot_gdscript.md)
+45. [Safely Extending an Existing System](part_07_working_safely/05_extending_existing_system.md)
 
-### Reference
+# Reference
 
-- current implementation status
-- glossary
-- source/symbol index
-- player attribute ledger
-- event/calculation taxonomy
-- validation commands
-- historical handoffs/session notes
+- [Current textbook/project status](STATUS.md)
+- [Search index](INDEX.md)
+- [Glossary](GLOSSARY.md)
+- [Verification rules](VERIFICATION_RULES.md)
+- [Validation](VALIDATION.md)
+- [Player attributes ledger](PLAYER_ATTRIBUTES_LEDGER.md)
+- [Event calculation taxonomy](EVENT_CALCULATION_TAXONOMY.md)
+- [Granular attribute breakdown](GRANULAR_ATTRIBUTE_BREAKDOWN.md)
+- [Rally event quality calculation map](RALLY_EVENT_QUALITY_CALCULATION_MAP.md)
+- [Historical / older textbook material](LEGACY.md)
 
-## Chapter style
+## Current-authority boundary
 
-A technical chapter should normally flow from **purpose → actual system → concepts encountered → source trace → architectural reasoning → modification/debugging guidance**. Beginner explanations belong inline where they become useful rather than as mandatory mini-sections.
+For rally work, the canonical phase index is `docs/design/RALLY_MILESTONES.md`; future action semantics are in `docs/design/RALLY_ACTION_SPACE.md`; detailed proof belongs in `docs/review/`.
 
-The first appearance of an important GDScript/Godot construct may be explained closely. Later appearances get short reminders. Eventually the construct is used normally. Real VWM code should therefore become progressively less annotated as the book advances.
+For a fast answer to “what owns this now?”, start with [STATUS.md](STATUS.md), then the relevant Part IV/VI chapter, then inspect live source.
 
-Small recurring callouts are encouraged:
+## Legacy material
 
-- **Godot reminder** — engine/editor concept worth recalling.
-- **GDScript reminder** — syntax/language construct worth recalling.
-- **VWM boundary** — project-specific authority or dependency that must not be confused with neighboring code.
-
-## Migration status
-
-The older `part_01_project` through `part_06_exercises` chapters remain in the repository during the v2 rewrite so useful material is not destroyed before it is migrated. They describe an earlier architecture and should not automatically be treated as current truth.
-
-The canonical current rally status is `docs/design/RALLY_MILESTONES.md`; the action-space target is `docs/design/RALLY_ACTION_SPACE.md`.
-
-For active coding-agent handoff, use the current project/review documents rather than the old textbook `FRESH_AGENT_HANDOFF.md` until that reference section is rebuilt.
+The earlier `part_01_project` through `part_06_exercises` directories are retained as historical teaching material. They describe an earlier project/rally architecture and are **not** the recommended reading path. See [LEGACY.md](LEGACY.md).
