@@ -306,6 +306,7 @@ func _initialize() -> void:
 	_test_the_incoming_ball_reaches_no_platform_launch()
 	_test_overpass_control_wires_live()
 	_test_overpass_attack_selects_and_launches_live()
+	_test_overpass_attack_forms_real_block()
 	_test_shared_platform_shadow_contract()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
@@ -11399,6 +11400,79 @@ func _test_overpass_attack_selects_and_launches_live() -> void:
 	_check(
 		free_flight == frozen,
 		"the overpass attack leaves the incoming authoritative launch unmutated",
+	)
+
+
+## The overpass attack enters the REAL block path: `_resolve_overpass_attack`
+## forms the defending wall from live front-row state and the overpass flight
+## window (no set parameters), so a blocker who can close produces a real wall the
+## swing is contested against, and one who cannot produces an empty wall -- no
+## *viable* block, correctly, rather than a skipped one. This certifies the exact
+## `_form_home_block` + `block_wall` call the resolver makes.
+func _test_overpass_attack_forms_real_block() -> void:
+	var players: Array[VolleyballPlayer] = []
+	var lineup := RotationLineup.new()
+	for slot in range(1, 7):
+		var voli := _overpass_voli(300 + slot, 55, 55)
+		voli.block_timing = 70
+		players.append(voli)
+		lineup.assign_slot(slot, voli.id)
+	var plan := DefensivePlan.new()
+	plan.rotation_number = 1
+	plan.ensure_defaults(lineup, players)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.home_principles = TeamPrinciples.new()
+	simulator.live_velocities = {}
+	simulator.player_facing = {}
+	simulator.player_recovery = {}
+	## Primary blocker selection reads the slot GRID x, and `_blocker_close_terms`
+	## reads the blocker's live position; so every front-row blocker is placed at
+	## the net at its own slot lane, and the attack is aimed down the middle front
+	## slot -- whoever is selected is already in the lane at the tape and closes.
+	var lane_x: float = CourtConstants.slot_position(3).x
+	var starts := {}
+	for voli in players:
+		var slot := lineup.slot_for_player(voli.id)
+		var grid: Vector2 = CourtConstants.slot_position(slot)
+		starts[voli.id] = Vector2(grid.x, 0.48) \
+			if CourtConstants.is_front_row_slot(slot) else Vector2(grid.x, 0.85)
+	simulator.live_positions = starts
+
+	## Ample window: the net-side blocker closes and a real wall forms.
+	var formed: Dictionary = simulator._form_home_block(
+		players, lineup, plan, lane_x, 1, 0.5, lane_x, 0.90, 0.0, null, 0.0,
+		{"overpass": true},
+	)
+	var wall: Array = GeometricAttackPromotion.block_wall(
+		formed, simulator._home_block_fallbacks(players, lineup),
+		simulator.live_positions, "Balanced", 0.0,
+	)
+	_check(
+		wall.size() >= 1,
+		"an overpass attack against a set net-side blocker enters a real block wall",
+	)
+
+	## Now the front row is caught deep off the net and the window is too short to
+	## travel back: no blocker can close, so `block_wall` returns empty rather than
+	## a fabricated wall. (A blocker already at the tape needs no window; the
+	## window only bites when a body has ground to cover.)
+	var deep := {}
+	for voli in players:
+		deep[voli.id] = Vector2(0.95, 0.95)
+	simulator.live_positions = deep
+	var rushed: Dictionary = simulator._form_home_block(
+		players, lineup, plan, lane_x, 1, 0.5, lane_x, 0.02, 0.0, null, 0.0,
+		{"overpass": true},
+	)
+	var empty_wall: Array = GeometricAttackPromotion.block_wall(
+		rushed, simulator._home_block_fallbacks(players, lineup),
+		simulator.live_positions, "Balanced", 0.0,
+	)
+	_check(
+		empty_wall.is_empty(),
+		"a front row caught deep with no time to close forms no wall, not a faked one",
 	)
 
 

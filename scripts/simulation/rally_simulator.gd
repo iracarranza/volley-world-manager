@@ -12133,8 +12133,8 @@ func _resolve_overpass_into_home(
 		return null
 	if str(choice.get("action", "")) == "attack":
 		return _resolve_overpass_attack(
-			result, choice, actor, &"home", players, lineup, opponent_team,
-			defensive_plan, exchange_number, incoming_quality,
+			result, choice, free_flight, actor, &"home", players, lineup,
+			opponent_team, defensive_plan, exchange_number, incoming_quality,
 		)
 	var setter := _player_by_id(players, lineup.active_setter_id())
 	if setter == null:
@@ -12198,8 +12198,8 @@ func _resolve_overpass_into_opponent(
 		return null
 	if str(choice.get("action", "")) == "attack":
 		return _resolve_overpass_attack(
-			result, choice, actor, &"opponent", players, lineup, opponent_team,
-			defensive_plan, exchange_number, incoming_quality,
+			result, choice, free_flight, actor, &"opponent", players, lineup,
+			opponent_team, defensive_plan, exchange_number, incoming_quality,
 		)
 	var setter := _opponent_setter(opponent_team)
 	if setter == null:
@@ -12239,6 +12239,7 @@ func _resolve_overpass_into_opponent(
 func _resolve_overpass_attack(
 	result: Resource,
 	choice: Dictionary,
+	free_flight: Dictionary,
 	attacker: VolleyballPlayer,
 	attacking_side: StringName,
 	players: Array[VolleyballPlayer],
@@ -12249,11 +12250,47 @@ func _resolve_overpass_attack(
 	incoming_quality: float,
 ) -> Resource:
 	var defending_home := attacking_side == &"opponent"
-	var defending_positions: Array = []
 	var defence_map: Dictionary = live_positions if defending_home \
 		else opponent_live_positions
+	var defending_positions: Array = []
 	for value in defence_map.values():
 		defending_positions.append(Vector2(value))
+	var contact_pos := Vector2(choice.get("contact_position", attacker.position \
+		if attacker != null else Vector2(0.5, 0.5)))
+	## The wall the defence can actually form against a *no-set* first-contact
+	## attack. Its geometry comes only from live inputs: the attack lane
+	## (`contact_pos.x`) and the closure window, which is the incoming overpass
+	## flight -- the time the front row had to close. `preset_window_seconds = 0.0`
+	## is a true statement (there was no set to pre-read), and `tempo`/`set_quality`
+	## are neutral read-cue defaults for a contact that had no set to grade. When
+	## no blocker can close in the window, `block_wall` returns an empty wall --
+	## no *viable* block, correctly, rather than a skipped one. See
+	## `OVERPASS_ACTION_HANDOFF.md`.
+	var window := maxf(
+		float(choice.get("contact_time", 0.0))
+			- float(free_flight.get("start_time", 0.0)),
+		0.05,
+	)
+	var formation: Dictionary
+	var wall: Array = []
+	if defending_home:
+		formation = _form_home_block(
+			players, lineup, defensive_plan, contact_pos.x, 1, 0.5,
+			contact_pos.x, window, 0.0, attacker, 0.0, {"overpass": true},
+		)
+		wall = GeometricAttackPromotionModel.block_wall(
+			formation, _home_block_fallbacks(players, lineup), live_positions,
+			"Balanced", 0.0,
+		)
+	else:
+		formation = _form_opponent_block(
+			opponent_team, contact_pos.x, 1, 0.5, contact_pos.x, window, 0.0,
+			attacker, 0.0,
+		)
+		wall = GeometricAttackPromotionModel.block_wall(
+			formation, _opponent_block_fallbacks(opponent_team),
+			opponent_live_positions, "Balanced", 0.0,
+		)
 	var attacking_principles: Resource = home_principles \
 		if attacking_side == &"home" else opponent_principles
 	var decisiveness := 0.5
@@ -12262,7 +12299,7 @@ func _resolve_overpass_attack(
 		decisiveness = 0.5 if raw == null else clampf(float(raw), 0.0, 1.0)
 	var seed_value := rally_seed + 91_000 + int(choice.get("player_id", 0))
 	var execution := OverpassActionModel.execute_attack(
-		choice, [], defending_positions, decisiveness, 0.0, seed_value
+		choice, wall, defending_positions, decisiveness, 0.0, seed_value
 	)
 	if not bool(execution.get("available", false)):
 		return null
@@ -12270,8 +12307,6 @@ func _resolve_overpass_attack(
 	var outgoing: Dictionary = execution.get("outgoing_trajectory", {})
 	if outgoing.is_empty():
 		return null
-	var contact_pos := Vector2(choice.get("contact_position", attacker.position \
-		if attacker != null else Vector2(0.5, 0.5)))
 	var landing := Vector2(swing.get("landing", contact_pos))
 	var outcome := str(swing.get("outcome", "in"))
 	var errored := outcome in ["net", "out"]
@@ -12284,8 +12319,12 @@ func _resolve_overpass_attack(
 			"side": str(attacking_side), "overpass": true,
 			"team_contact_number": 1, "outgoing_trajectory": outgoing,
 			"swing_outcome": outcome, "first_contact_action": "attack",
+			"block_wall_size": wall.size(),
 		},
 	)
+	## The block resolved the contest inside `resolve_swing` from the real wall.
+	## `net`/`out` is the attacker's error; a `stuff` is the defence's point; a
+	## `tool`/`high_hands`/`block_crush` beat the hands for the attacker's point.
 	if errored:
 		return _finish(
 			result, "attack_error" if attacking_side == &"home" \
@@ -12293,9 +12332,30 @@ func _resolve_overpass_attack(
 			attacking_side == &"opponent", attacker.id,
 			{"hitter": attacker.display_name},
 		)
-	## In play: the defending side plays the crossed swing as its own first
-	## contact. A returned rally means they controlled it; `null` means nobody
-	## could -- the swing lands, which is the attacker's point.
+	if outcome in ["stuff", "monster_block"]:
+		if attacking_side == &"home":
+			return _finish(
+				result, "blocked", false, attacker.id,
+				{"hitter": attacker.display_name},
+			)
+		var blocker := formation.get("primary") as VolleyballPlayer
+		return _finish(
+			result, "counter_block", true,
+			blocker.id if blocker != null else attacker.id,
+			{"hitter": attacker.display_name},
+		)
+	if outcome in ["tool", "block_crush", "high_hands"]:
+		return _finish(
+			result, "kill" if attacking_side == &"home" else "opponent_kill",
+			attacking_side == &"home", attacker.id,
+			{"hitter": attacker.display_name},
+		)
+	## In play (clean cross or a soft touch/deflection): the defending side plays
+	## the crossed swing as its own first contact. A returned rally means they
+	## controlled it; `null` means nobody could -- the swing lands, the attacker's
+	## point. (A block deflection back to the attacking side -- a recycle -- is not
+	## modelled as attacker coverage here; that is coverage/M6 scope, and it falls
+	## to the same kill fallback, over-crediting the attacker on a rare sub-case.)
 	var defence: Resource = null
 	if attacking_side == &"home":
 		defence = _resolve_overpass_into_opponent(
