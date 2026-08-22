@@ -83,7 +83,9 @@ func _sync() -> void:
 	var player_id := int(actor.get("player_id"))
 	var body_type := str(actor.get("body_type"))
 	var appearance_value: Variant = actor.get("appearance")
-	var appearance: Dictionary = appearance_value if appearance_value is Dictionary else {}
+	var appearance: Dictionary = {}
+	if appearance_value is Dictionary:
+		appearance = appearance_value
 	var marking := BodyTypeModelsScript.chosen_marking(
 		body_type, player_id, appearance
 	)
@@ -129,7 +131,9 @@ func _sync() -> void:
 			continue
 		var upper := arm_root.get_node_or_null("Mesh") as MeshInstance3D
 		var elbow := arm_root.get_node_or_null("Elbow") as Node3D
-		var fore := elbow.get_node_or_null("Mesh") as MeshInstance3D if elbow != null else null
+		var fore: MeshInstance3D = null
+		if elbow != null:
+			fore = elbow.get_node_or_null("Mesh") as MeshInstance3D
 		if upper != null:
 			_apply_overlay(
 				upper, pattern, 1, float(side_info[1]), 0,
@@ -194,7 +198,9 @@ func _skin_meshes(actor: Node) -> Array[MeshInstance3D]:
 		if upper != null:
 			meshes.append(upper)
 		var elbow := root.get_node_or_null("Elbow") as Node3D
-		var fore := elbow.get_node_or_null("Mesh") as MeshInstance3D if elbow != null else null
+		var fore: MeshInstance3D = null
+		if elbow != null:
+			fore = elbow.get_node_or_null("Mesh") as MeshInstance3D
 		if fore != null:
 			meshes.append(fore)
 	return meshes
