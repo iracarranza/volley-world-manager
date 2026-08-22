@@ -1,104 +1,208 @@
 # Glossary
 
-## Action opportunity
+Short refreshers for terms that recur across the textbook. For full explanation, follow [INDEX.md](INDEX.md).
 
-A possible volleyball action available to one player during a time window. In the persistent foundation, `ActionOpportunity` stores action type, player, timing, target, feasibility, and related data.
+## Godot / GDScript
 
-## Autoload
+### Annotation
+A `@...` marker that changes how Godot treats a declaration, e.g. `@export` or `@export_range`.
 
-A Godot script or scene created once and made globally accessible. This project configures `GameManager` and `CareerManager` as Autoloads.
+### Autoload
+A script/scene Godot creates at startup under `/root` so it persists across screen/scene changes. VWM uses managers such as `CareerManager` and `GameManager` this way.
 
-## Ball trajectory
+### `await`
+Suspends the current GDScript function until a signal/awaitable event occurs while the engine continues running. Used in rendering/frame-sensitive code such as sticker baking.
 
-The path and timing of a ball flight. `BallTrajectory` stores start, control, and end positions along with start time, duration, and apex height.
+### Class
+A definition of data/behavior. `class_name RallyState` gives a GDScript class a globally recognizable type name.
 
-## Ball contact signature
+### `class_name`
+Declares a global GDScript class name for a script.
 
-A calculated description of contact speed, angles, signed spin, and flight
-stability. It characterizes what players must read without performing an
-aerodynamic simulation.
+### `const`
+A named value that the script does not reassign. Constants can hold numbers, Strings, preloaded scripts/scenes, Arrays, etc.
 
-## Ball flight estimate
+### `Control`
+Godot's UI-oriented Node family. Buttons, Labels, Containers, panels and many VWM screens derive from `Control`.
 
-One player's current belief about a flight's destination and arrival time. It
-may differ from authoritative `BallFlight` truth because of recognition delay,
-ability, novelty, and familiarity.
+### Container
+A `Control` that lays out its child Controls. Examples: `VBoxContainer`, `HBoxContainer`, `MarginContainer`, `PanelContainer`, `ScrollContainer`.
 
-## Class
+### Dictionary
+Key/value collection (`{}`). Flexible and useful for dynamic records, but keys/types are checked mostly at runtime.
 
-A definition of data and behavior. `class_name RallyEvent` makes `RallyEvent` a named GDScript type.
+### `emit` / signal emission
+Publishing a Godot signal so connected callbacks are invoked. In GDScript: `my_signal.emit(value)`.
 
-## Contact window
+### `extends`
+Declares inheritance, e.g. `extends Resource`, `extends Button`.
 
-The time interval during which a player can reach and legally act on the ball.
+### Exported property
+A property annotated with `@export...` so Godot understands it as editor/resource data and can expose it in the Inspector.
 
-## Deterministic seed
+### Inspector
+The Godot editor panel used to view/edit properties of the selected Node/Resource.
 
-A number used to initialize random generation so the same inputs can reproduce the same sequence of random values.
+### Instance
+One runtime object created from a class/scene. A `.tscn` scene definition and a Node instantiated from it are not the same thing.
 
-## Dictionary
+### `instantiate()`
+Creates a runtime scene instance from a `PackedScene`.
 
-A collection of key-value pairs. Dictionaries are flexible but easier to misuse than typed Resources; verify exact keys.
+### Local Scene Tree
+The authored scene hierarchy in the editor.
 
-## Event
+### Node
+A runtime object that can live in Godot's SceneTree and have children/lifecycle/input/rendering behavior.
 
-In this project, a `RallyEvent` is a record consumed by playback and analysis. It is not the complete physical state of the rally.
+### `null`
+Absence of an object/value. A cast or lookup can legitimately return `null`; whether that is acceptable depends on the contract.
 
-## Manager
+### `preload()`
+Loads a resource when the script is parsed/loaded. Common for scripts/scenes known ahead of time.
 
-A stateful coordinator, such as `CareerManager` or `GameManager`.
+### `res://`
+Path prefix for files inside the Godot project/resources.
 
-## Model
+### Resource
+A Godot data object that does not need to live in the SceneTree. VWM uses Resources heavily for players, teams, careers, events, fixtures, etc.
 
-A data-focused class, usually a `Resource`, stored under `scripts/models/`.
+### RefCounted
+Lightweight Godot object whose lifetime is managed by reference count. Many VWM stateless/system/helper classes extend it rather than Node.
 
-## Normalized court coordinates
+### Remote Scene Tree
+The actual runtime Node hierarchy visible in Godot's debugger while the game is running. Essential for code-built screens/components.
 
-Two-dimensional court positions expressed mainly from `0.0` to `1.0`, then converted to court distance or screen coordinates elsewhere.
+### Scene (`.tscn`)
+A serialized tree of Nodes that can be edited and instantiated.
 
-## Opportunity window
+### Signal
+Godot's event/message mechanism. One object emits; other objects can connect callbacks without the producer needing direct knowledge of them.
 
-The measured interval during which movement, timing, and body feasibility make
-an action available. A window can close after a corrected ball read even when
-it was open earlier.
+### Static function
+A function called on the class/script rather than a specific instance. VWM uses many static system calculations.
 
-## Perceived flight
+### StyleBox
+Godot Theme resource describing rectangular UI appearance/margins/borders/corners/shadows for states such as normal/hover/pressed.
 
-A player-specific estimate of ball destination and arrival time. It is distinct
-from the authoritative `BallFlight` used to grade the resulting contact.
+### SubViewport
+A separate render target that can render a scene off-screen. VWM uses one to bake 3D player poses into 2D sticker images.
 
-## Persistent state
+### Theme
+Godot resource that defines styles/fonts/colors/constants for Control types and variations.
 
-State carried forward from one simulation moment to the next. A player remains where movement left them until another rule changes that position.
+### Theme Type Variation
+A named variation (e.g. a VWM button/card role) that lets Controls reuse shared Theme styles without custom overrides everywhere.
 
-## Playback
+### `user://`
+Godot's platform-specific writable application-data directory. Appropriate for saves/settings/caches.
 
-Visual presentation of already-resolved simulation records. Playback should display results; it should not secretly decide gameplay outcomes.
+### `var`
+Declares mutable data. `var x := expression` asks GDScript to infer the static type; `var x: Type = ...` states it explicitly.
 
-## Resource
+### Variant
+Godot's general-purpose value type. Dictionaries and many dynamic APIs return Variant; cast/check before assuming a specific object/type.
 
-A Godot data object that can be typed, saved, duplicated, and passed around without being part of the scene tree.
+### Vector2 / Vector3
+Two-/three-component vector value types used for positions, directions and velocities. Meaning/units depend on subsystem convention.
 
-## Scene
+## VWM architecture
 
-A saved tree of Nodes. Scenes define user interfaces, screens, and reusable visual components.
+### Action opportunity
+A possible action for one player at a particular time/contact geometry. `ActionOpportunity`/related records carry physical availability rather than final choice.
 
-## Scheduler
+### Action choice
+Selection among legal/physically feasible actions using player information, ability/tendencies and tactics. Choice should not widen physical feasibility.
 
-A structure that orders future simulation moments by time and priority.
+### Attribute ceiling
+A player's per-attribute developmental maximum. Distinct from current rating and from the scalar potential summary.
 
-## Signal
+### Authoritative
+The layer/value that actually decides the simulated fact. Diagnostics, presentation and shadow candidates may describe alternatives without being authoritative.
 
-A message emitted by one object that other objects may connect to without tight direct coupling.
+### Authored game abstraction
+A deliberately chosen simplified model magnitude whose exact value is not derived/measured. Must be documented honestly rather than presented as empirical fact.
 
-## System
+### Ball / trajectory authority
+The contact creates an outgoing launch; free flight and interactions determine what happens next. Intended recipient/presentation endpoint must not rewrite it.
 
-A mostly stateless calculation module, such as `CoverageCalculator` or `VolleyballTrainingSystem`.
+### Body centre vs contact point
+The athlete's body position and the ball-contact coordinate are different physical facts. M3 derives platform stand-off from body/contact geometry.
 
-## Tactical home
+### Certification
+Evidence that a subsystem/boundary satisfies explicit invariants. Isolated certification, live integration, production promotion and legacy retirement are distinct stages.
 
-A preferred position for a phase of play. It is a movement goal, not a command to teleport or reset a player.
+### Contact number
+The team's ordinary contact count after possession (1/2/3). It is context, **not** synonymous with reception/set/attack action type.
 
-## Variant
+### Controlled fixture
+A hand/seed-authored deterministic situation designed to exercise a specific legal branch or invariant.
 
-Godot's general-purpose value type. It allows flexibility but provides fewer guarantees than a specific static type.
+### Coverage
+In current rally docs, often attack/block coverage: the attacking team trying to keep a blocked ball alive. Distinct from opponent floor defence/dig.
+
+### Derived value
+A magnitude that follows mathematically from other accepted facts (e.g. projectile velocity at time).
+
+### Development rollout
+A path that can be exercised/certified in explicit development fixtures without necessarily being production-authoritative in ordinary rallies.
+
+### Event
+`RallyEvent`: a resolved action record for playback/statistics/analysis. Not the complete physical world state.
+
+### Feasibility
+What ball/body/rules make possible. Physical feasibility is separate from tactical preference/responsibility and from legality.
+
+### Free flight
+An authoritative ball flight constructed from a resolved launch and allowed to continue toward its natural terminal unless physically intercepted/interacted with.
+
+### Intended recipient
+A tactical/decision intent for where a ball should be useful. It is not the physical endpoint or guaranteed actual interceptor.
+
+### Legacy authority
+Older mechanism that still decides behavior while a replacement is shadow/development-only. A migration is not complete until authority is promoted/retired explicitly.
+
+### Manager
+A stateful coordinator/service such as `CareerManager` or `GameManager`.
+
+### Measured value
+A value produced by a known instrument/observation with understood units/provenance.
+
+### Model
+A data-focused class, usually a Resource under `scripts/models/`.
+
+### Normalized court coordinate
+Many court positions represented from roughly `0..1` in x/y, converted to metres/screen pixels when needed. Do not confuse normalized units with metres.
+
+### Perception / estimate
+What an actor/manager currently believes about truth. Rally reads and scouting reports can be imperfect without changing underlying truth.
+
+### Persistent state
+State carried across relevant time/phase boundaries rather than reconstructed from a convenient endpoint.
+
+### Playback
+Visual presentation of already-resolved state/events. It must not secretly decide physical ownership, launch, movement feasibility or outcome.
+
+### Probe
+Purpose-built measurement/certification tool, often under `tools/`. A good probe can falsify its hypothesis and names units/fixture conditions.
+
+### Realised prefix / segment
+The exact portion of an authoritative free flight actually played before a later contact. It retains the source flight ID/launch and does not rewrite the source.
+
+### Responsibility
+Which actor should claim/own a team action among physically viable candidates. Assignment/proximity can inform it but cannot override impossibility.
+
+### Shadow system
+Historical/current diagnostic architecture that computes a candidate without owning official outcome. Useful for comparison/calibration, not automatically live authority.
+
+### System
+A calculation/behavior module, often mostly stateless and frequently implemented as a RefCounted class with static methods.
+
+### T1 / T2 / T3
+M4's shared platform-contact relations: T1 outgoing pace, T2 reachable redirection envelope, T3 technique-driven angular execution error.
+
+### Tactical home
+A desired movement/reference position, not a teleport/reset command.
+
+### Truth label
+Textbook labels such as VERIFIED, PARTIALLY IMPLEMENTED, PROPOSED, HISTORICAL used to keep current source, future design and migration history distinct.
