@@ -47,6 +47,18 @@ const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 const ENABLE_PHYSICAL_PLATFORM_DIG: bool = true
 const ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE: bool = true
 
+## Reception is the third and last platform family to move onto the shared
+## physical authority. It is staged behind its own production gate -- like every
+## rollout before it -- because the home first-ball reception->set path is a
+## pre-M5 inline resolver (it chooses the setter spatially against the pass
+## destination and has no authoritative-free-flight/interception branch), so the
+## migration is a retrofit rather than a wiring change and is certified before it
+## goes live. The development override reuses the dig's `platform_dig_development_open`
+## field, so the existing paired-census machinery exercises reception physics too;
+## production stays legacy until this flag flips with the same evidence discipline
+## the dig promotion used. See `PLATFORM_DIG_PROMOTION.md` (remaining M4 migration).
+const ENABLE_PHYSICAL_RECEPTION: bool = false
+
 ## Gate E: the geometric attack. Where the other rollouts promote one *contact*,
 ## this one replaces how an attack is decided and resolved end to end -- course,
 ## power, swing, flight, block intersection and in/out.

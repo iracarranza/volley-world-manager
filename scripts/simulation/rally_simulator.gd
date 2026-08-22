@@ -1651,6 +1651,11 @@ func resolve(
 		opponent_serve_origin, serve_quality, arrival,
 		float(result.reception_quality), 0.51, 0.98, serve_trajectory,
 		_player_by_id(players, lineup.active_setter_id()),
+		home_reception_intent,
+		_platform_body_velocity(
+			receiver_start, receiver_reach, receiver_move_time, serve_time
+		),
+		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
 	)
 	if using_live_reception:
 		var selected_metadata: Dictionary = selected_live_reception.get(
@@ -3962,6 +3967,11 @@ func _resolve_home_serve(
 		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
 		reception_quality, 0.02, 0.49, serve_trajectory,
 		_opponent_setter(opponent_team),
+		opponent_reception_intent,
+		_platform_body_velocity(
+			receiver_start, opponent_receiver_reach, receiver_move_time, serve_time
+		),
+		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
 	)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
@@ -10605,6 +10615,10 @@ func _physical_platform_dig_result(
 	body_velocity_mps: Vector2,
 	platform_intent: Dictionary,
 	contact_time: float,
+	## The platform family this contact belongs to, used only to label the flight
+	## and keep the deterministic seed streams distinct. The physics is identical
+	## across families -- this is the shared resolver, not a per-family fork.
+	contact_family: String = "dig",
 ) -> Dictionary:
 	if digger == null:
 		return {}
@@ -10643,8 +10657,8 @@ func _physical_platform_dig_result(
 		)),
 		## Separate deterministic stream: opening the rollout cannot resequence
 		## any perception, contest or tactical draw around this contact.
-		"seed": hash("%d|platform-dig|%d|%.6f" % [
-			rally_seed, digger.id, contact_time,
+		"seed": hash("%d|platform-%s|%d|%.6f" % [
+			rally_seed, contact_family, digger.id, contact_time,
 		]),
 	})
 	if not bool(shadow.get("selection_available", false)) \
@@ -10660,8 +10674,9 @@ func _physical_platform_dig_result(
 	## is not promoted into the next voli's hands. A later physical interception
 	## may realize a prefix of this exact record without rewriting the launch.
 	var trajectory := FreeFlightInterceptionModel.from_launch(
-		"dig", contact_position, contact_height, launch_velocity, contact_time,
-		"%d:dig:%d:%.6f" % [rally_seed, digger.id, contact_time],
+		contact_family, contact_position, contact_height, launch_velocity,
+		contact_time,
+		"%d:%s:%d:%.6f" % [rally_seed, contact_family, digger.id, contact_time],
 	)
 	if trajectory.is_empty():
 		return {}
@@ -10713,6 +10728,19 @@ func _physical_platform_dig_enabled() -> bool:
 			platform_dig_development_open and OS.is_debug_build()
 			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
 		))
+
+
+## Reception's own production gate, independent of the dig. It is deliberately
+## NOT wired to the dig's development-open field: until the home first-ball
+## reception->set path carries an M5 interception branch, enabling physical
+## reception there produces a setter aimed at the free flight's floor endpoint, so
+## coupling it to the dig's dev override would break every dev-override probe
+## (the dig rollout among them) before the retrofit lands. A decoupled
+## `development_physical_reception` override is added with the home retrofit, for
+## the paired reception census; production stays legacy until this const flips.
+func _physical_platform_reception_enabled() -> bool:
+	return not platform_dig_development_force_legacy \
+		and RallyFeatureFlagsModel.ENABLE_PHYSICAL_RECEPTION
 
 
 ## The keep-alive ball a successful attack-coverage contact launches.
@@ -10831,6 +10859,14 @@ func _reception_pass_result(
 	## what decides the pass's hang time -- and, when the pass is bad enough,
 	## whether they get hands on it at all.
 	setter: VolleyballPlayer = null,
+	## The soft intent this reception is aimed at (the designated setter's release
+	## seat), the receiver's own body velocity through the contact, and when the
+	## serve reaches them. Supplied so the physical branch can launch one
+	## authoritative ball through the shared resolver; empty/zero leaves the legacy
+	## scatter untouched, which is what keeps the flag-off path byte-identical.
+	platform_intent: Dictionary = {},
+	body_velocity_mps: Vector2 = Vector2.ZERO,
+	contact_time: float = 0.0,
 ) -> Dictionary:
 	var movement_vector := contact_position - start_position
 	var desired_vector := desired_target - contact_position
@@ -10944,7 +10980,7 @@ func _reception_pass_result(
 		posture = "off-axis"
 	elif edge_ratio > POSTURE_MOVING_EDGE_RATIO:
 		posture = "moving"
-	return {
+	var reception_result := {
 		"destination": destination,
 		"body_alignment": body_alignment,
 		"platform_feasibility": platform_feasibility,
@@ -10994,6 +11030,32 @@ func _reception_pass_result(
 		"pass_contact_height_meters": pass_contact_height,
 		"set_contact_height_meters": set_contact_height,
 	}
+	## Physical reception overlays one authoritative launch on the legacy result.
+	## The receiver-state fields above (recovery, posture, feasibility, alignment)
+	## are what the contact did to the passer and stay as measured; only the
+	## outgoing ball is replaced, and the free flight is handed to M5 for the
+	## actual second contact. `set_contact_height_meters` becomes NaN because there
+	## is no setter contact yet -- M5 supplies it once a body intercepts.
+	if _physical_platform_reception_enabled() and not platform_intent.is_empty():
+		var physical := _physical_platform_dig_result(
+			receiver, contact_position, incoming_trajectory, arrival,
+			body_velocity_mps, platform_intent, contact_time, "reception",
+		)
+		if not physical.is_empty():
+			reception_result["trajectory"] = physical.trajectory
+			reception_result["authoritative_free_flight"] = \
+				physical.authoritative_free_flight
+			reception_result["destination"] = physical.destination
+			reception_result["pass_apex_meters"] = physical.pass_apex_meters
+			reception_result["pass_contact_height_meters"] = \
+				physical.pass_contact_height_meters
+			reception_result["set_contact_height_meters"] = \
+				physical.set_contact_height_meters
+			reception_result["platform_contact"] = physical.platform_contact
+			reception_result["target_error_meters"] = physical.get(
+				"target_error_meters", 0.0
+			)
+	return reception_result
 
 
 ## Whether a defender stayed on their feet, and what happened to them if not.
