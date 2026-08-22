@@ -45,3 +45,20 @@ jobs:
         run: |
           set -euo pipefail
           godot --headless --path . --script tests/test_runner.gd
+
+      - name: Render surface-mark gallery
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          xvfb-run -a godot --path . --rendering-method gl_compatibility \
+            --script tools/render_surface_mark_gallery.gd
+
+      - name: Upload surface-mark gallery
+        uses: actions/upload-artifact@v4
+        with:
+          name: surface-mark-previews
+          path: artifacts/mark-previews/*.png
+          if-no-files-found: error
+          retention-days: 14
