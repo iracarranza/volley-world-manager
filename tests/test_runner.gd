@@ -304,6 +304,7 @@ func _initialize() -> void:
 	_test_platform_attributes_retain_leverage_after_the_physical_gate()
 	_test_platform_contacts_state_an_intent()
 	_test_the_incoming_ball_reaches_no_platform_launch()
+	_test_overpass_control_wires_live()
 	_test_shared_platform_shadow_contract()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
@@ -11244,6 +11245,118 @@ func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
 		dig_contacts > 0 and release_anchored_digs == dig_contacts,
 		"every controlled-dig intent uses its team's existing setter release seat",
 	)
+
+
+## M5 overpass, live-wired. The focused probe certifies `OverpassActionSystem` in
+## isolation; this certifies the resolver integration at both
+## `crossed_net_unresolved` exits -- that `_overpass_control_contact` builds actors
+## from the authoritative live maps (never presentation), derives the receiving
+## side's own release anchors, executes exactly one outgoing ball as contact 1,
+## and leaves the incoming authoritative launch untouched.
+func _test_overpass_control_wires_live() -> void:
+	## Both receivers back-row, so a ball crossing above the tape near the net is
+	## not a legal attack for either -- the contest can only choose control, which
+	## is what this test is here to exercise. The attack branch is a later
+	## checkpoint.
+	var controller := _overpass_voli(202, 96, 44)
+	var partner := _overpass_voli(201, 45, 58)
+	var lineup := RotationLineup.new()
+	lineup.setter_id = controller.id
+	lineup.designated_setter_ids = [controller.id]
+	lineup.assign_slot(6, controller.id)
+	lineup.assign_slot(5, partner.id)
+	var principles := TeamPrinciples.new()
+	principles.decisiveness = 0.05
+	principles.transition_commitment = 0.20
+
+	## A shared-model launch that legally crosses the net unresolved -- the same
+	## fixture the focused probe places on the policy boundary.
+	var contact := Vector2(0.50, 0.62)
+	var resolved: Dictionary = PlatformContactModel.evaluate({
+		"incoming_velocity_mps": Vector3(0.0, -20.0, 14.0),
+		"contact_position": contact, "contact_height_meters": 0.95,
+		"body_velocity_mps": Vector2.ZERO, "circumstance_severity": 0.8,
+		"stability_ability": 1.0, "technique_ability": 0.8,
+		"intent_target_anchor": Vector2(0.50, 0.52),
+		"intent_height_anchor_meters": 2.35,
+		"intent_arrival_floor_seconds": 0.45, "seed": 88421,
+	})
+	_check(
+		resolved.has("realised_velocity_mps"),
+		"the overpass fixture yields a shared-model launch",
+	)
+	var free_flight: Dictionary = FreeFlightInterceptionSystem.from_launch(
+		"dig", contact, 0.95, Vector3(resolved.realised_velocity_mps), 0.0,
+		"live-overpass-fixture",
+	)
+	var frozen := free_flight.duplicate(true)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.opponent_principles = principles
+	simulator.opponent_live_positions = {
+		controller.id: Vector2(0.50, 0.30), partner.id: Vector2(0.62, 0.34),
+	}
+	simulator.opponent_live_velocities = {}
+	simulator.player_facing = {}
+	simulator.player_recovery = {}
+
+	var outcome: Dictionary = simulator._overpass_control_contact(
+		free_flight, [partner, controller], &"opponent", lineup, principles,
+		controller, Vector2(0.50, 0.40), Vector2(0.50, 0.30),
+	)
+	_check(
+		not outcome.is_empty()
+			and str(outcome.get("action", "")) in [
+				"controlled_first_contact", "emergency_first_contact",
+			],
+		"an overpass resolves to a live first-contact control action from live state",
+	)
+	var out_flight: Dictionary = outcome.get("outgoing_trajectory", {})
+	_check(
+		str(out_flight.get("trajectory_role", "")) == "authoritative_free_flight"
+			and int(outcome.get("team_contact_number", -1)) == 1,
+		"the control produces one authoritative outgoing ball as the team's contact 1",
+	)
+	## The launch invariant the whole M5 architecture rests on: a downstream choice
+	## never rewrites the ball it was choosing from.
+	_check(
+		free_flight == frozen,
+		"resolving the overpass leaves the incoming authoritative launch unmutated",
+	)
+
+
+## A receiving voli for the overpass fixtures: control and attack set explicitly,
+## and a full locomotion/body attribute set so the intent's own `_movement_time`
+## and release-height derivations have real inputs rather than zeros.
+func _overpass_voli(
+	player_id: int, control: int, attack: int
+) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	player.display_name = "Overpass voli %d" % player_id
+	player.position_role = "Setter" if control >= attack else "Outside Hitter"
+	player.position_code = "S" if control >= attack else "OH1"
+	player.height_cm = 190
+	player.wingspan_cm = 198
+	for attribute in [
+		"reception", "ball_control", "dig_control", "reception_balance",
+		"reception_stability",
+	]:
+		player.set(attribute, control)
+	for attribute in [
+		"attack_power", "attack_accuracy", "approach_timing", "shot_variety",
+		"finesse",
+	]:
+		player.set(attribute, attack)
+	for attribute in [
+		"acceleration", "lateral_speed", "transition_speed", "explosiveness",
+		"stamina", "work_rate", "anticipation", "court_vision", "composure",
+		"decision_making", "tactical_discipline",
+	]:
+		player.set(attribute, 72)
+	player.fatigue = 0.0
+	return player
 
 
 ## M4's shared platform relation is an authored feasibility/execution boundary,
