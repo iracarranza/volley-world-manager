@@ -529,6 +529,29 @@ func _test_regional_kits() -> void:
 		REGIONAL_KITS_SCRIPT.side_region([]).is_empty(),
 		"a side with no region resolves to none rather than to a default",
 	)
+	_check(
+		RegionalVenue3D.venue_id_for_region("Pāwa Hitō") == "Pāwa Hitō"
+			and RegionalVenue3D.venue_id_for_region("Taktikã") == "Taktikã"
+			and RegionalVenue3D.venue_id_for_region("Pelara") == "Pelara"
+			and RegionalVenue3D.selectable_venues().size() == 8,
+		"venue identity preserves every host while exposing every built major room",
+	)
+	var fixture := VolleyballFixture.new()
+	fixture.venue_id = "Xérvu"
+	fixture.venue_selectable = true
+	fixture.competition_name = "Friendly"
+	var fixture_round_trip := VolleyballFixture.from_dict(fixture.to_dict())
+	_check(
+		str(fixture_round_trip.venue_id) == "Xérvu"
+			and fixture_round_trip.allows_venue_selection(),
+		"fixture venue identity and friendly editability survive save/load",
+	)
+	var legacy_fixture := VolleyballFixture.from_dict({"opponent_name": "Old Club"})
+	_check(
+		str(legacy_fixture.venue_id).is_empty()
+			and not legacy_fixture.allows_venue_selection(),
+		"fixtures from old saves load without inventing a player-selected venue",
+	)
 
 
 func _test_ui_visual_system() -> void:
@@ -2622,10 +2645,23 @@ func _test_minor_region_behaviour() -> void:
 	)
 	_check(career_manager.career.fixtures.size() == 3,
 		"new careers receive a starter competition schedule")
+	var host_venues_are_authoritative := true
+	for scheduled_fixture in career_manager.career.fixtures:
+		if str(scheduled_fixture.venue_id) != "Landavol" \
+				or scheduled_fixture.allows_venue_selection():
+			host_venues_are_authoritative = false
+	_check(
+		host_venues_are_authoritative,
+		"scheduled fixtures persist the club's host venue and do not expose a venue choice",
+	)
 	_check(career_manager.advance_week().is_empty(),
 		"career can train and advance before its opening fixture")
 	_check(career_manager.prepare_fixture(1).is_empty(),
 		"due fixture prepares the configured Match Center state")
+	_check(
+		str(career_manager.fixture_by_id(1).venue_id) == "Landavol",
+		"fixture preparation keeps the persisted host venue authoritative",
+	)
 	_check(game_autoload.match_state.match_format.best_of_sets == 3,
 		"fixture preparation passes career match format into MatchState")
 	## The market is a weighted slice of the world population rather than a
@@ -8251,6 +8287,20 @@ func _test_3d_playback_contract() -> void:
 				float(block_timeline.landing) + 0.20, block_timeline
 			) == 0.0,
 		"block playback samples one monotonic, ballistic jump and lands after it",
+	)
+	var commentary := screen.get_node(
+		"HUD/CommentaryCluster/CommentaryBubble/Margin/Copy/DetailLabel"
+	) as Label
+	_check(
+		commentary.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART
+			and commentary.text_overrun_behavior != TextServer.OVERRUN_TRIM_ELLIPSIS,
+		"broadcast commentary wraps without ellipsis truncation",
+	)
+	_check(
+		screen.has_node("HUD/ScoreBug")
+			and screen.has_node("HUD/ControlRibbon/Margin/Controls/CameraButton")
+			and not screen.has_node("HUD/TopPanel"),
+		"Match View uses a score bug and bottom ribbon instead of viewer chrome",
 	)
 	screen.free()
 
@@ -14730,6 +14780,21 @@ func _test_an_opponent_has_a_region() -> void:
 		) and club.identity_label() == "Xérvu",
 		"a region outranks the preset, and is what a player is told they are facing",
 	)
+	var live_manager := get_root().get_node("GameManager")
+	live_manager.set_opponent_region("Xérvu", 0)
+	var live_result := live_manager.resolve_active_rally(14721) as RallyResult
+	var opponent_profiles_are_xervyan := true
+	for player_resource in live_manager.opponent_team.on_court_players():
+		var player := player_resource as VolleyballPlayer
+		if player == null or str(live_result.player_physical_profiles.get(
+			player.id, {}
+		).get("club_region", "")) != "Xérvu":
+			opponent_profiles_are_xervyan = false
+	_check(
+		opponent_profiles_are_xervyan,
+		"the authoritative opponent region reaches every away actor's kit construction",
+	)
+	live_manager.set_opponent_region("Landavol", 0)
 
 
 ## Who a block actually hides the ball from.

@@ -1,0 +1,47 @@
+name: Gameplay Broadcast Integration
+
+on:
+  push:
+    branches:
+      - codex/gameplay-broadcast-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: Godot 4.7.2 / real gameplay Match View
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip \
+            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 \
+            /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            /usr/local/bin/godot
+      - name: Parse and import project
+        run: godot --headless --path . --editor --quit
+      - name: Install virtual display
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+      - name: Capture real rally frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/gameplay-broadcast
+          xvfb-run -a godot --path . --rendering-method gl_compatibility \
+            res://tools/gameplay_broadcast.tscn -- \
+            --output-dir="$GITHUB_WORKSPACE/artifacts/gameplay-broadcast"
+          test "$(find artifacts/gameplay-broadcast -type f -name '*.png' | wc -l)" -eq 6
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gameplay-broadcast-frames
+          path: artifacts/gameplay-broadcast/*.png
+          if-no-files-found: error
+          retention-days: 14

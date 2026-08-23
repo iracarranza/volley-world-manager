@@ -2,6 +2,7 @@ class_name MatchScreen
 extends Control
 
 signal close_requested
+signal playback_frame_available(event_type: int, event_index: int, progress: float)
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
@@ -17,6 +18,17 @@ const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd
 @onready var camera_button: Button = %CameraButton
 @onready var close_button: Button = %CloseButton
 @onready var speed_option: OptionButton = %SpeedOption
+@onready var set_label: Label = %SetLabel
+@onready var set_count_label: Label = %SetCountLabel
+@onready var home_region_label: Label = %HomeRegionLabel
+@onready var opponent_region_label: Label = %OpponentRegionLabel
+@onready var home_score_label: Label = %HomeScoreLabel
+@onready var opponent_score_label: Label = %OpponentScoreLabel
+@onready var home_serve_label: Label = %HomeServe
+@onready var opponent_serve_label: Label = %OpponentServe
+@onready var commentary_bubble: PanelContainer = $HUD/CommentaryCluster/CommentaryBubble
+@onready var speaker_label: Label = %SpeakerLabel
+@onready var headshots: HBoxContainer = %Headshots
 
 var playback_speed: float = 1.0
 var active_result: RallyResult
@@ -57,6 +69,9 @@ var player_physical_profiles: Dictionary = {}
 ## and doing that per posed player per frame to get an answer that cannot have
 ## changed is the kind of work a replay cannot afford.
 var platform_surfaces: Dictionary = {}
+var home_region_identity: String = "Landavol"
+var opponent_region_identity: String = "Landavol"
+var venue_identity: String = "Landavol"
 
 
 func _ready() -> void:
@@ -67,6 +82,55 @@ func _ready() -> void:
 	close_button.pressed.connect(_close)
 	speed_option.item_selected.connect(_speed_changed)
 	_populate_speeds()
+	_build_announcer_placeholders()
+	_refresh_score_bug()
+
+
+## Fixture/game identity enters the view through one explicit seam. RallyResult
+## remains the authority for bodies, movement and contacts; this only selects
+## the strips, names and room those real events are presented in.
+func configure_match_presentation(
+	home_region: String, opponent_region: String, fixture_venue: String
+) -> void:
+	home_region_identity = VolleyballRegions.canonical_name(home_region)
+	opponent_region_identity = VolleyballRegions.canonical_name(opponent_region)
+	venue_identity = RegionalVenue3D.venue_id_for_region(fixture_venue)
+	if is_node_ready():
+		match_court_3d.apply_venue(venue_identity)
+		_refresh_score_bug()
+
+
+func _build_announcer_placeholders() -> void:
+	if headshots == null or headshots.get_child_count() > 0:
+		return
+	for spec in [
+		{"name": "KAI", "id": 9901, "body": "Feli", "mark": "blaze"},
+		{"name": "MIO", "id": 9902, "body": "Avi", "mark": "speckle"},
+	]:
+		var portrait := VoliHeadshotView.new()
+		portrait.name = "%sHeadshot" % str(spec["name"])
+		portrait.tooltip_text = "%s · match analyst" % str(spec["name"])
+		headshots.add_child(portrait)
+		portrait.configure_placeholder(
+			int(spec["id"]), str(spec["name"]), str(spec["body"]), str(spec["mark"])
+		)
+
+
+func _refresh_score_bug() -> void:
+	home_region_label.text = home_region_identity.to_upper()
+	opponent_region_label.text = opponent_region_identity.to_upper()
+	var manager := get_node_or_null("/root/GameManager")
+	var state: Resource = manager.match_state if manager != null else null
+	if state == null:
+		return
+	set_label.text = "SET %d" % int(state.set_number)
+	set_count_label.text = "SETS %d–%d" % [
+		int(state.home_sets), int(state.opponent_sets),
+	]
+	home_score_label.text = str(int(state.home_score))
+	opponent_score_label.text = str(int(state.opponent_score))
+	home_serve_label.text = "●" if bool(state.serving_home) else ""
+	opponent_serve_label.text = "" if bool(state.serving_home) else "●"
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -91,6 +155,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0) -> void:
 	if rally_result == null or rally_result.events.is_empty():
 		return
+	if match_court_3d.venue_builder == null:
+		match_court_3d.apply_venue(venue_identity)
 	playback_generation += 1
 	var generation := playback_generation
 	active_result = rally_result
@@ -103,6 +169,9 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	replay_button.disabled = true
 	skip_button.disabled = false
 	visible = true
+	_refresh_score_bug()
+	headshots.visible = true
+	commentary_bubble.custom_minimum_size = Vector2(430.0, 148.0)
 	move_to_front()
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_build_player_names(rally_result.events)
@@ -138,6 +207,9 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.reset_player_poses()
 	event_label.text = "POINT COMPLETE"
+	speaker_label.text = "MIO"
+	headshots.visible = false
+	commentary_bubble.custom_minimum_size = Vector2(430.0, 188.0)
 	caption_label.text = rally_result.terminal_outcome.replace("_", " ").to_upper()
 	detail_label.text = rally_result.explanation
 	progress_bar.value = 100.0
@@ -254,7 +326,9 @@ func _run_rally(generation: int) -> void:
 				window = maxf(window, settle_seconds(_ball_end_height_meters))
 			if window <= 0.0:
 				continue
-			await _play_contact_pulse(event, next_contact, window, generation)
+			await _play_contact_pulse(
+				event, next_contact, window, generation, event_index
+			)
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.clear_cognition()
 
@@ -367,6 +441,7 @@ func _play_flight(
 		duration,
 	)
 	var elapsed := 0.0
+	var inspection_frame_sent := false
 	match_court_3d.ball_actor.reset_flight()
 	match_court_3d.begin_ball_flight(display_trajectory, float(event.quality))
 	while elapsed < duration:
@@ -389,6 +464,9 @@ func _play_flight(
 			(float(event_index) + progress) / maxf(float(event_count), 1.0)
 		) * 100.0
 		await get_tree().process_frame
+		if not inspection_frame_sent and progress >= 0.58:
+			inspection_frame_sent = true
+			playback_frame_available.emit(int(event.event_type), event_index, progress)
 	match_court_3d.finish_movement_plan(movement_plan, duration)
 	match_court_3d.reset_player_poses()
 	## Returned so the caller knows how much of the rally's clock this leg
@@ -421,7 +499,8 @@ func _play_flight(
 ## The gap is a real span of time taken from `physical_time`; there is no reason
 ## it should be the one span nobody walks during.
 func _play_contact_pulse(
-	event: RallyEvent, next_contact: RallyEvent, duration: float, generation: int
+	event: RallyEvent, next_contact: RallyEvent, duration: float, generation: int,
+	event_index: int = -1,
 ) -> void:
 	var movement_plan := _build_movement_plan(event, next_contact, duration)
 	var carry := _carry_trajectory(event, next_contact, duration)
@@ -429,6 +508,7 @@ func _play_contact_pulse(
 		match_court_3d.ball_actor.reset_flight()
 		match_court_3d.begin_ball_flight(carry, float(event.quality))
 	var elapsed := 0.0
+	var inspection_frame_sent := false
 	while elapsed < duration:
 		if generation != playback_generation or skip_requested:
 			break
@@ -471,6 +551,9 @@ func _play_contact_pulse(
 				event,
 			)
 			await get_tree().process_frame
+			if not inspection_frame_sent and progress >= 0.58:
+				inspection_frame_sent = true
+				playback_frame_available.emit(int(event.event_type), event_index, progress)
 			continue
 		var peak := _event_elevation(event, int(event.actor_id))
 		match_court_3d.set_player_pose(
@@ -481,6 +564,9 @@ func _play_contact_pulse(
 			_action_context(event, int(event.actor_id)),
 		)
 		await get_tree().process_frame
+		if not inspection_frame_sent and progress >= 0.58:
+			inspection_frame_sent = true
+			playback_frame_available.emit(int(event.event_type), event_index, progress)
 	match_court_3d.finish_movement_plan(movement_plan, duration)
 
 
@@ -2027,6 +2113,7 @@ func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> 
 		event_index + 1, event_count, event.type_name().to_upper(),
 		float(event.metadata.get("event_time", 0.0)),
 	]
+	speaker_label.text = "KAI" if event_index % 2 == 0 else "MIO"
 	## The vocabulary's name leads the caption when this contact earned one, the
 	## same way it does on the tactical board. Both playback paths name the same
 	## moments because both read the same budgeted tag.

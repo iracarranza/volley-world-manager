@@ -442,9 +442,9 @@ text = "Replay Point"
 [node name="Replay3DButton" type="Button" parent="Margin/Content/QuickRallyBar"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Replay the previous point in the event-driven 3D match engine."
+tooltip_text = "Watch the previous point in the broadcast Match View."
 disabled = true
-text = "View 3D"
+text = "Match View"
 
 [node name="PlaybackSpeedOption" type="OptionButton" parent="Margin/Content/QuickRallyBar" unique_id=1836883194]
 unique_name_in_owner = true
@@ -808,6 +808,15 @@ text = "Opponent region"
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Who you are playing. A region decides the principles this side plays by; the roster stays a mirror of your own, so any difference across the net is the identity."
+
+[node name="ExhibitionVenueLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+layout_mode = 2
+text = "Match View venue"
+
+[node name="ExhibitionVenueOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "For an exhibition, choose the room independently of the opponent. Scheduled career fixtures use their persisted host venue."
 
 [node name="OpponentAdaptationRateLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=998741491]
 unique_name_in_owner = true

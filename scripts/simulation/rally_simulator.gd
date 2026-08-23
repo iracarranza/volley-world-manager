@@ -9306,17 +9306,22 @@ func _playback_physical_profiles(
 	## in a different shirt per body. `side_region` takes the mode, so one
 	## outlier cannot split a team.
 	##
-	## Only the home side carries one. The opposition wears the universal change
-	## strip by direction, and plumbing a region here that nothing reads would be
-	## a knob with no range, which this file has enough of already.
+	## Both sides carry construction identity. The opposition still wears the
+	## universal light change strip, but PlayerActor3D uses `club_region` for the
+	## panels, seams and marks laid over that ground. Without the region every
+	## opponent looked identical even though the fixture had already selected the
+	## correct club and principles.
 	var home_region := RegionalKits.side_region(players)
 	for player in players:
 		profiles[player.id] = _physical_playback_profile(player, home_region)
 	if opponent_team != null:
+		var opponent_region := str(opponent_team.region)
+		if opponent_region.is_empty():
+			opponent_region = RegionalKits.side_region(opponent_team.players)
 		for player_resource in opponent_team.on_court_players():
 			var player := player_resource as VolleyballPlayer
 			if player != null:
-				profiles[player.id] = _physical_playback_profile(player, "")
+				profiles[player.id] = _physical_playback_profile(player, opponent_region)
 	return profiles
 
 
