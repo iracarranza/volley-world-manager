@@ -165,6 +165,28 @@ Three situations the sweep never reached, built deterministically instead:
 | overpass, reception→set | 2.267 | 2.267 | **continuous** |
 | terminal net, attack→none | — | — | **repaired above** |
 
+## What the frames are, and what they are not
+
+`tools/render_rally_frames.gd` films a leg in the real court — real actors, real
+kit, real camera and lighting — by stepping `set_ball_trajectory_sample`, which
+is the same call playback makes. Ten frames at
+`artifacts/m8-visual/frames/`, five per curve, seed 500004, a serve whose ball
+was drawn stopping at 2.417 m and now reaches the floor at 0.120 m.
+
+**They film the ball, and only the ball.** The volis in them stand in their spawn
+state: the renderer drives no poses and no movement plans. That is deliberate.
+`MatchScreen._apply_contact_poses` decides which actor is posed, with what
+weighting between the outgoing and incoming contact, and reproducing that
+decision inside a review tool would be a second authority for how a contact is
+drawn — the exact thing this milestone exists to prevent. A tool that reimplements
+the thing it is auditing cannot audit it.
+
+So these frames settle the ball's path and nothing else. Whether a rally *reads
+as volleyball* — actors reacting, contacts landing on the beat, the whole thing
+legible in motion — is not answerable from them and needs the app running with
+somebody watching. Two separate questions that a screenshot can easily be
+mistaken for answering both of.
+
 ## What remains, and why it is not a presentation defect
 
 The instinctive reading of the residual is that presentation overwrites a height
