@@ -3813,6 +3813,21 @@ func resolve(
 			opponent_dig_intent,
 		)
 		opponent_pass_target = Vector2(opponent_dig_pass.destination)
+	## Where they actually ended up, not where the ball was. A defender who was
+	## beaten to it starts the next phase short of it, which is the position the
+	## rest of the rally should reason from.
+	##
+	## **Above the event, because the event reads it.** This sat below the
+	## `_add_event` call, alone among the four floor-defence sites -- the home dig
+	## and the transition dig both write the reach before appending. Nothing
+	## between the two lines resolved anything, so the drift was invisible until
+	## two published facts started reading `opponent_live_positions` at append
+	## time: `body_contact_position` reported every opponent digger contacting
+	## the ball from the spot they started at (13 of 13 diggers, mean travel to
+	## the ball 1.97 m, mean travel to the published body 0.000 m), and
+	## `opponent_phase_targets` below published a defensive shape in which the
+	## digger had not moved while the caption said "after moving 1.8m".
+	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
@@ -3873,10 +3888,6 @@ func resolve(
 			"platform_contact": opponent_dig_pass.get("platform_contact", {}),
 		})
 	_note_recovery(opponent_defender, opponent_dig_recovery, opponent_dig_time)
-	## Where they actually ended up, not where the ball was. A defender who was
-	## beaten to it starts the next phase short of it, which is the position the
-	## rest of the rally should reason from.
-	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
 	rally_clock = maxf(rally_clock, opponent_dig_time)
 	if dug:
 		result.key_factors.append(_factor("strong_defense"))

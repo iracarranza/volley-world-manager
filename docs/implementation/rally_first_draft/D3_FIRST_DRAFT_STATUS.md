@@ -45,10 +45,17 @@ and not against something easier:
 
 ## Certification
 
-- **full suite** — **2,139 pass, 0 fail** at `413eee5`. The count is not
-  attributable: two checks were written this pass and C5 changed which balls
-  come up, so every sampling gate draws against a different population. The FAIL
-  line is what was read.
+- **full suite** — see the entry below. The first run over this pass's own final
+  state found **1 of 2,141 failing**, and it was worth having: the movement
+  agreement gate had been broken by M8's own new published field, and under that
+  sat a real home/opponent drift. Both repaired, neither by touching a band. See
+  `docs/review/BODY_CONTACT_ENDPOINT.md`.
+
+  The earlier figure of **2,139 pass, 0 fail** at `413eee5` predates M8's
+  instruments and is not the certification for this state. The count is not
+  attributable in either case: two checks were written this pass and C5 changed
+  which balls come up, so every sampling gate draws against a different
+  population. The FAIL line is what was read.
 - **`run_contact_authority_census.gd`** — 9 of 9 edges same-ball, 9 of 9
   same-lineage, 0 backwards in time.
 - **`run_block_authority_probe.gd`** — PASS, 4 gates, both sides 0/0.

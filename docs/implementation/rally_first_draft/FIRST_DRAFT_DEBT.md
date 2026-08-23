@@ -177,7 +177,7 @@ Next diagnostic: task #140, "Is 12% the right price for a shanked serve-receive?
 3. movement/actor continuity — *empty; FD-004 closed, FD-001 withdrawn*
 4. responsibility/selection — *empty*
 5. attack/block interaction — *empty*
-6. home/opponent asymmetry — *empty; two drifts found and both repaired — the block's stale swing and the receive zone's `enabled` check*
+6. home/opponent asymmetry — *empty; three drifts found and all three repaired — the block's stale swing, the receive zone's `enabled` check, and the opponent dig writing its reach after the event that reads it (`docs/review/BODY_CONTACT_ENDPOINT.md`)*
 7. tactical wiring — *not yet audited (M9)*
 8. presentation/reporting — FD-002, FD-003 (one family)
 9. calibration/balance — FD-005
