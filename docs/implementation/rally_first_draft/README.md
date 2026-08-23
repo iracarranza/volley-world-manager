@@ -44,7 +44,13 @@ point is **B0**, not A0. What moved, and what the run left behind:
 | [`B0_CONTACT_AUTHORITY_CENSUS.md`](B0_CONTACT_AUTHORITY_CENSUS.md) | the B0 table, measured from running rallies rather than read from source |
 | [`B1_B6_FAMILY_AUDITS.md`](B1_B6_FAMILY_AUDITS.md) | per-family dispositions, the one authority break found, and the cross-family chain |
 | [`C0_ACTION_WINDOW_CENSUS.md`](C0_ACTION_WINDOW_CENSUS.md) | the M7 action-window audit, and what C5/C6 did about it |
+| [`M8_CANONICAL_SIDEOUT.md`](M8_CANONICAL_SIDEOUT.md) | the canonical side-out fixture, its trace and how to read its two zeros |
+| [`D3_FIRST_DRAFT_STATUS.md`](D3_FIRST_DRAFT_STATUS.md) | work-unit status and the completion decision, tested against §10's own two lists |
 | [`FIRST_DRAFT_DEBT.md`](FIRST_DRAFT_DEBT.md) | the ledger, owned by the run |
+
+**The first draft is complete** as of the receive-geometry unification, and M8's
+structural layer passes. What remains open is presentation fidelity, which §10
+permits by name, and M9, which has not started.
 
 **Cluster A is already closed and was not replayed.** At the pinned base
 `ENABLE_PHYSICAL_RECEPTION` is `false` and A0–A2 are named as a hard blocking

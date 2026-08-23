@@ -34,6 +34,10 @@ is presentation authoring movement the resolver never decided — the thing
 - presentation invented **45.9%**
 - **0 of 8,125** placed volis carried a duration
 
+**Two of those three numbers were wrong, and this instrument is why.** See
+"The serve leg was never silent" at the foot of this file. The duration row was
+correct.
+
 That last row is the C6 defect stated as a missing field rather than as a
 drawing complaint. Every phase map published a destination and a fraction of the
 journey covered, and nothing about time — so a voli who crossed two metres in
@@ -121,21 +125,64 @@ This is an F5 observation. It is recorded, not fitted.
 
 ## What is still silent
 
-Two legs publish nothing about the other eleven volis:
+Measured after the receive-geometry unification, and after the correction below:
 
-- **SERVE** — 300 events, 3,300 silent voli-legs. Nothing is said about either
-  side's shape while the serve is in the air. The receive formation *is*
-  published, but on the reception event and as a **placement** (progress 0.0),
-  not as a journey taken during the serve flight. So the receiving five arrive
-  in formation rather than moving into it — the same defect C5 just repaired one
-  leg later.
-- **ATTACK_COVERAGE** — 10 events, 110 silent. A rare leg, but it publishes no
-  map at all.
+| leg | silent voli-legs |
+|---|---:|
+| ATTACK | 1,714 |
+| SET | 1,516 |
+| DIG | 901 |
+| BLOCK | 851 |
+| ATTACK_COVERAGE | 143 |
 
-Both are recorded in `FIRST_DRAFT_DEBT.md` rather than repaired here: the serve
-one is a larger change than it looks, because the receive formation is currently
-the *definition* of where the receivers stand for the reception feasibility
-check, and turning it into a journey moves reception quality directly.
+Not one leg but five, and the shape is consistent: each of these events publishes
+the *defending* side's map and not the acting side's. An attack event names the
+six who are defending it; the six attacking are described on the SET event before
+it or not at all. So the remaining gap is one repair applied five times — publish
+the acting side's off-ball map through `_establish_shape` and the existing phase
+maps — and it is `FIRST_DRAFT_DEBT.md`'s FD-002 and FD-003 as a single family
+rather than two entries.
 
-At 46.4% silent, presentation is still inventing nearly half the off-ball
-movement in the game. That number is the honest headline of M7's remaining work.
+They are grouped on purpose. Each of those maps calls `_reached_point`, so each
+one *moves volis*; closing them one at a time would mean five overlapping
+distribution measurements of one change.
+
+**Two claims that used to live in this section are gone.** The serve leg is not
+silent — see below. And the receive formation is no longer a placement: it seeds
+`live_positions` at rally initialization, so it is the spawn position, the
+reception claim's origin and the start of every later traversal at once, measured
+at 0 of 2,110 bystander displacement.
+
+## The serve leg was never silent
+
+The 45.9% above, and the 46.4% after C5, both counted the serve's other eleven
+volis as invented by presentation. They are not.
+
+**A rally's first contact has no preceding interval.** Playback draws a leg as
+`event -> next_contact` and reads its targets off `next_contact`, so nothing
+precedes the serve and there is no interval in which anybody could have moved.
+Both sides' serve-flight movement is published on the RECEPTION event — the
+receiving side's shape and the serving side's transition, all twelve — because
+that is the only event where it can be drawn.
+
+The resolver has said so the whole time. `_receive_formation_map`'s own note
+records measuring 400 serves of 400 with no preceding flight, and gives that as
+the reason the map is published where it is.
+
+So this census was scoring a leg that does not exist: a threshold measured
+against the wrong distribution, committed by the instrument written to find
+those. It now carries a `no leg` column and excludes it.
+
+| | claimed | measured |
+|---|---:|---:|
+| resolver placed | 54.1% | **65.2%** |
+| presentation invented | 45.9% | **34.8%** |
+
+FD-001 is withdrawn on that evidence rather than repaired — there was nothing to
+repair. What was real inside it, the receive formation being a placement at
+coordinates gameplay did not use, is FD-004, and that is closed and certified.
+
+At 34.8%, presentation still invents a third of the off-ball drawing, across the
+SET, ATTACK, BLOCK, DIG and coverage legs. That is the honest headline of the
+remaining work, and §10 of `01_TARGET_AUTHORITY_STATE.md` names it as permitted
+in a complete first draft: "presentation lag behind newly authoritative state".

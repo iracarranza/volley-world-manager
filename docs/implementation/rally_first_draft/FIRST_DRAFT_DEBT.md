@@ -24,77 +24,135 @@ Relevant existing spec/review:
 
 ---
 
-## FD-001 — nothing is published about the other eleven volis during the serve
+## FD-001 — WITHDRAWN. The serve leg is published; the census was counting a leg that does not exist
 
-Class: F4
-Subsystem: off-ball movement / phase maps (`rally_simulator.gd`)
-First observed at: this run's C0 census
-Reproduction: `godot --headless --path . --script res://tools/run_action_window_census.gd` — the `SERVE` row reads `published 0, silent 3300`
-Expected semantic invariant: for each canonical leg, the resolver can state why every on-court voli is or is not moving (packet C0)
-Observed: the serve leg publishes no phase map at all, so `tactical_court._support_target_for_side` invents a target for eleven volis out of their base position and the action point — presentation authoring movement the resolver never decided
-Likely upstream owner: `_receive_formation_map` and the serving side's own transition
-Blocks later construction: no
-Why deferred: the receive formation is presently a **placement** (`progress 0.0`), and it is also the definition of where the receivers stand for the reception feasibility check. Turning it into a journey taken during the serve flight moves reception quality directly, which is a change worth its own measurement rather than a rider on C5's.
-Next diagnostic: extend `_establish_shape` to the receive formation with the serve flight as the window, then re-run the balance probe for reception quality specifically
-Relevant spec: `05_CONTINUOUS_ACTION_AND_INTEGRATION.md` C5, `OFF_BALL_MOVEMENT.md`
+Class: F3 (instrument defect, not engine defect)
+Subsystem: `tools/run_action_window_census.gd`
+Disposition: **withdrawn on evidence, not repaired**
+
+The entry claimed the serve leg publishes nothing about the other eleven volis
+and that presentation therefore invents them. It does not. A rally's first
+contact has **no preceding interval** — playback draws a leg as
+`event -> next_contact` and reads its targets off `next_contact` — so both
+sides' serve-flight movement is published on the RECEPTION event, all twelve of
+them, which is the only event where it can be drawn.
+
+The resolver has known this the whole time. `_receive_formation_map`'s own note
+records measuring 400 serves of 400 with no preceding flight, and says the map
+is published on the reception "because playback draws a leg as `event ->
+next_contact`".
+
+So the 3,300 "silent" voli-legs on the SERVE row were an artefact of the census
+scoring a leg that does not exist — a threshold measured against the wrong
+distribution, committed by the instrument built to find those. The census now
+carries a `no leg` column and excludes it.
+
+What was real inside this entry was the receive formation being a *placement* at
+coordinates gameplay did not use. That is FD-004, and it is repaired.
 
 ---
 
 ## FD-002 — attack coverage publishes no phase map
 
 Class: F4
-Subsystem: off-ball movement (`_resolve_attack_coverage`)
-First observed at: this run's C0 census
-Reproduction: as above — the `ATTACK_COVERAGE` row reads `published 0, silent 110`
-Expected semantic invariant: same as FD-001
-Observed: the coverage leg names no off-ball targets; all eleven non-actors are presentation's invention
-Likely upstream owner: `_resolve_attack_coverage`
-Blocks later construction: no
-Why deferred: it is the cheapest of the three silences and it was still left, on purpose. Publishing `_cover_phase_map` here is not a reporting addition — the map calls `_reached_point`, which moves volis and writes `live_positions`, so it is the same C5 behaviour change applied to a third leg. FD-001, FD-002 and FD-004 are one shape of repair ("this leg publishes no off-ball map, so presentation invents it and nobody walks anywhere"), and closing them one at a time means three separate distribution measurements of three overlapping changes. They should move together and be measured once.
-Next diagnostic: publish `_cover_phase_map` on the coverage event with the keep-alive flight as the window, in the same pass as FD-001
+Subsystem: `_resolve_attack_coverage`
+Reproduction: `godot --headless --path . --script res://tools/run_action_window_census.gd` — `ATTACK_COVERAGE` reads `published 0, silent 143` over 300 rallies
+Disposition: **retained as non-blocking debt, with evidence**
+
+The goal's test is whether this "still represents missing authoritative off-ball
+state / actor-state substitution under packet first-draft criteria". It does not,
+and the evidence is specific rather than a shrug:
+
+- **No actor-state substitution.** Nothing resets or defaults a voli at the
+  coverage boundary. `live_positions` carries across it, recovery debt is
+  published on the coverage contact like every other, and C1's gate in
+  `run_continuous_action_probe.gd` passes (273 contacts in 400 rallies carrying
+  debt the next leg still owes).
+- **No required M7 action is made impossible.** M7's own seven-item closure
+  criterion is certified in full; coverage is not among the actions it names, and
+  the actions it does name all overlap their preceding ball phases.
+- **The interval is the block deflection**, 0.22–0.38 s measured in the D0 walk,
+  on 13 events per 300 rallies.
+- **Closing it would not close the class.** The remaining silence is 5,125
+  voli-legs across five legs; coverage is 143 of them, 2.8%. This is one member
+  of the FD-003 family, not a separable defect.
+
+Its cost is presentation fidelity for a third of a second on a rare leg, which
+the packet's §10 lists by name as permitted in a complete first draft.
+
+Next repair: publish `_cover_phase_map` on the coverage event with the keep-alive
+flight as the window — the same helper the block and transition legs already use.
+Grouped with FD-003 rather than taken alone, because `_cover_phase_map` calls
+`_reached_point`, so it moves volis and needs measuring with its siblings rather
+than as three overlapping single-change measurements.
 
 ---
 
-## FD-003 — presentation still invents 46.4% of off-ball movement
+## FD-003 — presentation draws off-ball movement the resolver did not publish
 
-Class: F4
+Class: F4 — and explicitly permitted in a complete first draft
 Subsystem: `scenes/components/tactical_court.gd` (`_support_target_for_side`)
-First observed at: this run's C0 census
-Reproduction: as above — the summary line `volis presentation must invent: 8229 of 17734 (46.4%)`
-Expected semantic invariant: "presentation may not invent movement targets because the resolver did not publish them" (`01_TARGET_AUTHORITY_STATE` §9)
-Observed: a fallback in the tactical court derives a target from base position and action point for any voli the resolver did not name
-Likely upstream owner: this is the *aggregate* of FD-001, FD-002 and the un-mapped volis on the SET/DIG legs; it closes as they do
-Blocks later construction: no
-Why deferred: the fallback cannot be removed before the maps that would replace it exist, and removing it early would leave volis frozen rather than wrongly placed — a worse failure, and one that hides the real gap instead of surfacing it
-Next diagnostic: close FD-001 and FD-002, re-measure, then narrow the fallback to a genuine "no information" case and make it visibly a hold rather than a journey
+Reproduction: as above — `volis presentation must invent: 5125 of 14736 (34.8%)`
+Disposition: **open, non-blocking**
+
+**The number was overstated and is corrected here.** This entry previously read
+46.4%, which included FD-001's phantom serve leg. The measured figure with that
+artefact removed is **34.8%**.
+
+The packet's §10 permits a complete first draft to contain "presentation lag
+behind newly authoritative state". This is exactly that: the simulation now
+publishes traversal times, arrival windows, unified receiver geometry, per-contact
+body positions and leg starts, and presentation has not caught up to any of it.
+
+And the boundary is one-way, which is the part that matters for the completion
+criterion. Verified rather than assumed: no script under `scripts/simulation`,
+`scripts/models` or `scripts/managers` loads anything under `scenes/`, and
+presentation never writes resolver state — `match_court_3d.live_positions` is the
+court's own drawing copy, not the resolver's. Deleting `_support_target_for_side`
+outright would change no gameplay number in any rally; it would change only what
+is drawn. Presentation reconstructs no gameplay truth because it cannot.
+
+Next repair: publish the acting side's off-ball map on the SET, ATTACK, BLOCK,
+DIG and coverage legs, using `_establish_shape` and the existing phase maps, and
+measure the five together. Then narrow the fallback to a genuine no-information
+case and make it read as a hold rather than a journey.
 
 ---
 
-## FD-004 — the drawn receive shape and the simulated one are different coordinates
+## FD-004 — CLOSED. One receiver geometry, seeded before the serve
 
-Class: F4
+Class: F1 (two answers to one physical question) — repaired
 Subsystem: `_receive_formation_map`, `_initial_home_positions`, `_initial_opponent_positions`
-First observed at: this run's C0 census; the second half found while attempting the repair
-Reproduction: `godot --headless --path . --script res://tools/run_action_window_census.gd` — `RECEPTION` publishes 2,904 targets and only 1,452 carry a duration
-Expected semantic invariant: C5 — receivers establish from their actual starting positions before the ball is struck, and one physical fact has one answer
+Disposition: **closed and certified**
 
-Observed, and it is worse than the census row suggests:
+The reception claim built `reception_origins` from `live_positions`, seeded from
+the rotation grid or the plan's zone, while `_receive_formation_map` separately
+published the shape the six actually take up. Gameplay believed one, the drawing
+showed the other, and `result.initial_home_positions` — what `match_court_3d`
+spawns actors at — was the gameplay one.
 
-1. `_receive_formation_map` publishes where the six *stand* to receive — passers on their seams, front row off the passing lanes, setter at the release — with `progress: 0.0`. Nobody moves there; they appear there.
-2. **Gameplay does not believe that map.** It writes nothing into `live_positions`, which is seeded by `_initial_home_positions` from the rotation slot or the defensive plan's `SERVE_RECEIVE` zone. So the reception claim and the receiver's reach are computed from a *different* set of coordinates than the ones drawn.
+The formation is now seeded into `live_positions` at rally initialization, so it
+is the spawn position, the claim's origin and the start of every later traversal
+at once. The reception event publishes `_lineup_live_shape` — the volis' actual
+state — instead of recomputing a second copy.
 
-Likely upstream owner: the receive leg as a whole — FD-001 and FD-004 are two halves of one repair
-Blocks later construction: no
+`tools/run_receive_geometry_probe.gd`, 500 rallies, 422 serve receptions:
 
-Why deferred — and this one was attempted and backed out deliberately:
+```
+bystanders that moved from spawn        0 of 2,110
+worst displacement               0.000000 court units
+receivers that travelled              411, mean 0.1367
+serve -> reception lineage breaks       0
+receptions stamped before the serve     0
+```
 
-The obvious fix is to walk the six into the formation during the serve's flight and write the result back to `live_positions`. It cannot be done where the map is published: the formation is attached to the **reception** event (correctly, because playback draws a leg as `event → next_contact`), and by then the receiver's claim and reach have already been resolved and `live_positions[receiver.id]` holds their actual contact position. Writing the shape back there would move the receiver off the ball they just played.
+A second home/opponent drift was found while tracing it and repaired in the same
+pass: `_initial_home_positions` honoured a serve-receive zone whether or not it
+was `enabled`, where `_initial_opponent_positions` had always checked.
 
-Doing it properly means establishing the shape *before* the reception claim, which reorders a certified M4 path and changes reception feasibility materially — the receivers would read from their seams instead of the rotation grid.
-
-That may well be the more correct volleyball (a receiving side is in formation when the ball is struck, not moving into it during the flight). But it is not on the packet's F1 list: no second authority governs a physical fact here, because gameplay consistently uses `live_positions` and the formation map is consistently presentation. It is a reporting inconsistency plus an off-ball fidelity gap, which is F4 — and F4 inside a certified family is exactly what B1–B4's "audit, do not rewrite" covers.
-
-Next diagnostic / repair: decide whether `live_positions` should be seeded from `_receive_formation_map` at rally start for the receiving side, which would collapse the two shapes into one without reordering anything. Then measure reception quality and the dig/side-out mix before and after. That is a volleyball decision with a measurable cost, and it deserves its own pass rather than a rider on this one.
+Cost, measured and not fitted: dig 0.393 → 0.407, kill 0.659 → 0.611, contacts
+4.796 → 4.827, every governed band still holding, reception quality unchanged at
+0.434 to three decimals.
 
 ---
 
@@ -116,10 +174,10 @@ Next diagnostic: task #140, "Is 12% the right price for a shanked serve-receive?
 
 1. ball/contact authority — *empty; B0/B6 closed every edge by launch identity*
 2. causality/timing — *empty; the B4 repair closed the one violation found*
-3. movement/actor continuity — FD-001, FD-002, FD-004
+3. movement/actor continuity — *empty; FD-004 closed, FD-001 withdrawn*
 4. responsibility/selection — *empty*
 5. attack/block interaction — *empty*
-6. home/opponent asymmetry — *empty; the B4 repair closed the one found*
+6. home/opponent asymmetry — *empty; two drifts found and both repaired — the block's stale swing and the receive zone's `enabled` check*
 7. tactical wiring — *not yet audited (M9)*
-8. presentation/reporting — FD-003
+8. presentation/reporting — FD-002, FD-003 (one family)
 9. calibration/balance — FD-005

@@ -87,6 +87,16 @@ These are one upstream class: legs for which the resolver does not yet publish/a
 
 - **FD-003** — 46.4% aggregate of off-ball movement still requires presentation fallback. Re-measure only after the movement debt above changes; do not treat the aggregate as an independent gameplay fix.
 
+> **Superseded after this record was written.** The 46.4% was an instrument
+> artefact: the action-window census counted the serve's other eleven volis as
+> invented, and a rally's first contact has no preceding interval for anybody to
+> have moved in — both sides' serve-flight movement is published on the reception
+> event. Corrected, the figure is **34.8%**. FD-001 is withdrawn on that evidence
+> and FD-004 is closed and certified, which together made the first draft
+> complete. See `docs/implementation/rally_first_draft/D3_FIRST_DRAFT_STATUS.md`
+> and `C0_ACTION_WINDOW_CENSUS.md`. This file is left as the record of the pass
+> ending at `570176d` rather than rewritten.
+
 ### Calibration
 
 - **FD-005** — contacts/rally and kill/ace observations remain outside advisory targets. This is post-draft calibration/volleyball evaluation, not construction debt. No fitting was performed.

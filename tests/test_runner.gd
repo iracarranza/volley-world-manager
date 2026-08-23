@@ -278,6 +278,7 @@ func _initialize() -> void:
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_one_ball_chain_by_launch_identity()
+	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
 	_test_readiness_and_calibration_reports()
 	_test_opponent_approach_mirror()
@@ -8640,6 +8641,79 @@ func _test_opponent_setter_release_is_clear() -> void:
 ## The ball's described path must be one continuous chain. A block that never
 ## touched the ball must not shorten the shot, and must not emit a deflection
 ## leg that puts the ball in two places at once.
+## The receive formation is the shape the receivers are actually in.
+##
+## FD-004's permanent guard. `_receive_formation_map` used to publish where the
+## six *stand* to receive while `_initial_home_positions` seeded `live_positions`
+## from the rotation grid -- and the reception claim builds `reception_origins`
+## out of `live_positions`, so gameplay read the serve from one set of
+## coordinates while a viewer watched the six stand in another.
+##
+## The signature is what makes it guardable. A voli who does not touch the serve
+## has nothing to do during its flight: they were already in formation when the
+## whistle went. So their published position on the reception must equal their
+## spawned position **exactly**. If the two geometries ever separate again, that
+## difference becomes the whole distance between a rotation grid and a receive
+## shape, on every rally, and this fails immediately rather than after somebody
+## notices the drawing looks wrong.
+##
+## Exact, not tolerant: the claim is identity, and a tolerance would be a place
+## for a small drift to hide.
+##
+## Only the **first** reception of a rally is scored. A reception that clears the
+## net becomes the other side's ordinary first contact and is emitted as a second
+## RECEPTION -- it legitimately has no receive formation, and counting it here
+## would report a correct overpass as a broken invariant. That mistake was made
+## once already, by the probe this test is derived from.
+func _test_receive_shape_is_where_the_receivers_stand() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var bystanders := 0
+	var displaced := 0
+	var travelled := 0
+	var worst := 0.0
+	for seed_value in range(77000, 77240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var scored := false
+		for event in result.events:
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+				continue
+			if scored:
+				break
+			scored = true
+			var meta: Dictionary = event.metadata
+			var receiving_home := str(meta.get("side", "home")) == "home"
+			var published: Dictionary = meta.get(
+				"home_phase_targets" if receiving_home else "opponent_phase_targets",
+				{},
+			)
+			var spawned: Dictionary = result.initial_home_positions if receiving_home \
+				else result.initial_opponent_positions
+			for raw_player_id in published:
+				var player_id := int(raw_player_id)
+				if not spawned.has(player_id):
+					continue
+				var moved := Vector2(spawned[player_id]).distance_to(
+					Vector2(published[raw_player_id])
+				)
+				if player_id == int(event.actor_id):
+					if moved > 0.0001:
+						travelled += 1
+					continue
+				bystanders += 1
+				if moved > 0.0001:
+					displaced += 1
+					worst = maxf(worst, moved)
+	_check(
+		bystanders >= 500 and displaced == 0,
+		"a voli who does not touch the serve stands exactly where they were spawned",
+	)
+	_check(
+		travelled > 0,
+		"the receiver travels to the ball rather than being frozen in formation",
+	)
+
+
 ## M6 / B6: one ball, all the way down, **by identity rather than by shape**.
 ##
 ## The packet's P3 matrix asks every canonical edge for "same launch lineage",

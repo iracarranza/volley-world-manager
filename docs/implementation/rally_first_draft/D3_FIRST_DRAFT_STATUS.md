@@ -14,12 +14,12 @@ and not against something easier:
 | A0–A2 · M4 reception closeout | **already closed, not replayed** | `ENABLE_PHYSICAL_RECEPTION = true` at `9e2b55d`; `RALLY_MILESTONES.md` M4 **DONE**. The packet pins `6ce8f3b`, one commit earlier. |
 | B0 · contact-authority census | **done** | `run_contact_authority_census.gd`, 600 rallies, 2,862 contacts, seven families, nine edges |
 | B1 · serve | **closed, no change** | retired error draw has no reader; every fact from `_canonical_serve` |
-| B2 · set | **closed, no change** | 515 of 515 sets consume a realised prefix by launch identity |
+| B2 · set | **closed, no change** | every set consumes a realised prefix by launch identity |
 | B3 · attack | **closed, no change** | `551e29e` audited in scope; no second landing authority found |
 | B4 · block | **one break repaired** | 100 of 100 touching home blocks met a superseded swing, up to 1.140 s late; both sides now 0 |
 | B5 · platform closure | **closed** | one `PlatformContactModel.evaluate` call site, three families, no per-family coefficients |
 | B6 · cross-family chain | **closed by identity** | all nine edges 100% same-launch after `authoritative_flight_id` reached serve/set/attack/block |
-| C0 · action-window audit | **done** | `run_action_window_census.gd`; 45.9% of voli-legs were presentation's invention, 0 of 8,125 carried a duration |
+| C0 · action-window audit | **done** | `run_action_window_census.gd`; 0 of 8,125 placed volis carried a duration. Its first headline of 45.9% invented was its own artefact — corrected to **34.8%** once the serve's non-existent leg was excluded |
 | C1 · previous contacter clears | **built; now visible** | recovery debt published from `_add_event`; 273 contacts in 400 rallies carry it |
 | C2 · setter transition overlap | **already built** | the hardcoded 0.68 window is now the real interception time; the transition setter takes the same head start the first ball takes from the serve |
 | C3 · hitter approach overlap | **already built** | 335 sets publish a hitter approach start before the attack |
@@ -29,8 +29,9 @@ and not against something easier:
 | C7 · phase boundaries sample state | **already built** | `ACTOR_CONTINUITY.md`; recovery/body/facing carried across phase rebuilds |
 | D0 · integration walk | **done** | `run_first_draft_walk.gd` prints one rally end to end with launch lineage at every boundary |
 | D1 · superseded event-window cleanup | **audited, nothing to remove** | see B6's legacy note: all three surviving legacy paths still serve live paired protocols |
-| D2 · history/presentation audit | **partially closed** | traversal times and recovery debt now published; 46.4% of off-ball movement is still presentation's invention (FD-003) |
+| D2 · history/presentation audit | **closed for authority; fidelity open** | the boundary is one-way and verified; 34.8% of off-ball movement is still drawn from an invented target, which §10 permits by name (FD-003) |
 | D3 · checkpoint | **this file** | |
+| M8 · canonical side-out | **structural PASS** | seed 76005 on the vertical-slice roster, 8 contacts, 7 boundaries, 7/7 gates — see `M8_CANONICAL_SIDEOUT.md` |
 
 ## Production authority
 
@@ -79,52 +80,78 @@ applies to this pass. All three arms PASS, unchanged:
 
 ## Is the first draft complete?
 
-**No, and the gap is named rather than hidden.** The packet's list of what a
-complete first draft may *not* knowingly contain has five items. Four are clear:
+**Yes.** Tested against the packet's own list rather than a looser one.
 
-- a missing ordinary contact family — none; seven families, all in the rubric.
-- two production authorities for one physical question — none found by the
-  census, and the one that existed (the home block's superseded swing) is
-  repaired.
-- a legacy path manufacturing a ball where free flight should own it — none;
-  every edge is same-launch by identity.
-- an architectural decision silently replaced by a guessed constant — none. No
-  new magnitude was authored in this pass. Every number used
-  (`_movement_time`, `TRAVEL_COST_PER_METER`, the lateral mode, the set flight
-  window) already existed and already governed the same kind of journey.
+A complete first draft may **not** knowingly contain:
 
-The fifth is the open one:
+| forbidden | status |
+|---|---|
+| a missing ordinary contact family | none — seven families, all in the rubric (B0) |
+| two production authorities for one physical question | none — 9/9 edges same ball *and* same lineage; the last known duplicate, the receive geometry, closed with 0 of 2,110 bystander displacement |
+| a legacy path manufacturing the ball where free flight should own it | none — every published ball carries a launch identity |
+| event-boundary player resets that make required M7 actions impossible | none — all seven of M7's own done-when items certified by `run_continuous_action_probe` |
+| an architectural decision silently replaced by a guessed constant | none — no new authored magnitude in this pass or the two before it |
 
-> event-boundary player resets that make required M7 actions impossible
+And it explicitly **may** contain, by §10: incorrect movement magnitudes inside
+a complete path, a failed symmetry gate, a poor outcome distribution, rare-state
+defects, and **presentation lag behind newly authoritative state**.
 
-The serve leg still publishes nothing about the other eleven volis, and the
-receive formation is a placement drawn at coordinates gameplay does not use. So
-the *serve-to-reception* leg still has the shape C5 just removed from the
-attack leg. It does not make a required M7 action impossible — the reception
-still happens, from a consistent (if different) set of positions — but it is the
-same defect, one leg upstream, and calling the draft complete while it stands
-would be the kind of claim this repository keeps being warned about.
+That last clause is what disposes of the largest open item. FD-003 — 34.8% of
+voli-legs drawn from a target the resolver did not publish — is presentation lag
+by definition: the simulation now publishes traversal times, arrival windows,
+unified receiver geometry, per-contact body positions and leg starts, and the
+drawing has not caught up to any of it.
 
-FD-001 and FD-004 in the debt ledger carry it, with the reason it was attempted
-and backed out rather than shipped: doing it properly reorders a certified M4
-path and moves reception quality, which is a decision with a measurable cost and
-deserves its own pass.
+### The one test that settles D2
+
+The completion criterion is that presentation no longer **reconstructs gameplay
+truth**. Verified rather than argued:
+
+- no script under `scripts/simulation`, `scripts/models` or `scripts/managers`
+  loads anything under `scenes/`;
+- presentation never writes resolver state — `match_court_3d.live_positions` is
+  the court's own drawing copy, not the resolver's;
+- deleting `_support_target_for_side` outright would change **no gameplay number
+  in any rally**. Every rally would resolve identically; only the drawing would
+  differ.
+
+Presentation reconstructs no gameplay truth because the dependency is one-way
+and it cannot. What it does is invent a *drawing* where simulation is silent,
+which is fidelity debt and is named in §10.
+
+### What was open at the last checkpoint, and what happened to it
+
+- **FD-001 — withdrawn on evidence.** The claim that the serve leg publishes
+  nothing was an artefact of this pass's own census scoring a leg that does not
+  exist. A rally's first contact has no preceding interval; both sides'
+  serve-flight movement is published on the reception, all twelve.
+- **FD-004 — closed and certified.** One receiver geometry, seeded at rally
+  initialization, 7 gates.
+- **FD-002 — retained, proven non-blocking** against the packet criteria: no
+  actor-state substitution, no required M7 action made impossible, 13 events per
+  300 rallies over a third of a second, and 2.8% of a class it cannot close
+  alone.
 
 ## Next certification / repair priority
 
-1. **FD-001 + FD-004 together** — decide whether `live_positions` is seeded from
-   `_receive_formation_map` for the receiving side at rally start. That collapses
-   the drawn and simulated receive shapes into one *without* reordering anything,
-   and it is the last leg where a shape appears rather than forms. Measure
-   reception quality and the side-out mix either side of it.
-2. **FD-002** — publish `_cover_phase_map` on the coverage event. Cheapest of the
-   three silences, same helper as the two that already work.
-3. **FD-003** — once 1 and 2 land, narrow `_support_target_for_side` to a genuine
-   no-information case and make it read as a hold rather than a journey.
-4. **M8** — the canonical side-out. It is now worth running: the structural
-   layer it inspects exists, so its findings will be about fidelity rather than
-   about missing architecture, which is exactly the state the packet wanted
-   before certification began.
-5. **Task #140** — "Is 12% the right price for a shanked serve-receive?" That is
+1. **FD-002 + FD-003 together** — publish the acting side's off-ball map on the
+   SET, ATTACK, BLOCK, DIG and coverage legs through `_establish_shape` and the
+   existing phase maps, and measure the five as one change. Each calls
+   `_reached_point`, so each moves volis; measuring them separately would be
+   three overlapping distribution measurements of one repair. Then narrow
+   `_support_target_for_side` to a genuine no-information case and make it read
+   as a hold rather than a journey.
+2. **M8's visual layer** — the structural layer passes and cannot go further
+   headless. This needs the app running and a person watching, which is what
+   P5's own note about localizing a visual failure is for. What the structural
+   pass establishes is that if a viewer sees something wrong in seed 76005, the
+   simulation is not where it came from.
+3. **M9 tactical A/B** — not started. The packet wants each tactic to change a
+   predicted *intermediate mechanism*, stated before running, not a terminal
+   rate.
+4. **Task #140** — "Is 12% the right price for a shanked serve-receive?" That is
    the volleyball question under FD-005's rate observations, and it should be
    answered before anything is tuned toward the advisory bands.
+5. **The home/opponent dig gap**, observed at 0.504 against 0.325 after the
+   receive-geometry migration, widened from 0.445/0.350. That belongs to the
+   held symmetry work (tasks #62–#64), and fitting it is forbidden here.

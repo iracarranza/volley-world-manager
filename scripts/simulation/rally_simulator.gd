@@ -1053,6 +1053,16 @@ var opponent_plan: Resource = null
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
+## Every voli's position as of the last contact, so the next one can say where
+## its actor started.
+##
+## M8 asks each boundary for `actor_start -> traversal -> contact`. The contact
+## end is `body_contact_position`; the *start* is where that voli was when the
+## previous contact happened, and it existed only inside whichever resolver
+## branch had moved them. Snapshotting the live maps once per contact answers it
+## uniformly and derives nothing: the leg for contact N is the interval between
+## contact N-1 and contact N, so the position at N-1 is the start by definition.
+var _positions_at_last_contact: Dictionary = {}
 ## The receiving side's own labels for its receive shape, captured where the
 ## shape is built.
 ##
@@ -1256,6 +1266,7 @@ func resolve(
 	recovery_fatigue_cost = {}
 	exertion_cost = {}
 	receive_formation_intents = {}
+	_positions_at_last_contact = {}
 	live_positions = _initial_home_positions(
 		lineup, defensive_plan, not home_serving, true,
 		players if not home_serving else [], receive_formation_intents,
@@ -14046,6 +14057,43 @@ func _add_event(
 	var recovery_owed := _recovery_time_penalties(rally_clock)
 	if not recovery_owed.is_empty():
 		event.metadata["recovery_debt"] = recovery_owed
+	## **Where the body that made this contact was standing.**
+	##
+	## M8 asks every boundary for `actor_start -> traversal -> contact(position,
+	## time)`, and the contact position was published by two families of seven:
+	## SET and ATTACK, on both sides. Serve, reception, block, dig and coverage
+	## published only where the *ball* was -- a reception event's
+	## `start_position` is the serve's landing point, which is a fact about the
+	## ball and says nothing about the passer.
+	##
+	## Nothing is derived here. At the moment a contact event is appended the
+	## actor's live position *is* their contact position: every family writes it
+	## before appending -- `live_positions[receiver.id] = receiver_reach`,
+	## the hitter's from the attack integration, the setter's from theirs. This
+	## publishes the state that already exists rather than reconstructing it, and
+	## it defers to a family that stated a more precise one of its own.
+	if not event.metadata.has("body_contact_position"):
+		if live_positions.has(actor_id):
+			event.metadata["body_contact_position"] = Vector2(live_positions[actor_id])
+		elif opponent_live_positions.has(actor_id):
+			event.metadata["body_contact_position"] = Vector2(
+				opponent_live_positions[actor_id]
+			)
+	## And where that body started the leg it just finished -- see
+	## `_positions_at_last_contact`. On a rally's first contact there is no
+	## previous one, so the field is honestly absent rather than filled with the
+	## contact position, which would report every server as having travelled
+	## nowhere and be indistinguishable from a server who really had.
+	if _positions_at_last_contact.has(actor_id):
+		event.metadata["actor_leg_start"] = Vector2(
+			_positions_at_last_contact[actor_id]
+		)
+	for player_id in live_positions:
+		_positions_at_last_contact[int(player_id)] = Vector2(live_positions[player_id])
+	for player_id in opponent_live_positions:
+		_positions_at_last_contact[int(player_id)] = Vector2(
+			opponent_live_positions[player_id]
+		)
 	result.events.append(event)
 
 
