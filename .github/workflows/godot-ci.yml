@@ -16,7 +16,16 @@ jobs:
   test:
     name: Godot 4.7.2 / headless suite
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 was set when this job rendered four galleries and then ran a smaller
+    # suite. The galleries still finish in about 90 seconds together; the
+    # foundation suite is what grew, and on the first run over the merged
+    # first-draft state it was killed mid-suite at exactly 30:00 with no
+    # failure of its own. A cap that stops a passing suite reports the cap.
+    #
+    # Raised rather than split: the render steps are what make the suite worth
+    # running on this tree at all, and one job keeps their artefacts and the
+    # suite result on the same page.
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
