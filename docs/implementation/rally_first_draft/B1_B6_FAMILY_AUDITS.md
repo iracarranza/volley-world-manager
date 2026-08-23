@@ -35,11 +35,11 @@ The census answers it exactly, and the arithmetic is worth stating:
 | feeding family | sets fed | by launch identity |
 |---|---:|---:|
 | RECEPTION → SET | 414 | 414 |
-| DIG → SET | 86 | 86 |
-| ATTACK_COVERAGE → SET | 17 | 17 |
-| **total** | **517** | **517** |
+| DIG → SET | 82 | 82 |
+| ATTACK_COVERAGE → SET | 19 | 19 |
+| **total** | **515** | **515** |
 
-517 is every `SET` event in the census. **Every second contact in the engine
+515 is every `SET` event in the census. **Every second contact in the engine
 consumes a realised prefix by launch identity, whichever family fed it.**
 
 The known debts the packet lists — opponent/transition set posture gaps,
@@ -61,7 +61,7 @@ repair inside the attack family and it does not introduce a second authority.
 
 | check | evidence |
 |---|---|
-| no legacy quality scalar authors a second landing | `SET → ATTACK` 517 of 517 same ball; `ATTACK → BLOCK` and `ATTACK → DIG` both 100% after B4 |
+| no legacy quality scalar authors a second landing | `SET → ATTACK` 515 of 515 same ball; `ATTACK → BLOCK` and `ATTACK → DIG` both 100% after B4 |
 | the attack event refers to the actual launch | the attack's `outgoing_trajectory` *is* the ball every downstream contact receives, by identity |
 | home and opponent consume the same category of facts | after the B4 repair, both block paths read the attack event's published metadata |
 
@@ -101,8 +101,12 @@ before and after — the same figures recorded at the M4 promotion.
 
 The other three B4 checks hold unchanged: a block touch changes the same ball
 rather than spawning a replacement, the post-block continuation is one
-authoritative ball (`BLOCK → DIG` 38 of 38, `BLOCK → ATTACK_COVERAGE` 23 of 23),
+authoritative ball (`BLOCK → DIG` 36 of 36, `BLOCK → ATTACK_COVERAGE` 25 of 25),
 and `block_intent` / hand choice remain intent rather than terminal verdicts.
+
+The before/after table above is deliberately the population as it stood when the
+repair was made. Everything outside it is the committed state — see B6's note on
+why the two differ.
 
 ---
 
@@ -171,18 +175,30 @@ through a label, which is the thing this identity was added to make detectable.
 
 | edge | seen | same ball | by identity |
 |---|---:|---:|---:|
-| SET → ATTACK | 517 | 517 | 517 |
+| SET → ATTACK | 515 | 515 | 515 |
 | SERVE → RECEPTION | 494 | 494 | 494 |
 | ATTACK → BLOCK | 443 | 443 | 443 |
 | RECEPTION → SET | 414 | 414 | 414 |
-| ATTACK → DIG | 230 | 230 | 230 |
-| DIG → SET | 86 | 86 | 86 |
-| BLOCK → DIG | 38 | 38 | 38 |
-| BLOCK → ATTACK_COVERAGE | 23 | 23 | 23 |
-| ATTACK_COVERAGE → SET | 17 | 17 | 17 |
+| ATTACK → DIG | 231 | 231 | 231 |
+| DIG → SET | 82 | 82 | 82 |
+| BLOCK → DIG | 36 | 36 | 36 |
+| BLOCK → ATTACK_COVERAGE | 25 | 25 | 25 |
+| ATTACK_COVERAGE → SET | 19 | 19 | 19 |
 
 Zero edges hand over a different ball. Zero edges are missing an incoming ball.
 Zero contacts are ordered backwards in time.
+
+**Measured on the committed state, not on the state that closed B6.** The
+populations moved a little between the two — 517 sets became 515, 86 dig-fed
+became 82, 17 coverage-fed became 19 — because C5 landed in between and
+defenders who now walk into their shape change which balls come up. That is an
+F5 observation and the reason the table was re-taken rather than carried
+forward: a count is only worth the commit it was measured on, which is the
+standing warning in `CLAUDE.md` and applies to a doc table exactly as much as to
+a test baseline.
+
+What did not move is the claim. Every edge is still 100% same-ball and 100%
+same-lineage, and 414 + 82 + 19 is still exactly the number of sets.
 
 `_test_one_ball_chain_by_launch_identity` in `tests/test_runner.gd` asserts both
 halves permanently, on the suite's own budget, so the chain cannot quietly

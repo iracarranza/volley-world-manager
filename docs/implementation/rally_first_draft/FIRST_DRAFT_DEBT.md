@@ -50,8 +50,8 @@ Expected semantic invariant: same as FD-001
 Observed: the coverage leg names no off-ball targets; all eleven non-actors are presentation's invention
 Likely upstream owner: `_resolve_attack_coverage`
 Blocks later construction: no
-Why deferred: 10 events in 300 rallies. Real, and the cheapest of the three remaining silences to close, but it is a small population and the same helper (`_cover_phase_map`) already exists to close it.
-Next diagnostic: publish `_cover_phase_map` on the coverage event with the keep-alive flight as the window
+Why deferred: it is the cheapest of the three silences and it was still left, on purpose. Publishing `_cover_phase_map` here is not a reporting addition — the map calls `_reached_point`, which moves volis and writes `live_positions`, so it is the same C5 behaviour change applied to a third leg. FD-001, FD-002 and FD-004 are one shape of repair ("this leg publishes no off-ball map, so presentation invents it and nobody walks anywhere"), and closing them one at a time means three separate distribution measurements of three overlapping changes. They should move together and be measured once.
+Next diagnostic: publish `_cover_phase_map` on the coverage event with the keep-alive flight as the window, in the same pass as FD-001
 
 ---
 
