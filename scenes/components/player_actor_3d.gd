@@ -31,6 +31,15 @@ const SetBiomechanicsScript := preload("res://scripts/data/set_biomechanics.gd")
 @onready var signature_surge: SignatureSurge3D = $SignatureSurge3D
 
 var player_id: int = -1
+## Who this actor is, kept rather than spent.
+##
+## `configure` was handed a display name and put it straight into
+## `identity_label.text`, formatted together with the position code, so the name
+## survived only as part of a string meant for reading over the voli's head.
+## Anything that wanted to *name* this actor -- the camera's follow list is the
+## first thing that did -- had no way to ask, and asking anyway crashed the match
+## view on open.
+var voli_name: String = ""
 var is_home_team: bool = true
 ## Which region's clubs this voli plays for, and therefore what they wear.
 ##
@@ -420,6 +429,7 @@ func configure(
 ) -> void:
 	_ensure_node_bindings()
 	player_id = p_player_id
+	voli_name = display_name
 	is_home_team = home_team
 	dominant_hand = "Left" if p_dominant_hand == "Left" else "Right"
 	body_type = str(physical_profile.get("body_type", "Vegi"))

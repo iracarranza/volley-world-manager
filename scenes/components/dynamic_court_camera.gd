@@ -257,7 +257,11 @@ func _refresh_players(force: bool = false) -> void:
 	for raw_id in ids:
 		var id := int(raw_id)
 		var actor := _court.actor_for(id)
-		var label := str(actor.display_name).strip_edges() if actor != null else ""
+		## `voli_name`, not `display_name`: `PlayerActor3D` has never had the
+		## latter. Reading a property that does not exist is an error rather than
+		## a null, so this did not fall through to the "Voli %d" default below --
+		## it took the match view down as the follow list was built.
+		var label := str(actor.voli_name).strip_edges() if actor != null else ""
 		if label.is_empty():
 			label = "Voli %d" % id
 		_follow_option.add_item(label)
