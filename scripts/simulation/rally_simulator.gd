@@ -3227,7 +3227,11 @@ func resolve(
 	var recycle_target := _attack_coverage_target(
 		set_target, block_strength, geometric
 	) if recycled else Vector2(set_target.x, 0.50)
-	var net_contact := Vector2(set_target.x, 0.50)
+	## Where the ball crossed, not where the hitter contacted it -- see
+	## `_block_contact_point`. This is the swing's truncation and the
+	## deflection's origin at once, so it is the §5 realised contact and both
+	## legs have to meet at it.
+	var net_contact := _block_contact_point(geometric, set_target.x, 0.50)
 	var attack_event: Resource = result.events[-1]
 	## A block that never touches the ball must not shorten the shot.
 	##
@@ -3412,14 +3416,22 @@ func resolve(
 			hitter, assignment.lane, set_target, hitter_point
 		)
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
-	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
-	var opponent_blocker_name := opponent_blocker.display_name \
-		if opponent_blocker != null else "Open block"
+	## The hand the ball met rather than the one that closed furthest. The
+	## formation's primary still owns the wall -- the close percentages, the
+	## coverage segments, the deflection -- and only the contact is attributed
+	## to whoever `_block_contact` proved was in the ball's path.
+	var contact_blocker := _block_contact_blocker(
+		geometric, opponent_blocker, assisting_blocker
+	)
+	var opponent_blocker_id := contact_blocker.id if contact_blocker != null else -1
+	var opponent_blocker_name := contact_blocker.display_name \
+		if contact_blocker != null else "Open block"
 	narration["opponent_blocker"] = opponent_blocker_name
 	var home_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker_id,
 		opponent_blocker_name,
-		Vector2(set_target.x, 0.47), post_block_target, block_contacts_ball,
+		_block_contact_point(geometric, set_target.x, 0.47),
+		post_block_target, block_contacts_ball,
 		block_strength, "Block forms at %s" % assignment.lane,
 		"%d%% close speed; the blockers seal the chosen lane.%s" % [
 			roundi(block_strength * 100.0),
@@ -3462,6 +3474,34 @@ func resolve(
 			## perfectly timed -- the one thing `block_timing` is supposed to show.
 			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
+			## Where the ball actually crossed the tape, which this event places
+			## its contact at. Published on all three block sites so the two can
+			## be checked against each other without re-running the resolver.
+			"net_crossing_x": float(geometric.get("net_crossing_x", set_target.x)),
+			## The intersection this contact *is* -- see `_block_contact_point`.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_contact_actor_id": int(
+				geometric.get("block_contact_actor_id", -1)
+			),
+			"block_contact_height_meters": geometric.get(
+				"block_contact_height_meters", null
+			),
+			## And how high the ball was at the tape whether or not it was met,
+			## so a beaten block is drawn where the ball went rather than where
+			## the hands were.
+			"ball_height_at_net_meters": geometric.get(
+				"ball_height_at_net_meters", null
+			),
+			## The wall's primary and assist, which is what the event used to
+			## credit. Published beside the contact so "the ball met a hand other
+			## than the one that closed furthest" is a statement a reader can
+			## check rather than a claim about code.
+			"block_wall_primary_id": int(
+				opponent_blocker.id if opponent_blocker != null else -1
+			),
+			"block_wall_assist_id": int(
+				assisting_blocker.id if assisting_blocker != null else -1
+			),
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
 			"signature_charge": float(geometric.get("signature_charge", 0.0)),
@@ -5490,7 +5530,15 @@ func _resolve_opponent_transition(
 
 	## The swing's shape is solved only now, so the run-up that just adjusted
 	## `opponent_attack` also shapes the arc it produces.
-	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
+	##
+	## The net crossing, not the hitter's contact x. This point is the swing's
+	## truncation *and* the deflection's origin, so it is the realised contact of
+	## §5 and both legs have to meet at it. Placing it under the hitter put the
+	## wall's contact wherever the hitter had been standing, which for any shot
+	## that was not straight down the line is somewhere the ball never was.
+	var opponent_net_contact := _block_contact_point(
+		geometric, opponent_contact.x, 0.50
+	)
 	var opponent_attack_angle := _attack_launch_angle_degrees(
 		opponent_hitter, str(attack_choice.attack_type), opponent_attack
 	)
@@ -5753,7 +5801,9 @@ func _resolve_opponent_transition(
 			home_target, opponent_contact.x, home_block, block_outcome,
 			str(defensive_plan.block_defense_relationship) if defensive_plan != null else "Balanced"
 		)
-	var home_block_target := Vector2(opponent_contact.x, 0.43) \
+	## Under the hands, not under the hitter -- the mirror of the continuation
+	## site's `block_event_end`.
+	var home_block_target := Vector2(opponent_net_contact.x, 0.43) \
 		if block_outcome == "stuff" else deflection_target
 	## Same contract as the two home-attack block paths: only a block that
 	## actually touches the ball shortens the shot or deflects it.
@@ -5867,6 +5917,17 @@ func _resolve_opponent_transition(
 	var blocker_id := blocker.id if blocker != null else -1
 	var assisting_blocker_id := assisting_blocker.id \
 		if assisting_blocker != null else -1
+	## The hand the ball met, which is not always the hand that closed furthest.
+	##
+	## Kept apart from `blocker_id` deliberately: that one is the formation's
+	## primary and is what excludes both bodies from the floor shape below, so
+	## re-attributing it would put whichever blocker did not touch the ball into
+	## a defensive position while they were still at the tape. The wall that
+	## formed and the hand inside it that met the ball are two facts, and only
+	## the second belongs on the contact.
+	var contact_blocker := _block_contact_blocker(
+		geometric, blocker, assisting_blocker
+	)
 	var home_floor_intents := {}
 	var floor_phase_positions := _establish_shape(
 		_home_floor_phase_positions(
@@ -5884,11 +5945,18 @@ func _resolve_opponent_transition(
 			_defensive_intents(floor_phase_positions, home_floor_intents)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
-	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
+	var blocker_name := contact_blocker.display_name if contact_blocker != null \
+		else "No assigned blocker"
 	narration["blocker"] = blocker_name
 	var opponent_cover_intents := {}
-	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
-		Vector2(opponent_contact.x, 0.53), home_block_target,
+	_add_event(result, RallyEventModel.EventType.BLOCK,
+		contact_blocker.id if contact_blocker != null else -1, blocker_name,
+		## The proven crossing at the tape, a hair onto the blocking side. Same
+		## point as `opponent_net_contact` above, which is where the swing was
+		## truncated and where the deflection leaves from -- one contact, both
+		## legs meeting at it.
+		_block_contact_point(geometric, opponent_contact.x, 0.53),
+		home_block_target,
 		home_block_contacts, home_block,
 		"%s · %s" % [blocker_name, block_outcome.capitalize()],
 		"Primary close %d%%; block quality %d%%.%s" % [
@@ -5944,6 +6012,27 @@ func _resolve_opponent_transition(
 				geometric.get("block_edge_miss_meters", 0.0)
 			),
 			"net_crossing_x": float(geometric.get("net_crossing_x", 0.5)),
+			## The intersection this contact *is*, published alongside the actor
+			## and position built from it so the agreement is checkable from the
+			## event rather than by re-running the resolver. `_block_contact`
+			## proves all three; until now none of them left it.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_contact_actor_id": int(
+				geometric.get("block_contact_actor_id", -1)
+			),
+			"block_contact_height_meters": geometric.get(
+				"block_contact_height_meters", null
+			),
+			## And how high the ball was at the tape whether or not it was met,
+			## so a beaten block is drawn where the ball went rather than where
+			## the hands were.
+			"ball_height_at_net_meters": geometric.get(
+				"ball_height_at_net_meters", null
+			),
+			## The wall's own two, beside the hand that met the ball -- see the
+			## note at the first-ball block site.
+			"block_wall_primary_id": blocker_id,
+			"block_wall_assist_id": assisting_blocker_id,
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"home_phase_intents": _defensive_intents(
@@ -7430,9 +7519,16 @@ func _resolve_home_continuation(
 		## or for how long, which the other two both did. Same map, same shape.
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
 			_defensive_intents(cont_block_stage, cont_floor_intents)
-	var cont_net_contact := Vector2(set_target.x, 0.50)
-	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
-		else Vector2(set_target.x, 0.47)
+	## The proven crossing, matching the other two block sites -- see
+	## `_block_contact_point`. Truncation and deflection origin at once, so this
+	## is the §5 realised contact for the continuation swing.
+	var cont_net_contact := _block_contact_point(geometric, set_target.x, 0.50)
+	## A stuffed ball comes down under the hands that stuffed it, so this target
+	## follows the contact rather than the hitter -- same reason as
+	## `cont_net_contact` above. Overwritten by `_trajectory_endpoint` whenever a
+	## deflection is drawn; it is the target that feeds that deflection.
+	var block_event_end := Vector2(cont_net_contact.x, 0.50) if not blocked \
+		else Vector2(cont_net_contact.x, 0.47)
 	var continuation_visible_attack_trajectory := continuation_attack_trajectory
 	if cont_block_contacts:
 		var cont_attack_event: Resource = result.events[-1]
@@ -7496,10 +7592,15 @@ func _resolve_home_continuation(
 		)
 		attack_target = block_event_end
 	var continuation_cover_intents := {}
+	## The hand the ball met, on the same rule as the other two block sites.
+	var cont_contact_blocker := _block_contact_blocker(
+		geometric, opponent_blocker, assisting_blocker
+	)
 	_add_event(result, RallyEventModel.EventType.BLOCK,
-		opponent_blocker.id if opponent_blocker != null else -1,
-		opponent_blocker.display_name if opponent_blocker != null else "Open block",
-		Vector2(set_target.x, 0.47),
+		cont_contact_blocker.id if cont_contact_blocker != null else -1,
+		cont_contact_blocker.display_name if cont_contact_blocker != null \
+			else "Open block",
+		_block_contact_point(geometric, set_target.x, 0.47),
 		block_event_end, cont_block_contacts, block_quality,
 		"Opponent block · exchange %d" % exchange_number,
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
@@ -7525,6 +7626,29 @@ func _resolve_home_continuation(
 			"block_hands_call": str(block_result.get("block_hands_call", "")),
 			"block_hands_followed": bool(
 				block_result.get("block_hands_followed", false)
+			),
+			## Where the ball crossed, and the intersection this contact is --
+			## see `_block_contact_point`. Same three keys as the other two block
+			## sites carry.
+			"net_crossing_x": float(geometric.get("net_crossing_x", set_target.x)),
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_contact_actor_id": int(
+				geometric.get("block_contact_actor_id", -1)
+			),
+			"block_contact_height_meters": geometric.get(
+				"block_contact_height_meters", null
+			),
+			## And how high the ball was at the tape whether or not it was met,
+			## so a beaten block is drawn where the ball went rather than where
+			## the hands were.
+			"ball_height_at_net_meters": geometric.get(
+				"ball_height_at_net_meters", null
+			),
+			"block_wall_primary_id": int(
+				opponent_blocker.id if opponent_blocker != null else -1
+			),
+			"block_wall_assist_id": int(
+				assisting_blocker.id if assisting_blocker != null else -1
 			),
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			## When each blocker jumped, so playback can draw the apex where the
@@ -8155,6 +8279,63 @@ static func _block_intent_margins(intent: String) -> Dictionary:
 		"Funnel":
 			return {"stuff": 0.09, "touch": -0.03, "funnel": -0.07}
 	return {"stuff": 0.0, "touch": 0.0, "funnel": 0.0}
+
+
+## Where the ball met the tape, as the realised contact rather than a position
+## assembled beside it.
+##
+## `CONTACT_AND_BALL_FLIGHT.md` §5: a realised contact is the single point where
+## the incoming segment ends and the outgoing one begins, so it has to *be* the
+## intersection that was proved. `AttackResolutionModel._block_contact` proves
+## one -- height against reach, lateral against half width, timing folded into
+## both -- and publishes the crossing it cut on. All three block events placed
+## the contact at the **hitter's** contact x instead, which is where the wall was
+## staged and not where the ball went: measured over 300 rallies, mean 0.278 m
+## apart, worst 0.784 m, and wider than a blocker's own hand on 17.4% of the
+## contacts that published both. See
+## `docs/review/block_authority/BEFORE_block_contact_authority.txt`.
+##
+## `fallback_x` is that hitter contact, and it stays as the fallback for one
+## reason: with `ENABLE_GEOMETRIC_ATTACK` shut there is no crossing to read, and
+## the legacy contest stages the wall on the hitter's lane by construction, so
+## the hitter's x is then the best available statement rather than a wrong one.
+static func _block_contact_point(
+	geometric: Dictionary, fallback_x: float, net_plane_y: float
+) -> Vector2:
+	return Vector2(
+		clampf(float(geometric.get("net_crossing_x", fallback_x)), 0.0, 1.0),
+		net_plane_y,
+	)
+
+
+## Whose hands, when the ball met any.
+##
+## The event named the formation's *primary* blocker -- the one who closed
+## furthest -- and `_block_contact` picks by centrality, because the ball meets
+## the surface in its path rather than the tallest or the best-closed one. Its
+## own note records the cost of getting that wrong: 32% of two-blocker contacts
+## credited to a less central hand than the ball met, which read as hitters
+## finding the outside hand and made a second blocker easier to tool.
+##
+## Falls back to the primary when nothing was touched, because a beaten block is
+## still an event about the blocker who went up, and there is no contact to take
+## an actor from.
+static func _block_contact_blocker(
+	geometric: Dictionary,
+	primary: VolleyballPlayer,
+	assist: VolleyballPlayer,
+) -> VolleyballPlayer:
+	var proven := int(geometric.get("block_contact_actor_id", -1))
+	if proven < 0:
+		return primary
+	if assist != null and assist.id == proven:
+		return assist
+	## Including the primary explicitly rather than falling through to it, so
+	## that the one case this cannot serve -- a proven id belonging to neither
+	## body this event holds -- is the same return as "no contact" and is caught
+	## by the gate rather than hidden here. The event publishes
+	## `block_contact_actor_id` alongside its actor for exactly that check.
+	return primary
 
 
 func _contest_block(
@@ -15609,6 +15790,11 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		),
 		"block_edge_gap_meters": swing.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(swing.get("block_contact_kind", "")),
+		"block_contact_actor_id": int(swing.get("block_contact_actor_id", -1)),
+		"block_contact_height_meters": swing.get(
+			"block_contact_height_meters", null
+		),
+		"ball_height_at_net_meters": swing.get("ball_height_at_net_meters", null),
 		"block_deflection_landing": swing.get("block_deflection_landing", null),
 		"block_deflection_speed_mps": float(swing.get("block_deflection_speed_mps", 0.0)),
 		"block_deflection_vertical_angle_degrees": float(swing.get(
@@ -15719,6 +15905,16 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		),
 		"block_edge_gap_meters": record.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(record.get("block_contact_kind", "")),
+		## The contact itself: who met the ball and how high it was. Forwarded so
+		## the BLOCK event can be built from the intersection that was proved
+		## rather than from the formation that was assembled before the swing.
+		"block_contact_actor_id": int(record.get("block_contact_actor_id", -1)),
+		"block_contact_height_meters": record.get(
+			"block_contact_height_meters", null
+		),
+		"ball_height_at_net_meters": record.get(
+			"ball_height_at_net_meters", null
+		),
 		"block_deflection_landing": record.get("block_deflection_landing", null),
 		"block_deflection_speed_mps": float(record.get("block_deflection_speed_mps", 0.0)),
 		"block_deflection_vertical_angle_degrees": float(record.get(

@@ -197,7 +197,26 @@ One cause was separable and is fixed: the 0.08 s drawing floor was being used as
 the integration window for a struck ball's far end. See
 `docs/review/M8_VISUAL_CONTINUITY.md`.
 
-Blocks later construction: no. Next repair: §5, which is simulation work.
+**Narrowed: the block is out of it, and the remaining scope is exact.** One
+family's contact height did have an owner all along -- the resolver reads the
+swing's own flight at the tape to decide whether the wall can reach it -- and was
+being consumed inside `_block_contact` and dropped at the promotion seam, with
+playback drawing the ball at the blocker's *jumping reach* instead. That is now
+published and read: every block leg where a hand met the ball is seamless on both
+sides, 72 of 72. The 60 that still score a break are blocks the ball went **past**,
+where the leg into the event does not end at the event -- the probe is scoring a
+transition that is not a seam, not a contact that fails to line up. Row means fell
+from 1.914 to 1.567 m (home) and 1.217 to 1.028 m (opponent); total seam jumps
+378 to 309, and the worst is no longer a block. See
+`docs/review/BLOCK_REALISED_CONTACT.md`.
+
+What remains is every family whose `contact_height` is still a **body**
+measurement standing in for a fact about the ball -- a reach, a platform, a hip.
+That is RECEPTION at 144 of 145 legs, 0.34--0.39 m, and SET at 105 of 151. The
+block was separable because its height is read off a flight; the others are not,
+and closing them is §5, *Realized segment*, which is simulation work.
+
+Blocks later construction: no. Next repair: §5 for the non-block families.
 
 ---
 
@@ -224,6 +243,19 @@ receptions, 3 failed sets and 14 failed attacks still publish a ball -- those ar
 service errors, shanks and swings that went out, every one of them touched. Only
 the block and the dig fail by not touching. The authoritative test is B0's: did
 the contact publish a ball.
+
+**The block half was never the pose, and a separate defect was hiding under it.**
+`match_screen._carry_trajectory` already had the right test -- it refuses to draw
+a deflection for a block whose `block_contact_kind` is empty -- and that key was
+published on the ATTACK event and not on the BLOCK event, 0 of 236 measured. So
+the guard read an absent key, found the empty string, and suppressed the carry on
+*every* block including the 97 that touched the ball. Repaired by publishing the
+key where it is read; see `docs/review/BLOCK_REALISED_CONTACT.md`.
+
+What is left of this entry is the pose alone, and the paragraph above still
+governs it: a blocker who could not reach still jumps, so the honest repair is a
+distinct reaching-and-missing pose rather than a suppression. The dig half is
+untouched.
 
 ---
 

@@ -191,6 +191,13 @@ static func resolve(
 		return result
 	result["block_miss_reason"] = str(block_miss.get("reason", ""))
 	result["net_height_over_block_meters"] = height_at_net - _tallest_reach(blockers)
+	## **How high the ball was when it reached the tape**, whoever did or did not
+	## touch it. `_block_contact` cuts on this and publishes it only when a hand
+	## met the ball, so a beaten wall left presentation with nothing and it drew
+	## the block at the top of the blocker's reach instead -- the ball placed in
+	## hands it had just cleared by half a metre. This is the same number in both
+	## cases and belongs to the flight, not to the contest.
+	result["ball_height_at_net_meters"] = height_at_net
 	## How far past the nearest hand the ball crossed, in metres. A wall beaten by
 	## a hand's width is a width problem; one beaten by a metre is standing in the
 	## wrong place, and widening it would only be a bound stretched to swallow a

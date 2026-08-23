@@ -36,6 +36,10 @@ func _initialize() -> void:
 	var rows := {}
 	var seam_worst := 0.0
 	var seam_worst_label := ""
+	var block_touched := 0
+	var block_touched_breaks := 0
+	var block_missed := 0
+	var block_missed_breaks := 0
 	var floor_worst := 0.0
 	var floor_worst_label := ""
 	for side_index in range(2):
@@ -93,6 +97,25 @@ func _initialize() -> void:
 						if jump > seam_worst:
 							seam_worst = jump
 							seam_worst_label = "%s -> %s" % [previous_label, family]
+				## A block the ball went past is not a seam at all: the leg into
+				## it does not end there, it carries on to the floor or to a
+				## digger. Counted apart so the block's residual can be read as
+				## what it is rather than as a contact that fails to line up.
+				if int(event.event_type) == RallyEvent.EventType.BLOCK \
+						and not is_nan(previous_end) and not is_nan(start_height):
+					var touched := not str(
+						event.metadata.get("block_contact_kind", "")
+					).is_empty()
+					var broke := absf(previous_end - start_height) \
+						> SEAM_TOLERANCE_METERS
+					if touched:
+						block_touched += 1
+						if broke:
+							block_touched_breaks += 1
+					else:
+						block_missed += 1
+						if broke:
+							block_missed_breaks += 1
 
 				## FLOOR. A next contact that did not touch the ball is a ball
 				## that reached the floor, so the leg into it must arrive there.
@@ -112,6 +135,14 @@ func _initialize() -> void:
 				previous_end = end_height
 				previous_label = family
 	_report(rows, seam_worst, seam_worst_label, floor_worst, floor_worst_label)
+	print("")
+	print("block seams, split by whether a hand met the ball")
+	print("  the ball was met       %4d legs, %d break" % [
+		block_touched, block_touched_breaks,
+	])
+	print("  the ball went past     %4d legs, %d break" % [
+		block_missed, block_missed_breaks,
+	])
 
 
 func _report(

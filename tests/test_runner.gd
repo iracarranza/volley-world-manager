@@ -269,6 +269,8 @@ func _initialize() -> void:
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
 	_test_a_blocker_has_five_states()
+	_test_block_contact_is_an_intersection()
+	_test_block_event_publishes_the_contact_it_proved()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -22622,4 +22624,304 @@ func _test_body_facing_rule() -> void:
 		PlayerActor3D.HEAD_YAW_LIMIT_DEGREES > 0.0
 			and PlayerActor3D.HEAD_YAW_LIMIT_DEGREES < 90.0,
 		"head yaw is limited to less than a quarter turn off the body",
+	)
+
+
+## A block contact is an intersection, and the event has to say the one that was
+## proved.
+##
+## `AttackResolutionModel._block_contact` has always been a real ball-by-body
+## test -- height against reach, lateral against half width, timing folded into
+## both -- so quality never created a contact on the production path. What it
+## could not do was *say* what it proved: the crossing, the height and the hand
+## all stopped at the promotion seam, and the BLOCK event published the
+## formation's primary blocker at the **hitter's** contact x instead.
+##
+## Measured before the repair, over 300 rallies: the published contact sat a
+## mean 0.278 m from the crossing the feasibility test cut on, worst 0.784 m,
+## and further than a blocker's own hand is wide on 17.4% of contacts -- and on
+## 36.1% of them the ball met a hand other than the primary. See
+## `docs/review/block_authority/BEFORE_block_contact_authority.txt`.
+##
+## One miss this model does not have, stated rather than invented a fixture for:
+## there is no *below* miss. A ball too low to clear the tape never reaches the
+## wall at all -- `_feasible_launch` and the net-clearance search own that -- so
+## the two ways past a block are over it and around it, and the model names
+## exactly those two.
+func _test_block_contact_is_an_intersection() -> void:
+	const HALF := 0.45
+	const REACH := 3.20
+	var lane := 0.5
+	var wall: Array = [
+		{"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF},
+	]
+
+	## Reachable: under the hands and inside the width.
+	var reachable: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, 2.90, wall
+	)
+	_check(
+		not reachable.is_empty()
+			and is_equal_approx(float(reachable.height_at_net_meters), 2.90)
+			and float(reachable.depth_below_reach_meters) > 0.0,
+		"a ball under the hands and inside them is met, at the height it was met",
+	)
+
+	## Over the top: a reach problem, and it says so.
+	var over_detail := {}
+	var over: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, REACH + 0.01, wall, over_detail
+	)
+	_check(
+		over.is_empty() and str(over_detail.get("reason", "")) == "over",
+		"a ball above the hands is not touched, and the miss is a reach problem",
+	)
+
+	## Around the edge: a positioning problem, and the gap is reported negative.
+	var around_detail := {}
+	var wide_x := lane + (HALF + 0.20) / CourtConstants.COURT_WIDTH_METERS
+	var around: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		wide_x, 2.90, wall, around_detail
+	)
+	_check(
+		around.is_empty()
+			and str(around_detail.get("reason", "")) == "around"
+			and float(around_detail.get("edge_miss_meters", 0.0)) < 0.0,
+		"a ball past the outside hand is not touched, and the miss is a positioning one",
+	)
+
+	## Both at once, on a wall of two that each fail differently. The reasons
+	## compose rather than one silently winning.
+	##
+	## Both blockers stand in the lane and the ball goes wide *and* high, which
+	## is the only shape that produces both reasons: the height test comes first
+	## and continues, so a blocker too short to reach never gets as far as the
+	## lateral test and can only ever report `over`. Written the other way round
+	## first, and this assertion is what caught it.
+	var mixed_detail := {}
+	var mixed: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		wide_x, REACH + 0.01, [
+			{"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF},
+			{"net_x": lane, "reach_height_m": REACH + 0.40, "half_width_m": HALF},
+		], mixed_detail
+	)
+	_check(
+		mixed.is_empty()
+			and str(mixed_detail.get("reason", "")) == "over and around",
+		"a swing that clears one hand and passes the other is beaten both ways",
+	)
+
+	## **Only one blocker is feasible.** The short one cannot be the contact
+	## however central they stand, because centrality only ranks hands the ball
+	## can actually reach.
+	var one_feasible: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, 3.05, [
+			{"net_x": lane, "reach_height_m": 2.60, "half_width_m": HALF,
+				"player_id": 11},
+			{"net_x": lane + 0.30 / CourtConstants.COURT_WIDTH_METERS,
+				"reach_height_m": 3.30, "half_width_m": HALF, "player_id": 12},
+		]
+	)
+	_check(
+		not one_feasible.is_empty()
+			and int(Dictionary(one_feasible.blocker).player_id) == 12,
+		"the ball meets the only hand that could reach it, not the nearest one",
+	)
+
+	## **Centrality, not reach.** Both hands can get to this ball; the ball meets
+	## the one in its path. This is the 36.1% the event used to misattribute,
+	## because it credited whoever closed furthest instead.
+	var central: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, 2.90, [
+			{"net_x": lane + 0.36 / CourtConstants.COURT_WIDTH_METERS,
+				"reach_height_m": 3.40, "half_width_m": HALF, "player_id": 21},
+			{"net_x": lane, "reach_height_m": 3.20, "half_width_m": HALF,
+				"player_id": 22},
+		]
+	)
+	_check(
+		not central.is_empty()
+			and int(Dictionary(central.blocker).player_id) == 22,
+		"a taller hand off the ball's line does not beat a shorter one under it",
+	)
+
+	## The four kinds, by the two quantities that cut them: depth under the hands
+	## and distance from the outside edge.
+	var stuffed: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, REACH - ATTACK_RESOLUTION_SCRIPT.STUFF_DEPTH_METERS - 0.05, wall
+	)
+	var grazed: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, REACH - 0.01, wall
+	)
+	var tool_x := lane \
+		+ (HALF - ATTACK_RESOLUTION_SCRIPT.TOOL_EDGE_MARGIN_METERS * 0.5) \
+		/ CourtConstants.COURT_WIDTH_METERS
+	var tooled: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		tool_x, REACH - 0.60, wall
+	)
+	_check(
+		str(stuffed.get("kind", "")) == "stuff"
+			and str(grazed.get("kind", "")) == "touch"
+			and str(tooled.get("kind", "")) == "tool",
+		"depth under the hands and distance from the edge decide what the contact was",
+	)
+
+	## **Early and late are not the same hands.** Identical geometry, one blocker
+	## with their arms still coming down: the effective edge of a dropping hand is
+	## not where the hand is, so the same ball is tooled rather than touched.
+	var edge_height := REACH - 0.60
+	var square_edge: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane + (HALF - ATTACK_RESOLUTION_SCRIPT.TOOL_EDGE_MARGIN_METERS * 1.2)
+			/ CourtConstants.COURT_WIDTH_METERS,
+		edge_height, [{
+			"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF,
+			"arm_state": "extended",
+			"block_effectiveness": BlockJumpModel.REFERENCE_EFFECTIVENESS,
+		}]
+	)
+	var dropping_edge: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane + (HALF - ATTACK_RESOLUTION_SCRIPT.TOOL_EDGE_MARGIN_METERS * 1.2)
+			/ CourtConstants.COURT_WIDTH_METERS,
+		edge_height, [{
+			"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF,
+			"arm_state": "descending",
+			"block_effectiveness": BlockJumpModel.REFERENCE_EFFECTIVENESS,
+		}]
+	)
+	_check(
+		str(square_edge.get("kind", "")) != "tool"
+			and str(dropping_edge.get("kind", "")) == "tool",
+		"the same ball off a dropping hand is tooled where a locked one touches it",
+	)
+
+	## Source-state immutability: the wall a swing is hit into is not edited by
+	## being hit into.
+	var probe_wall: Array = [
+		{"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF,
+			"player_id": 31},
+	]
+	var before := str(probe_wall)
+	ATTACK_RESOLUTION_SCRIPT._block_contact(lane, 2.90, probe_wall)
+	_check(
+		str(probe_wall) == before,
+		"resolving a contact does not edit the wall it was resolved against",
+	)
+
+
+## And the event says it: same hand, same place, on both sides of the net.
+##
+## The half of the repair that could not be tested against the model, because the
+## defect was never in the model. Read entirely off published metadata -- if this
+## gate had to re-run the resolver to check the resolver, it would be checking
+## nothing.
+func _test_block_event_publishes_the_contact_it_proved() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var per_side := {"home": 0, "opponent": 0}
+	var contacts := 0
+	var actor_disagrees := 0
+	var actor_outside_wall := 0
+	var position_disagrees := 0
+	var contact_without_hand := 0
+	var hand_without_contact := 0
+	var height_missing := 0
+	var seam_breaks := 0
+	var time_out_of_order := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(931000, 931090):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			var previous: Resource = null
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+					previous = event
+					continue
+				var meta: Dictionary = event.metadata
+				var kind := str(meta.get("block_contact_kind", ""))
+				var hand := int(meta.get("block_contact_actor_id", -1))
+				## Contact if and only if a hand was proved. Neither direction is
+				## allowed to drift: a kind with no hand is a contact nobody made,
+				## and a hand with no kind is a hand that met nothing.
+				if not kind.is_empty() and hand < 0:
+					contact_without_hand += 1
+				if kind.is_empty() and hand >= 0:
+					hand_without_contact += 1
+				if kind.is_empty():
+					previous = event
+					continue
+				contacts += 1
+				var side_key := str(meta.get("side", "?"))
+				if per_side.has(side_key):
+					per_side[side_key] = int(per_side[side_key]) + 1
+				if int(event.actor_id) != hand:
+					actor_disagrees += 1
+				if not (hand in [
+					int(meta.get("block_wall_primary_id", -1)),
+					int(meta.get("block_wall_assist_id", -1)),
+				]):
+					actor_outside_wall += 1
+				if not is_equal_approx(
+					float(meta.get("net_crossing_x", -1.0)), event.start_position.x
+				):
+					position_disagrees += 1
+				if meta.get("block_contact_height_meters", null) == null:
+					height_missing += 1
+				## The contact happens after the swing that produced it and
+				## before whatever plays it next. Stamped from the rally clock
+				## through `_swing_reaches_net`, which exists because a block
+				## happens partway through a flight rather than at its end -- the
+				## fault it was written for was hands stamped up to 1.140 s after
+				## the ball they were touching had landed.
+				if previous != null:
+					var struck := float(previous.metadata.get("event_time", -1.0))
+					var met := float(meta.get("event_time", -1.0))
+					if struck >= 0.0 and met >= 0.0 and met < struck:
+						time_out_of_order += 1
+				## The incoming leg ends where the contact is. `_truncated_arc`
+				## re-slices the swing to the net when the wall touches it, and
+				## the point it slices to is this same contact -- so a break here
+				## is the two coming apart, which is the whole of §5.
+				if previous != null:
+					var flight: Dictionary = previous.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if flight.has("end_position") and not is_equal_approx(
+						Vector2(flight["end_position"]).x, event.start_position.x
+					):
+						seam_breaks += 1
+				previous = event
+	_check(
+		contacts > 0 and int(per_side.home) > 0 and int(per_side.opponent) > 0,
+		"both sides of the net produce block contacts to check",
+	)
+	_check(
+		contact_without_hand == 0 and hand_without_contact == 0,
+		"a block event names a hand exactly when the ball met one",
+	)
+	_check(
+		actor_disagrees == 0,
+		"the block event's actor is the hand the intersection proved",
+	)
+	_check(
+		actor_outside_wall == 0,
+		"the hand the ball met belongs to the wall that formed",
+	)
+	_check(
+		position_disagrees == 0,
+		"the contact is published where the ball crossed, not where the hitter stood",
+	)
+	_check(
+		height_missing == 0,
+		"every block contact publishes the height the ball was met at",
+	)
+	_check(
+		seam_breaks == 0,
+		"the swing's drawn end and the block's contact are one point",
+	)
+	_check(
+		time_out_of_order == 0,
+		"a block contact is stamped after the swing it met",
 	)

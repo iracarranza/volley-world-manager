@@ -524,6 +524,14 @@ func _carry_trajectory(
 	## The resolver already says. `block_contact_kind` is empty for a block the
 	## ball passed, and the attack's own flight carries on to the defender exactly
 	## as it did before this window learned to draw anything.
+	##
+	## **And for a long time it said it to nobody.** `block_contact_kind` was
+	## published on the ATTACK event and not on this one -- measured at 0 of 236
+	## block events over 300 rallies -- so this test read an absent key, found the
+	## empty string, and suppressed the carry on *every* block including the 97
+	## that touched the ball. The guard did what it was written to do to the 139
+	## misses and silently did it to the contacts as well. The key is now on the
+	## block event (236 of 236) and this reads what it was always meant to.
 	if int(event.event_type) == RallyEventModel.EventType.BLOCK \
 			and str(event.metadata.get("block_contact_kind", "")).is_empty():
 		return {}

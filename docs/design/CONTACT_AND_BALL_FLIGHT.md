@@ -134,6 +134,29 @@ physical flight.
 which terminate at the *designated setter's* reach — a realized-segment endpoint
 chosen before the segment's real end is known.
 
+**CURRENT, the block: satisfied.** One family reaches this section's bar, and how
+it got there says what the others need. A block's endpoint is not chosen ahead of
+the segment — `AttackResolutionModel._block_contact` reads the swing's own flight
+at the tape, and the height it finds there decides both whether a hand can reach
+the ball and where the ball was when it did. Actor, position and height are that
+one intersection; the incoming leg's truncation and the deflection's origin are
+the same point by construction; and the launch is untouched, because the
+truncation re-slices an arc rather than re-solving one.
+
+None of that was new work. All three facts existed inside the contest and were
+dropped at the promotion seam, which left the event naming the formation's
+primary blocker at the *hitter's* contact x and playback drawing the ball at the
+blocker's jumping reach. Measured before: contact position a mean 0.278 m from
+the crossing, worst 0.784 m; 36.1% of contacts credited to the wrong hand; the
+height published nowhere. After: 0.000 m, 0 disagreements, 72 of 72 touched block
+legs drawn seamlessly on both sides. See `docs/review/BLOCK_REALISED_CONTACT.md`.
+
+The distinction that made the block separable is the one this section turns on: a
+block's contact height is read off a **flight**, and every other family's is read
+off a **body** — a reach, a platform, a hip — standing in for a fact about the
+ball because nothing publishes the latter. That substitution is what remains of
+this item.
+
 ## 6. What `BallTrajectory` should mean — TARGET
 
 **CURRENT: both, and nothing marks which.** Serve is written as free flight;
