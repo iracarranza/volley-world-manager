@@ -92,6 +92,78 @@ between two authoritative states, and it must not move the ball.
 Two legs' worth of count, and a third off the block's mean gap. The count barely
 moves because the residual below is a different cause with the same symptom.
 
+## The second repair, and the witness itself
+
+The first repair moved the block seam and left the reported symptom untouched,
+because the symptom was not a seam. It was the *end* of the rally.
+
+A leg with no next contact is a ball on its way to the floor, and
+`display_trajectory` defaults its far end to the floor for exactly that reason.
+The struck-ball branch then overwrote it — with where the ball *is* once the
+published flight time is spent, which for a ball still falling is not where it
+stops. Playback held it at that height for `settle_seconds` and `hold_at_rest()`
+put it down. A hang, then a snap.
+
+Measured over 180 rallies, both serving sides:
+
+| | before | after |
+|---|---:|---:|
+| terminal legs drawn stopping above the floor | **56 of 119** | **0 of 119** |
+| mean height above the floor | 0.580 m | 0.000 m |
+| worst | **2.362 m**, on a serve | 0.000 m |
+
+A serve error hung nearly two and a half metres up for about two thirds of a
+second before being snapped to the ground. That is the reported witness, and it
+had nothing to do with aces: it is every ball that ends a rally.
+
+The fall time is now solved from the launch rather than chosen, and the outro
+does not grow to match — `MatchScreen.settle_seconds` had already been
+lengthening the last window by exactly this fall, and now returns zero for it
+because the ball has arrived instead of waiting to.
+
+**Found by a constructed fixture, confirmed in production, and the order
+mattered.** 220 rallies produce no ball dying in the net, so the terminal cases
+were built rather than waited for; the constructed one showed a 1.33 m jump. Its
+duration was a hand-chosen number, though, so it was treated as a lead and not a
+finding until production was measured — where the real figure turned out to be
+nearly twice as bad.
+
+## Coverage: by situation, not by family
+
+The continuity baseline reports contact families. M8 asks for situations, which
+is a different list — a family can be well covered while a situation inside it is
+never drawn. Both serving sides, 220 rallies:
+
+| situation | legs | with a seam | breaks | mean | worst |
+|---|---:|---:|---:|---:|---:|
+| serve→receive | 188 | none | — | — | — |
+| ace | 3 | none | — | — | — |
+| serve→touch→shank | 3 | 3 | 3 | 0.387 | 0.453 |
+| receive→set | 167 | 167 | 166 | 0.354 | 1.831 |
+| set→attack | 198 | 198 | 144 | 0.271 | 0.946 |
+| attack→floor | 29 | 29 | 0 | 0.000 | 0.000 |
+| attack→block→dig | 169 | 169 | 0 | 0.000 | 0.000 |
+| stuff | 22 | 22 | 0 | 0.000 | 0.000 |
+| dig/coverage | 112 | 112 | 0 | 0.000 | 0.000 |
+| terminal out | 61 | 29 | 0 | 0.000 | 0.000 |
+| terminal floor | 159 | 159 | 74 | 0.173 | 0.808 |
+| recovery_debt leg | 86 | 86 | 15 | 0.057 | 0.837 |
+
+**"With a seam" is a separate column because it has to be.** A seam needs a leg
+on either side of it, and a situation classified on the rally's first leg — the
+serve, and therefore every ace — has nothing before it to disagree with. The
+first version of this table printed those as "0 breaks, mean 0.000", which reads
+as a clean result and is no result. That is the same instrument failure this file
+documents twice more.
+
+Three situations the sweep never reached, built deterministically instead:
+
+| constructed fixture | arrive | depart | verdict |
+|---|---:|---:|---|
+| wipe/tool, attack→block | 1.974 | 2.742 | jumps 0.769 m — FD-006 |
+| overpass, reception→set | 2.267 | 2.267 | **continuous** |
+| terminal net, attack→none | — | — | **repaired above** |
+
 ## What remains, and why it is not a presentation defect
 
 The instinctive reading of the residual is that presentation overwrites a height
@@ -149,8 +221,9 @@ Recorded, not chosen.
 
 ## Certification
 
-- `run_canonical_sideout.gd` — **PASS, 7/7**, figures identical to before the
-  repair: 7 boundaries, 0 lineage breaks, 0 out of order, 5 actors travelling,
+- **Full suite — 2,141 pass, 0 fail**, the same count as `main`. No gate moved.
+- `run_canonical_sideout.gd` — **PASS, 7/7**, figures identical to before both
+  repairs: 7 boundaries, 0 lineage breaks, 0 out of order, 5 actors travelling,
   0 facts reconstructed.
 - Simulation untouched by construction and by inspection: `display_trajectory`
   duplicates its input and is called only from `match_screen` and from
