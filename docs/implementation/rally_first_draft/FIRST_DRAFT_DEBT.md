@@ -170,6 +170,63 @@ Next diagnostic: task #140, "Is 12% the right price for a shanked serve-receive?
 
 ---
 
+## FD-006 — the ball's height at the moment it is touched has no owner
+
+Class: F4 — presentation drawing a quantity nobody has assigned
+Subsystem: `BallPresentation.display_trajectory`, and `CONTACT_AND_BALL_FLIGHT.md` §5
+Reproduction: `godot --headless --path . --script res://tools/run_playback_continuity_probe.gd`
+Disposition: **open, non-blocking; not F1**
+
+A drawn leg arrives at one height and the next departs from another, so the ball
+jumps at the contact: 378 of 835 legs over 180 rallies, worst 3.227 m at
+attack-to-block, mean 1.2--1.9 m at the block and 0.34--0.39 m at every
+serve-to-reception.
+
+**It is not two authorities for one fact**, which is the reading that first
+suggested itself. The resolver publishes `end_height_meters` on every trajectory
+and presentation computes its own, but those are *defined* to be different
+quantities -- `rally_simulator.gd:1394` says `end_height_meters` "is not read as
+this flight's endpoint. `BallFlight.from_trajectory` reads it as the height of
+the **next contact**", and measurement agrees: `|published - body|` is 0.033 m on
+the serve. So the published field is already the body's number, and presentation
+is computing the one quantity with no owner at all -- where the ball actually is
+when it is struck. `CONTACT_AND_BALL_FLIGHT.md` §5, *Realized segment*, is the
+item that owns it and is marked TARGET.
+
+One cause was separable and is fixed: the 0.08 s drawing floor was being used as
+the integration window for a struck ball's far end. See
+`docs/review/M8_VISUAL_CONTINUITY.md`.
+
+Blocks later construction: no. Next repair: §5, which is simulation work.
+
+---
+
+## FD-007 — playback draws a contact for a contact that never happened
+
+Class: F4
+Subsystem: `match_screen._apply_contact_poses`
+Reproduction: `godot --headless --path . --script res://tools/probe_failed_contact_semantics.gd` -- 59 blocks and 47 digs per 180 rallies fail without publishing a ball
+Disposition: **open, non-blocking**
+
+The next contact's actor is posed through a wind-up-to-contact with no test for
+whether the contact occurred, so a block that never touched the ball and a dig
+that never reached it are both drawn playing it.
+
+Worth stating precisely, because the obvious fix is wrong: a defender who cannot
+reach still lunges, so suppressing the pose would replace one false statement
+with another. The honest repair is a distinct reaching-and-missing pose, which is
+animation work rather than authority work -- and note that `_build_movement_plan`
+already gets the *position* half right, driving a failed receiver, digger or
+coverer to their `movement_target` rather than onto the ball they never reached.
+
+**`success` is not the test.** Measured: all 35 failed serves, 4 failed
+receptions, 3 failed sets and 14 failed attacks still publish a ball -- those are
+service errors, shanks and swings that went out, every one of them touched. Only
+the block and the dig fail by not touching. The authoritative test is B0's: did
+the contact publish a ball.
+
+---
+
 ## Post-draft clustering
 
 1. ball/contact authority — *empty; B0/B6 closed every edge by launch identity*
@@ -179,5 +236,9 @@ Next diagnostic: task #140, "Is 12% the right price for a shanked serve-receive?
 5. attack/block interaction — *empty*
 6. home/opponent asymmetry — *empty; three drifts found and all three repaired — the block's stale swing, the receive zone's `enabled` check, and the opponent dig writing its reach after the event that reads it (`docs/review/BODY_CONTACT_ENDPOINT.md`)*
 7. tactical wiring — *not yet audited (M9)*
-8. presentation/reporting — FD-002, FD-003 (one family)
+8. presentation/reporting — FD-002, FD-003 (one family); FD-006 and FD-007, which
+   are the M8 visual pass's own findings and are separate from FD-002/003: those
+   two are the resolver being *silent* about off-ball movement, while these two
+   are playback drawing a ball height and a contact that no published fact
+   supports
 9. calibration/balance — FD-005
