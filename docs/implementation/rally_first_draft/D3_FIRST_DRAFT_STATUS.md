@@ -14,7 +14,7 @@ and not against something easier:
 | A0–A2 · M4 reception closeout | **already closed, not replayed** | `ENABLE_PHYSICAL_RECEPTION = true` at `9e2b55d`; `RALLY_MILESTONES.md` M4 **DONE**. The packet pins `6ce8f3b`, one commit earlier. |
 | B0 · contact-authority census | **done** | `run_contact_authority_census.gd`, 600 rallies, 2,862 contacts, seven families, nine edges |
 | B1 · serve | **closed, no change** | retired error draw has no reader; every fact from `_canonical_serve` |
-| B2 · set | **closed, no change** | 517 of 517 sets consume a realised prefix by launch identity |
+| B2 · set | **closed, no change** | 515 of 515 sets consume a realised prefix by launch identity |
 | B3 · attack | **closed, no change** | `551e29e` audited in scope; no second landing authority found |
 | B4 · block | **one break repaired** | 100 of 100 touching home blocks met a superseded swing, up to 1.140 s late; both sides now 0 |
 | B5 · platform closure | **closed** | one `PlatformContactModel.evaluate` call site, three families, no per-family coefficients |
@@ -44,8 +44,10 @@ and not against something easier:
 
 ## Certification
 
-- **full suite** — see the commit message for the figure on the commit that
-  landed it; no assertion fails.
+- **full suite** — **2,139 pass, 0 fail** at `413eee5`. The count is not
+  attributable: two checks were written this pass and C5 changed which balls
+  come up, so every sampling gate draws against a different population. The FAIL
+  line is what was read.
 - **`run_contact_authority_census.gd`** — 9 of 9 edges same-ball, 9 of 9
   same-lineage, 0 backwards in time.
 - **`run_block_authority_probe.gd`** — PASS, 4 gates, both sides 0/0.
