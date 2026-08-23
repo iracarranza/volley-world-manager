@@ -90,6 +90,15 @@ func _capture_live_frame(event_type: int, _event_index: int, _progress: float) -
 	if capture_busy or not wanted.has(event_type) or saved.has(event_type):
 		return
 	capture_busy = true
+	screen.playback_paused = true
+	_save_after_draw(event_type)
+
+
+func _save_after_draw(event_type: int) -> void:
+	## The inspection signal is emitted during scene processing; root texture
+	## still contains the preceding rendered frame until post-draw. Pausing keeps
+	## the real playback on this sample while the renderer catches up.
+	await RenderingServer.frame_post_draw
 	var filename := "%s_%s.png" % [capture_prefix, str(wanted[event_type])]
 	var image := get_tree().root.get_texture().get_image()
 	var error := image.save_png(output_dir.path_join(filename))
@@ -98,6 +107,7 @@ func _capture_live_frame(event_type: int, _event_index: int, _progress: float) -
 	else:
 		saved[event_type] = true
 		print("saved %s" % output_dir.path_join(filename))
+	screen.playback_paused = false
 	capture_busy = false
 
 
