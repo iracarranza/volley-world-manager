@@ -17,12 +17,30 @@ extends SceneTree
 ##
 ##   **contacting**  this voli is the actor. Their movement is the event.
 ##
+##   **no leg**    this contact has nothing before it, so there is no interval
+##                 for anybody to have moved in. Only the serve, and only ever
+##                 the serve: playback draws a leg as `event -> next_contact`
+##                 and reads its targets off `next_contact`, so a rally's first
+##                 contact has no preceding flight to draw. The resolver knows
+##                 this -- `_receive_formation_map`'s own note records measuring
+##                 400 serves of 400 with no preceding flight -- and publishes
+##                 the serve-flight movement of *both* sides on the RECEPTION
+##                 event instead, which is where it can be drawn.
+##
 ##   **silent**     nothing was published and they did not touch the ball.
 ##                  `tactical_court._support_target_for_side` then invents a
 ##                  target for them from their base position and the action
 ##                  point -- which is presentation authoring movement the
 ##                  resolver never decided, the thing `01_TARGET_AUTHORITY_STATE`
 ##                  section 9 forbids in as many words.
+##
+## **The `no leg` row is a correction to this file's own first headline.** It
+## originally counted the serve's other eleven volis as silent and reported
+## 45.9% of voli-legs as presentation's invention. They are not silent: they are
+## published on the reception, all twelve of them, because that is the event the
+## leg belongs to. Scoring them as a gap measured a leg that does not exist --
+## the same shape of error as reading a threshold against the wrong distribution,
+## committed by the instrument built to find those.
 ##
 ## And one thing that is missing for *every* published voli: **when**. The maps
 ## publish where a voli got to and how much of the journey they covered. They do
@@ -79,6 +97,7 @@ func _leg(census: Dictionary, name: String) -> Dictionary:
 			"published": 0,
 			"contacting": 0,
 			"silent": 0,
+			"no_leg": 0,
 			"with_intent": 0,
 			"with_timing": 0,
 		}
@@ -103,6 +122,11 @@ func _scan(rally: Resource, census: Dictionary) -> void:
 				intents[int(player_id)] = true
 		row.published += named.size()
 		row.contacting += 1
+		## A rally's first contact has no preceding interval; see the header.
+		if kind == RallyEventScript.EventType.SERVE:
+			row.no_leg += maxi(ON_COURT - 1, 0)
+			row.with_intent += intents.size()
+			continue
 		## The actor is often *also* in the published map -- a receiver is placed
 		## by the receive formation and then makes the contact. Counting them in
 		## both columns made `silent` undercount, so the accounted set is the
@@ -131,27 +155,33 @@ func _print(census: Dictionary) -> void:
 	print("\naction-window census -- %d rallies, %d volis on court\n" % [
 		census.rallies, ON_COURT,
 	])
-	print("%-16s %8s %11s %11s %9s %11s %10s" % [
-		"leg", "events", "published", "contacting", "silent",
+	print("%-16s %8s %11s %11s %9s %8s %11s %10s" % [
+		"leg", "events", "published", "contacting", "silent", "no leg",
 		"w/ intent", "w/ timing",
 	])
 	var order := [
 		"SERVE", "RECEPTION", "SET", "ATTACK", "BLOCK", "DIG", "ATTACK_COVERAGE",
 	]
-	var totals := {"published": 0, "contacting": 0, "silent": 0, "with_timing": 0}
+	var totals := {
+		"published": 0, "contacting": 0, "silent": 0, "no_leg": 0,
+		"with_timing": 0,
+	}
 	for name in order:
 		if not census.legs.has(name):
 			continue
 		var row: Dictionary = census.legs[name]
-		print("%-16s %8d %11d %11d %9d %11d %10d" % [
+		print("%-16s %8d %11d %11d %9d %8d %11d %10d" % [
 			name, row.events, row.published, row.contacting, row.silent,
-			row.with_intent, row.with_timing,
+			row.no_leg, row.with_intent, row.with_timing,
 		])
 		for key in totals:
 			totals[key] += int(row[key])
 	var accounted := int(totals.published) + int(totals.contacting)
 	var everyone := accounted + int(totals.silent)
 	print("")
+	print("  voli-legs with no interval to move in: %d  (excluded below)" % int(
+		totals.no_leg
+	))
 	print("  volis the resolver placed:        %d of %d  (%.1f%%)" % [
 		accounted, everyone, 100.0 * float(accounted) / maxf(float(everyone), 1.0),
 	])

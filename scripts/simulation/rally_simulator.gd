@@ -1053,6 +1053,17 @@ var opponent_plan: Resource = null
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
+## The receiving side's own labels for its receive shape, captured where the
+## shape is built.
+##
+## `_receive_formation_map` separates the passers from the front-row volis
+## staging off the passing lanes from the setter, and its own note says the
+## distinction exists so the cognition layer does not have to re-derive, from a
+## coordinate, a fact the formation builder already had. The shape now lives in
+## `live_positions` from rally initialization, so the labels have to be carried
+## rather than recomputed -- recomputing them at the reception is what made the
+## drawn formation a second representation in the first place.
+var receive_formation_intents: Dictionary = {}
 ## What each player is carrying, alongside where they are.
 ##
 ## `live_positions` has always been the resolver's authoritative state and it
@@ -1244,13 +1255,19 @@ func resolve(
 	player_recovery = {}
 	recovery_fatigue_cost = {}
 	exertion_cost = {}
-	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
+	receive_formation_intents = {}
+	live_positions = _initial_home_positions(
+		lineup, defensive_plan, not home_serving, true,
+		players if not home_serving else [], receive_formation_intents,
+	)
 	## Everyone starts the rally genuinely at rest -- this is the one moment the
 	## old assumption was true.
 	live_velocities = {}
 	opponent_live_velocities = {}
 	player_facing = {}
-	opponent_live_positions = _initial_opponent_positions(opponent_team, home_serving)
+	opponent_live_positions = _initial_opponent_positions(
+		opponent_team, home_serving, true, receive_formation_intents
+	)
 	var result: Resource = RallyResultModel.new()
 	result.initial_home_positions = live_positions.duplicate(true)
 	result.initial_opponent_positions = opponent_live_positions.duplicate(true)
@@ -1693,7 +1710,6 @@ func resolve(
 	## Book the cost of the contact before the rally moves on, so the transition
 	## below reads a receiver who is still getting up rather than one who is not.
 	_note_recovery(receiver, str(reception_pass.contact_recovery), rally_clock)
-	var home_receive_intents := {}
 	## The side that just served, taking base while their serve is in the air.
 	var opponent_serve_intents := {}
 	var opponent_by_id := {}
@@ -1726,10 +1742,8 @@ func resolve(
 			## serve event they were never drawn at all -- nothing precedes the
 			## first contact of a rally, so that leg does not exist. Measured
 			## after the fact: 400 serves of 400 had no preceding flight.
-			"home_phase_targets": _receive_formation_map(
-				lineup, players, false, home_receive_intents
-			),
-			"home_phase_intents": home_receive_intents,
+			"home_phase_targets": _lineup_live_shape(lineup, live_positions),
+			"home_phase_intents": receive_formation_intents,
 			"opponent_phase_targets": opponent_serve_transition,
 			"opponent_phase_intents": opponent_serve_intents,
 			"planner_zone_center": Vector2(receiver_zone.center) \
@@ -4105,7 +4119,6 @@ func _resolve_home_serve(
 	)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
-	var opponent_receive_intents := {}
 	var home_serve_intents := {}
 	var home_by_id := {}
 	for entry in players:
@@ -4127,12 +4140,11 @@ func _resolve_home_serve(
 			"platform_intent": opponent_reception_intent,
 			## The other side's receive shape, on the same event and for the same
 			## reason as the home one above.
-			"opponent_phase_targets": _receive_formation_map(
+			"opponent_phase_targets": _lineup_live_shape(
 				opponent_team.current_lineup() if opponent_team != null else null,
-				opponent_team.players if opponent_team != null else [],
-				true, opponent_receive_intents,
+				opponent_live_positions,
 			),
-			"opponent_phase_intents": opponent_receive_intents,
+			"opponent_phase_intents": receive_formation_intents,
 			"home_phase_targets": home_serve_transition,
 			"home_phase_intents": home_serve_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
@@ -9128,13 +9140,39 @@ func _attack_direction(contact_x: float, target: Vector2) -> String:
 ## first frame of a rally and wrong for anywhere else -- a base posture that puts
 ## somebody behind the baseline would have them walk back off the court every
 ## time the ball crossed the net.
+## **Where a side stands when the whistle goes.**
+##
+## FD-001 / FD-004. A receiving side used to be placed on the rotation grid --
+## or on the plan's serve-receive zone where one existed -- while
+## `_receive_formation_map` separately published, onto the reception event, the
+## shape the six *actually take up* to receive: passers on their seams, front row
+## off the passing lanes, setter at the release. Two answers to one physical
+## question, and gameplay believed neither of the drawn one: the reception claim
+## builds `reception_origins` out of `live_positions`, so a receiver read the
+## serve from the rotation grid while a viewer watched them stand in formation.
+##
+## The formation is the answer. A receiving side is in its receive shape *before*
+## the ball is struck -- that is what serve receive is -- so the shape belongs in
+## the state the whistle starts from rather than in a map drawn afterwards. Now
+## the same call seeds `live_positions`, `result.initial_home_positions` (which
+## is what the 3D court spawns actors at) and the origin of every later traversal.
+##
+## `players` is needed only to pick the passers. Empty keeps the old rotation-grid
+## behaviour, and `home_base_positions` deliberately passes nothing: a *defending*
+## base is not a receive shape and asking for one there would have been the third
+## representation rather than the removal of the second.
 func _initial_home_positions(
 	lineup: RotationLineup,
 	defensive_plan: Resource,
 	receiving: bool,
 	stage_server: bool = true,
+	players: Array = [],
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var positions := {}
+	var formation := {}
+	if receiving and not players.is_empty():
+		formation = _receive_formation_map(lineup, players, false, out_intents)
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		var position := CourtConstants.slot_position(slot_number)
@@ -9149,12 +9187,26 @@ func _initial_home_positions(
 		if stage_server and not receiving and slot_number == 1:
 			positions[player_id] = CourtConstants.serve_origin(position.x, true)
 			continue
+		if receiving and formation.has(player_id):
+			position = Vector2(formation[player_id])
 		if defensive_plan != null:
 			if receiving:
+				## **`enabled` is checked here now, and was not.**
+				##
+				## `_initial_opponent_positions` below has always required a zone to
+				## be enabled before it moves anybody; this side took any zone that
+				## existed. So a serve-receive zone the manager had switched off
+				## still relocated a home receiver and never an opponent one --
+				## the same shape of home/opponent drift the block's stale swing
+				## turned out to be, found while tracing this one.
+				##
+				## An enabled zone still wins over the formation, and should: the
+				## formation is the structural default and the zone is the manager
+				## saying otherwise. That is one resolution, not two geometries.
 				var zone: Resource = defensive_plan.zone_for(
 					player_id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 				)
-				if zone != null:
+				if zone != null and bool(zone.enabled):
 					position = Vector2(zone.center)
 			else:
 				position = defensive_plan.defender_position(player_id, position)
@@ -9168,14 +9220,24 @@ func _initial_opponent_positions(
 	opponent_team: Resource,
 	receiving: bool,
 	stage_server: bool = true,
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var positions := {}
 	if opponent_team == null:
 		return positions
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
 	var reception_zones: Dictionary = {}
+	var formation := {}
+	## The mirror of the home side's seeding above, and mirrored deliberately:
+	## the defect being closed here is one representation of a fact existing in
+	## two places, and giving the two sides different ways to take up a receive
+	## shape would rebuild it sideways.
 	if receiving:
 		reception_zones = _opponent_reception_coverage(opponent_team).zones
-	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+		if opponent_lineup != null:
+			formation = _receive_formation_map(
+				opponent_lineup, opponent_team.players, true, out_intents
+			)
 	var serving_id := opponent_lineup.player_at_slot(1) \
 		if stage_server and opponent_lineup != null and not receiving else -1
 	for player_resource in opponent_team.on_court_players():
@@ -9183,6 +9245,8 @@ func _initial_opponent_positions(
 		if player == null:
 			continue
 		var position: Vector2 = opponent_team.court_position(player.id, "defense")
+		if formation.has(player.id):
+			position = Vector2(formation[player.id])
 		var zone: Resource = reception_zones.get(player.id) as Resource
 		if zone != null and bool(zone.enabled):
 			position = Vector2(zone.center)
@@ -17113,6 +17177,24 @@ func _receive_formation_positions(
 ## watches most closely.
 ##
 ## Nothing here is invented. It is the same call, kept whole.
+## The six on court, where they actually are.
+##
+## Published on the reception event in place of a recomputed
+## `_receive_formation_map`. The shape is seeded into `live_positions` at rally
+## initialization now, so asking the formation builder again at reception time
+## would be computing a second copy of state that already exists -- and it would
+## be *wrong* for one voli, the receiver, who has since moved to the ball.
+func _lineup_live_shape(lineup: RotationLineup, live: Dictionary) -> Dictionary:
+	var shape := {}
+	if lineup == null:
+		return shape
+	for slot_number in range(1, 7):
+		var player_id := int(lineup.player_at_slot(slot_number))
+		if live.has(player_id):
+			shape[player_id] = Vector2(live[player_id])
+	return shape
+
+
 func _receive_formation_map(
 	lineup: RotationLineup,
 	players: Array,
