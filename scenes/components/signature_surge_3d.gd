@@ -194,11 +194,14 @@ func _release_spec(index: int, strength: float) -> Dictionary:
 				"width": 0.82,
 			}
 		"foresight":
-			var direction := Vector3(cos(angle), 0.06, sin(angle) * 0.42).normalized()
+			## Pushed camera-side and widened. The first version sat on the
+			## anchor and was mostly hidden behind the actor's own torso, so the
+			## reticle read as two bars rather than a focus.
+			var direction := Vector3(cos(angle), 0.10, sin(angle) * 0.34).normalized()
 			return {
-				"position": anchor + direction * 0.24,
+				"position": Vector3(0.0, contact_anchor_meters, 0.22) + direction * 0.30,
 				"direction": direction,
-				"length": lerpf(0.24, 0.38, strength),
+				"length": lerpf(0.30, 0.46, strength),
 				"width": 0.72,
 			}
 		"heroics":
@@ -211,13 +214,17 @@ func _release_spec(index: int, strength: float) -> Dictionary:
 				"width": 0.82,
 			}
 		"monster_block":
-			var x := lane * 0.19
-			var y := contact_anchor_meters - 0.13 + float(index % 2) * 0.22
+			## Also moved camera-side, for the same reason and with the same
+			## correction: a wall the camera is behind is not a wall.
 			return {
-				"position": Vector3(x, y, -0.03),
+				"position": Vector3(
+					lane * 0.22,
+					contact_anchor_meters - 0.15 + float(index % 2) * 0.20,
+					0.24,
+				),
 				"direction": Vector3.UP,
-				"length": lerpf(0.62, 1.02, strength),
-				"width": 0.78,
+				"length": lerpf(0.58, 0.92, strength),
+				"width": 0.72,
 			}
 		_:
 			var direction := Vector3(cos(angle), 0.14, sin(angle)).normalized()
@@ -270,6 +277,9 @@ func _draw_contact_shape(
 		ring.rotation = Vector3.ZERO
 		ring.scale = Vector3.ONE
 		var alpha := release_peak * fade * strength * (0.82 - float(index) * 0.15)
+		## Middle ring takes the move colour, the outer two the accent. Two moves
+		## below override this; the variable exists so they can.
+		var ring_colour := accent if index != 1 else colour
 		match _move:
 			"block_crush":
 				## Three horizontal fronts collapse toward the strike point.
@@ -286,12 +296,16 @@ func _draw_contact_shape(
 				ring.position.y += 0.05 + float(index) * 0.07
 				ring.scale = Vector3.ONE * lerpf(0.20 + float(index) * 0.04, 0.66 + float(index) * 0.09, release)
 			"foresight":
-				## Compact concentric target rings stay close to the setting hands.
+				## Three concentric reticle rings sit just camera-side of the
+				## setting hands. They used to sit behind the torso, where the
+				## actor occluded all but two bars of them.
+				ring.position = Vector3(
+					0.0, contact_anchor_meters + 0.03, 0.24 + float(index) * 0.035
+				)
 				ring.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-				ring.position.z = -0.05 + float(index) * 0.045
-				var s := lerpf(0.16 + float(index) * 0.05, 0.34 + float(index) * 0.12, release)
+				var s := lerpf(0.20 + float(index) * 0.06, 0.48 + float(index) * 0.14, release)
 				ring.scale = Vector3.ONE * s
-				alpha *= 0.92
+				alpha = release_peak * fade * strength * (0.92 - float(index) * 0.14)
 			"heroics":
 				## Rescue energy travels along the floor rather than exploding around
 				## the torso: three staggered, flattened ripples behind the dig.
@@ -301,15 +315,22 @@ func _draw_contact_shape(
 				ring.scale = Vector3(sx, 0.42, sz)
 				alpha *= 0.72
 			"monster_block":
-				## Vertical overlapping hoops make a wall at the tape instead of the
-				## radial blast used by an attacking crush.
+				## One broad vertical hoop, plus the six upright release strokes,
+				## makes a wall. Three overlapping hoops around the head made a
+				## cage instead, so the other two are suppressed rather than
+				## repositioned -- the strokes already carry the width.
+				if index > 0:
+					_set_alpha(ring, colour, 0.0)
+					continue
+				ring.position = Vector3(0.0, contact_anchor_meters - 0.02, 0.25)
 				ring.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-				ring.position.x = (float(index) - 1.0) * 0.30
-				var s := lerpf(0.22, 0.72 + float(index % 2) * 0.10, release)
-				ring.scale = Vector3(s * 1.28, s, 0.72)
+				var s := lerpf(0.28, 0.86, release)
+				ring.scale = Vector3(s * 1.65, s * 0.72, 0.62)
+				ring_colour = accent
+				alpha = release_peak * fade * strength * 0.78
 			_:
 				ring.scale = Vector3.ONE * lerpf(0.22, 0.72, release)
-		_set_alpha(ring, accent if index != 1 else colour, alpha)
+		_set_alpha(ring, ring_colour, alpha)
 
 
 func clear() -> void:

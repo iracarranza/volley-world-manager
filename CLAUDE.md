@@ -12,8 +12,24 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-17 on M4 slice 2's first half:
-**2,147 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-23 on the M6/M7 first-draft pass at
+`413eee5`: **2,139 checks pass, 0 fail**. Treat any test failure as a regression.
+
+**And that number cannot be attributed, which is the point of saying so.** Two
+checks were written this pass (`_test_one_ball_chain_by_launch_identity`), and
+C5 made floor defenders walk into their defensive shape instead of appearing in
+it -- so rallies resolve differently and every sampling gate draws against a
+different population. No pre-change count was measured on this branch state, so
+how much of the move is the two checks and how much is the defence is simply not
+known. What is known is the FAIL line: zero.
+
+Two figures were already on record for the *same* M4 promotion and they disagree:
+`RALLY_MILESTONES.md` says "Suite **2,132 PASS**" and the
+`ENABLE_PHYSICAL_RECEPTION` comment says "the full suite is 2161/2161". Both were
+true when written; at least one was measured on a slightly different tree. Left
+standing rather than reconciled, because guessing which is which is exactly the
+mistake this section keeps warning about -- but noted here so the next reader
+does not treat either as the number to beat.
 
 That is 2,142 plus six checks written **minus one**, and the minus one is the
 interesting half: the continuation dig stopped fabricating a constant stretch, so

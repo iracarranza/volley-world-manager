@@ -277,6 +277,8 @@ func _initialize() -> void:
 	_test_a_blocked_ball_has_somewhere_to_go()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
+	_test_one_ball_chain_by_launch_identity()
+	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
 	_test_readiness_and_calibration_reports()
 	_test_opponent_approach_mirror()
@@ -8639,6 +8641,156 @@ func _test_opponent_setter_release_is_clear() -> void:
 ## The ball's described path must be one continuous chain. A block that never
 ## touched the ball must not shorten the shot, and must not emit a deflection
 ## leg that puts the ball in two places at once.
+## The receive formation is the shape the receivers are actually in.
+##
+## FD-004's permanent guard. `_receive_formation_map` used to publish where the
+## six *stand* to receive while `_initial_home_positions` seeded `live_positions`
+## from the rotation grid -- and the reception claim builds `reception_origins`
+## out of `live_positions`, so gameplay read the serve from one set of
+## coordinates while a viewer watched the six stand in another.
+##
+## The signature is what makes it guardable. A voli who does not touch the serve
+## has nothing to do during its flight: they were already in formation when the
+## whistle went. So their published position on the reception must equal their
+## spawned position **exactly**. If the two geometries ever separate again, that
+## difference becomes the whole distance between a rotation grid and a receive
+## shape, on every rally, and this fails immediately rather than after somebody
+## notices the drawing looks wrong.
+##
+## Exact, not tolerant: the claim is identity, and a tolerance would be a place
+## for a small drift to hide.
+##
+## Only the **first** reception of a rally is scored. A reception that clears the
+## net becomes the other side's ordinary first contact and is emitted as a second
+## RECEPTION -- it legitimately has no receive formation, and counting it here
+## would report a correct overpass as a broken invariant. That mistake was made
+## once already, by the probe this test is derived from.
+func _test_receive_shape_is_where_the_receivers_stand() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var bystanders := 0
+	var displaced := 0
+	var travelled := 0
+	var worst := 0.0
+	for seed_value in range(77000, 77240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var scored := false
+		for event in result.events:
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+				continue
+			if scored:
+				break
+			scored = true
+			var meta: Dictionary = event.metadata
+			var receiving_home := str(meta.get("side", "home")) == "home"
+			var published: Dictionary = meta.get(
+				"home_phase_targets" if receiving_home else "opponent_phase_targets",
+				{},
+			)
+			var spawned: Dictionary = result.initial_home_positions if receiving_home \
+				else result.initial_opponent_positions
+			for raw_player_id in published:
+				var player_id := int(raw_player_id)
+				if not spawned.has(player_id):
+					continue
+				var moved := Vector2(spawned[player_id]).distance_to(
+					Vector2(published[raw_player_id])
+				)
+				if player_id == int(event.actor_id):
+					if moved > 0.0001:
+						travelled += 1
+					continue
+				bystanders += 1
+				if moved > 0.0001:
+					displaced += 1
+					worst = maxf(worst, moved)
+	_check(
+		bystanders >= 500 and displaced == 0,
+		"a voli who does not touch the serve stands exactly where they were spawned",
+	)
+	_check(
+		travelled > 0,
+		"the receiver travels to the ball rather than being frozen in formation",
+	)
+
+
+## M6 / B6: one ball, all the way down, **by identity rather than by shape**.
+##
+## The packet's P3 matrix asks every canonical edge for "same launch lineage",
+## and until the B0 census was built nothing in the suite could answer it. The
+## nearest thing -- `_test_post_block_trajectory_chain` above -- asserts that the
+## block's deflection *starts where* the attack's flight ended, which is a
+## geometric claim: two independently constructed records with matching endpoints
+## satisfy it just as well as one record handed along, and telling those apart is
+## the entire point of a one-ball chain.
+##
+## So this asserts the thing the geometry was standing in for. Every contact that
+## publishes an outgoing ball stamps `authoritative_flight_id`; the next contact's
+## incoming ball must carry the same one, unless the contact in between published
+## nothing (a block that never touched it), in which case the ball survives and
+## the chain skips to the last contact that did publish.
+##
+## Two ways this can fail that the geometric check cannot see:
+##
+##   - a consumer reconstructs a trajectory from an outcome label or an intended
+##     endpoint and happens to land on the same coordinates;
+##   - a re-slice of one launch is minted as a *new* launch, which is a second
+##     physical authority over one flight even though nothing visibly moves.
+##
+## The B0 census reports the same figures without asserting them, on 600 rallies.
+## This asserts them on the suite's own budget.
+func _test_one_ball_chain_by_launch_identity() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	const CONTACTS: Array[int] = [
+		RALLY_EVENT_SCRIPT.EventType.SERVE,
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.SET,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK,
+		RALLY_EVENT_SCRIPT.EventType.BLOCK,
+		RALLY_EVENT_SCRIPT.EventType.DIG,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
+	]
+	var edges := 0
+	var lineage_breaks := 0
+	var unidentified := 0
+	var published := 0
+	for seed_value in range(72000, 72240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var previous := {}
+		for event in result.events:
+			if not CONTACTS.has(int(event.event_type)):
+				continue
+			var incoming: Dictionary = event.metadata.get(
+				"incoming_trajectory",
+				event.metadata.get("incoming_pass_trajectory", {}),
+			)
+			if not previous.is_empty() and not incoming.is_empty():
+				edges += 1
+				var upstream := str(previous.get("authoritative_flight_id", ""))
+				if upstream.is_empty() \
+						or upstream != str(incoming.get("authoritative_flight_id", "")):
+					lineage_breaks += 1
+			var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if outgoing.is_empty():
+				continue
+			published += 1
+			if str(outgoing.get("authoritative_flight_id", "")).is_empty():
+				unidentified += 1
+			## Only a contact that produced a ball becomes the upstream of the
+			## next edge. A block that never touched it leaves the attack's ball
+			## in the air, and the defender behind it is receiving that.
+			previous = outgoing
+	_check(
+		published >= 500 and unidentified == 0,
+		"every published outgoing ball carries a launch identity",
+	)
+	_check(
+		edges >= 500 and lineage_breaks == 0,
+		"every contact receives the launch the previous contact published",
+	)
+
+
 func _test_post_block_trajectory_chain() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
@@ -13471,20 +13623,45 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var first: Resource = manager.resolve_active_rally(770012)
-	var trace: Dictionary = first.analysis.get("shadow_reception", {})
-	var record: Dictionary = Dictionary(trace.get("summary", {})).get(
-		"geometric_attack", {}
-	)
+	## **The rally has to contain a swing before it can carry a swing's record.**
+	## This stood on the single seed 770012, which stopped swinging when reception
+	## became physical: its pass is one no setter can run down, so the rally now
+	## ends truthfully at the floor with no attack at all, and a gate that asks
+	## whether an attack was measured geometrically had nothing to measure. That is
+	## a stale sample, not a lost property -- the assertion below is unchanged and
+	## still demands an available record, a named outcome and a real speed. Scan a
+	## short span for the first rally that actually swings, and hold every later
+	## check on that same seed so the determinism pair still compares like with
+	## like.
+	var geometric_seed := 770012
+	var first: Resource = null
+	var record := {}
+	for candidate_seed in range(770012, 770052):
+		var candidate: Resource = manager.resolve_active_rally(candidate_seed)
+		if candidate == null:
+			continue
+		var candidate_trace: Dictionary = candidate.analysis.get(
+			"shadow_reception", {}
+		)
+		var candidate_record: Dictionary = Dictionary(
+			candidate_trace.get("summary", {})
+		).get("geometric_attack", {})
+		if bool(candidate_record.get("available", false)):
+			geometric_seed = candidate_seed
+			first = candidate
+			record = candidate_record
+			break
 	_check(
-		bool(record.get("available", false))
+		first != null
+			and bool(record.get("available", false))
 			and not str(record.get("outcome", "")).is_empty()
 			and float(record.get("speed_mps", 0.0)) > 0.0,
 		"a live rally resolves its attack geometrically alongside the legacy swing",
 	)
-	var repeat: Resource = manager.resolve_active_rally(770012)
+	var repeat: Resource = manager.resolve_active_rally(geometric_seed)
 	_check(
-		str(repeat.terminal_outcome) == str(first.terminal_outcome)
+		first != null
+			and str(repeat.terminal_outcome) == str(first.terminal_outcome)
 			and repeat.events.size() == first.events.size(),
 		"the shadow geometric swing leaves the rally it measures untouched",
 	)

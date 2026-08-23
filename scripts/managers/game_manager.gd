@@ -620,6 +620,7 @@ func resolve_active_rally(
 	development_continuous_reception: bool = false,
 	development_physical_platform_dig: bool = false,
 	development_legacy_platform_dig: bool = false,
+	development_physical_reception: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
 	## Handed in before the resolve, not looked up inside it. The resolver stays
@@ -643,6 +644,7 @@ func resolve_active_rally(
 		match_state.serve_context() if match_state != null else {},
 		float(match_state.match_flow) if match_state != null else 0.0,
 		development_legacy_platform_dig,
+		development_physical_reception,
 	)
 
 
