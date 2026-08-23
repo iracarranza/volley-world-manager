@@ -1,0 +1,164 @@
+extends SceneTree
+
+## M7 / C0 -- for each leg of a rally, why is every voli moving or not moving?
+##
+##     godot --headless --path . \
+##       --script res://tools/run_action_window_census.gd
+##
+## The packet's C0 is done "when the implementation agent can state, for each
+## canonical leg, why every on-court player is or is not moving". That is twelve
+## volis per contact, and the honest way to answer it is to count how many of
+## them the resolver actually said anything about.
+##
+## Three states per voli per leg, and they are not the same finding:
+##
+##   **published**  the resolver put this voli in `home_phase_targets` or
+##                  `opponent_phase_targets`. Simulation decided where they went.
+##
+##   **contacting**  this voli is the actor. Their movement is the event.
+##
+##   **silent**     nothing was published and they did not touch the ball.
+##                  `tactical_court._support_target_for_side` then invents a
+##                  target for them from their base position and the action
+##                  point -- which is presentation authoring movement the
+##                  resolver never decided, the thing `01_TARGET_AUTHORITY_STATE`
+##                  section 9 forbids in as many words.
+##
+## And one thing that is missing for *every* published voli: **when**. The maps
+## publish where a voli got to and how much of the journey they covered. They do
+## not publish how long the journey took, so a voli who arrived in 0.3 s of a
+## 1.1 s window is indistinguishable from one who took the whole window, and
+## playback interpolates them identically. That is C6's defect stated as a
+## missing field rather than as a drawing complaint.
+
+const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
+const RallyEventScript := preload("res://scripts/models/rally_event.gd")
+
+const FIRST_SEED: int = 73000
+const RALLIES_PER_SERVER: int = 150
+
+## The twelve on court, six a side.
+const ON_COURT: int = 12
+
+const CONTACT_TYPES: Array[int] = [
+	RallyEventScript.EventType.SERVE,
+	RallyEventScript.EventType.RECEPTION,
+	RallyEventScript.EventType.SET,
+	RallyEventScript.EventType.ATTACK,
+	RallyEventScript.EventType.BLOCK,
+	RallyEventScript.EventType.DIG,
+	RallyEventScript.EventType.ATTACK_COVERAGE,
+]
+
+
+func _initialize() -> void:
+	var census := _run()
+	_print(census)
+	quit(0)
+
+
+func _run() -> Dictionary:
+	var census := {"rallies": 0, "legs": {}}
+	for serving_home in [true, false]:
+		for seed_value in range(FIRST_SEED, FIRST_SEED + RALLIES_PER_SERVER):
+			var manager: Object = GameManagerScript.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				census.rallies += 1
+				_scan(rally, census)
+			manager.free()
+	return census
+
+
+func _leg(census: Dictionary, name: String) -> Dictionary:
+	if not census.legs.has(name):
+		census.legs[name] = {
+			"events": 0,
+			"published": 0,
+			"contacting": 0,
+			"silent": 0,
+			"with_intent": 0,
+			"with_timing": 0,
+		}
+	return census.legs[name]
+
+
+func _scan(rally: Resource, census: Dictionary) -> void:
+	for event in rally.events:
+		var kind := int(event.event_type)
+		if not CONTACT_TYPES.has(kind):
+			continue
+		var meta: Dictionary = event.metadata
+		var row := _leg(census, str(RallyEventScript.EventType.keys()[kind]))
+		row.events += 1
+		var named := {}
+		for key in ["home_phase_targets", "opponent_phase_targets"]:
+			for player_id in Dictionary(meta.get(key, {})):
+				named[int(player_id)] = true
+		var intents := {}
+		for key in ["home_phase_intents", "opponent_phase_intents"]:
+			for player_id in Dictionary(meta.get(key, {})):
+				intents[int(player_id)] = true
+		row.published += named.size()
+		row.contacting += 1
+		## The actor is often *also* in the published map -- a receiver is placed
+		## by the receive formation and then makes the contact. Counting them in
+		## both columns made `silent` undercount, so the accounted set is the
+		## union and not the sum.
+		named[int(event.actor_id)] = true
+		row.silent += maxi(ON_COURT - named.size(), 0)
+		row.with_intent += intents.size()
+		## No published map carries a per-voli traversal duration or arrival
+		## timestamp today. Counted rather than assumed, so the day one does the
+		## number moves on its own.
+		for player_id in named:
+			var travel: Dictionary = _travel_record(meta, int(player_id))
+			if travel.has("traversal_seconds") or travel.has("arrival_time"):
+				row.with_timing += 1
+
+
+func _travel_record(meta: Dictionary, player_id: int) -> Dictionary:
+	for key in ["home_phase_intents", "opponent_phase_intents"]:
+		var map: Dictionary = meta.get(key, {})
+		if map.has(player_id):
+			return Dictionary(map[player_id])
+	return {}
+
+
+func _print(census: Dictionary) -> void:
+	print("\naction-window census -- %d rallies, %d volis on court\n" % [
+		census.rallies, ON_COURT,
+	])
+	print("%-16s %8s %11s %11s %9s %11s %10s" % [
+		"leg", "events", "published", "contacting", "silent",
+		"w/ intent", "w/ timing",
+	])
+	var order := [
+		"SERVE", "RECEPTION", "SET", "ATTACK", "BLOCK", "DIG", "ATTACK_COVERAGE",
+	]
+	var totals := {"published": 0, "contacting": 0, "silent": 0, "with_timing": 0}
+	for name in order:
+		if not census.legs.has(name):
+			continue
+		var row: Dictionary = census.legs[name]
+		print("%-16s %8d %11d %11d %9d %11d %10d" % [
+			name, row.events, row.published, row.contacting, row.silent,
+			row.with_intent, row.with_timing,
+		])
+		for key in totals:
+			totals[key] += int(row[key])
+	var accounted := int(totals.published) + int(totals.contacting)
+	var everyone := accounted + int(totals.silent)
+	print("")
+	print("  volis the resolver placed:        %d of %d  (%.1f%%)" % [
+		accounted, everyone, 100.0 * float(accounted) / maxf(float(everyone), 1.0),
+	])
+	print("  volis presentation must invent:   %d of %d  (%.1f%%)" % [
+		int(totals.silent), everyone,
+		100.0 * float(totals.silent) / maxf(float(everyone), 1.0),
+	])
+	print("  placed volis carrying a duration: %d of %d" % [
+		int(totals.with_timing), int(totals.published),
+	])

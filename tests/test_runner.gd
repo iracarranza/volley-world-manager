@@ -277,6 +277,7 @@ func _initialize() -> void:
 	_test_a_blocked_ball_has_somewhere_to_go()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
+	_test_one_ball_chain_by_launch_identity()
 	_test_opponent_setter_release_is_clear()
 	_test_readiness_and_calibration_reports()
 	_test_opponent_approach_mirror()
@@ -8639,6 +8640,83 @@ func _test_opponent_setter_release_is_clear() -> void:
 ## The ball's described path must be one continuous chain. A block that never
 ## touched the ball must not shorten the shot, and must not emit a deflection
 ## leg that puts the ball in two places at once.
+## M6 / B6: one ball, all the way down, **by identity rather than by shape**.
+##
+## The packet's P3 matrix asks every canonical edge for "same launch lineage",
+## and until the B0 census was built nothing in the suite could answer it. The
+## nearest thing -- `_test_post_block_trajectory_chain` above -- asserts that the
+## block's deflection *starts where* the attack's flight ended, which is a
+## geometric claim: two independently constructed records with matching endpoints
+## satisfy it just as well as one record handed along, and telling those apart is
+## the entire point of a one-ball chain.
+##
+## So this asserts the thing the geometry was standing in for. Every contact that
+## publishes an outgoing ball stamps `authoritative_flight_id`; the next contact's
+## incoming ball must carry the same one, unless the contact in between published
+## nothing (a block that never touched it), in which case the ball survives and
+## the chain skips to the last contact that did publish.
+##
+## Two ways this can fail that the geometric check cannot see:
+##
+##   - a consumer reconstructs a trajectory from an outcome label or an intended
+##     endpoint and happens to land on the same coordinates;
+##   - a re-slice of one launch is minted as a *new* launch, which is a second
+##     physical authority over one flight even though nothing visibly moves.
+##
+## The B0 census reports the same figures without asserting them, on 600 rallies.
+## This asserts them on the suite's own budget.
+func _test_one_ball_chain_by_launch_identity() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	const CONTACTS: Array[int] = [
+		RALLY_EVENT_SCRIPT.EventType.SERVE,
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.SET,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK,
+		RALLY_EVENT_SCRIPT.EventType.BLOCK,
+		RALLY_EVENT_SCRIPT.EventType.DIG,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
+	]
+	var edges := 0
+	var lineage_breaks := 0
+	var unidentified := 0
+	var published := 0
+	for seed_value in range(72000, 72240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var previous := {}
+		for event in result.events:
+			if not CONTACTS.has(int(event.event_type)):
+				continue
+			var incoming: Dictionary = event.metadata.get(
+				"incoming_trajectory",
+				event.metadata.get("incoming_pass_trajectory", {}),
+			)
+			if not previous.is_empty() and not incoming.is_empty():
+				edges += 1
+				var upstream := str(previous.get("authoritative_flight_id", ""))
+				if upstream.is_empty() \
+						or upstream != str(incoming.get("authoritative_flight_id", "")):
+					lineage_breaks += 1
+			var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if outgoing.is_empty():
+				continue
+			published += 1
+			if str(outgoing.get("authoritative_flight_id", "")).is_empty():
+				unidentified += 1
+			## Only a contact that produced a ball becomes the upstream of the
+			## next edge. A block that never touched it leaves the attack's ball
+			## in the air, and the defender behind it is receiving that.
+			previous = outgoing
+	_check(
+		published >= 500 and unidentified == 0,
+		"every published outgoing ball carries a launch identity",
+	)
+	_check(
+		edges >= 500 and lineage_breaks == 0,
+		"every contact receives the launch the previous contact published",
+	)
+
+
 func _test_post_block_trajectory_chain() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()

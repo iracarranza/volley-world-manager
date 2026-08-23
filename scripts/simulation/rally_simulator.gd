@@ -3232,6 +3232,10 @@ func resolve(
 			float(attack_event.metadata.get("event_time", rally_clock)),
 			float(attack_to_block_arc.get("vertical_speed_mps", NAN)),
 			float(attack_to_block_arc.get("swing_duration_seconds", NAN)),
+			NAN, NAN,
+			## The swing's own identity, carried through the re-slice. This is the
+			## same launch met sooner, not a second ball built at the tape.
+			str(attack_trajectory.get("authoritative_flight_id", "")),
 		)
 	## Walk the opponent's blockers to their wall during the *set's* flight,
 	## which is when a block actually forms. Without this they were drawn
@@ -3259,12 +3263,17 @@ func resolve(
 	## met a spike from a position nothing had chosen. This is the same
 	## preparation the home six get on the opponent's attack, pointed the other
 	## way.
-	var opponent_floor_stage := _floor_phase_positions(
-		opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
-		set_target.x,
-		opponent_blocker.id if opponent_blocker != null else -1,
-		assisting_blocker.id if assisting_blocker != null else -1,
-		true, opponent_wall_x,
+	var opponent_floor_intents := {}
+	var opponent_floor_stage := _establish_shape(
+		_floor_phase_positions(
+			opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
+			set_target.x,
+			opponent_blocker.id if opponent_blocker != null else -1,
+			assisting_blocker.id if assisting_blocker != null else -1,
+			true, opponent_wall_x,
+		),
+		opponent_team.on_court_players(), opponent_live_positions,
+		float(set_flight_time), opponent_floor_intents,
 	)
 	for raw_floor_id in opponent_floor_stage:
 		var floor_id := int(raw_floor_id)
@@ -3282,6 +3291,13 @@ func resolve(
 		var opponent_stage_intents := _uniform_intents(
 			opponent_block_stage, &"defending"
 		)
+		## The four behind the wall took a real journey to get there, so their
+		## uniform stamp is replaced by what the traversal actually cost them.
+		## `_uniform_intents` stays for the two blockers, whose staging is the
+		## block path's to describe.
+		for raw_floor_id in opponent_floor_intents:
+			opponent_stage_intents[int(raw_floor_id)] = \
+				opponent_floor_intents[raw_floor_id]
 		if opponent_blocker != null:
 			opponent_stage_intents[opponent_blocker.id] = {
 				"intent": &"blocking", "progress": 0.0,
@@ -5734,7 +5750,36 @@ func _resolve_opponent_transition(
 			float(opponent_flight.get("start_time", rally_clock)),
 			float(to_block_arc.get("vertical_speed_mps", NAN)),
 			float(to_block_arc.get("swing_duration_seconds", NAN)),
+			NAN, NAN,
+			## Same rule as the home side's re-slice: a prefix keeps the launch it
+			## is a prefix of.
+			str(opponent_flight.get("authoritative_flight_id", "")),
 		)
+	## **The swing the wall actually met, re-read after the truncation above.**
+	##
+	## The block event used to publish `opponent_attack_trajectory` -- the local
+	## captured *before* that re-slice -- as both its incoming ball and the source
+	## of its own timestamp. So on every home block that touched the ball, the
+	## wall was recorded intersecting an arc the attack no longer had: measured at
+	## 100 of 100 touching home blocks against 0 of 113 on the opponent side,
+	## which is the tell that this is one path drifting from its twin rather than
+	## a shared rule being wrong.
+	##
+	## The timestamp came with it. `_contact_time` is the flight's `end_time`, and
+	## on an *untruncated* swing that is the moment the ball reaches the floor
+	## behind the blockers -- so the hands were being stamped up to 1.140 s after
+	## the ball they were supposedly touching had landed. `_swing_reaches_net`
+	## exists for exactly this and its own note says why: reception, set and dig
+	## happen when a flight finishes, a block happens partway through one.
+	##
+	## Read through the event rather than kept in a second local, because the
+	## event's metadata *is* the published ball and a local copy is how the two
+	## came apart in the first place.
+	var opponent_swing_flight: Dictionary = opponent_attack_trajectory
+	if opponent_attack_event != null:
+		opponent_swing_flight = Dictionary(opponent_attack_event.metadata.get(
+			"outgoing_trajectory", opponent_attack_trajectory
+		))
 	## Same correction as the home block's: the ball has to arrive before the
 	## hands can touch it.
 	var home_block_trajectory := _block_deflection_trajectory(
@@ -5788,18 +5833,21 @@ func _resolve_opponent_transition(
 	var blocker_id := blocker.id if blocker != null else -1
 	var assisting_blocker_id := assisting_blocker.id \
 		if assisting_blocker != null else -1
-	var floor_phase_positions := _home_floor_phase_positions(
-		lineup, defensive_plan, opponent_contact.x,
-		blocker_id, assisting_blocker_id, home_wall_x,
+	var home_floor_intents := {}
+	var floor_phase_positions := _establish_shape(
+		_home_floor_phase_positions(
+			lineup, defensive_plan, opponent_contact.x,
+			blocker_id, assisting_blocker_id, home_wall_x,
+		),
+		players, live_positions, float(set_flight_time), home_floor_intents,
 	)
 	for raw_player_id in floor_phase_positions:
 		live_positions[int(raw_player_id)] = Vector2(
 			floor_phase_positions[raw_player_id]
 		)
 	if opponent_attack_event != null:
-		opponent_attack_event.metadata["home_phase_intents"] = _uniform_intents(
-			floor_phase_positions, &"defending"
-		)
+		opponent_attack_event.metadata["home_phase_intents"] = \
+			_defensive_intents(floor_phase_positions, home_floor_intents)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
@@ -5864,8 +5912,8 @@ func _resolve_opponent_transition(
 			"net_crossing_x": float(geometric.get("net_crossing_x", 0.5)),
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
-			"home_phase_intents": _uniform_intents(
-				floor_phase_positions, &"defending"
+			"home_phase_intents": _defensive_intents(
+				floor_phase_positions, home_floor_intents
 			),
 			"primary_close": block_result.primary_close,
 			"primary_close_terms": Dictionary(
@@ -5890,8 +5938,8 @@ func _resolve_opponent_transition(
 			"setter_pull": block_result.setter_pull,
 			"read_quality": block_result.read_quality,
 			"opponent_setter_position": opponent_setter_position,
-			"event_time": _contact_time(opponent_attack_trajectory, rally_clock),
-			"incoming_trajectory": opponent_attack_trajectory,
+			"event_time": _swing_reaches_net(opponent_swing_flight, rally_clock),
+			"incoming_trajectory": opponent_swing_flight,
 			"outgoing_trajectory": home_block_trajectory})
 	## The home blockers are in the air. Registered before the floor-defence
 	## claim below reads `_recovery_time_penalties`, so a blocker who has just
@@ -7321,12 +7369,17 @@ func _resolve_home_continuation(
 		cont_block_stage[opponent_blocker.id] = Vector2(cont_wall.primary_position)
 	if assisting_blocker != null:
 		cont_block_stage[assisting_blocker.id] = Vector2(cont_wall.assist_position)
-	var cont_floor_stage := _floor_phase_positions(
-		opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
-		set_target.x,
-		opponent_blocker.id if opponent_blocker != null else -1,
-		assisting_blocker.id if assisting_blocker != null else -1,
-		true, cont_wall_x,
+	var cont_floor_intents := {}
+	var cont_floor_stage := _establish_shape(
+		_floor_phase_positions(
+			opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
+			set_target.x,
+			opponent_blocker.id if opponent_blocker != null else -1,
+			assisting_blocker.id if assisting_blocker != null else -1,
+			true, cont_wall_x,
+		),
+		opponent_team.on_court_players(), opponent_live_positions,
+		float(continuation_flight_time), cont_floor_intents,
 	)
 	for raw_floor_id in cont_floor_stage:
 		var floor_id := int(raw_floor_id)
@@ -7339,6 +7392,10 @@ func _resolve_home_continuation(
 	if not cont_block_stage.is_empty():
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_targets"] = \
 			cont_block_stage
+		## This site published where the continuation defence stood and never why
+		## or for how long, which the other two both did. Same map, same shape.
+		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
+			_defensive_intents(cont_block_stage, cont_floor_intents)
 	var cont_net_contact := Vector2(set_target.x, 0.50)
 	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
 		else Vector2(set_target.x, 0.47)
@@ -9270,6 +9327,84 @@ func _home_floor_phase_positions(
 ## Nothing about standing in your defensive shape is home-specific, so the side
 ## is now a parameter rather than a copy: the y axis mirrors, the depth and
 ## posture adjustments flip with it, and both sixes get the same preparation.
+## Walk a side **into** a defensive shape instead of teleporting them into it.
+##
+## `_floor_phase_positions` below computes the shape the plan asks for -- zones,
+## depth, seam, the wall's two shoulders -- and every one of its three callers
+## then wrote that shape straight into the live position map. So the defence
+## *arrived* in the diagram the instant the attacker swung, from wherever the
+## previous phase had left them, across any distance, for free.
+##
+## The C0 action-window census counted the consequence exactly: of 1,350 volis
+## placed on an `ATTACK` event, **none** had spent any time getting there. Every
+## other journey in this file goes through `_reached_point`; the defensive base
+## was the one that did not, which is why it was also the only one that always
+## succeeded.
+##
+## This is gameplay and not drawing. The shape is handed to
+## `CoverageModel.choose_claimant` as the defenders' real positions for the dig
+## reach check, so a defender who had no time to get to their zone was still
+## reaching from inside it.
+##
+## C5 states the rule in one sentence -- "the attack launch may change who
+## ultimately owns the ball, but it does not create the defender's entire
+## pre-swing position from scratch" -- and adds a second: partial establishment
+## stays partial. `_reached_point` already does that. A defender who cannot cover
+## the distance in the set's flight stops where the time ran out.
+##
+## **Nothing new is authored here.** The traversal authority, the cost per metre
+## and the lateral mode are the ones every other off-ball leg already uses; the
+## window is the set flight the defence genuinely has. What changes is that the
+## journey is now taken rather than assumed, and defensive establishment is
+## billed the exertion it always cost in the sport and never cost here.
+func _establish_shape(
+	shape: Dictionary,
+	roster: Array,
+	live: Dictionary,
+	window_seconds: float,
+	out_intents: Dictionary = {},
+) -> Dictionary:
+	var by_id := {}
+	for entry in roster:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var established := {}
+	for raw_player_id in shape:
+		var player_id := int(raw_player_id)
+		var target := Vector2(shape[raw_player_id])
+		var player := by_id.get(player_id, null) as VolleyballPlayer
+		## No window and no body are both "we cannot say", and the honest answer
+		## to that is the shape as asked for -- the behaviour every caller had.
+		if player == null or window_seconds <= 0.0:
+			established[player_id] = target
+			continue
+		var here: Vector2 = live.get(player_id, target)
+		## Lateral, not a sprint. Taking a defensive base is a read and a shuffle;
+		## the two volis who genuinely sprint on this ball are closing the wall,
+		## and the block staging has already moved them before this runs -- so
+		## their remaining distance here is nearly nothing and they are charged
+		## nearly nothing.
+		var reached := _reached_point(player, here, target, window_seconds, "lateral")
+		established[player_id] = reached
+		## **The shape's own label wins if it has one.**
+		##
+		## A defensive base has one reason and every voli in it shares it, so
+		## `defending` is the whole story. A receive formation does not:
+		## `_receive_formation_map` separates the passers from the front-row
+		## volis staging off the passing lanes from the setter, and its own note
+		## says the distinction exists so the cognition layer does not have to
+		## re-derive from a coordinate a fact the formation builder already knew.
+		## Stamping `defending` over that would throw it away to reuse a helper.
+		var authored: Dictionary = out_intents.get(player_id, {})
+		out_intents[player_id] = _travel_intent(
+			player,
+			StringName(authored.get("intent", &"defending")),
+			here, target, reached, "lateral", window_seconds,
+		)
+	return established
+
+
 func _floor_phase_positions(
 	lineup: RotationLineup,
 	defensive_plan: Resource,
@@ -10349,6 +10484,22 @@ func _ball_trajectory(
 	## default. `height_source` records which it was so the gap stays countable.
 	start_height: float = NAN,
 	end_height: float = NAN,
+	## **Which launch this flight belongs to.**
+	##
+	## The B0 census found four families -- serve, set, attack and block --
+	## publishing balls with no identity on them at all. Every edge between them
+	## still handed over the right ball, but the strongest thing a certification
+	## could say was "the same *shape* arrived", and P3's matrix asks each edge
+	## for "same launch lineage". Two geometrically identical records are
+	## indistinguishable from one record passed along, which is precisely the
+	## substitution a one-ball chain exists to rule out.
+	##
+	## Empty mints a new identity: this contact is a new launch. A **re-slice of
+	## an existing launch** -- the swing truncated to the tape when a block
+	## touches it -- passes the source's id instead, because it is a prefix of
+	## that launch and not a second one. That is the whole distinction, and it is
+	## stated by the caller rather than inferred from coincident floats.
+	flight_id: String = "",
 ) -> Dictionary:
 	var timestamp := rally_clock if start_timestamp < 0.0 else start_timestamp
 	var direction := end - start
@@ -10387,6 +10538,18 @@ func _ball_trajectory(
 		data["launch_vertical_mps"] = launch_vertical_mps
 	if not is_nan(swing_duration_seconds):
 		data["swing_duration_seconds"] = swing_duration_seconds
+	## The id and **not** `trajectory_role`.
+	##
+	## `authoritative_free_flight` is M5's word for a flight M5 resolved, and
+	## `FreeFlightInterceptionModel.opportunities` and `realised_prefix` both
+	## refuse to act on anything that does not carry it. Stamping it here would
+	## let a serve or a set arc walk into the interception system, which is a
+	## second physical authority arriving through a label -- the exact thing this
+	## identity is being added to make detectable.
+	data["authoritative_flight_id"] = flight_id if not flight_id.is_empty() \
+		else "%d:%s:%.6f:%.4f,%.4f" % [
+			rally_seed, kind, timestamp, start.x, start.y,
+		]
 	return data
 
 
@@ -13798,6 +13961,27 @@ func _add_event(
 	event.headline = headline
 	event.detail = detail
 	event.metadata = metadata.duplicate(true)
+	## **What every body on court still owes, on the contact that samples it.**
+	##
+	## M7 / C1, and D2's "expose enough authoritative state for playback and
+	## history to draw it". `player_recovery` has carried contact consequences
+	## across phase boundaries since `ACTOR_CONTINUITY.md` certified the plumbing,
+	## and `_recovery_time_penalties` hands it to the second-contact and defensive
+	## claim clocks -- so it is already gameplay authority. It was simply never
+	## *published*. Nothing outside this file could see that the voli who just dug
+	## the ball is still getting up, which meant a probe asking C1's question --
+	## does a contact leave debt the next leg still owes -- had no channel to read
+	## and returned zero for the whole engine.
+	##
+	## Published from `_add_event` for the same reason the jump is charged here:
+	## one place sees every contact, and a per-site publication is a list with one
+	## site missing from it.
+	##
+	## Written onto the event's own copy rather than into `metadata`, which is the
+	## caller's dictionary and in several places is reused for the next event.
+	var recovery_owed := _recovery_time_penalties(rally_clock)
+	if not recovery_owed.is_empty():
+		event.metadata["recovery_debt"] = recovery_owed
 	result.events.append(event)
 
 
@@ -17071,11 +17255,12 @@ func _transition_phase_map(
 				mode = "lateral"
 		var reached := _reached_point(player, here, intent, window_seconds, mode)
 		targets[player.id] = reached
-		out_intents[player.id] = {
-			"intent": &"receiving" if player.id == chase_id \
+		out_intents[player.id] = _travel_intent(
+			player,
+			&"receiving" if player.id == chase_id \
 				else (&"preparing_attack" if mode == "transition" else &"defending"),
-			"progress": _travel_fraction(here, intent, reached),
-		}
+			here, intent, reached, mode, window_seconds,
+		)
 		## The resolver has to believe what playback draws. Leaving these out of
 		## `live_positions` would put the drawn court and the simulated court in
 		## different places from the second contact onward, which is the defect
@@ -17137,10 +17322,13 @@ func _opponent_transition_phase_map(
 			"transition" if player.id == chase_id else "lateral",
 		)
 		targets[player.id] = reached
-		out_intents[player.id] = {
-			"intent": &"receiving" if player.id == chase_id else &"defending",
-			"progress": _travel_fraction(here, intent, reached),
-		}
+		out_intents[player.id] = _travel_intent(
+			player,
+			&"receiving" if player.id == chase_id else &"defending",
+			here, intent, reached,
+			"transition" if player.id == chase_id else "lateral",
+			window_seconds,
+		)
 		opponent_live_positions[player.id] = reached
 	return targets
 
@@ -17239,10 +17427,9 @@ func _cover_phase_map(
 				cue_intent = &"preparing_attack"
 			"Take second contact":
 				cue_intent = &"setting"
-		out_intents[player.id] = {
-			"intent": cue_intent,
-			"progress": _travel_fraction(here, intent, reached),
-		}
+		out_intents[player.id] = _travel_intent(
+			player, cue_intent, here, intent, reached, mode, window_seconds
+		)
 		if opponent_side:
 			opponent_live_positions[player.id] = reached
 		else:
@@ -17271,6 +17458,23 @@ func _cover_phase_map(
 ## Progress is deliberately absent: these are placements rather than journeys,
 ## and a progress bar on a voli who was simply put somewhere would be a number
 ## with nothing behind it.
+## A defensive shape's intents: the journeys that were taken, over a `defending`
+## stamp for anyone the shape placed without one.
+##
+## Two different facts wearing one name is what `_uniform_intents` was becoming
+## here. A voli walked into their zone has a traversal and an arrival; a voli the
+## wall staging put on the net does not, because a different path owns their
+## movement. Overlaying keeps both honest rather than averaging them into a
+## progress bar with nothing behind it.
+static func _defensive_intents(
+	targets: Dictionary, journeys: Dictionary
+) -> Dictionary:
+	var intents := _uniform_intents(targets, &"defending")
+	for raw_player_id in journeys:
+		intents[int(raw_player_id)] = journeys[raw_player_id]
+	return intents
+
+
 static func _uniform_intents(targets: Dictionary, intent: StringName) -> Dictionary:
 	var intents := {}
 	for player_id in targets:
@@ -17369,10 +17573,9 @@ func _tool_pursuit_map(
 	var here: Vector2 = live.get(chaser.id, landing)
 	var reached := _reached_point(chaser, here, landing, window_seconds, "transition")
 	targets[chaser.id] = reached
-	out_intents[chaser.id] = {
-		"intent": &"defending",
-		"progress": _travel_fraction(here, landing, reached),
-	}
+	out_intents[chaser.id] = _travel_intent(
+		chaser, &"defending", here, landing, reached, "transition", window_seconds
+	)
 	live[chaser.id] = reached
 	return targets
 
@@ -17401,10 +17604,9 @@ func _deflection_adjust_map(
 		var intended := here.lerp(dig_position, DEFLECTION_LEAN)
 		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
 		targets[player_id] = reached
-		out_intents[player_id] = {
-			"intent": &"defending",
-			"progress": _travel_fraction(here, intended, reached),
-		}
+		out_intents[player_id] = _travel_intent(
+			player, &"defending", here, intended, reached, "lateral", window_seconds
+		)
 		live[player_id] = reached
 	return targets
 
@@ -17436,10 +17638,9 @@ func _serve_transition_map(
 		## single rally -- which the fatigue model would then faithfully believe.
 		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
 		targets[player_id] = reached
-		out_intents[player_id] = {
-			"intent": &"defending",
-			"progress": _travel_fraction(here, intended, reached),
-		}
+		out_intents[player_id] = _travel_intent(
+			player, &"defending", here, intended, reached, "lateral", window_seconds
+		)
 		live[player_id] = reached
 	return targets
 
@@ -17451,6 +17652,58 @@ func _travel_fraction(from: Vector2, intended: Vector2, reached: Vector2) -> flo
 	return clampf(
 		RallyKinematics.court_distance_meters(from, reached) / asked, 0.0, 1.0
 	)
+
+
+## One off-ball journey, published with **when it ended** and not only where.
+##
+## M7 / C6. Every phase map in this file published a destination and a fraction
+## covered, and nothing at all about time. So a voli who crossed two metres in
+## 0.31 s of a 1.14 s window and then stood waiting was indistinguishable, in
+## everything downstream, from one who spent the whole window walking -- and
+## playback, given a start, an end and a window, draws the second. The C0 census
+## counted it: **0 of 8,125** placed volis carried a duration.
+##
+## The resolver has always known the answer. `_reached_point` computes
+## `_movement_time` to decide whether the target is reachable at all, then throws
+## the number away and returns a position. Asking the same authority for the time
+## to where the voli *actually got* costs one more call and invents nothing: no
+## new speed, no new relation, no window-filling.
+##
+## `traversal_seconds` is the journey. `window_seconds` is how long the ball gave
+## them. A voli with `traversal < window` arrived early and the remainder is
+## theirs to stand in, which is the physical fact C6 asks for -- stated here so
+## that anything drawing them has it, rather than left for presentation to
+## assume. `arrival_progress` is that ratio precomputed, because "did they arrive
+## early" is the question every consumer actually has and deriving it from two
+## fields is where an off-by-one lives.
+##
+## A journey that was cut short comes back with `traversal == window`, by
+## construction: `_reached_point` bisects to exactly the point the window buys,
+## so the time to that point is the window. That is correct and not a special
+## case -- a voli who ran out of time did not arrive early.
+func _travel_intent(
+	mover: VolleyballPlayer,
+	intent: StringName,
+	from: Vector2,
+	intended: Vector2,
+	reached: Vector2,
+	mode: String,
+	window_seconds: float,
+) -> Dictionary:
+	var traversal := 0.0
+	if mover != null:
+		traversal = minf(
+			_movement_time(mover, from, reached, mode), maxf(window_seconds, 0.0)
+		)
+	return {
+		"intent": intent,
+		"progress": _travel_fraction(from, intended, reached),
+		"traversal_seconds": traversal,
+		"window_seconds": maxf(window_seconds, 0.0),
+		"arrival_progress": clampf(
+			traversal / maxf(window_seconds, 0.0001), 0.0, 1.0
+		),
+	}
 
 
 func _weak_passer_target(
