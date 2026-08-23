@@ -1,0 +1,46 @@
+name: Broadcast Match View Draft
+
+on:
+  push:
+    branches:
+      - chatgpt/broadcast-match-view-draft
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+      - name: Parse project
+        run: godot --headless --path . --editor --quit
+      - name: Install virtual display
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+      - name: Render broadcast draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a godot --path . --rendering-method gl_compatibility res://tools/broadcast_match_view.tscn
+      - name: Collect frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/broadcast-draft
+          find "$HOME/.local/share/godot" -type f -name 'broadcast_*.png' -print -exec cp {} artifacts/broadcast-draft/ \;
+          test "$(find artifacts/broadcast-draft -type f -name 'broadcast_*.png' | wc -l)" -eq 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: broadcast-match-view-draft
+          path: artifacts/broadcast-draft/*.png
+          if-no-files-found: error
+          retention-days: 14
