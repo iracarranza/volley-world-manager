@@ -532,7 +532,7 @@ func _test_regional_kits() -> void:
 	_check(
 		RegionalVenue3D.venue_id_for_region("Pāwa Hitō") == "Pāwa Hitō"
 			and RegionalVenue3D.venue_id_for_region("Taktikã") == "Taktikã"
-			and RegionalVenue3D.venue_id_for_region("Pelara") == "Pelara"
+			and RegionalVenue3D.venue_id_for_region("Kutré Lyn") == "Kutré Lyn"
 			and RegionalVenue3D.selectable_venues().size() == 8,
 		"venue identity preserves every host while exposing every built major room",
 	)

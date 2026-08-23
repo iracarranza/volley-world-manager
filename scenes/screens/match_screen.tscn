@@ -199,7 +199,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.93, 0.7, 1)
 theme_override_font_sizes/font_size = 16
 text = "Rally playback"
-autowrap_mode = 2
+autowrap_mode = 3
 
 [node name="DetailLabel" type="Label" parent="HUD/CommentaryCluster/CommentaryBubble/Margin/Copy"]
 unique_name_in_owner = true
@@ -208,7 +208,7 @@ size_flags_vertical = 3
 theme_override_colors/font_color = Color(0.9, 0.92, 0.95, 1)
 theme_override_font_sizes/font_size = 14
 text = "Resolved simulation events appear here."
-autowrap_mode = 2
+autowrap_mode = 3
 
 [node name="Headshots" type="HBoxContainer" parent="HUD/CommentaryCluster"]
 unique_name_in_owner = true
