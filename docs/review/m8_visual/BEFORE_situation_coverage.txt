@@ -1,0 +1,29 @@
+=== SITUATION COVERAGE, pre-repair (4ffde10) ===
+required situation            legs   w/ seam  seam brk  mean seam     worst
+serve->receive                 188   -- none         0      0.000     0.000
+ace                              3   -- none         0      0.000     0.000
+serve->touch->shank              3         3         3      0.387     0.453
+receive->set                   167       167       166      0.354     1.831
+set->attack                    198       198       144      0.271     0.946
+attack->floor                   29        29         0      0.000     0.000
+attack->block touch->dig       169       169         0      0.000     0.000
+stuff                           22        22         0      0.000     0.000
+wipe/tool                        0   -- none         0      0.000     0.000
+dig/coverage                   112       112         0      0.000     0.000
+overpass                         0   -- none         0      0.000     0.000
+terminal net                     0   -- none         0      0.000     0.000
+terminal out                    61        29         0      0.000     0.000
+terminal floor                 159       159        77      0.465     2.960
+recovery_debt leg               86        86        15      0.057     0.837
+NOT REACHED BY THE SWEEP: wipe/tool, overpass, terminal net
+constructed fixtures for what the sweep does not reach
+fixture                        arrive     depart  verdict
+wipe/tool  attack->block        1.974      2.742  JUMPS 0.769 m
+overpass  reception->set        2.267      2.267  continuous
+terminal net  attack->none      1.446      0.120  JUMPS 1.326 m
+
+=== TERMINAL BALL REST, pre-repair ===
+terminal legs measured              119
+  drawn stopping above the floor    56
+  mean height above floor           0.580 m
+  worst                             2.362 m on a SERVE

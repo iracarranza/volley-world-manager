@@ -147,6 +147,7 @@ never drawn. Both serving sides, 220 rallies:
 | dig/coverage | 112 | 112 | 0 | 0.000 | 0.000 |
 | terminal out | 61 | 29 | 0 | 0.000 | 0.000 |
 | terminal floor | 159 | 159 | 74 | 0.173 | 0.808 |
+| — *before both repairs* | 159 | 159 | 77 | **0.465** | **2.960** |
 | recovery_debt leg | 86 | 86 | 15 | 0.057 | 0.837 |
 
 **"With a seam" is a separate column because it has to be.** A seam needs a leg
