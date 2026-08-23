@@ -18,9 +18,9 @@ const CASES := [
 	{"move": "monster_block", "event": RallyEventModel.EventType.BLOCK, "pose": 0.84, "anchor": 2.34},
 ]
 const PHASES := [
-	{"id": "gather", "phase": -0.28},
-	{"id": "release", "phase": 0.12},
-	{"id": "tail", "phase": 0.46},
+	{"id": "gather", "phase": -0.46},
+	{"id": "release", "phase": 0.10},
+	{"id": "tail", "phase": 0.60},
 ]
 
 var _court: MatchCourt3D
@@ -73,7 +73,7 @@ func _render_case(case_data: Dictionary) -> void:
 	## Foresight can fully form but commit to the wrong future; Heroics can start
 	## to ignite and then lose its tiny action window before the rescue exists.
 	if move == "foresight":
-		surge.set_cue(move, 1.0, false, 0.12)
+		surge.set_cue(move, 1.0, false, 0.10)
 		await get_tree().process_frame
 		await get_tree().process_frame
 		_save_frame("foresight_misread")
