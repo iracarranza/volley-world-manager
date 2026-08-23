@@ -57,7 +57,10 @@ func _run_case(prefix: String, home_region: String, opponent_region: String, see
 	}
 	saved.clear()
 	screen.configure_match_presentation(home_region, opponent_region, home_region)
-	await screen.load_and_play_rally(result, 2.0)
+	## Software-rendered CI can advance a short contact from 0.5 to 0.9 in one
+	## frame at high speed. Slow playback keeps attack and incoming-block
+	## inspection moments on distinct rendered frames without changing the rally.
+	await screen.load_and_play_rally(result, 0.5)
 	while capture_busy:
 		await get_tree().process_frame
 	for event_type in wanted:
