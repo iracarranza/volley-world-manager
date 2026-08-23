@@ -172,31 +172,75 @@ const PALETTES := {
 		{"skin": Color("c98f4e"), "crown": Color("f0dcc0")},
 		{"skin": Color("6d6a66"), "crown": Color("d9d5cd")},
 		{"skin": Color("2f2b2c"), "crown": Color("b9a98f")},
-		{"skin": Color("d8b98a"), "crown": Color("8a5f3c")},
+		{"skin": Color("d8b98a"), "crown": Color("8a5f3c")},		## Six added on the same rule as Simi: keep the authored four, then
+		## fan hue around a value ladder, because value is what survives at
+		## portrait size. One entry inverts a dark crown onto a light coat.
+		{"skin": Color("e8e2d8"), "crown": Color("8a7f70")},  ## silver
+		{"skin": Color("4f6470"), "crown": Color("cdd8de")},  ## blue
+		{"skin": Color("7a4a30"), "crown": Color("e8c9a8")},  ## chocolate
+		{"skin": Color("b0562f"), "crown": Color("f4dcc0")},  ## red
+		{"skin": Color("9a9384"), "crown": Color("efe9dc")},  ## taupe
+		{"skin": Color("5c4a55"), "crown": Color("ded0da")},  ## smoke
 	],
 	"Avi": [
 		{"skin": Color("8fb7d6"), "crown": Color("e8a63c")},
 		{"skin": Color("d9dfe4"), "crown": Color("d96a3c")},
 		{"skin": Color("4a7f5e"), "crown": Color("e8c93c")},
-		{"skin": Color("c46b8a"), "crown": Color("f2e0c0")},
+		{"skin": Color("c46b8a"), "crown": Color("f2e0c0")},		## Six added on the same rule as Simi: keep the authored four, then
+		## fan hue around a value ladder, because value is what survives at
+		## portrait size. One entry inverts a dark crown onto a light coat.
+		{"skin": Color("e8c33c"), "crown": Color("d9662c")},  ## canary
+		{"skin": Color("6b4fa0"), "crown": Color("f0d94a")},  ## violet
+		{"skin": Color("28303a"), "crown": Color("d9a83c")},  ## corvid
+		{"skin": Color("c9432f"), "crown": Color("2f2a26")},  ## cardinal
+		{"skin": Color("9ec46b"), "crown": Color("e85a2c")},  ## parakeet
+		{"skin": Color("7a6a5a"), "crown": Color("e8dcc0")},  ## sparrow
 	],
 	"Cani": [
 		{"skin": Color("8a6a45"), "crown": Color("e8ddc8")},
 		{"skin": Color("3c3a3f"), "crown": Color("c9c2b4")},
 		{"skin": Color("c9a06a"), "crown": Color("f4ecdc")},
-		{"skin": Color("6f4a34"), "crown": Color("d8c3a0")},
+		{"skin": Color("6f4a34"), "crown": Color("d8c3a0")},		## Six added on the same rule as Simi: keep the authored four, then
+		## fan hue around a value ladder, because value is what survives at
+		## portrait size. One entry inverts a dark crown onto a light coat.
+		{"skin": Color("e5d9c2"), "crown": Color("7a6248")},  ## cream
+		{"skin": Color("5d6b74"), "crown": Color("d5dde2")},  ## merle
+		{"skin": Color("9d3f2a"), "crown": Color("f0cdb0")},  ## red
+		{"skin": Color("232022"), "crown": Color("c8bda8")},  ## charcoal
+		{"skin": Color("b8b3a8"), "crown": Color("6b6257")},  ## silver
+		{"skin": Color("c2703a"), "crown": Color("f4dcc4")},  ## apricot
 	],
 	"Ursi": [
 		{"skin": Color("4a3b34"), "crown": Color("d9c9b4")},
 		{"skin": Color("1f1c1e"), "crown": Color("cdd6db")},
 		{"skin": Color("8a6f52"), "crown": Color("efe3cd")},
-		{"skin": Color("d6c6ad"), "crown": Color("6b5847")},
+		{"skin": Color("d6c6ad"), "crown": Color("6b5847")},		## Six added on the same rule as Simi: keep the authored four, then
+		## fan hue around a value ladder, because value is what survives at
+		## portrait size. One entry inverts a dark crown onto a light coat.
+		{"skin": Color("f0ece2"), "crown": Color("6b5f52")},  ## polar
+		{"skin": Color("b5673a"), "crown": Color("f2d9b8")},  ## cinnamon
+		{"skin": Color("5a6a72"), "crown": Color("d8e0e4")},  ## glacier
+		{"skin": Color("6e5f4a"), "crown": Color("e4dccb")},  ## grizzled
+		{"skin": Color("3a2f3a"), "crown": Color("c9b8a8")},  ## sable
+		{"skin": Color("8a7a3c"), "crown": Color("f4e8c0")},  ## honey
 	],
+	## **Ten, and spread on value first.** The four this replaces were all one
+	## hue -- warm brown -- with two of them a step apart in value, so a squad
+	## with three Simi in it read as the same voli three times. Value is what
+	## survives at portrait size, so the ladder runs near-black to cream and the
+	## hues fan out around it rather than clustering. The last entry inverts a
+	## dark crown onto a light coat, which the Feli and Ursi tables already do.
 	"Simi": [
 		{"skin": Color("6f5a4e"), "crown": Color("f0d9bd")},
 		{"skin": Color("2e2a2b"), "crown": Color("c4a888")},
 		{"skin": Color("a08466"), "crown": Color("f4e6cf")},
 		{"skin": Color("55402f"), "crown": Color("e0b98c")},
+		{"skin": Color("7c7a76"), "crown": Color("dcd8cf")},
+		{"skin": Color("9a5a3c"), "crown": Color("f2c9a0")},
+		{"skin": Color("6b6b45"), "crown": Color("e6e0b8")},
+		{"skin": Color("4a5560"), "crown": Color("cfd8de")},
+		{"skin": Color("5a3f52"), "crown": Color("d9bcd0")},
+		{"skin": Color("d9c3a2"), "crown": Color("7a5f45")},
 	],
 	"Tomato": [
 		{"skin": Color("d63b2a"), "crown": Color("3f7a35")},
@@ -249,12 +293,181 @@ static func palette_for(body_key: String, player_id: int) -> Dictionary:
 ## A sphere torso narrows toward the top and a capsule does not, and a single
 ## constant cannot serve both -- which is how the kit band ended up either
 ## buried or floating depending on which produce wore it.
+## The torso's own half-width at a height, as a fraction of its semi-height.
+##
+## **Capsules were returning a constant**, which is the whole profile of a
+## cylinder and only the middle band of a capsule. A capsule is flat through the
+## centre and turns in through two hemispherical caps: on the standard torso the
+## caps start 0.130 from the middle, so a stripe 0.54 long spends more than half
+## its length in a region where the body has already narrowed. Placed on the
+## constant radius it hangs off the shirt at both ends, which is exactly what
+## the tall patterns were doing.
 static func _torso_radius_at(torso: Dictionary, up: float) -> float:
 	var radius := float(torso.get("radius", 0.32))
-	if str(torso.get("shape", "sphere")) != "sphere":
+	var shape := str(torso.get("shape", "sphere"))
+	if shape == "capsule":
+		var semi := float(torso.get("height", 1.0)) * 0.5
+		## Where the cylinder ends and the cap begins.
+		var straight := maxf(semi - radius, 0.0)
+		var y := absf(clampf(up, -1.0, 1.0)) * semi
+		if y <= straight:
+			return radius
+		var into_cap := minf(y - straight, radius)
+		return radius * sqrt(maxf(1.0 - pow(into_cap / radius, 2.0), 0.04))
+	if shape != "sphere":
 		return radius
 	var t := clampf(up, 0.0, 0.98)
 	return radius * sqrt(maxf(1.0 - t * t, 0.04))
+
+
+## How far a mark's underside sinks into the body it lies on.
+##
+## Small and deliberately non-zero. A patch whose inner face is exactly on the
+## surface leaves a hairline of body colour showing between the two wherever the
+## tessellation of one disagrees with the other, and a shirt seam that flickers
+## at the edge is worse than one buried three millimetres.
+const PATCH_BITE: float = 0.003
+## The longest a patch quad may be along either axis before it is subdivided
+## again. Small enough that a panel wrapping a 0.31 m torso never shows a facet;
+## large enough that a 12 mm tick stays two triangles.
+const PATCH_STEP: float = 0.028
+
+
+## A mark that lies **on** a body rather than a box standing in front of one.
+##
+## **Why this exists, since the previous three attempts each sounded sufficient.**
+## A kit mark used to be a stack of `BoxMesh` segments, each one flat, each one
+## placed at the radius its own height gave it. Through the barrel of a torso
+## that is fine, because the radius does not change. Through the caps it is not:
+## a capsule of radius 0.308 loses about 10 mm of radius between one segment of a
+## 0.52 m panel and the next, while the panel is only 12 mm deep. Every joint
+## between two segments was therefore a step nearly as tall as the mark was
+## thick, and every step showed its own horizontal top face -- lit from above by
+## the key, which is why they read as bright dashes scattered through the *upper*
+## half of a panel and not the lower, and why the outline stepped instead of
+## curving. Three repairs missed it because all three assumed the defect was in
+## how the boxes were *seated* rather than in their being boxes at all: removing
+## the 6% segment overlap, ruling out coplanar z-fighting, and anchoring the
+## inner face instead of the centre each changed nothing measurable, and the
+## per-segment dump showed the geometry was doing exactly what it was told.
+##
+## A box cannot follow a curve. So a mark is now a **patch**: a tessellated shell
+## whose vertices are evaluated on the body's own profile, extruded `depth`
+## outward and `PATCH_BITE` inward. It curves because its vertices curve.
+##
+## Three things the box stack could not do fall out of this for free -- a mark
+## wider than the flat of the body no longer floats at its edges, a tapering
+## stroke tapers continuously rather than in steps, and a rolled stroke shears
+## along the surface instead of tilting a slab off it.
+##
+## `rows` runs top to bottom, each entry `{y, radius, u, half}`: the height, the
+## body's radius there, the arc-centre of the mark and its half-width, both in
+## metres of arc. `reference_radius` converts arc to angle and is held constant
+## down the mark, because a vertical line on a body is a line of constant
+## longitude -- deriving the angle per row instead is what splayed Blôc's
+## outermost stripe from 50 degrees at its middle to 60 at its ends.
+static func build_surface_patch(
+	rows: Array, face: float, reference_radius: float, depth: float
+) -> ArrayMesh:
+	if rows.size() < 2:
+		return ArrayMesh.new()
+	var columns := 2
+	for row in rows:
+		columns = maxi(
+			columns, int(ceil(float(row["half"]) * 2.0 / PATCH_STEP))
+		)
+	columns = mini(columns, 12)
+	var outer: Array = []
+	var inner: Array = []
+	for row in rows:
+		var ring_out: Array = []
+		var ring_in: Array = []
+		var radius := float(row["radius"])
+		var up := float(row["y"])
+		var half := float(row["half"])
+		for column in range(columns + 1):
+			var arc := float(row["u"]) + lerpf(
+				-half, half, float(column) / float(columns)
+			)
+			var theta := arc / maxf(reference_radius, 0.001)
+			ring_out.append(_patch_point(radius + depth, theta, up, face))
+			ring_in.append(_patch_point(radius - PATCH_BITE, theta, up, face))
+		outer.append(ring_out)
+		inner.append(ring_in)
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var last := rows.size() - 1
+	for row in range(last):
+		for column in range(columns):
+			## Outward, then the same shell reversed for the underside.
+			_patch_quad(
+				tool, face,
+				outer[row][column], outer[row + 1][column],
+				outer[row + 1][column + 1], outer[row][column + 1]
+			)
+			_patch_quad(
+				tool, face,
+				inner[row][column + 1], inner[row + 1][column + 1],
+				inner[row + 1][column], inner[row][column]
+			)
+		## The two long edges: the visible rim of a seam or a panel.
+		_patch_quad(
+			tool, face,
+			outer[row][0], inner[row][0], inner[row + 1][0], outer[row + 1][0]
+		)
+		_patch_quad(
+			tool, face,
+			inner[row][columns], outer[row][columns],
+			outer[row + 1][columns], inner[row + 1][columns]
+		)
+	for column in range(columns):
+		_patch_quad(
+			tool, face,
+			inner[0][column], outer[0][column],
+			outer[0][column + 1], inner[0][column + 1]
+		)
+		_patch_quad(
+			tool, face,
+			outer[last][column], inner[last][column],
+			inner[last][column + 1], outer[last][column + 1]
+		)
+	## Per-triangle, deliberately. Averaging across shared vertices would smooth
+	## the rim into the face and lose the edge that makes a panel read as applied
+	## rather than printed; the shell is subdivided finely enough that flat
+	## normals on it are indistinguishable from smooth ones.
+	tool.generate_normals()
+	return tool.commit()
+
+
+static func _patch_point(
+	radius: float, theta: float, up: float, face: float
+) -> Vector3:
+	return Vector3(radius * sin(theta), up, face * radius * cos(theta))
+
+
+## One quad, wound so its front face points away from the body.
+##
+## The back of a shirt is the same construction reflected, and reflection
+## reverses handedness -- so a winding that faces outward on the chest faces
+## *into* the body on the back. Flipping here rather than at every call site is
+## the difference between one rule and sixteen chances to get it wrong.
+static func _patch_quad(
+	tool: SurfaceTool, face: float, a: Vector3, b: Vector3, c: Vector3, d: Vector3
+) -> void:
+	if face >= 0.0:
+		tool.add_vertex(a)
+		tool.add_vertex(b)
+		tool.add_vertex(c)
+		tool.add_vertex(a)
+		tool.add_vertex(c)
+		tool.add_vertex(d)
+		return
+	tool.add_vertex(a)
+	tool.add_vertex(d)
+	tool.add_vertex(c)
+	tool.add_vertex(a)
+	tool.add_vertex(c)
+	tool.add_vertex(b)
 
 
 ## What grows out of the top. One shape per produce rather than one stem and two
@@ -416,6 +629,11 @@ const UNIVERSAL_RATIOS := {
 ## what each type already says about itself.
 static var type_expression: float = 0.45
 
+## Whether the kit is drawn as garments with edges, or stays paint on the
+## body. Same reason as the flag above: two candidates, rendered rather than
+## argued about. See `_add_garments`.
+static var draw_garments: bool = true
+
 
 ## The full description of one player's body: meshes, attachment points,
 ## colours and cosmetic parts.
@@ -459,13 +677,27 @@ static func silhouette(
 	if not palette.is_empty():
 		authored["skin"] = palette.skin
 		authored["crown"] = palette.crown
-	## After the palette and before the blend, because a mark is a colour laid on
-	## a skin and the skin is not known until the line above. Marking a body first
-	## and recolouring it after would give every voli of a produce the same stripes
-	## in the same ink whatever they were wearing.
-	return _add_neck(_toward_universal(_add_markings(
-		authored, resolved, player_id, chosen_marking(resolved, player_id, choices)
-	)))
+	## Blend to the shared figure, then lay this voli's own proportions over it,
+	## and only then mark the body.
+	##
+	## Marking used to run first, on the authored skeleton, which was wrong twice
+	## over. `_mark_on_face` sizes and places a mark from `head.radius` and
+	## `_mark_on_arm` from `arm.top_radius`, so a mark placed before the blend was
+	## measured against a head the blend then resized -- latent and small, but a
+	## mark drawn against dimensions the body does not have. Features make it
+	## neither: a heavy voli's arm is 14% thicker, and a stripe placed on the
+	## light one's arm would sit inside it.
+	##
+	## The palette still comes first, because a mark is a colour laid on a skin
+	## and the skin is not known until the line above.
+	var featured := _apply_features(
+		_toward_universal(authored),
+		chosen_features(resolved, player_id, choices),
+	)
+	var marked := _add_markings(
+		featured, resolved, player_id, chosen_marking(resolved, player_id, choices)
+	)
+	return _add_neck(_add_garments(marked) if draw_garments else marked)
 
 
 ## The three chosen-or-hashed axes, each written once so the picker and the rig
@@ -565,6 +797,323 @@ static func marking_for(body_key: String, player_id: int) -> String:
 	if options.is_empty():
 		return "none"
 	return str(options[absi(hash("marks:%d" % player_id)) % options.size()])
+
+
+## What a voli's *body* is, beyond its species.
+##
+## Colour and coat gave the animals ten colourways and five coats, which is a lot
+## of looks and still only two axes -- and both of them are paint. A Vegi reads as
+## an individual across a squad because its **shape** varies: a Pear is not a
+## Stalk from any distance. The animals had exactly one shape per species, so two
+## Cani on the same colourway with the same coat were the same drawing twice.
+##
+## These are the shape axes the animals were missing. Three of them, hashed off
+## three separate strings for the same reason `marks:` is separate from
+## `palette:` -- an ear length that correlated with a colourway would be a fourth
+## way of saying the third one.
+##
+## Weighted by repetition, like `MARKINGS`, and for the same reason: `standard`
+## is the plurality of every axis, so most volis carry one or two notes rather
+## than three and about a fifth are plain on all three. A feature every voli has
+## is not a feature. Twenty-seven distinct shapes per family, on top of the ten
+## colourways and the coats.
+##
+## Five entries, and the count matters -- see `feature_for`, which is where the
+## rest of this is recorded. These were authored as four-entry lists drawn the
+## way every other axis here is drawn, and the three came out perfectly
+## correlated: every small-eared voli was also short-muzzled and also heavy,
+## three names for one axis.
+const FEATURE_AXES := {
+	"ears": ["standard", "standard", "standard", "small", "tall"],
+	"muzzle": ["standard", "standard", "standard", "short", "long"],
+	"build": ["standard", "standard", "standard", "light", "heavy"],
+}
+
+## Which families have a face built out of parts these axes can reach.
+##
+## Vegi's head is produce and Avi's is a beak and crest, so neither has an ear or
+## a muzzle to vary; they are held back until their own axes are authored rather
+## than given a silently-inert entry in the table above. The other four all carry
+## a named `EarLeft`/`EarRight` pair and a `Muzzle`, which is all these axes ask
+## for -- though not all in the same geometry, which is what `_featured_ear` is
+## about.
+const FEATURED_BODIES: Array[String] = ["Feli", "Cani", "Ursi", "Simi"]
+
+## Ear size, and how the pair sits off the skull.
+##
+## Four keys because there are two ear geometries in the roster and one set of
+## multipliers cannot serve both honestly. Feli and Cani wear **cones**, where
+## length and base width are independent and the pair's carriage is a rotation;
+## Ursi and Simi wear **spheres**, where a round ear that grows taller without
+## growing wider stops being a round ear, so a single `size` drives both and the
+## carriage is how far apart they sit.
+##
+## `splay` is added to the **magnitude** of the authored z rotation, keeping its
+## sign, which is what stops this axis erasing the difference between the cone
+## families. Feli's ears stand at 14 degrees and Cani's hang at 152; a longer ear
+## is 19 and 157 respectively -- more cat and more hound, never the other one.
+## `spread` is the sphere families' equivalent: a bear's ears being wide-set or
+## close-set is the readable half of that silhouette.
+const EAR_FEATURES := {
+	"small": {"length": 0.78, "width": 0.92, "splay": -4.0, "size": 0.80, "spread": 0.93},
+	"standard": {"length": 1.0, "width": 1.0, "splay": 0.0, "size": 1.0, "spread": 1.0},
+	"tall": {"length": 1.30, "width": 0.94, "splay": 5.0, "size": 1.26, "spread": 1.08},
+}
+
+## Snout size and how far it carries in front of the face.
+##
+## Expressed as radius, height and position rather than as an instance `scale`,
+## because `PlayerActor3D._mouth_override` builds the mouth by reading this
+## part's radius, height and position by name and does *not* read its scale. A
+## scaled muzzle would draw a mouth that no longer wrapped it -- the exact defect
+## the override's own comment records having been caught once already.
+const MUZZLE_FEATURES := {
+	"short": {"size": 0.86, "reach": 0.020},
+	"standard": {"size": 1.0, "reach": 0.0},
+	"long": {"size": 1.12, "reach": -0.045},
+}
+
+## How much body there is around the same skeleton. Girth is the torso, the
+## shorts and the joint spacing; limb is the thickness of arms and legs.
+##
+## Deliberately **not** height. Rig height is what a body type says about itself
+## and what the universal blend is protecting, and a per-voli height axis is a
+## separate question -- attributes have a claim on it that a hash does not.
+const BUILD_FEATURES := {
+	"light": {"girth": 0.90, "limb": 0.88},
+	"standard": {"girth": 1.0, "limb": 1.0},
+	"heavy": {"girth": 1.11, "limb": 1.14},
+}
+
+
+static func has_features(body_type: String) -> bool:
+	return body_type in FEATURED_BODIES
+
+
+## The distinct values of one axis, in a stable order, for a picker -- the same
+## deduplication `marking_options` does, and for the same reason: the table is
+## weighted for drawing and a menu wants it flattened.
+static func feature_options(axis: String) -> Array[String]:
+	var seen: Array[String] = []
+	for value in Array(FEATURE_AXES.get(axis, [])):
+		if not seen.has(str(value)):
+			seen.append(str(value))
+	return seen
+
+
+## Which value of one axis this voli carries.
+##
+## **The id goes first, and every other axis in this file has it last.** That is
+## not a style difference, it is the fix for a defect the other axes are only
+## accidentally clear of, and it cost a probe to find.
+##
+## Written the usual way -- `hash("ears:%d")`, `hash("muzzle:%d")`,
+## `hash("build:%d")` -- the three axes came out perfectly correlated: over 4,000
+## ids they drew 4 of the 27 shapes they can express, every small-eared voli also
+## short-muzzled and also heavy. Per-axis counts looked perfect, which is what
+## made it worth measuring the *joint* distribution instead: an axis moving in
+## lockstep with another is still individually well distributed, so the obvious
+## instrument cannot see this at all.
+##
+## Godot's `String.hash` is djb2, `h = 33 * h + c`, so a string built as
+## prefix-then-id hashes to `H(prefix) * 33^m + S(id)` where `m` is the id's
+## length. Two axes sharing an id therefore differ by `(H_a - H_b) * 33^m` -- a
+## value that does not depend on the id at all. **A constant offset, at every
+## modulus.** Changing the list size cannot help; five entries drew 4 of 27 the
+## same as four did.
+##
+## Putting the id first makes the axis word the suffix, and the three words are
+## different lengths, so the id is multiplied by a different power of 33 in each
+## and the offset stops being constant. That still needs a non-power-of-two
+## table, because 33 is congruent to 1 modulo any power of two and those
+## differing powers collapse back to equal -- which is the second half of the
+## same bug, and why `FEATURE_AXES` has five entries rather than four.
+##
+## `probe_feature_independence.gd` keeps both broken forms alongside this one and
+## fails below 27 of 27. The older axes here -- `marks:`, `palette:`, `vegi:` --
+## are all prefix-then-id and so are all constant offsets of each other; they
+## read as independent only because 5, 6, 7 and 10 are pairwise coprime enough
+## that the residues spread. That is luck, not design, and it is the thing to
+## remember before adding a fourth.
+static func feature_for(axis: String, player_id: int) -> String:
+	var options: Array = FEATURE_AXES.get(axis, [])
+	if options.is_empty():
+		return "standard"
+	return str(options[absi(hash("%d:%s" % [player_id, axis])) % options.size()])
+
+
+## This voli's three shape notes, chosen or hashed, as one dictionary.
+##
+## Empty for a body with no parts to vary, so `_apply_features` is a no-op for
+## the four families that have not been given axes yet rather than something
+## every caller has to remember to skip.
+static func chosen_features(
+	body_key: String, player_id: int, choices: Dictionary
+) -> Dictionary:
+	if not has_features(body_key):
+		return {}
+	var features := {}
+	for axis in FEATURE_AXES:
+		var axis_key := str(axis)
+		var named := str(choices.get(axis_key, ""))
+		features[axis_key] = named if named in feature_options(axis_key) \
+			else feature_for(axis_key, player_id)
+	return features
+
+
+## Lay this voli's own proportions over the resolved figure.
+##
+## Runs **after** the universal blend, not before it, and the distinction is the
+## whole design. The blend exists to stop a *species* skeleton drifting away from
+## a person, and it discards 55% of whatever an authored body claims. A feature
+## is not a species claim -- it is one voli being broader or longer-eared than
+## the next one of the same species -- so putting it before the blend would quote
+## it at 45% strength and the axis would barely read. Extras were never blended
+## at all, for the same reason stated at `_toward_universal`: identity arrives
+## through what is added.
+static func _apply_features(spec: Dictionary, features: Dictionary) -> Dictionary:
+	if features.is_empty():
+		return spec
+	var featured := spec.duplicate(true)
+	var build: Dictionary = BUILD_FEATURES.get(
+		str(features.get("build", "standard")), BUILD_FEATURES["standard"]
+	)
+	var girth := float(build.girth)
+	var limb := float(build.limb)
+	if girth != 1.0:
+		var torso: Dictionary = Dictionary(featured.get("torso", {}))
+		if torso.has("radius"):
+			torso["radius"] = float(torso.radius) * girth
+			featured["torso"] = torso
+		## **The `shorts` box in every body spec is never drawn**, so nothing is
+		## scaled here. `_build_silhouette` builds a mesh from it and
+		## `_apply_physical_profile` immediately replaces that mesh with a section
+		## of the torso's own profile -- the second one runs after the first and
+		## wins. An earlier version of this function scaled `shorts.size` believing
+		## it dressed the voli; it dressed a mesh that is overwritten a line later.
+		## Girth still reaches the shorts, because they are sampled from the torso
+		## radius that girth *does* move.
+		## Only the half-width moves. Shoulder and hip *heights* are the blended
+		## skeleton and a broader voli is not a differently-jointed one.
+		var shoulder := Vector2(featured.get("shoulder", Vector2(0.34, 1.5)))
+		featured["shoulder"] = Vector2(shoulder.x * girth, shoulder.y)
+		var hip := Vector2(featured.get("hip", Vector2(0.15, 0.46)))
+		featured["hip"] = Vector2(hip.x * girth, hip.y)
+	if limb != 1.0:
+		for key in ["arm", "leg"]:
+			var bone: Dictionary = Dictionary(featured.get(key, {}))
+			if bone.is_empty():
+				continue
+			for radius_key in ["top_radius", "bottom_radius"]:
+				if bone.has(radius_key):
+					bone[radius_key] = float(bone[radius_key]) * limb
+			featured[key] = bone
+		## Shoes come in two shapes: a capsule with a radius for most, a box with
+		## a size for Simi. Handling only the first left one family's feet at a
+		## constant width while its legs thickened around them -- the silent kind
+		## of miss, because a shoe that never changes still renders.
+		var shoe: Dictionary = Dictionary(featured.get("shoe", {}))
+		if shoe.has("radius"):
+			shoe["radius"] = float(shoe.radius) * limb
+			featured["shoe"] = shoe
+		elif shoe.has("size"):
+			var shoe_size: Vector3 = shoe.size
+			shoe["size"] = Vector3(
+				shoe_size.x * limb, shoe_size.y, shoe_size.z
+			)
+			featured["shoe"] = shoe
+	var ears: Dictionary = EAR_FEATURES.get(
+		str(features.get("ears", "standard")), EAR_FEATURES["standard"]
+	)
+	var muzzle: Dictionary = MUZZLE_FEATURES.get(
+		str(features.get("muzzle", "standard")), MUZZLE_FEATURES["standard"]
+	)
+	## Where the head actually is, for the sphere-ear branch. Read after the build
+	## block above, because nothing there moves the head -- girth is width and the
+	## head is not part of it -- but reading it here keeps the ordering honest if
+	## that ever stops being true.
+	var head_centre := Vector3(0.0, float(featured.get("head_y", 1.74)), 0.0)
+	var extras: Array = []
+	for raw_part in Array(featured.get("extras", [])):
+		var part := Dictionary(raw_part).duplicate(true)
+		match str(part.get("name", "")):
+			"EarLeft", "EarRight":
+				extras.append(_featured_ear(part, ears, head_centre))
+			"Muzzle":
+				extras.append(_featured_muzzle(part, muzzle))
+			_:
+				extras.append(part)
+	featured["extras"] = extras
+	return featured
+
+
+## An ear at its new size, still attached where it was.
+##
+## Both branches below are the same rule -- hold the join to the skull fixed and
+## let the ear grow away from it -- applied to the two different places a join
+## actually is. Neither needed measuring; each falls out of the geometry.
+##
+## **Cone** (Feli, Cani). The mesh is centred on its own origin with the apex up,
+## so growing one without moving it buries the base in the skull or lifts it off.
+## The base sits at local `(0, -h/2)`, which a z rotation of theta puts at
+## `(h/2 * sin, -h/2 * cos)`; holding that point fixed while the height changes
+## by `delta` asks the centre to move by `(-delta/2 * sin, delta/2 * cos)`.
+##
+## That one expression is why the cone families share the axis. Feli's ears stand
+## (cos near +1) so a longer one grows *upward* from a fixed skull join; Cani's
+## hang past horizontal (cos near -0.9) so the same term grows the ear *downward*
+## from a fixed top.
+##
+## **Sphere** (Ursi, Simi). A round ear sits *on* the skull rather than rooted in
+## it, so the fixed thing is the contact with the head's surface: a ball of
+## radius r touching a head centred at `head_centre` has its own centre exactly r
+## further out along that line. Grow the radius by `delta` and the centre moves
+## `delta` outward, which is why this branch needs the head's centre passed in
+## and the cone branch does not.
+static func _featured_ear(
+	part: Dictionary, ears: Dictionary, head_centre: Vector3
+) -> Dictionary:
+	var position: Vector3 = part.get("position", Vector3.ZERO)
+	if str(part.get("shape", "sphere")) == "cone":
+		var authored_height := float(part.get("height", 0.22))
+		var height := authored_height * float(ears.length)
+		part["height"] = height
+		part["radius"] = float(part.get("radius", 0.08)) * float(ears.width)
+		var rotation: Vector3 = part.get("rotation", Vector3.ZERO)
+		var splay := float(ears.splay)
+		var turned := rotation.z + (splay if rotation.z >= 0.0 else -splay)
+		part["rotation"] = Vector3(rotation.x, rotation.y, turned)
+		var radians := deg_to_rad(turned)
+		var delta := (height - authored_height) * 0.5
+		part["position"] = position + Vector3(
+			-delta * sin(radians), delta * cos(radians), 0.0
+		)
+		return part
+	var size := float(ears.size)
+	var authored_radius := float(part.get("radius", 0.075))
+	var radius := authored_radius * size
+	part["radius"] = radius
+	part["height"] = float(part.get("height", 0.13)) * size
+	## Spread first, so the outward correction is computed along the line the ear
+	## actually ends up on rather than the one it started on.
+	var spread := Vector3(position.x * float(ears.spread), position.y, position.z)
+	var outward := spread - head_centre
+	part["position"] = spread if outward.length() < 0.001 \
+		else spread + outward.normalized() * (radius - authored_radius)
+	return part
+
+
+static func _featured_muzzle(part: Dictionary, muzzle: Dictionary) -> Dictionary:
+	var size := float(muzzle.size)
+	part["radius"] = float(part.get("radius", 0.10)) * size
+	part["height"] = float(part.get("height", 0.15)) * size
+	var position: Vector3 = part.get("position", Vector3.ZERO)
+	## The snout carries forward on -z, which is the direction both authored
+	## muzzles already sit in front of their heads.
+	part["position"] = Vector3(
+		position.x, position.y, position.z + float(muzzle.reach)
+	)
+	return part
 
 
 ## Where a mark sits: on the face, or along an arm.
@@ -733,6 +1282,121 @@ static func _add_markings(
 ## against the blend -- correct until the blend moves, and silently wrong after.
 ## A neck sized from the two things it spans is correct by construction, and it
 ## is also just a real part of a body.
+## The four joints the rig already turns on but has never drawn.
+##
+## `player_actor_3d.tscn` gives every limb two capsule segments meeting at a
+## pivot: `LeftArm`'s own origin is the shoulder, `LeftArm/Elbow` is the elbow,
+## and the leg is built the same way at the hip and the knee. The pivots bend
+## correctly and carry no geometry, so a limb is two tapered capsules whose ends
+## simply stop next to each other -- which is what makes an arm read as stacked
+## sausages rather than as an arm.
+##
+## This is the same repair `_add_neck` below already makes at the one junction
+## somebody noticed: "a short collar of neck at the join is what stops a sphere
+## head reading as balanced on a sphere body". The other four junctions have the
+## same problem and never got the same treatment.
+##
+## **It is not the unified-mesh work**, and the distinction is worth keeping. A
+## smooth-union body is one continuous surface with no seams anywhere and one
+## outline around the whole of it; this is eight spheres parked on pivots that
+## already exist. It buys most of the same read for a fraction of the cost, and
+## it leaves every mesh, material and ink hull where they are.
+##
+## Each sphere is sized from the limb radii that actually meet at that joint, so
+## a heavy voli's elbow is a heavy voli's elbow without anything being restated.
+## Slightly proud of both -- a joint that merely matches its limbs leaves the
+## seam exactly where it was.
+## A `static var`, like `type_expression`, because the first
+## value tried reads as a knuckle rather than as a joint and the difference
+## between "filled" and "doll-jointed" is one number nobody should have to argue
+## about without looking at both.
+## The kit, as garments rather than as paint.
+##
+## A voli's clothing has been two things: the torso capsule painted the club's
+## colour, and a section of that same capsule painted darker for shorts. Nothing
+## is *worn* -- the body is simply a different colour below the neck, which is
+## why the silhouette says "primitive" no matter how it is lit. Miis and clay
+## figures read as dressed because the garment is a **shell with edges**: a
+## sleeve that ends partway down the arm, a short leg that ends above the knee,
+## a hem you can see.
+##
+## These are the two edges that do the most work, and both are cheap: they hang
+## off limb bones that already exist, so they travel with every pose, and they
+## take the `kit` colour key, so a club's strip dresses them with no new plumbing.
+##
+## The shorts legs also fix the defect that prompted this. The shorts are a
+## section of the torso's profile, so from the front their silhouette is a
+## trapezoid and each thigh crosses its lower corner -- a leg passing through the
+## *side* of a garment rather than out of the bottom of it. A short kit-coloured
+## sleeve around the top of each thigh is what a pair of shorts actually is, and
+## the corner stops being a place a leg comes out of.
+static func _add_garments(spec: Dictionary) -> Dictionary:
+	var arm: Dictionary = spec.get("arm", {})
+	var leg: Dictionary = spec.get("leg", {})
+	var arm_radius := float(arm.get("top_radius", 0.065))
+	var arm_length := float(arm.get("height", 0.84))
+	var leg_radius := float(leg.get("top_radius", 0.105))
+	var leg_length := float(leg.get("height", 0.66))
+	var extras: Array = spec.get("extras", [])
+	for side in ["Left", "Right"]:
+		## A sleeve over the top of the upper arm, flaring very slightly so its
+		## hem stands off the limb instead of shrink-wrapping it. Proud of the
+		## arm by a clear margin -- a garment that matches the body's radius is
+		## a paint job again.
+		extras.append({
+			"name": "Sleeve%s" % side, "parent": "BodyPivot/%sArm" % side,
+			"shape": "cylinder",
+			"top_radius": arm_radius * 1.30, "bottom_radius": arm_radius * 1.34,
+			"height": arm_length * 0.24,
+			"position": Vector3(0.0, -arm_length * 0.10, 0.0),
+			"color": "kit",
+		})
+		## Longer than the first draft, and the reason is a measurement rather
+		## than taste. The hip sits at y 0.769 and the knee at 0.413, so the cuff
+		## already covered most of the thigh -- but the shirt runs down to 0.595,
+		## which left only 0.083 m of it visible. The shirt hem and the shorts hem
+		## were nearly the same line, so there was no garment to see. Extending
+		## the cuff toward the knee is what buys visible shorts; widening it would
+		## only have made a wider invisible thing.
+		extras.append({
+			"name": "ShortsLeg%s" % side, "parent": "BodyPivot/%sLeg" % side,
+			"shape": "cylinder",
+			## Flared at the hem, which is the difference between shorts and
+			## tights: a leg opening stands off the thigh.
+			"top_radius": leg_radius * 1.28, "bottom_radius": leg_radius * 1.40,
+			"height": leg_length * 0.39,
+			"position": Vector3(0.0, -leg_length * 0.18, 0.0),
+			"color": "shorts",
+		})
+		## **No sock top.** It was built, measured and removed rather than kept.
+		##
+		## The knee sits at y 0.413 and the shoe's own bounds reach 0.388, so this
+		## body has 0.025 m of visible shin -- the shoe capsule is effectively the
+		## whole lower leg. A sock band sized to read at all came out spanning
+		## 0.208 to 0.509: across the shoe at one end and over the knee at the
+		## other, which is not a sock, it is a stripe painted through two joints.
+		##
+		## The gap is not a garment problem and cannot be fixed by a garment. Volis
+		## have no shin to dress, and giving them one is a change to the shoe or to
+		## the leg proportions -- a body decision, not a kit decision.
+	## A collar at the neck opening -- one ring, trim coloured, sitting on the
+	## torso's top where the shirt actually ends. The neck is drawn by `_add_neck`
+	## after this, and passes through the ring rather than being covered by it.
+	var torso: Dictionary = spec.get("torso", {})
+	var neck_radius := float(Dictionary(spec.get("head", {})).get("radius", 0.18))
+	var torso_top := float(spec.get("torso_y", 1.1)) \
+		+ float(torso.get("height", 0.9)) * 0.5
+	extras.append({
+		"name": "Collar", "parent": "BodyPivot", "shape": "cylinder",
+		"top_radius": neck_radius * 0.86, "bottom_radius": neck_radius * 1.02,
+		"height": neck_radius * 0.30,
+		"position": Vector3(0.0, torso_top - neck_radius * 0.12, 0.0),
+		"color": "trim",
+	})
+	spec["extras"] = extras
+	return spec
+
+
 static func _add_neck(spec: Dictionary) -> Dictionary:
 	var torso: Dictionary = spec.get("torso", {})
 	var head: Dictionary = spec.get("head", {})
@@ -972,9 +1636,33 @@ static func _feli() -> Dictionary:
 			## legibility rather than merely looking plain.
 			{
 				"name": "Tail", "parent": "BodyPivot", "shape": "cylinder",
-				"top_radius": 0.03, "bottom_radius": 0.055, "height": 0.72,
-				"position": Vector3(0.0, 0.96, 0.34),
-				"rotation": Vector3(36.0, 0.0, 0.0), "color": "skin",
+				## Shorter, and rooted further in. At 0.72 the tail read from
+				## directly behind as a tan bar straight down the middle of the
+				## kit: a tail sweeping back at the camera foreshortens into a
+				## stripe, and length is what made the stripe long.
+				##
+				## Measured rather than eyeballed, because the first attempt at
+				## this was signed the wrong way round and confidently reported
+				## the tip as the root. A cylinder's local `(0,-1,0)` end rotates
+				## about X to `(0,-cos,-sin)`; the root therefore lands at z 0.022
+				## against a torso surface at 0.308, buried 0.286 m, while the tip
+				## still stands 0.19 m clear of the body. Both ends are where a
+				## tail's ends belong.
+				"top_radius": 0.03, "bottom_radius": 0.055, "height": 0.52,
+				## Out of the seat of the shorts, which is where a tail leaves an
+				## animal. It sat at 1.10 for one pass -- raised there to clear a
+				## hem it was hanging below -- and 1.10 is the *middle of the
+				## back* on a torso spanning 0.595 to 1.510: a tail growing out
+				## of the spine. Lowered to the hip and swept back harder instead,
+				## so it leaves the garment rather than the ribcage and still ends
+				## above the seat's own bottom.
+				## Raised again. At 0.78 the root sat 0.079 m above the torso's own
+				## lowest point -- near the crotch, where the capsule has already
+				## narrowed toward its cap, so the tail showed between the legs
+				## from the front. Higher up the body is at full width and the
+				## same root is deeply inside it.
+				"position": Vector3(0.0, 0.90, 0.26),
+				"rotation": Vector3(66.0, 0.0, 0.0), "color": "skin",
 			},
 		],
 	}
@@ -1186,16 +1874,24 @@ static func _cani() -> Dictionary:
 			## Rotated past horizontal so they hang rather than point. A cone
 			## tipped 150 degrees reads as a drop ear at any distance the game is
 			## watched from; the same cone at 14 degrees is a cat.
+			##
+			## Set outboard at 0.195 rather than the authored 0.150, because 0.150
+			## is *inside* the skull: the head blends to a radius near 0.180, so a
+			## drop ear centred nearer than that hung within the head's own
+			## outline and showed as a sliver of contour rather than as an ear.
+			## Found by walking the per-voli ear axis and seeing all three lengths
+			## read the same -- a feature that cannot be seen is not a feature.
+			## Lifted 0.02 with it so the wider seat still meets the skull.
 			{
 				"name": "EarLeft", "parent": "BodyPivot", "shape": "cone",
 				"radius": 0.075, "height": 0.26,
-				"position": Vector3(-0.15, 1.86, 0.02),
+				"position": Vector3(-0.195, 1.88, 0.02),
 				"rotation": Vector3(0.0, 0.0, 152.0), "color": "skin",
 			},
 			{
 				"name": "EarRight", "parent": "BodyPivot", "shape": "cone",
 				"radius": 0.075, "height": 0.26,
-				"position": Vector3(0.15, 1.86, 0.02),
+				"position": Vector3(0.195, 1.88, 0.02),
 				"rotation": Vector3(0.0, 0.0, -152.0), "color": "skin",
 			},
 			## Longer and lower than Feli's. `PlayerActor3D._mouth_override` reads
@@ -1208,9 +1904,12 @@ static func _cani() -> Dictionary:
 			},
 			{
 				"name": "Tail", "parent": "BodyPivot", "shape": "cylinder",
-				"top_radius": 0.035, "bottom_radius": 0.06, "height": 0.62,
-				"position": Vector3(0.0, 0.92, 0.28),
-				"rotation": Vector3(58.0, 0.0, 0.0), "color": "skin",
+				## Same shortening and the same reason as Feli's.
+				"top_radius": 0.035, "bottom_radius": 0.06, "height": 0.46,
+				## Same correction as Feli's: out of the seat, not out of the
+				## spine.
+				"position": Vector3(0.0, 0.88, 0.23),
+				"rotation": Vector3(68.0, 0.0, 0.0), "color": "skin",
 			},
 		],
 	}

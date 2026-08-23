@@ -18,3 +18,24 @@
 # artefact worth versioning and this is not.
 review_bundle/
 review_bundle.zip
+
+# Render galleries written by the tools/render_*.gd probes. Seventeen megabytes
+# of PNG on this branch alone, and every frame of it is one command away:
+# `xvfb-run -a godot --path . --rendering-method gl_compatibility --script
+# tools/render_all_kits.gd`. Same rule as review_bundle/ above -- the tool is
+# the artefact worth versioning, not its output. Note the renderers must NOT be
+# run with --headless: the gallery hangs and writes zero images.
+#
+# artifacts/title_desk_draft/ stays tracked, because it is a design decision
+# somebody argued about rather than a probe's latest output.
+artifacts/all-colourways/
+artifacts/all-kits/
+artifacts/cani-ear-ab/
+artifacts/feature-axes/
+artifacts/headshot-previews/
+artifacts/identity-budget/
+artifacts/mark-previews/
+artifacts/simi-colourways/
+artifacts/squad-after/
+artifacts/squad-identity/
+artifacts/style-drafts/

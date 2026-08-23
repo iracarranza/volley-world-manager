@@ -10,12 +10,6 @@ height = 1.05
 radial_segments = 12
 rings = 6
 
-[sub_resource type="CapsuleMesh" id="ShortsMesh"]
-radius = 0.33
-height = 0.45
-radial_segments = 12
-rings = 4
-
 [sub_resource type="SphereMesh" id="HeadMesh"]
 radius = 0.20
 height = 0.40
@@ -88,10 +82,6 @@ mesh = SubResource("RingMesh")
 [node name="Torso" type="MeshInstance3D" parent="BodyPivot"]
 position = Vector3(0, 1.13, 0)
 mesh = SubResource("TorsoMesh")
-
-[node name="Shorts" type="MeshInstance3D" parent="BodyPivot"]
-position = Vector3(0, 0.60, 0)
-mesh = SubResource("ShortsMesh")
 
 [node name="Head" type="MeshInstance3D" parent="BodyPivot"]
 position = Vector3(0, 1.82, 0)
