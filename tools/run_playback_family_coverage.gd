@@ -141,6 +141,11 @@ func _record(rows: Dictionary, name: String, jump: float) -> void:
 	row["n"] = int(row["n"]) + 1
 	if is_nan(jump):
 		return
+	## Counted separately from `n`, because a seam needs a leg on *both* sides of
+	## it. A situation classified on the rally's first leg -- the serve, and so
+	## every ace -- has nothing before it to disagree with, and reporting that as
+	## "0 breaks" reads as a clean result when it is no result at all.
+	row["measured"] = int(row.get("measured", 0)) + 1
 	row["seam_total"] = float(row["seam_total"]) + jump
 	if jump > SEAM_TOLERANCE_METERS:
 		row["seam_breaks"] = int(row["seam_breaks"]) + 1
@@ -148,22 +153,152 @@ func _record(rows: Dictionary, name: String, jump: float) -> void:
 
 
 func _report(rows: Dictionary) -> void:
-	print("%-26s %7s %10s %10s %10s" % [
-		"required situation", "legs", "seam brk", "mean seam", "worst",
+	print("%-26s %7s %9s %9s %10s %9s" % [
+		"required situation", "legs", "w/ seam", "seam brk", "mean seam", "worst",
 	])
 	var uncovered: Array = []
 	for name in REQUIRED:
 		var row: Dictionary = rows[name]
 		var legs := int(row["n"])
+		var measured := int(row.get("measured", 0))
 		if legs == 0:
 			uncovered.append(name)
-		print("%-26s %7d %10d %10.3f %10.3f" % [
-			name, legs, int(row["seam_breaks"]),
-			float(row["seam_total"]) / float(maxi(legs, 1)), float(row["worst"]),
+		print("%-26s %7d %9s %9d %10.3f %9.3f" % [
+			name, legs,
+			"-- none" if measured == 0 else str(measured),
+			int(row["seam_breaks"]),
+			float(row["seam_total"]) / float(maxi(measured, 1)), float(row["worst"]),
 		])
 	print("")
 	if uncovered.is_empty():
 		print("every required situation is exercised by the sweep")
 	else:
-		print("NOT EXERCISED (needs a constructed fixture): %s" % ", ".join(uncovered))
+		print("NOT REACHED BY THE SWEEP: %s" % ", ".join(uncovered))
+	_constructed()
 	quit(0)
+
+
+const RALLY_EVENT := preload("res://scripts/models/rally_event.gd")
+
+## A body big enough to have a reach, so the fixtures below are drawn against a
+## real contact height rather than the 188 cm default standing in for one.
+const FIXTURE_PROFILES := {
+	11: {"height_cm": 196.0, "wingspan_cm": 201.0},
+	22: {"height_cm": 191.0, "wingspan_cm": 196.0},
+}
+
+
+## The situations a seed sweep does not reach.
+##
+## Rare states are rare, so waiting for one is not a plan -- 220 rallies produced
+## no wipe, no overpass and no ball dying in the net. These are built instead,
+## deterministically, and asked the same question the sweep asks: does the drawn
+## ball leave the next leg from where the previous one put it, and does a ball
+## that is going nowhere arrive at the floor.
+func _constructed() -> void:
+	print("")
+	print("constructed fixtures for what the sweep does not reach")
+	print("%-26s %10s %10s  %s" % ["fixture", "arrive", "depart", "verdict"])
+	_wipe_fixture()
+	_overpass_fixture()
+	_net_terminal_fixture()
+
+
+func _fixture_event(
+	kind: int, actor: int, from: Vector2, to: Vector2, metadata: Dictionary
+) -> RallyEvent:
+	var event: RallyEvent = RALLY_EVENT.new()
+	event.event_type = kind
+	event.actor_id = actor
+	event.actor_name = "Fixture %d" % actor
+	event.start_position = from
+	event.end_position = to
+	event.metadata = metadata
+	return event
+
+
+func _seam_row(name: String, arrive: float, depart: float) -> void:
+	var gap := absf(arrive - depart)
+	print("%-26s %10.3f %10.3f  %s" % [
+		name, arrive, depart,
+		"continuous" if gap <= SEAM_TOLERANCE_METERS else "JUMPS %.3f m" % gap,
+	])
+
+
+## A swing that uses the block and goes out. The ball is touched by the wall and
+## carries on, so the leg into the block must not be drawn dying at it.
+func _wipe_fixture() -> void:
+	var attack := _fixture_event(
+		RallyEvent.EventType.ATTACK, 11, Vector2(0.44, 0.44), Vector2(0.62, 0.06),
+		{
+			"side": "home", "used_the_block": true, "jump_multiplier": 1.0,
+			"outgoing_trajectory": {
+				"start_position": Vector2(0.44, 0.44),
+				"end_position": Vector2(0.62, 0.06),
+				"duration": 0.42, "launch_vertical_mps": -6.4,
+			},
+		}
+	)
+	var block := _fixture_event(
+		RallyEvent.EventType.BLOCK, 22, Vector2(0.55, 0.49), Vector2(0.58, 0.62), {}
+	)
+	var display: Dictionary = BP.display_trajectory(
+		attack, block, attack.metadata["outgoing_trajectory"], FIXTURE_PROFILES
+	)
+	_seam_row(
+		"wipe/tool  attack->block",
+		float(display.get("end_height_meters", NAN)),
+		BP.contact_height(block, FIXTURE_PROFILES),
+	)
+
+
+## A reception that crosses the net unplayed and becomes the other side's first
+## contact. The receiving voli's platform launches it; an opponent plays it.
+func _overpass_fixture() -> void:
+	var reception := _fixture_event(
+		RallyEvent.EventType.RECEPTION, 11, Vector2(0.30, 0.80), Vector2(0.58, 0.28),
+		{
+			"side": "home", "overpass": true,
+			"outgoing_trajectory": {
+				"start_position": Vector2(0.30, 0.80),
+				"end_position": Vector2(0.58, 0.28),
+				"duration": 1.05,
+			},
+		}
+	)
+	var opponent := _fixture_event(
+		RallyEvent.EventType.SET, 22, Vector2(0.58, 0.28), Vector2(0.70, 0.20),
+		{"side": "opponent", "setter_capability": {"reach_state": "standing"}}
+	)
+	var display: Dictionary = BP.display_trajectory(
+		reception, opponent, reception.metadata["outgoing_trajectory"], FIXTURE_PROFILES
+	)
+	_seam_row(
+		"overpass  reception->set",
+		float(display.get("end_height_meters", NAN)),
+		BP.contact_height(opponent, FIXTURE_PROFILES),
+	)
+
+
+## A ball that dies in the net: nothing plays it next, so it is going to the
+## floor and has to be drawn arriving there.
+func _net_terminal_fixture() -> void:
+	var attack := _fixture_event(
+		RallyEvent.EventType.ATTACK, 11, Vector2(0.42, 0.42), Vector2(0.50, 0.50),
+		{
+			"side": "home", "jump_multiplier": 1.0,
+			"outgoing_trajectory": {
+				"start_position": Vector2(0.42, 0.42),
+				"end_position": Vector2(0.50, 0.50),
+				"duration": 0.30, "launch_vertical_mps": -3.1,
+			},
+		}
+	)
+	var display: Dictionary = BP.display_trajectory(
+		attack, null, attack.metadata["outgoing_trajectory"], FIXTURE_PROFILES
+	)
+	_seam_row(
+		"terminal net  attack->none",
+		float(display.get("end_height_meters", NAN)),
+		BP.FLOOR_CONTACT_HEIGHT_METERS,
+	)
