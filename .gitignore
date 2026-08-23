@@ -18,3 +18,8 @@
 # artefact worth versioning and this is not.
 review_bundle/
 review_bundle.zip
+
+# Python bytecode from the tools/ scripts. One .pyc reached the tree before this
+# rule existed; it is a build product of a file already versioned beside it.
+__pycache__/
+*.pyc
