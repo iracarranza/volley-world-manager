@@ -7,7 +7,6 @@ extends Node
 const COURT := preload("res://scenes/components/match_court_3d.tscn")
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
-const RegionalKits := preload("res://scripts/data/regional_kits.gd")
 
 const CASES := [
 	{"move": "block_crush", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28},
@@ -33,11 +32,15 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_actor = ACTOR.instantiate() as PlayerActor3D
 	_court.add_child(_actor)
+	## `club_region` is the production kit input: PlayerActor3D.configure reads
+	## it from the same profile channel MatchCourt3D supplies, then
+	## `apply_ui_palette` resolves RegionalKits. Keep the review on that path
+	## instead of teaching the renderer a second way to dress an actor.
 	_actor.configure(77, true, "Signature review", "Right", {
 		"body_type": "Feli",
 		"body_marking": "blaze",
+		"club_region": "Pāwa Hitō",
 	})
-	RegionalKits.apply_to_actor(_actor, "pawa", true)
 	_hide_readouts()
 	_actor.position = Vector3(0.0, 0.0, 0.4)
 	_actor.rotation.y = 0.0
