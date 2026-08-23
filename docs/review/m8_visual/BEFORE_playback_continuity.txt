@@ -1,0 +1,23 @@
+Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
+
+family/serving side          legs  untch   seam brk  mean seam  floor brk
+ATTACK/home                    73     36          0      0.000          0
+ATTACK/opponent                78     23          0      0.000          0
+ATTACK_COVERAGE/home            2      0          0      0.000          0
+ATTACK_COVERAGE/opponent        3      0          0      0.000          0
+BLOCK/home                     64     26         64      2.286         26
+BLOCK/opponent                 68     21         67      1.753         21
+DIG/home                       36      3          0      0.000          2
+DIG/opponent                   35      0          0      0.000          0
+RECEPTION/home                 72      0         72      0.344          0
+RECEPTION/opponent             73      0         72      0.388          0
+SERVE/home                     90      1          0      0.000          1
+SERVE/opponent                 90      3          0      0.000          3
+SET/home                       73      9         53      0.336          9
+SET/opponent                   78      5         52      0.193          5
+
+legs drawn                         835
+seam height jumps > 0.05 m         380
+  worst 3.227 m at ATTACK -> BLOCK
+untouched balls not drawn to floor 67
+  worst 3.191 m above floor at SET -> missed ATTACK
