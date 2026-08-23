@@ -218,7 +218,7 @@ func _collect(result: Resource, rows: Array[Dictionary]) -> void:
 			if int(candidate.event_type) == RallyEventScript.EventType.BLOCK \
 					and block_event == null:
 				block_event = candidate
-			elif int(candidate.event_type) == RallyEventScript.EventType.DEFENSE \
+			elif int(candidate.event_type) == RallyEventScript.EventType.DIG \
 					and defence == null:
 				defence = candidate
 		## Touched blocks are out for the same reason the compiler drops them: the

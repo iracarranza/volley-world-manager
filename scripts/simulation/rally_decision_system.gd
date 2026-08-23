@@ -2,6 +2,55 @@ class_name RallyDecisionSystem
 extends RefCounted
 
 
+## Shared first-contact action availability. These are the existing reception
+## decision thresholds moved to the layer that owns decisions so an overpass
+## and a serve receive do not grow separate physical/control bands.
+##
+## `opportunity` may be an ActionOpportunity or its public dictionary record.
+## This returns contact forms, not event labels: an overhead release remains a
+## first-team contact unless a later sequence layer honestly classifies it.
+static func available_first_contact_actions(
+	player: VolleyballPlayer,
+	opportunity: Variant,
+	confidence: float,
+) -> Array[String]:
+	var options: Array[String] = []
+	var feasibility := float(_opportunity_value(
+		opportunity, "physical_feasibility", 0.0
+	))
+	var reachable := bool(_opportunity_value(opportunity, "reachable", false))
+	## Free-flight records contain only reachable opportunities and therefore do
+	## not need to repeat that boolean.
+	if opportunity is Dictionary and not opportunity.has("reachable"):
+		reachable = true
+	var balance := float(_opportunity_value(
+		opportunity, "arrival_balance", 0.0
+	))
+	var margin := float(_opportunity_value(
+		opportunity, "arrival_margin", -9.0
+	))
+	if feasibility >= 0.35:
+		options.append("emergency_keep_alive")
+	if reachable and balance >= 0.38:
+		options.append("safe_center_pass")
+	if reachable and margin >= 0.12 and balance >= 0.62 \
+			and confidence >= 0.60 and player != null \
+			and player.ball_control >= 65 and player.decision_making >= 60:
+		options.append("quick_release_pass")
+	return options
+
+
+static func _opportunity_value(
+	opportunity: Variant, key: String, fallback: Variant
+) -> Variant:
+	if opportunity is Dictionary:
+		return opportunity.get(key, fallback)
+	if opportunity != null:
+		var value: Variant = opportunity.get(key)
+		return fallback if value == null else value
+	return fallback
+
+
 ## Selects among currently open perceived receive options, then grades the
 ## chosen action against authoritative ball truth. This is deterministic and
 ## returns evidence only; it does not create an official RallyEvent.

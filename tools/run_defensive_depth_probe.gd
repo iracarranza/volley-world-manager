@@ -50,7 +50,7 @@ func _initialize() -> void:
 			for raw in result.events:
 				var event := raw as RallyEvent
 				if event == null \
-						or event.event_type != RallyEventScript.EventType.DEFENSE:
+						or event.event_type != RallyEventScript.EventType.DIG:
 					continue
 				var side := str(event.metadata.get("side", ""))
 				if not depth.has(side) or not event.metadata.has("movement_start"):

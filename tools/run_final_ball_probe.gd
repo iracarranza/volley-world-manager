@@ -76,7 +76,7 @@ func _initialize() -> void:
 	var names := {
 		Events.EventType.SERVE: "SERVE", Events.EventType.RECEPTION: "RECEPTION",
 		Events.EventType.SET: "SET", Events.EventType.ATTACK: "ATTACK",
-		Events.EventType.BLOCK: "BLOCK", Events.EventType.DEFENSE: "DEFENSE",
+		Events.EventType.BLOCK: "BLOCK", Events.EventType.DIG: "DIG", Events.EventType.ATTACK_COVERAGE: "ATTACK_COVERAGE",
 	}
 	var Presentation := load("res://scripts/simulation/ball_presentation.gd")
 	var manager: Object = load("res://scripts/managers/game_manager.gd").new()

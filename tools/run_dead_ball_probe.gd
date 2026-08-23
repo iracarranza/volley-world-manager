@@ -27,7 +27,8 @@ func _initialize() -> void:
 		Events.EventType.SET: "SET",
 		Events.EventType.ATTACK: "ATTACK",
 		Events.EventType.BLOCK: "BLOCK",
-		Events.EventType.DEFENSE: "DEFENSE",
+		Events.EventType.DIG: "DIG",
+		Events.EventType.ATTACK_COVERAGE: "ATTACK_COVERAGE",
 	}
 	var manager: Object = load("res://scripts/managers/game_manager.gd").new()
 	manager.seed_vertical_slice_data()

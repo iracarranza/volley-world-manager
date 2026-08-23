@@ -433,7 +433,7 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 					player_id, current, action_target, true
 				))
 				targets.append(action_target)
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 				targets.append(_defensive_read_position(
 					player_id, current, action_target, false
 				))
@@ -448,7 +448,7 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 					var landing := action_target + Vector2(0.0, -0.045)
 					targets.append(landing)
 					targets.append(landing.lerp(base_target, 0.38))
-				RallyEventModel.EventType.DEFENSE:
+				RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 					var recovery_weight := 0.18 \
 						if action_target.distance_to(current) > 0.20 else 0.32
 					targets.append(action_target.lerp(base_target, recovery_weight))
@@ -460,7 +460,7 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 				var landing := action_target + Vector2(0.0, 0.045)
 				targets.append(landing)
 				targets.append(landing.lerp(base_target, 0.38))
-			RallyEventModel.EventType.DEFENSE:
+			RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 				var recovery_weight := 0.18 if action_target.distance_to(current) > 0.20 else 0.32
 				targets.append(action_target.lerp(base_target, recovery_weight))
 			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.SET:
@@ -518,7 +518,7 @@ func movement_phase_caption_for(
 			return "Read step" if phase_index == 0 else "Block close"
 		RallyEventModel.EventType.RECEPTION:
 			return "Read step" if phase_index == 0 else "Receive move"
-		RallyEventModel.EventType.DEFENSE:
+		RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			return "Read step" if phase_index == 0 else (
 				"Dive" if not bool(event.success) else "Defensive move"
 			)
@@ -538,7 +538,8 @@ func has_player_movement(event: Resource) -> bool:
 		RallyEventModel.EventType.SET,
 		RallyEventModel.EventType.ATTACK,
 		RallyEventModel.EventType.BLOCK,
-		RallyEventModel.EventType.DEFENSE,
+		RallyEventModel.EventType.DIG,
+		RallyEventModel.EventType.ATTACK_COVERAGE,
 	]
 
 
@@ -787,7 +788,7 @@ func _prepare_player_movement(event: Resource) -> void:
 		movement_start = Vector2(event.metadata["movement_start"])
 		_set_live_playback_position(movement_player_id, movement_start)
 	match int(event.event_type):
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			movement_target = event.start_position
 		RallyEventModel.EventType.SET:
 			movement_target = event.start_position
@@ -803,7 +804,7 @@ func _movement_action_target(event: Resource) -> Vector2:
 	if event.metadata.has("movement_target"):
 		return Vector2(event.metadata["movement_target"])
 	match int(event.event_type):
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			return event.start_position
 		RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
 			return event.start_position
@@ -939,7 +940,7 @@ func _support_target_for_side(
 	var front_row := CourtConstants.is_front_row_slot(slot_number)
 	if own_phase:
 		match event_type:
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 				target = local_base.lerp(local_action, 0.10 if front_row else 0.18)
 			RallyEventModel.EventType.SET:
 				target = local_base.lerp(Vector2(
@@ -961,7 +962,7 @@ func _support_target_for_side(
 				else:
 					target.x = lerpf(local_base.x, local_action.x, 0.16)
 					target.y = clampf(local_base.y, 0.70, 0.92)
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 				target = local_base.lerp(Vector2(local_action.x, local_base.y), 0.05)
 			RallyEventModel.EventType.BLOCK:
 				target = local_base.lerp(local_action, 0.10)
@@ -2249,7 +2250,7 @@ func _playback_event_color(followup_block: Resource) -> Color:
 				"touch", "funnel", "recycle": return palette["block_deflect"]
 				"miss": return palette["block_miss"]
 				_: return palette["block_miss"]
-		RallyEventModel.EventType.DEFENSE:
+		RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			return palette["defense"]
 		RallyEventModel.EventType.POINT:
 			return palette["path"]

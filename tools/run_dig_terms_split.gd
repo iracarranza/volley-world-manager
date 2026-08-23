@@ -156,7 +156,7 @@ func _arrival_mean(side: Dictionary, term: String) -> float:
 func _collect(result: Resource, sides: Dictionary) -> void:
 	for raw_event in result.events:
 		var event: Resource = raw_event
-		if int(event.event_type) != RallyEventScript.EventType.DEFENSE:
+		if int(event.event_type) != RallyEventScript.EventType.DIG:
 			continue
 		var side := str(event.metadata.get("side", ""))
 		if not sides.has(side):

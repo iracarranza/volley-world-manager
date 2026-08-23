@@ -220,7 +220,8 @@ func _collect(
 		(legacy_error[key] as Array).append(_worst_height_gap(legacy, display))
 		if int(event.event_type) in [
 			RallyEventScript.EventType.RECEPTION,
-			RallyEventScript.EventType.DEFENSE,
+			RallyEventScript.EventType.DIG,
+			RallyEventScript.EventType.ATTACK_COVERAGE,
 		]:
 			var band := PASS_BANDS[clampi(
 				int(floor(clampf(float(event.quality), 0.0, 0.999) * 5.0)), 0, 4
@@ -305,7 +306,8 @@ func _legacy_display(
 		RallyEventScript.EventType.SERVE:
 			rise_scale = 1.35
 			minimum_lift = 0.42
-		RallyEventScript.EventType.RECEPTION, RallyEventScript.EventType.DEFENSE:
+		RallyEventScript.EventType.RECEPTION, RallyEventScript.EventType.DIG, \
+			RallyEventScript.EventType.ATTACK_COVERAGE:
 			rise_scale = 1.55
 			minimum_lift = 0.62
 		RallyEventScript.EventType.SET:

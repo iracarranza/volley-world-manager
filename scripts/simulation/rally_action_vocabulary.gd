@@ -169,12 +169,15 @@ static func classify(result: Resource, index: int) -> Dictionary:
 				return _result("Roof", 1.0, true)
 			if outcome in ["touch", "funnel", "recycle"] and not block_side_won:
 				return _result("Got tooled", 0.96, true)
+			## Floor dig only. A funnel is the wall steering the ball into its own
+			## back court; if the next contact is attack coverage the ball went
+			## back to the hitters, which is the opposite result.
 			if outcome == "funnel" and next != null \
-					and int(next.event_type) == RallyEventModel.EventType.DEFENSE \
+					and int(next.event_type) == RallyEventModel.EventType.DIG \
 					and bool(next.success):
 				return _result("Funnel", 0.78, true)
 			if outcome == "touch" and next != null \
-					and int(next.event_type) == RallyEventModel.EventType.DEFENSE \
+					and int(next.event_type) == RallyEventModel.EventType.DIG \
 					and bool(next.success):
 				return _result("Soft block", 0.80, true)
 			## Same correction: a wall beaten by tempo is one the
@@ -183,12 +186,23 @@ static func classify(result: Resource, index: int) -> Dictionary:
 			if outcome == "miss" and _assist_close(event) < 0.35:
 				return _result("Beaten by tempo", 0.70, true)
 			return _result("Block formed", 0.32, false)
-		RallyEventModel.EventType.DEFENSE:
+		## **The metadata test is gone because the event type now carries it.**
+		## "Cover" was reached by asking a `DEFENSE` event whether its metadata
+		## said `coverage == "attack"` -- a discriminator living beside the type
+		## rather than in it, which is how the two contacts stayed conflated
+		## everywhere else. The arms below are now decided by what the contact is.
+		RallyEventModel.EventType.ATTACK_COVERAGE:
+			if bool(event.success):
+				return _result("Cover", 0.72, true)
+			## A spilled cover keeps the wording it had before the split. It is
+			## unreachable today -- coverage came up 38 times out of 38 across 700
+			## rallies -- and inventing a phrase for a case nothing produces would
+			## be adding vocabulary under cover of a rename.
+			return _result("Defense beaten", 0.36, false)
+		RallyEventModel.EventType.DIG:
 			var defense_margin := float(event.metadata.get("arrival_margin", 0.2))
 			if bool(event.success) and defense_margin < 0.0:
 				return _result("Sprawl dig", 0.86, true)
-			if bool(event.success) and str(event.metadata.get("coverage", "")) == "attack":
-				return _result("Cover", 0.72, true)
 			if not bool(event.success) and defense_margin > 0.24:
 				return _result("Missed the easy one", 0.82, true)
 			return _result("Dig controlled" if bool(event.success) else "Defense beaten", 0.36, false)

@@ -683,7 +683,7 @@ const PHASE_POSE := {
 	## through and the figure stands up straight, which is a picture of somebody
 	## queuing.
 	"Floor": {
-		"event": RallyEventModel.EventType.DEFENSE,
+		"event": RallyEventModel.EventType.DIG,
 		"elevation": 0.0, "phase": -0.08,
 	},
 }

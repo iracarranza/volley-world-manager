@@ -128,7 +128,11 @@ static func contact_height(event: RallyEvent, profiles: Dictionary) -> float:
 					str(event.metadata.get("serve_style", "Standing"))
 				),
 			)
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+		## Any ball played up off a defensive contact, which is both of them: a
+		## coverer bumping a block rebound is doing the same thing to the ball as
+		## a defender digging a swing, from a metre instead of from six.
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, \
+		RallyEventModel.EventType.ATTACK_COVERAGE:
 			return GeometricAttackPromotion.pass_contact_from_height(height_meters)
 		RallyEventModel.EventType.SET:
 			var capability: Dictionary = event.metadata.get("setter_capability", {})

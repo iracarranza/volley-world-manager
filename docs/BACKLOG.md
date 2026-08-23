@@ -812,6 +812,26 @@ decided and unbuilt.
 Whichever way it goes, the label is wrong today: a fallback should not name
 itself after the region it is standing in for.
 
+**Three drafts now exist**: `docs/design/MINOR_REGION_PRINCIPLES_DRAFTS.md`. It
+also settles two things this entry left open. The seven axes' actual effects in
+the rally are written down for the first time, which is what any of these numbers
+have to be judged against; and asking whether the eight *existing* sets can be
+predicted from the tables the same regions already carry gives a real answer —
+`pin_focus` ranks perfectly against pin mass, `transition_commitment` follows the
+specialty lists, and `emotional_expression` has no modelled input anywhere. So
+two axes of seven derive, and the recommendation is the draft that authors only
+what the tables already force.
+
+Zaitgaist turns out not to be one of the six. Its principles should be looked up
+from the reigning Sixnet champion, exactly as its specialty already is, and
+storing seven permanent numbers for the region defined by not having an identity
+is the contradiction. That part needs no design call.
+
+The **kits** half of the same gap — six regions on `FALLBACK_PATTERN`, which
+`regional_kits.gd` calls "the list of what is still owed" — has drafts in
+`docs/design/MINOR_REGION_KIT_DRAFTS.md`, and reaches the same conclusion about
+Zaitgaist independently.
+
 ## 4. Career dashboard — the part of the rework that regressed out
 
 The nav dropdown, Home news panel, Team sub-tabs and the aggregated lineup
@@ -2825,10 +2845,36 @@ participates, and turning the offence flags on does not fix it -- measured with
 `ENABLE_HOME_MIDDLE_OFFENSE` and `ENABLE_CLAMPED_ARRIVAL_MARGIN` both on, the home
 wall still contacted exactly 6 balls with an identical depth distribution.
 
-**Next, and it is a different question from the one this section was opened to
-answer: why does the home wall fail to form on a quarter of opponent swings?**
-`_form_home_block` is the producer. Ask what it returns on those 31 rows before
-changing anything in it.
+**Answered: `docs/review/HOME_WALL_FORMATION.md`.** Not a read failure and not
+the `block_participation` filter -- of 134 "no wall" rows, **0** had nobody
+assigned and **134** had a primary who could not get across. Both formers compute
+the same setter pull; `_form_home_block` alone writes it onto the body via
+`live_positions`, and it is called twice per rally, so the second call pulls again
+from the already-pulled position. Suppressing terms one at a time: 134 as
+shipped, **42** with the pull anchored idempotently to the rotation slot, **0**
+with it never written. The failures are first-tempo balls -- set flight p50 0.128 s
+against 0.284 s where the wall forms -- against a body displaced 1.3 m from its
+slot with 0.43 s to cover 1.0 m.
+
+**De-compounded and certified.** `_form_home_block` takes an
+`applied_setter_pull` so the re-formation neither recomputes nor re-writes the
+drift the pre-release call applied. Matched population: **no wall 134 -> 42** on
+all three intents, displacement at close time 1.105 m -> 0.608 m, and terminal
+block outcomes essentially unmoved (stuff 14/12/8 -> 15/12/8) -- which is the
+figure to read if anyone suspects a balance change wearing a bug fix's clothes.
+The 92 recovered rows became `over` and `around`: a wall that exists being beaten.
+
+First-call-only was chosen over slot-anchoring to preserve live displacement, and
+measured, **the two are identical on this fixture** -- over 909 formations a
+front-row blocker's live position at first-formation time equals their rotation
+slot every time, zero counterexamples. So the preservation is real but latent, and
+the entire 1.3 m displacement was the setter pull applied twice with nothing else
+contributing.
+
+**Still open, and still #63's**: whether the pull should mutate a body at all,
+home/opponent/both/neither. The 42 remaining rows are exactly one honest
+application against a first-tempo ball -- set flight p50 0.101 s against 0.221 s
+where the wall forms.
 
 ### One defect this instrumentation introduced
 
@@ -6997,3 +7043,174 @@ What that page has to hold, and the two questions it will have to answer:
    it wants measuring against a mixed squad before the page is built on top of
    it. The chef serves one paste a week; whether comfort should read what is
    *served* rather than what is *available* is the open question.
+
+
+---
+
+## The second contact after the transfer policy: what is left
+
+`docs/review/SECOND_CONTACT_TRANSFER.md` implemented *strong first
+responsibility, not absolute*: the designated-setter term replaces the plan's
+per-slot emergency duty instead of stacking on it, so the setter's authority is a
+flat +0.46 in every rotation, and the opponent's serve-receive second contact now
+gets the serve's flight as a head start. Six rotation gates pass, five checks
+guard it, and technical quality can no longer buy a ball off a reachable setter
+in any rotation. Three things were deliberately left.
+
+**1. The obstruction toll ignores distance.** With a team-mate parked exactly on
+the contact point, the setter's arrival margin falls from +1.200 s to −0.133 s
+over twelve centimetres. This was first written up as the movement model's
+standing-start cost and that was wrong: clear travel is continuous and monotone
+(12.5 cm costs 0.2556 s), and the collapse is `_navigation_waypoint` bending the
+route around the body, at ~1.35 s whether the leg is 5 mm or 50 cm. A toll
+independent of distance is the thing to look at, and it belongs to the
+movement/approach work rather than to second-contact selection. In situ it is
+worth half a percentage point of emergency setting.
+
+**2. Three opponent callers still pass no head start.** The two dig paths and the
+coverage path into `_resolve_opponent_transition` each have a flight in scope and
+each mirrors `_resolve_home_continuation`, which does pass one — so the asymmetry
+is very likely live there too. Only the serve-receive site was corrected, because
+that is the one a fixture demonstrated; repairing three unmeasured sites on the
+strength of one measured one is how a pass stops being verifiable.
+
+**3. ~~The opponent's movement is recomputed after selection.~~ Done.**
+`FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md` corrected it: the opponent now
+consumes `opponent_setter_choice`'s start, route and travel, measures its margin
+against the realized pass rather than a 0.68 literal, is handed the first ball's
+own trajectory instead of `{}`, and publishes `arrival_margin` and
+`emergency_setter` like the home side. Opponent mean travel fell 0.81 s → 0.27 s
+against home's 0.21 s. Four checks guard it, all verified to fail on the old
+resolver.
+
+Still open and untouched, from the audit: **three duty tables for one concept**
+(`_second_contact_setter`, `_spatial_setter_choice` and
+`ShadowSetterResponseSystem._duty_priority`, the last ranking `Stay available to
+attack` *below* having no duty), and the semantics of `Stay available to attack`
+itself, which no default produces.
+
+
+---
+
+## ~~What is a defender oriented toward while they wait?~~ CLOSED, twice over
+
+`docs/review/DEFENSIVE_READINESS_BOUNDARY.md` stopped the defensive-responsibility
+pass at its first question, and this is the sentence that unblocks it.
+
+The movement model already prices preparation correctly: `_movement_profile`
+turns `RallyPlayerState.facing` into a direction-change delay and an arrival
+balance, spending it on **startup** and never on top speed. Measured, a body
+prepared the wrong way pays ~0.18 s on a 1.37 s trip.
+
+Nothing supplies that facing. It defaults to the constant `Vector2(0, -1)`;
+`apply_position` only updates it when velocity is non-zero, so a standing
+defender never does; and `_travel` overwrites it with the route direction on
+every call, which pins `facing_fit` at 1.0 for every voli on every leg. The
+defensive claimant does not even receive an actor -- `evaluate_arrival` takes a
+player and a point, and its only startup term is `reaction_delay` from
+`anticipation`, which is omnidirectional. Measured: four balls, four directions,
+identical reach margin of 1.0840 m.
+
+`RallyPlayerState.readiness` has the same shape -- defaults to 1.0, never
+written, and `ContactEnvelopeSystem` spends it on the contact envelope and the
+take-off multiplier regardless.
+
+Three candidate rules, none selected, each with a different consequence:
+
+1. **orient toward the live threat** -- most physically obvious; defenders get
+   better at balls in front and worse at balls behind, which is the sport;
+2. **orient toward the assigned zone** -- preparation becomes a consequence of
+   the manager's plan, so a defender set deep is genuinely worse at a short ball;
+   the most tactical texture and the biggest behavioural change;
+3. **retain facing from the last committed movement** -- the only option that is
+   purely a repair (stop `_travel` overwriting), but a voli who has stood still
+   all rally still carries an arbitrary constant.
+
+Until one exists as published state, propagating facing into defensive arrival
+would propagate a value that never varies, and the whole defensive-responsibility
+policy -- feasibility gate, immediate-possession precedence, short-ball
+ownership, fallback ordering -- sits downstream of it. The policy itself is
+written and agreed; only this input is missing.
+
+**Closed in two passes.** `f93a78b` gave a resting body a side-relative
+preparation and wired it into the claimant, replacing the identical 1.0840 m
+above with 1.2665 front / 1.0004 sides / 0.7344 behind. The follow-up
+(`docs/review/MOVING_ORIENTATION.md`) made it survive movement: the movement
+**form** decides, so IDLE, LATERAL, BLOCK_CLOSE and RECOVERY preserve
+orientation and only APPROACH and TRANSITION establish it from the route. Of the
+three candidate rules above, **option 3 was taken and sharpened** -- and the
+"arbitrary constant" objection to it dissolved when the constant turned out to
+be side-relative and toward the net, which is a real preparation rather than an
+arbitrary one. Options 1 and 2 were both rejected as orienting a body toward
+information it has not yet been tested against.
+
+`readiness` is closed too, by deletion: `docs/review/READINESS_REMOVAL.md`. It
+was never written anywhere, so its two envelope consumers were a folded constant
+and an identity, and a threshold at 0.45 sat on a distribution that was a single
+point at 1.0.
+
+## ~~Carry a rally actor between legs~~ MEASURED, AND NOT WORTH BUILDING YET
+
+Orientation now evolves honestly everywhere an actor is carried -- through
+`project_toward`, the four live integrators and the opportunity system. The
+legacy resolver is the one consumer that still cannot see it:
+`_ready_facings` hands the defensive claim a **stationary** side-relative facing
+for every defender, because there is no persistent actor to read a moved one
+from. `RallyPlayerState.create` appears exactly twice in `rally_simulator.gd`,
+both constructing a fresh actor for a single leg.
+
+That is why the moving-orientation pass left the outcome mix over 600 rallies
+byte-identical. The repair is real in the model and invisible in a match, and
+it will stay invisible until an actor survives from one leg to the next.
+
+The same missing structure is what makes `ContactEnvelopeSystem`'s new AIRBORNE
+takeoff exclusion currently unreachable, and it is what a future readiness
+relation would need before it could be measured at all. One piece of plumbing,
+three consequences.
+
+**Measured, and the paragraph above is wrong about the order.**
+`tools/run_carried_facing_probe.gd`, over 600 rallies: of **796** defensive
+contacts, **2** were made by a voli who had already swung. **0.3%.** That share
+is the whole of what a carried facing would change, because every defensive leg
+in the resolver is `"lateral"` and LATERAL *preserves* orientation -- a defender
+pursuing a ball cannot change their own facing, so the carrier would hold the
+side-relative ready facing they already get. The setter is the same: 26 more
+contacts, and `_spatial_setter_choice` resolves a release as `"lateral"` too.
+
+So building it now would ship a carrier for a constant -- the failure this
+repository keeps catching, reached by building rather than by neglect.
+
+The dependency runs the other way. Carrying a facing is **downstream** of §8, not
+upstream of it: defenders never change orientation because every defensive leg
+is LATERAL, every defensive leg is LATERAL because nothing can select the other
+form, and nothing can select it because the two relations below are missing.
+Do §8 first; this becomes worth building the moment a defender can open up.
+
+One thing here is worth doing on its own and is not blocked: the two halves of
+the engine **disagree about the setter's release**. `ShadowSetterResponseSystem`
+resolves it in TRANSITION and `_spatial_setter_choice` resolves the same movement
+as `"lateral"`. Under the moving-orientation policy §11 that is a
+classification defect, and exactly one of them is describing the physical
+movement. It needs a decision about what a setter's release *is* before either
+is changed, so it is named here rather than fixed.
+
+## Two relations the defensive form comparison needs, and nobody has measured
+
+`docs/review/MOVING_ORIENTATION.md` §4 stopped the *retain facing + LATERAL* vs
+*turn/open + TRANSITION* comparison on two independent grounds. Both are
+missing relations rather than missing wiring:
+
+1. **What a hip turn costs.** `LocomotionModel.direction_change_seconds`
+   normalises each mode against its own reference cadence, so the mode cancels:
+   the largest LATERAL-vs-TRANSITION difference across every facing fit is
+   0.000024 s. The engine prices changing *direction* and does not price
+   changing *form*.
+2. **A defender's per-form top speed.** `ENABLE_UNIFIED_SPEED_MODEL` is false,
+   so `evaluate_arrival` runs on one legacy ceiling with no mode in it.
+   Switching it moves every defensive arrival by up to 39% before any form is
+   compared.
+
+Worth knowing before either is attempted: inside a normal defensive window
+(~0.53 s) neither form reaches its own ceiling, so the comparison is worth
+almost nothing for the balls a defender actually plays and only pays on long
+pursuits.

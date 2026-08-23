@@ -208,6 +208,45 @@ const NET_SHORTFALL_FLOOR: float = 0.25
 ## serve that essentially cannot miss.
 const SERVE_SPREAD_MULTIPLIER: float = 0.70
 
+## How far a server may come off full pace to get the ball over the tape, and in
+## how many steps. The same shape as the swing's own relief sweep and for the
+## same reason: a server who cannot clear the net at full pace does not serve
+## through it, they take something off.
+##
+## **These four lived in `rally_simulator._serve_arc` and have been moved here
+## whole.** They were the working half of the old inverse solve -- the half that
+## priced arc and pace together and picked the quickest ball that cleared -- and
+## the audit in `docs/design/CONTACT_AND_BALL_FLIGHT.md` kept them on purpose.
+## What was wrong was never the sweep; it was that the sweep was aimed at a
+## landing point an RNG draw had already decided on.
+const SERVE_PACE_RELIEF_STEPS: int = 8
+## There is no relief *floor* constant, and there was: `SERVE_PACE_RELIEF_FLOOR`
+## sat at 0.55 and stopped the sweep before the serve became feasible. The floor
+## is now `BallFlightModel.minimum_speed_to_reach` for the aim and the candidate
+## spin -- see `_serve_launch`.
+## How many spin settings a server is allowed to consider between none and all
+## of theirs. Three is enough to find the trade -- flat, half-brushed, fully
+## brushed -- and a finer sweep buys resolution the shot does not have.
+const SERVE_SPIN_LEVELS: int = 3
+## The fourth was a flat `SERVE_NET_CLEARANCE_METERS = 0.12`, and it is gone.
+##
+## `_feasible_launch` had already found that exact constant to be "a constant
+## standing where a function belongs" and replaced it, for the swing, with the
+## margin the shot's own vertical spread demands -- because execution error
+## arrives at the tape as `ground_to_net * tan(error)`, which is centimetres from
+## a tight set and a third of a metre from four metres back. **A serve is struck
+## nine metres back**: the same geometry, at its extreme.
+##
+## The old sweep did not notice, and could not: it solved toward a landing point
+## that had already been decided, with no execution error applied afterwards, so
+## the margin never had to cover anything. Pointing the same sweep forward is
+## what exposed it -- measured, the median serve cleared by 0.071 m against a
+## planned 0.12, and 90% of the resulting errors were into the tape.
+##
+## So there is no serve clearance constant any more. There is one clearance
+## *rule*, `NET_CLEARANCE_MARGIN_METERS` floored and `NET_CLEARANCE_SPREAD_SIGMAS`
+## budgeted, and both contacts obey it.
+
 
 ## One swing, start to finish.
 ##
@@ -664,34 +703,19 @@ static func resolve_serve(
 	## geometry that puts spikes into the net from four.
 	var control := _rating(server, "serve_consistency") * 0.6 \
 		+ _rating(server, "serve_technique") * 0.4
-	var serve_gravity := BallSpin.gravity_for(spin_state)
-	var launch := _feasible_launch(
-		contact, bearing, speed, contact_height_meters, distance, distance,
-		attacking_negative_y,
+	var launch := _serve_launch(
+		contact, bearing, speed, contact_height_meters, distance,
+		attacking_negative_y, spin_state,
 		AttackSwingModel.vertical_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 		AttackSwingModel.bearing_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
-		## **A serve does not give up pace to flatten its arc.**
-		##
-		## For a swing that is the whole trade -- a roll shot is pace surrendered
-		## to get over a wall, and surrendering the least of it is the shot a
-		## player picks. A serve has no wall, and pace is not the hitter's
-		## incidental choice there but the tactical instruction itself:
-		## `tactical_risk` reaches the ball as speed and as nothing else, which is
-		## the contract `_test_the_serve_flies_the_same_ball_as_the_spike` holds.
-		##
-		## Measured: every serve takes the lofted branch, from nine metres back
-		## with the tape in the way, so softening applied to all of them. At risk
-		## 0.0 / 0.5 / 1.0 the softened serve came back at 11.68 / 11.18 / 11.39
-		## m/s -- not merely compressed but non-monotone, the instruction replaced
-		## by whatever pace the flattening search happened to stop at.
-		false,
-		## **And the ball's own gravity.** Solved flat, the search could only ever
-		## find the serve a spinless ball can hit -- so a topspin server's launch
-		## was certified for one flight and then drawn flying another, and the pace
-		## the spin was supposed to buy went nowhere. This is the whole of the
-		## remaining serve gap.
-		serve_gravity,
+		AttackSwingModel.power_error_scale(control, SERVE_SPREAD_MULTIPLIER, false),
 	)
+	## **The one launch state.** Everything below reads pace, angle and gravity
+	## from here and from nowhere else, which is the whole of what this pass
+	## changed: the ball is chosen, then flown, and where it lands is the answer
+	## rather than the question.
+	var serve_gravity := float(launch.gravity_mps2)
+	var chosen_spin: Dictionary = launch.spin
 	speed = float(launch.speed_mps)
 	var delivered := AttackSwingModel.deliver(
 		bearing, float(launch.angle_degrees), speed, control,
@@ -710,14 +734,217 @@ static func resolve_serve(
 	return {
 		"available": true,
 		"outcome": str(resolved.outcome),
+		"out_reason": str(resolved.get("out_reason", "")),
 		"bearing_degrees": bearing,
 		"target_distance_meters": distance,
 		"speed_mps": float(delivered.speed_mps),
 		"launch_mode": str(launch.mode),
+		## The state a consumer needs to fly this ball itself, published rather
+		## than left to be reconstructed from two endpoints and a duration --
+		## which is what `BallPresentation.launch_speed_mps` had been doing, and
+		## why truncating a flight silently changed the speed it left the hand at.
+		"launch": {
+			"contact": contact,
+			"contact_height_meters": contact_height_meters,
+			"bearing_degrees": float(delivered.bearing_degrees),
+			"angle_degrees": float(delivered.vertical_angle_degrees),
+			"speed_mps": float(delivered.speed_mps),
+			"horizontal_speed_mps": float(resolved.flight.horizontal_speed_mps),
+			"vertical_speed_mps": float(resolved.flight.vertical_speed_mps),
+			"gravity_mps2": serve_gravity,
+			"spin": chosen_spin,
+			"mode": str(launch.mode),
+			"cleared": bool(launch.cleared),
+		},
+		"spin": chosen_spin,
 		"delivered": delivered,
 		"resolution": resolved,
 		"landing": resolved.landing,
 		"flight": resolved.flight,
+	}
+
+
+## The ball this server actually chooses to hit, at the target they aimed at.
+##
+## **Production's sweep, kept whole and pointed forward.** It used to run in
+## `rally_simulator._serve_arc` against a landing point that a serve-error coin
+## flip had already moved, so it was solving "what launch puts the ball where the
+## verdict says it went". Nothing about the search was wrong -- it prices arc and
+## pace together, insists on the tape, and prefers the quickest ball rather than
+## the first one found. What was wrong was the question. Here it is asked of the
+## *aim*, and the landing is left to the physics.
+##
+## Two things are swept because the answer is a combination and picking either
+## half first throws the other away: how much pace the server keeps, and how much
+## they brush the ball. Topspin buys the dive that lets a hard serve drop inside
+## the endline and pays for it in range, so a server's full spin applied to every
+## serve puts the far court out of reach entirely.
+##
+## The candidate kept is the one with the greatest horizontal ground speed,
+## because what a receiver is given is *time*, and minimising the flight is
+## therefore what a server is trying to do.
+static func _serve_launch(
+	contact: Vector2,
+	bearing_degrees: float,
+	speed_mps: float,
+	contact_height_meters: float,
+	aim_distance_meters: float,
+	attacking_negative_y: bool,
+	spin_state: Dictionary,
+	## What this serve is going to scatter by, which is what decides how much air
+	## it has to plan for. Both spreads, because a bearing error lengthens the
+	## path to the tape and the ball has to stay up over the extra ground.
+	vertical_spread_degrees: float,
+	bearing_spread_degrees: float,
+	## **The fraction of intended pace one sigma of power shortfall removes, and
+	## it is deliberately not used.**
+	##
+	## The serve's dominant net-error channel is power, not angle -- measured, a
+	## power-shortfall draw past one sigma put 0.81 of live serves into the tape
+	## against 0.16 for an equally bad vertical draw. Budgeting the clearance
+	## against it at the same two sigma the angle already gets was tried, both by
+	## adding the two shortfalls and by combining them in quadrature as the
+	## independent draws they are. Both work, and both cost too much: the net rate
+	## went to 0.001-0.007, and the live serve became a **2.8 second lob** at 66
+	## degrees with nine metres of clearance and no aces at all.
+	##
+	## The reason is the distance. Height at the tape carries a gravity drop going
+	## as `1/v^2`; from nine metres behind the endline two sigma of pace is worth
+	## over two metres of height, against half a metre for two sigma of angle. A
+	## serve that insures against its own mishit at the rate an angle is insured
+	## stops being a serve.
+	##
+	## Making it work needs a *smaller* sigma count for pace than for angle, and
+	## nothing in the model says what that number is. It is a real design
+	## question -- how much pace does a server hold back? -- and inventing a
+	## fourth constant to answer it is what this repository's process rules forbid
+	## a fidelity pass from doing. The parameter stays on the signature so the
+	## quantity is named and reachable when that decision is made.
+	## See `docs/design/CONTACT_AND_BALL_FLIGHT.md`, UNRESOLVED PHYSICS 7.
+	_power_shortfall_scale: float,
+) -> Dictionary:
+	var aimed_to_net := _ground_distance_to_net(
+		contact, bearing_degrees, attacking_negative_y
+	)
+	var ground_to_net := minf(
+		maxf(
+			_ground_distance_to_net(
+				contact, bearing_degrees + bearing_spread_degrees,
+				attacking_negative_y,
+			),
+			_ground_distance_to_net(
+				contact, bearing_degrees - bearing_spread_degrees,
+				attacking_negative_y,
+			),
+		),
+		aimed_to_net * NET_PATH_STRETCH_CAP,
+	)
+	## The swing's own clearance rule, applied to the contact it matters most on.
+	## See the constants above for why the serve no longer has one of its own.
+	var needed := CourtConstants.NET_HEIGHT_METERS + maxf(
+		NET_CLEARANCE_MARGIN_METERS,
+		ground_to_net * tan(deg_to_rad(
+			maxf(vertical_spread_degrees, 0.0) * NET_CLEARANCE_SPREAD_SIGMAS
+		)),
+	)
+	var full_speed := maxf(speed_mps, BallFlightModel.MIN_SPEED_MPS)
+	var best := {}
+	var best_ground_speed := 0.0
+	## The least-bad serve seen anywhere in the sweep, kept in case nothing
+	## clears -- the highest ball at the tape, which is the same serve this
+	## server was always going to hit, aimed at the problem. `_feasible_launch`
+	## reaches for the identical fallback on a swing and says why: a hitter who
+	## cannot get the ball over still tries to get the ball over.
+	var forced := {}
+	var forced_height := -INF
+	## **Spin outside, pace inside, because the floor of the pace sweep is a
+	## property of the spin.** A ball falling at 25 m/s squared needs more speed
+	## to carry the same distance than one falling at 9.8, so there is no single
+	## slowest serve -- there is one per brush setting, and it has to be solved
+	## before the pace can be swept against it.
+	for spin_step in range(SERVE_SPIN_LEVELS):
+		var used := BallSpin.spin(
+			float(spin_state.get("axis", 0.0)),
+			float(spin_state.get("rate_rps", 0.0))
+				* float(spin_step) / float(SERVE_SPIN_LEVELS - 1),
+		)
+		var gravity := BallSpin.gravity_for(used)
+		## **The floor is derived, and it used to be a dial.**
+		##
+		## `SERVE_PACE_RELIEF_FLOOR` stopped the sweep at 0.55 of full pace
+		## whatever the shot was, and for a strong float server nothing inside
+		## that bound clears: measured, the driven root's height at the tape
+		## climbed 1.447 -> 2.674 m as pace came off and was *still* short of the
+		## 2.877 m needed when the sweep ran out. The search then fell to the
+		## lofted root and served a 68 degree ball with 10.1 m of clearance and a
+		## 2.98 s flight -- a punt, on 6.5% of live serves, and worse for a better
+		## server, because technique purifies a float and removes the topspin that
+		## would have let it dive.
+		##
+		## `_quickest_clearing_loft` had already written down the answer, about
+		## its own floor, forty lines away: *"The floor is a derived quantity, not
+		## a dial. Below the minimum speed for the range nothing reaches at any
+		## angle, and at it the two roots merge."* That is the honest bottom of a
+		## pace sweep -- past it there is no serve to find, and short of it there
+		## are serves being refused for no physical reason.
+		var reach_floor := float(BallFlightModel.minimum_speed_to_reach(
+			aim_distance_meters, contact_height_meters, gravity
+		).speed_mps)
+		## A server who cannot carry the ball that far at full pace has no relief
+		## to give: the sweep would otherwise interpolate *upward*, handing them
+		## speed they do not have.
+		var relief_floor := minf(reach_floor, full_speed)
+		for step in range(SERVE_PACE_RELIEF_STEPS):
+			var trial := lerpf(
+				full_speed, relief_floor,
+				float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
+			)
+			var solved := BallFlightModel.solve_angle_for_range(
+				trial, aim_distance_meters, contact_height_meters, gravity
+			)
+			for branch in [&"driven", &"lofted"]:
+				if not bool(solved.get("%s_found" % branch, false)):
+					continue
+				var angle := float(solved.get("%s_angle_degrees" % branch, 0.0))
+				## **Measured under the gravity this candidate flies under.**
+				## The sweep used to solve the flight with the ball's own spin
+				## gravity and then ask its height at the net under the default
+				## 9.8, so a topspin serve was certified over a tape it crossed
+				## as much as a metre lower. One ball, two gravities -- §0.
+				var height_at_net := _height_at_net(
+					trial, angle, contact_height_meters, ground_to_net, gravity
+				)
+				var candidate := {
+					"angle_degrees": angle, "speed_mps": trial,
+					"gravity_mps2": gravity, "spin": used,
+					"mode": str(branch), "cleared": true,
+				}
+				if ground_to_net > 0.0 and height_at_net < needed:
+					if height_at_net > forced_height:
+						forced_height = height_at_net
+						forced = candidate.duplicate()
+						forced["mode"] = "forced"
+						forced["cleared"] = false
+					continue
+				var ground_speed := trial * cos(deg_to_rad(angle))
+				if ground_speed <= best_ground_speed:
+					continue
+				best_ground_speed = ground_speed
+				best = candidate
+	if not best.is_empty():
+		return best
+	if not forced.is_empty():
+		return forced
+	## Nothing solved at any pace or spin: this server cannot carry the ball to
+	## where they aimed at all. They hit it anyway, flat out and flat, and the
+	## resolution below will read the tape off the flight like every other serve.
+	return {
+		"angle_degrees": AttackPowerModel.DRIVEN_REFERENCE_ANGLE_DEGREES,
+		"speed_mps": full_speed,
+		"gravity_mps2": BallSpin.gravity_for(spin_state),
+		"spin": spin_state,
+		"mode": "unsolved",
+		"cleared": false,
 	}
 
 

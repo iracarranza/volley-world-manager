@@ -14,6 +14,13 @@ static func apply(state: RallyState, candidate: Dictionary) -> Dictionary:
 	var hitter := state.player_state(&"home", hitter_id)
 	var contact_time := float(candidate.get("contact_time", -1.0))
 	var center := Vector2(candidate.get("center_position", hitter.position))
+	## A hitter arrives on a committed run-up, and the run-up is the one movement
+	## in the sport whose route is physically part of the action -- the torso is
+	## already turned into the swing. Classifying the arrival before applying it
+	## is what lets `apply_position` establish that orientation; the persistent
+	## actor was otherwise left in the mode the state builder made it (IDLE), so
+	## a hitter finished their approach still set the way they had been standing.
+	hitter.movement_mode = RallyPlayerState.MovementMode.APPROACH
 	hitter.apply_position(center, Vector2(candidate.get(
 		"velocity_mps", Vector2.ZERO
 	)))

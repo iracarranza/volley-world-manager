@@ -153,8 +153,9 @@ static func from_serve(
 	## inside the endline if it is falling at about 26 m/s squared, which at
 	## `TOPSPIN_GRAVITY_PER_RPS` needs roughly 21 revolutions per second -- so an
 	## elite topspin server has to reach the top of this range and a mediocre one
-	## must serve slower or serve it out. `_serve_arc`'s relief sweep then does
-	## exactly that on its own, without a rule anywhere saying so.
+	## must serve slower or serve it out. The serve's relief sweep -- now
+	## `GeometricAttackResolver._serve_launch`, formerly `rally_simulator._serve_arc`
+	## -- then does exactly that on its own, without a rule anywhere saying so.
 	##
 	## That is the shape the design asked for: serve technique *is* available
 	## topspin, and available topspin is what a hard serve is made of.

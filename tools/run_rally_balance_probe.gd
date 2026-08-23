@@ -38,6 +38,7 @@ func _initialize() -> void:
 		"home_swings": 0, "opponent_swings": 0,
 		"home_kills": 0, "opponent_kills": 0,
 		"digs_attempted": 0, "digs_up": 0,
+		"coverage_attempted": 0, "coverage_up": 0, "coverage_quality": 0.0,
 		"serves": 0, "aces": 0, "serve_errors": 0,
 		"receptions": 0, "reception_quality": 0.0,
 		"dig_quality": 0.0, "digs_counted": 0,
@@ -73,10 +74,17 @@ func _initialize() -> void:
 		int(tally.home_swings), int(tally.opponent_swings),
 	])
 	print("")
+	print("    %d floor digs attempted" % int(tally.digs_attempted))
 	_line("dig rate", float(tally.digs_up) / maxf(float(tally.digs_attempted), 1.0),
 		"0.35 - 0.55")
 	_line("dig quality, mean",
 		float(tally.dig_quality) / maxf(float(tally.digs_counted), 1.0), "")
+	## Its own two lines, never folded back into the dig figures above.
+	_line("attack coverage rate",
+		float(tally.coverage_up) / maxf(float(tally.coverage_attempted), 1.0), "")
+	print("    %d coverage contacts attempted" % int(tally.coverage_attempted))
+	_line("attack coverage quality, mean",
+		float(tally.coverage_quality) / maxf(float(tally.coverage_attempted), 1.0), "")
 	_line("attack quality, mean",
 		float(tally.attack_quality) / maxf(float(tally.attacks_counted), 1.0), "")
 	## Split by side, because half this engine's history is one side of the net
@@ -138,7 +146,20 @@ func _collect(result: Resource, tally: Dictionary) -> void:
 				tally.blocks = int(tally.blocks) + 1
 				if str(event.metadata.get("outcome", "")) == "stuff":
 					tally.stuffs = int(tally.stuffs) + 1
-			"Defense":
+			"Attack Coverage":
+				## **Kept out of the dig numbers, which is the whole point.** A
+				## coverer picks the rebound off their own block from a metre
+				## away and comes up with it essentially always -- 38 of 38 over
+				## these same 700 rallies -- so averaging it into the dig rate
+				## lifted a floor-dig rate of 0.445 to a reported 0.493 and made
+				## the 0.35-0.55 target look comfortably met from the middle
+				## rather than from the bottom third.
+				tally.coverage_attempted = int(tally.coverage_attempted) + 1
+				tally.coverage_quality = float(tally.coverage_quality) \
+					+ float(event.quality)
+				if bool(event.success):
+					tally.coverage_up = int(tally.coverage_up) + 1
+			"Dig":
 				## Every dig the defence got to play, and whether it came up.
 				## `success` is the contest's own verdict, which is the thing a
 				## rally continues on.

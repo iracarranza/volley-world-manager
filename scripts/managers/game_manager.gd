@@ -618,12 +618,19 @@ func called_play() -> OffensivePlay:
 func resolve_active_rally(
 	seed_value: int,
 	development_continuous_reception: bool = false,
+	development_physical_platform_dig: bool = false,
+	development_legacy_platform_dig: bool = false,
+	development_physical_reception: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
 	## Handed in before the resolve, not looked up inside it. The resolver stays
 	## a function of what it was given, which is what makes a rally replayable
 	## from a seed.
 	simulator.pair_familiarity = team.pair_familiarity if team != null else {}
+	## The clipboard, by the same rule as the line above: handed in, not looked
+	## up. `TacticSheet` has been persisted and readable since it was written and
+	## no rally had ever seen it.
+	simulator.tactic_sheet = team.tactic_sheet if team != null else null
 	if team != null:
 		simulator.team_cohesion = float(team.cohesion)
 		simulator.team_tactical_familiarity = float(team.tactical_familiarity)
@@ -631,10 +638,13 @@ func resolve_active_rally(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,
 		development_continuous_reception,
+		development_physical_platform_dig,
 		team.principles if team != null else null,
 		team.team_name if team != null else "",
 		match_state.serve_context() if match_state != null else {},
 		float(match_state.match_flow) if match_state != null else 0.0,
+		development_legacy_platform_dig,
+		development_physical_reception,
 	)
 
 

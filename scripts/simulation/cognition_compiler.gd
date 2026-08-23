@@ -152,7 +152,10 @@ static func _actor_intent(event_type: int) -> StringName:
 			return &"approaching"
 		RallyEventModel.EventType.BLOCK:
 			return &"blocking"
-		RallyEventModel.EventType.DEFENSE:
+		## A coverer is playing a ball up off the floor under pressure, which is
+		## the posture this names. That they are on the attacking side is a fact
+		## about the rally, not about what their body is doing.
+		RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			return &"defending"
 	return &"watching"
 
@@ -456,7 +459,20 @@ static func _compile_setter_scan(
 		## A setter reading four hitters does not stare at each of them. Each
 		## option is a look that is answered and released, which is exactly
 		## what a glance is for.
-		cue.as_glance()
+		##
+		## **The dwell cannot outlast the look that holds it.** Two authored
+		## constants disagree by two hundredths of a second -- this compiler
+		## budgets `OPTION_GLANCE_SECONDS` (0.16) per option while the cue's own
+		## default dwell is `GLANCE_DWELL_SECONDS` (0.18) -- so any slice that
+		## lands between them produces a glance whose dwell is longer than the
+		## glance, which `is_well_formed` rejects by design. The disagreement is
+		## older than the window that exposed it: it only binds once the setter's
+		## scan is short enough for `affordable` to cut, which physical reception
+		## made ordinary. Capping the dwell at the slice keeps the authored
+		## intent -- a look answered and released -- and says the same thing the
+		## truncation above already says: a setter short of time takes shorter
+		## looks. Neither constant is widened.
+		cue.as_glance(minf(CueModel.GLANCE_DWELL_SECONDS, glance_length))
 		cue.attention_player_id = int(option.get("player_id", -1))
 		## The setter's own read of this option, not the option's real value.
 		cue.certainty = clampf(
@@ -803,8 +819,15 @@ static func _compile_sightlines(
 		attack_event, _next_contact(events, attack_event), raw,
 		result.player_physical_profiles,
 	)
+	## **Floor dig only, and it used to be able to find the wrong contact.** This
+	## is the occlusion test -- whether the defender could see the swing past the
+	## blocker's hands -- and it needs the voli watching from *behind the block*.
+	## Attack coverage stands on the hitter's side with no wall between them and
+	## the ball, so a coverage contact arriving first would have been used as the
+	## observer for a sightline that does not exist. The comment above already
+	## said "the contact this finds is the dig itself"; now the type says it too.
 	var defence := _next_of_type(
-		events, set_index, RallyEventModel.EventType.DEFENSE
+		events, set_index, RallyEventModel.EventType.DIG
 	)
 	if defence == null:
 		return

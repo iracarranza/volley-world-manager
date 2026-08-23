@@ -40,7 +40,8 @@ const TYPE_NAMES: Dictionary = {
 	RallyEventScript.EventType.SET: "SET",
 	RallyEventScript.EventType.ATTACK: "ATTACK",
 	RallyEventScript.EventType.BLOCK: "BLOCK",
-	RallyEventScript.EventType.DEFENSE: "DEFENSE",
+	RallyEventScript.EventType.DIG: "DIG",
+	RallyEventScript.EventType.ATTACK_COVERAGE: "ATTACK_COVERAGE",
 	RallyEventScript.EventType.POINT: "POINT",
 }
 

@@ -48,7 +48,7 @@ func _initialize() -> void:
 				if event.event_type == RallyEventScript.EventType.ATTACK:
 					last_attack_x = event.start_position.x
 					continue
-				if event.event_type != RallyEventScript.EventType.DEFENSE \
+				if event.event_type != RallyEventScript.EventType.DIG \
 						or last_attack_x < 0.0:
 					continue
 				var side := str(event.metadata.get("side", ""))

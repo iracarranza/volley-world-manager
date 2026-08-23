@@ -199,5 +199,6 @@ func _collect(result: Resource, buckets: Dictionary) -> void:
 				_note(buckets, "SERVE, to reception or floor", row)
 			RallyEventScript.EventType.SET:
 				_note(buckets, "SET, to the hitter", row)
-			RallyEventScript.EventType.RECEPTION, RallyEventScript.EventType.DEFENSE:
+			RallyEventScript.EventType.RECEPTION, RallyEventScript.EventType.DIG, \
+			RallyEventScript.EventType.ATTACK_COVERAGE:
 				_note(buckets, "BUMP or DIG, to the setter", row)

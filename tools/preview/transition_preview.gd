@@ -139,7 +139,7 @@ func _shoot_floor(shot_name: String, recovery: String, posture: String) -> void:
 		actor.contact_recovery = recovery
 		actor.contact_posture = posture
 		actor.set_pose(
-			RallyEventModel.EventType.DEFENSE, 0.0,
+			RallyEventModel.EventType.DIG, 0.0,
 			PlayerActor3D.RECOVERY_END_PHASE * HANDOVER,
 			Vector2(0.7, -0.7), true,
 		)

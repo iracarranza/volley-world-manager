@@ -88,7 +88,7 @@ func _audit_double_contacts(
 	var contact_types := [
 		RallyEvent.EventType.SERVE, RallyEvent.EventType.RECEPTION,
 		RallyEvent.EventType.SET, RallyEvent.EventType.ATTACK,
-		RallyEvent.EventType.BLOCK, RallyEvent.EventType.DEFENSE,
+		RallyEvent.EventType.BLOCK, RallyEvent.EventType.DIG, RallyEvent.EventType.ATTACK_COVERAGE,
 	]
 	var previous_actor := -1
 	var previous_type := ""

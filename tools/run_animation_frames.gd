@@ -227,7 +227,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			## sweep now covers the whole action: arms to the ball, body follows,
 			## then the roll resolves.
 			actor.set_pose(
-				RallyEventModel.EventType.DEFENSE, 0.0,
+				RallyEventModel.EventType.DIG, 0.0,
 				lerpf(RECOVERY_STRIP_FROM_PHASE, 1.0, progress),
 				Vector2.RIGHT, true,
 			)

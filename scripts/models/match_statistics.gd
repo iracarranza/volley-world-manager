@@ -51,7 +51,7 @@ func summary() -> String:
 		int(home.get("kills", 0)), int(opponent.get("kills", 0)),
 		int(home.get("blocks", 0)), int(opponent.get("blocks", 0)),
 		int(home.get("aces", 0)), int(opponent.get("aces", 0)),
-		int(home.get("defense", 0)), int(opponent.get("defense", 0)),
+		int(home.get("dig", 0)), int(opponent.get("dig", 0)),
 	]
 
 
@@ -60,10 +60,34 @@ func to_dict() -> Dictionary:
 		"players": players.duplicate(true)}
 
 
+## **The one place an `EventType` name is persisted.** Keys here come from
+## `type_name().to_lower()`, and this dictionary is saved inside `match_state`,
+## so renaming `DEFENSE` to `DIG` would have stranded every counter a save had
+## already accumulated -- and the line labelled "Digs" would have read zero on
+## load for a match in progress. No ordinal is persisted anywhere; this is the
+## whole compatibility surface.
+##
+## Old saves counted attack coverage in the same bucket, which is exactly the
+## conflation this rename exists to end. Those historic totals cannot be split
+## after the fact -- nothing recorded which contact each one was -- so they carry
+## forward under `dig` slightly overstated, and every rally played from here is
+## counted correctly.
 func load_dict(data: Dictionary) -> void:
-	home = data.get("home", {}).duplicate(true)
-	opponent = data.get("opponent", {}).duplicate(true)
+	home = _migrate(data.get("home", {}).duplicate(true))
+	opponent = _migrate(data.get("opponent", {}).duplicate(true))
 	players = data.get("players", {}).duplicate(true)
+	for key in players:
+		players[key] = _migrate(players[key])
+
+
+static func _migrate(stats: Dictionary) -> Dictionary:
+	for old_key in ["defense", "defense_errors"]:
+		if not stats.has(old_key):
+			continue
+		var new_key: String = old_key.replace("defense", "dig")
+		stats[new_key] = int(stats.get(new_key, 0)) + int(stats[old_key])
+		stats.erase(old_key)
+	return stats
 
 
 func _increment(target: Dictionary, key: String) -> void:

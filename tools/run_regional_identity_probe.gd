@@ -163,7 +163,7 @@ func _fingerprint(region: String) -> Dictionary:
 							tempo_values.append(float(event.metadata.tempo))
 							if int(event.metadata.tempo) <= 1:
 								quicks += 1
-					RallyEventScript.EventType.DEFENSE:
+					RallyEventScript.EventType.DIG:
 						contacts += 1
 						if side != "home":
 							continue

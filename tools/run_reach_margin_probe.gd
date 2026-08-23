@@ -66,7 +66,7 @@ func _initialize() -> void:
 					last_attack_type = str(event.metadata.get("attack_type", "?"))
 				elif event.event_type == RallyEventScript.EventType.BLOCK:
 					last_block_outcome = str(event.metadata.get("outcome", "none"))
-				if event.event_type != RallyEventScript.EventType.DEFENSE:
+				if event.event_type != RallyEventScript.EventType.DIG:
 					continue
 				var side := str(event.metadata.get("side", ""))
 				if not rows.has(side):

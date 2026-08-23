@@ -27,7 +27,38 @@ const ShadowMovementModel := preload("res://scripts/simulation/shadow_movement_s
 static func _destination_is_start_position(event_type: int) -> bool:
 	return event_type in [
 		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.SET,
-		RallyEvent.EventType.ATTACK, RallyEvent.EventType.DEFENSE,
+		RallyEvent.EventType.ATTACK, RallyEvent.EventType.DIG,
+		RallyEvent.EventType.ATTACK_COVERAGE,
+	]
+
+
+## **Which end this family's `movement_duration` was actually timed to.**
+##
+## The ratio below divides a modelled traversal by `movement_duration`, so the
+## two have to describe the same journey. They do not describe the same journey
+## for every family, because the resolver times each leg to a different end:
+## the attack to `intended_hitter_body` and the set to the setter's contact,
+## the reception to `serve_landing` and the dig to the ball's floor target.
+## A hitter's centre stops behind the ball; a passer's platform reaches out to
+## it.
+##
+## This used to be inferred from whether the event carried a
+## `body_contact_position` at all, which worked only for as long as the two
+## families timed to the body were the only two publishing it. M8 published that
+## key from `_add_event` for every contact -- correctly, it is a real fact about
+## every contact -- and the proxy silently became "always the body". The
+## measured cost: RECEPTION 0.9952 -> 0.7802, DIG 0.9977 -> 0.6491,
+## ATTACK_COVERAGE 1.0000 -> 0.5209, while SET and ATTACK stayed identical to
+## four decimals because they were already on the body. Nothing about the engine
+## moved; three of five numerators started measuring to an end their denominator
+## had never been timed to.
+##
+## Naming the families is the repair rather than redrawing the bands, which
+## would have been fitting a gate to an instrument change. The bands stand where
+## they were measured.
+static func _destination_is_body_contact(event_type: int) -> bool:
+	return event_type in [
+		RallyEvent.EventType.SET, RallyEvent.EventType.ATTACK,
 	]
 ## Ratios outside this band would be plainly visible as slow motion or
 ## fast-forward during a phase.
@@ -59,9 +90,11 @@ static func run(seed_count: int = 40, base_seed: int = 300000) -> Dictionary:
 			if allotted <= 0.01:
 				continue
 			var start := Vector2(event.metadata.get("movement_start", event.start_position))
-			var destination := Vector2(event.metadata.get(
-				"body_contact_position", event.start_position
-			))
+			var destination := Vector2(event.start_position)
+			if _destination_is_body_contact(int(event.event_type)):
+				destination = Vector2(event.metadata.get(
+					"body_contact_position", event.start_position
+				))
 			var mode := _mode_for(int(event.event_type))
 			var actor := RallyPlayerState.create(
 				profile,
@@ -107,7 +140,8 @@ static func _has_movement(event: RallyEvent) -> bool:
 
 static func _mode_for(event_type: int) -> RallyPlayerState.MovementMode:
 	match event_type:
-		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DEFENSE:
+		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DIG, \
+		RallyEvent.EventType.ATTACK_COVERAGE:
 			return RallyPlayerState.MovementMode.LATERAL
 		RallyEvent.EventType.ATTACK:
 			return RallyPlayerState.MovementMode.APPROACH

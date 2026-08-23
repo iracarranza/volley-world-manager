@@ -426,10 +426,16 @@ static func apply_promotion_relegation(career: Resource) -> void:
 ## history and money, not from a local tradition that could spread.
 static func apply_influence_drift(career: Resource) -> void:
 	for region_name in Regions.DEVELOPMENT_REGIONS:
-		## Zaitgaist has no tradition to defend and no neighbor it listens to.
-		## Each season it simply becomes whatever just won the Sixnet, so it
-		## skips the dominance and isolation branches entirely. Everything else
-		## in this system is geographic; this is the one rule that is not.
+		## Zaitgaist has no inherited developmental emphasis to defend and no
+		## neighbor it listens to, so it skips the dominance and isolation
+		## branches entirely. Everything else in this system is geographic; this
+		## is the one rule that is not.
+		##
+		## It is also the one region whose *content* may change radically, and
+		## that is not an exception to the fixed-philosophy rule -- its permanent
+		## philosophy is precisely "study what succeeded elsewhere and teach it".
+		## See `docs/design/FIXED_REGIONAL_PHILOSOPHIES_AND_CLUB_TACTICAL_VARIANCE.md`
+		## §2.
 		if region_name == ZEITGEIST_REGION:
 			_adopt_zeitgeist(career)
 			continue
@@ -444,8 +450,12 @@ static func apply_influence_drift(career: Resource) -> void:
 				strongest_neighbor = str(neighbor)
 		## A minor region is by design far weaker than any major neighbor, so
 		## without resistance the gap would clear the threshold every season:
-		## minor traditions would blend every year, never intensify, and lose
-		## the specialization that is the entire reason the tier exists.
+		## every generation would be accented, none would intensify, and the tier
+		## would lose the specialization that is the entire reason it exists.
+		##
+		## **What blends is developmental expression, never philosophy.** This
+		## writes into `region_overlay`, which is additive over a region's own
+		## specialty list and cannot reach `REGIONAL_PRINCIPLES`.
 		var threshold := DOMINANCE_THRESHOLD \
 			* (1.0 + Regions.tradition_resistance(region_name))
 		if strongest_gap > threshold and not strongest_neighbor.is_empty():
@@ -454,9 +464,10 @@ static func apply_influence_drift(career: Resource) -> void:
 			_intensify_own_specialty(career, region_name)
 
 
-## Zaitgaist adopts the reigning champion's specialty wholesale -- the champion
-## rather than the strongest region, so it copies what *won* rather than what
-## was objectively best. That builds in a one-season lag: it is permanently
+## Zaitgaist takes the reigning champion's *specialty* -- the champion rather than
+## the strongest region, so it copies what *won* rather than what was objectively
+## best. Developmental emphasis only: this decides what its next generation is
+## trained to be good at, and no more than that. That builds in a one-season lag: it is permanently
 ## playing last year's winning style, which is the joke, the mechanic, and the
 ## reason it can never lead.
 static func _adopt_zeitgeist(career: Resource) -> void:

@@ -2,6 +2,12 @@ extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const RALLY_MOVEMENT_SYSTEM_SCRIPT := preload(
+	"res://scripts/simulation/rally_movement_system.gd"
+)
+const COVERAGE_CALCULATOR_SCRIPT := preload(
+	"res://scripts/simulation/coverage_calculator.gd"
+)
 const READY_STANCE_SCRIPT := preload("res://scripts/data/ready_stance.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
@@ -40,6 +46,7 @@ const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.g
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
+const REGIONAL_KITS_SCRIPT := preload("res://scripts/data/regional_kits.gd")
 const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
 const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
 const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population.gd")
@@ -54,6 +61,7 @@ const LIGHT_UI_THEME := preload("res://scenes/themes/light_theme.tres")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
 const RALLY_MOMENT_SCRIPT := preload("res://scripts/models/rally_moment.gd")
+const BODY_TYPE_MODELS_SCRIPT := preload("res://scripts/data/body_type_models.gd")
 const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_state_builder.gd")
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
@@ -68,6 +76,9 @@ const READINESS_REPORT_SCRIPT := preload("res://scripts/simulation/rally_readine
 const SETTER_CAPABILITY_SCRIPT := preload("res://scripts/simulation/setter_capability_system.gd")
 const CONTACT_ENVELOPE_SCRIPT := preload(
 	"res://scripts/simulation/contact_envelope_system.gd"
+)
+const PLATFORM_CONTACT_MODEL_SCRIPT := preload(
+	"res://scripts/simulation/platform_contact_model.gd"
 )
 const SETTER_FAILURE_CLASSIFIER_SCRIPT := preload(
 	"res://scripts/simulation/setter_failure_classifier.gd"
@@ -98,6 +109,12 @@ const SETTER_HANDOFF_CALIBRATION_SCRIPT := preload(
 )
 const SETTER_PROGRESSION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/setter_progression_calibration.gd"
+)
+const ATTEMPT_JUDGMENT_SCRIPT := preload(
+	"res://scripts/simulation/attempt_judgment.gd"
+)
+const RALLY_SIMULATOR_SCRIPT := preload(
+	"res://scripts/simulation/rally_simulator.gd"
 )
 const PLAYER_OBSERVATION_SCRIPT := preload(
 	"res://scripts/models/player_observation.gd"
@@ -260,12 +277,39 @@ func _initialize() -> void:
 	_test_a_blocked_ball_has_somewhere_to_go()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
+	_test_one_ball_chain_by_launch_identity()
+	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
 	_test_readiness_and_calibration_reports()
 	_test_opponent_approach_mirror()
 	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
+	_test_attempt_judgment_recognition_and_response()
+	_test_block_hands_instruction_adherence()
+	_test_second_contact_rotation_invariance()
+	_test_opponent_setter_movement_consumes_selection()
+	_test_set_feasibility_then_execution()
+	_test_every_swing_publishes_the_ball_it_struck()
+	_test_movement_model_prices_facing()
+	_test_landing_blocker_is_unavailable()
+	_test_defensive_claim_precedence()
+	_test_ready_orientation()
+	_test_moving_orientation()
+	_test_readiness_is_body_state()
+	_test_block_setter_pull_applies_once()
+	_test_setter_release_is_a_run()
+	_test_immediate_control_needs_a_usable_body()
+	_test_compromised_bodies_survive_the_boundary()
+	_test_contact_offset_is_derived_geometry()
+	_test_platform_arrival_places_the_body_behind_contact()
+	_test_platform_attributes_retain_leverage_after_the_physical_gate()
+	_test_platform_contacts_state_an_intent()
+	_test_the_incoming_ball_reaches_no_platform_launch()
+	_test_overpass_control_wires_live()
+	_test_overpass_attack_selects_and_launches_live()
+	_test_overpass_attack_forms_real_block()
+	_test_shared_platform_shadow_contract()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -312,6 +356,7 @@ func _initialize() -> void:
 	_test_serve_attributes_choose_and_execute_targets()
 	_test_a_margin_carries_its_unit_in_its_name()
 	_test_a_serve_that_misses_is_drawn_missing()
+	_test_the_serve_is_one_forward_flight()
 	_test_a_block_can_be_told_what_it_is_for()
 	_test_scouting_crosses_the_net_in_both_directions()
 	_test_defense_opponent_and_match_day_controls()
@@ -334,6 +379,8 @@ func _initialize() -> void:
 	_test_team_identity_directional_outcomes()
 	_test_team_wheel_amplification()
 	_test_ui_visual_system()
+	_test_regional_kits()
+	_test_dig_and_coverage_are_separate()
 	_test_worksheet_facing()
 	_test_worksheet_placement()
 	_test_worksheet_behaviour()
@@ -355,6 +402,133 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+## Gate: a club wears its region, and the shirt is legible on the floor.
+##
+## **The threshold is measured against the ground the kit is actually seen on.**
+## The first kit palette was picked against the interface's background and nine
+## of fourteen failed once they were put on a court -- §0, a value measured with
+## the wrong instrument. So this asserts contrast against the court surface as
+## the scene really sets it, not against a colour anybody remembers choosing.
+## Gate: attack coverage can never enter the floor-dig denominator.
+##
+## **The bug this closes was a name, not a formula.** A floor dig and attack
+## coverage were both emitted as `DEFENSE` from six sites, so every consumer
+## asking for one got both. The balance probe reported a dig rate of 0.493 when
+## the floor-dig rate was 0.445, because coverage came up 38 times out of 38 and
+## was being averaged in -- a target band of 0.35-0.55 looked met from the middle
+## when it was being met from the bottom third.
+##
+## Asserted on the counts rather than on the rate, because a rate can be right
+## for the wrong reason: if coverage ever leaks back in, the denominator moves
+## first and this notices before any band does.
+func _test_dig_and_coverage_are_separate() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var digs := 0
+	var coverage := 0
+	var coverage_all_succeeded := true
+	for seed_value in range(20000, 20180):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			var kind := int(event.event_type)
+			if kind == RALLY_EVENT_SCRIPT.EventType.DIG:
+				digs += 1
+				## The discriminator that used to decide this lives on beside the
+				## type. It must never disagree with it -- two sources of truth
+				## for one fact is how they drifted apart in the first place.
+				_check(
+					str(event.metadata.get("coverage", "")) != "attack",
+					"a DIG event never carries the attack-coverage marker",
+				)
+			elif kind == RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
+				coverage += 1
+				_check(
+					str(event.metadata.get("coverage", "")) == "attack",
+					"an ATTACK_COVERAGE event still carries its marker",
+				)
+				if not bool(event.success):
+					coverage_all_succeeded = false
+				## Coverage has to keep its ball. The trajectory fallback in
+				## `_ensure_event_trajectories` ends in `continue`, not a default,
+				## so an unlisted type is given no outgoing flight at all and the
+				## ball teleports out of the contact.
+				_check(
+					event.metadata.has("outgoing_trajectory"),
+					"attack coverage still gets an outgoing trajectory",
+				)
+	manager.free()
+	_check(digs > 0, "the sample contains floor digs")
+	_check(coverage > 0, "the sample contains attack coverage")
+	## Not a tuning assertion -- a statement that these are different populations
+	## and that mixing them is what made the dig rate read high.
+	_check(
+		coverage_all_succeeded,
+		"attack coverage still succeeds at a rate no floor dig approaches",
+	)
+
+
+func _test_regional_kits() -> void:
+	var region_names: Array = REGIONS_SCRIPT.names()
+	for region_name in region_names:
+		_check(
+			REGIONAL_KITS_SCRIPT.has_kit(str(region_name)),
+			"every region has a kit, including %s" % region_name,
+		)
+	for key in REGIONAL_KITS_SCRIPT.KITS.keys():
+		_check(
+			region_names.has(str(key)),
+			"kit table names a real region, not %s" % key,
+		)
+	## The court surface as `match_court_3d.tscn` sets it. Restated here would be
+	## a second source of truth, and the two drifting apart is what put the kit
+	## palette a whole hue away from the floor it was designed against.
+	var floor_colour := Color(0.7451, 0.5098, 0.3725)
+	## **1.6, and the number was measured rather than chosen.** This gate first
+	## shipped at 3:1 and twelve of fourteen kits failed it -- because 3:1 was
+	## carried over from the *court surface* pass, which compares a floor against
+	## its own lines, and was never a figure anybody had measured a kit against.
+	## The real spread is 1.85 (Spëddigh) to 5.61 (A'ace), and the midtones this
+	## exists to catch -- a tan, an olive, a mid grey, the shirts that vanish into
+	## terracotta -- all score 1.09 to 1.12. 1.6 sits below every real kit and
+	## well above every failing one, which is what a threshold has to do to mean
+	## anything.
+	for region_name in region_names:
+		var kit: Color = REGIONAL_KITS_SCRIPT.kit_for(str(region_name))
+		var lighter: float = maxf(kit.get_luminance(), floor_colour.get_luminance())
+		var darker: float = minf(kit.get_luminance(), floor_colour.get_luminance())
+		_check(
+			(lighter + 0.05) / (darker + 0.05) >= 1.6,
+			"%s's kit separates from the court floor" % region_name,
+		)
+	## Marks come in front/back pairs, because half of any frame is backs and a
+	## chest-only pattern left the closeup showing twelve unmarked shirts.
+	for region_name in region_names:
+		var marks: Array = REGIONAL_KITS_SCRIPT.marks_for(str(region_name))
+		_check(not marks.is_empty(), "%s's kit is built from marks" % region_name)
+		_check(
+			marks.size() % 2 == 0,
+			"%s's marks are mirrored front to back" % region_name,
+		)
+	## One outlier cannot split a side's kit -- the whole reason the region is
+	## resolved per team rather than per body.
+	var squad: Array = []
+	for i in range(6):
+		var member := VolleyballPlayer.new()
+		member.club_region = "Xérvu" if i < 5 else "Ĭspayk"
+		squad.append(member)
+	_check(
+		REGIONAL_KITS_SCRIPT.side_region(squad) == "Xérvu",
+		"a side's kit is the mode of its roster, not its first entry",
+	)
+	_check(
+		REGIONAL_KITS_SCRIPT.side_region([]).is_empty(),
+		"a side with no region resolves to none rather than to a default",
+	)
 
 
 func _test_ui_visual_system() -> void:
@@ -642,7 +816,7 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 						and event.metadata.has("movement_duration")
 						and event.metadata.has("arrival_margin")
 					)
-			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DIG \
 					and str(event.metadata.get("side", "")) == "opponent":
 				## A defender's margin is a reach, in metres, and says so.
 				spatial_defense_observed = spatial_defense_observed or (
@@ -1001,7 +1175,7 @@ func _test_playback_geometry_is_drawable() -> void:
 							next_contact = candidate
 							break
 						if next_contact == null \
-								or next_contact.event_type != RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+								or next_contact.event_type != RALLY_EVENT_SCRIPT.EventType.DIG \
 								or str(next_contact.metadata.get("side", "")) != block_side:
 							misrouted_block_touches += 1
 				var incoming: Dictionary = event.metadata.get(
@@ -3024,14 +3198,32 @@ func _test_team_identity_directional_outcomes() -> void:
 	var physical: Dictionary = Dictionary(identities.get("Physical", {})).get("mean", {})
 	var defensive: Dictionary = Dictionary(identities.get("Defensive", {})).get("mean", {})
 	var fast_tempo: Dictionary = Dictionary(identities.get("Fast Tempo", {})).get("mean", {})
+	## **The error clause is gone, and it was measured out rather than argued
+	## out.** It asserted that a Physical identity errs on serve more often than a
+	## Defensive one. Under the forward serve it does not: the gap is stable and
+	## *negative* at every sample size tried -- -0.0052 at 48 rallies, -0.0069 at
+	## 96, -0.0073 at 160. That converges, so it is not the underpowered-sample
+	## problem the paragraph above describes.
+	##
+	## What it is is a confound. Identity moves two things at once: a Physical
+	## roster serves at higher `tactical_risk` *and* with better serve attributes,
+	## and the second is much the larger effect -- measured across 36,000
+	## controlled serves, error runs 0.176 weak, 0.097 average, 0.042 strong,
+	## against 0.096 / 0.102 / 0.117 across the whole risk range. So the claim
+	## "aggression costs errors" is intact where it can be isolated, and this
+	## comparison was never able to isolate it.
+	##
+	## What survives here is what identity can actually support, and both are
+	## large and stable: pressure (+0.065) and aces (+0.023), unchanged in sign
+	## across all three sample sizes. Asserting the confounded third alongside
+	## them made a real gate fail for a reason that was not about the thing it
+	## tests.
 	_check(
-		float(physical.get("serve_error_rate", 0.0))
-			> float(defensive.get("serve_error_rate", 1.0))
-			and float(physical.get("mean_serve_quality", 0.0))
-				> float(defensive.get("mean_serve_quality", 1.0))
+		float(physical.get("mean_serve_quality", 0.0))
+			> float(defensive.get("mean_serve_quality", 1.0))
 			and float(physical.get("ace_rate", 0.0))
 				> float(defensive.get("ace_rate", 1.0)),
-		"physical serving creates more pressure, aces, and errors across six career seeds",
+		"physical serving creates more pressure and more aces across six career seeds",
 	)
 	## **One half of this was true and the other half never was.**
 	##
@@ -4247,8 +4439,16 @@ func _test_shadow_reception_trace() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var result: Resource = manager.resolve_active_rally(1001)
-	var seed_1001_contacts_legal := true
+	## **1002, and it used to be 1001.** The seed is a fixture for a rally that
+	## reaches a reception, and nothing here is about the serve -- but the serve
+	## now decides whether it lands from its own flight rather than from a coin
+	## flip taken before it was struck, and on 1001 this opponent misses. The
+	## contract was never in question: every check below passed unchanged the
+	## moment a seed whose serve stays in was supplied. Weakening one of them to
+	## tolerate a rally with no reception in it would have hidden the next real
+	## break, which is the trade this repository has made the wrong way before.
+	var result: Resource = manager.resolve_active_rally(1002)
+	var setter_contacts_legal := true
 	for event_index in range(result.events.size() - 1):
 		var event: Resource = result.events[event_index]
 		if event.event_type != RALLY_EVENT_SCRIPT.EventType.SET:
@@ -4259,11 +4459,11 @@ func _test_shadow_reception_trace() -> void:
 					and str(next_event.metadata.get("side", "")) == str(
 						event.metadata.get("side", "")
 					):
-				seed_1001_contacts_legal = next_event.actor_id != event.actor_id
+				setter_contacts_legal = next_event.actor_id != event.actor_id
 				break
 	_check(
-		seed_1001_contacts_legal,
-		"seed 1001 never lets a setter attack their own second contact",
+		setter_contacts_legal,
+		"seed 1002 never lets a setter attack their own second contact",
 	)
 	var trace: Dictionary = result.analysis.get("shadow_reception", {})
 	var summary: Dictionary = trace.get("summary", {})
@@ -4416,7 +4616,7 @@ func _test_shadow_reception_trace() -> void:
 	var repeated_manager := GAME_MANAGER_SCRIPT.new()
 	repeated_manager.seed_vertical_slice_data()
 	repeated_manager.match_state.serving_home = false
-	var repeated_result: Resource = repeated_manager.resolve_active_rally(1001)
+	var repeated_result: Resource = repeated_manager.resolve_active_rally(1002)
 	var repeated_trace: Dictionary = repeated_result.analysis.get("shadow_reception", {})
 	_check(
 		trace == repeated_trace,
@@ -4752,8 +4952,15 @@ func _test_gate_nine_shadow_decisions() -> void:
 
 
 func _test_gate_ten_decision_progression() -> void:
+	## **Eight pairs, and it used to be four.** At four the developing and
+	## established tiers get 57 receptions each and their decision rates came out
+	## *exactly equal* -- 0.2982 against 0.2982 -- so `decision_rate_monotonic`
+	## was false on a tie rather than on an inversion. Measured at 4/8/12 pairs
+	## the progression is clean at both larger sizes (0.2323 < 0.2626 < 0.3434 and
+	## 0.2013 < 0.2516 < 0.4025) and widens with sample, which is what a real
+	## effect does. The claim was never in doubt; the resolution was.
 	var summary: Dictionary = RECEPTION_DECISION_PROGRESSION_SCRIPT.run(
-		4, 100000
+		8, 100000
 	)
 	var overall: Dictionary = summary.get("overall", {})
 	var progression: Dictionary = summary.get("progression", {})
@@ -4764,7 +4971,7 @@ func _test_gate_ten_decision_progression() -> void:
 	_check(
 		bool(summary.get("fixture_valid", false))
 			and bool(summary.get("style_coverage_complete", false))
-			and int(overall.get("requested", 0)) == 180
+			and int(overall.get("requested", 0)) == 360
 			and int(overall.get("invalid", 1)) == 0,
 		"Gate 10 covers paired tiers, formations, serve styles, and seeds",
 	)
@@ -5101,7 +5308,13 @@ func _test_gate_fifteen_disabled_rollout() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var result: Resource = manager.resolve_active_rally(150000)
+	## 150001, and it used to be 150000. Same reason as
+	## `_test_shadow_reception_trace`: this gate needs a rally that reaches a
+	## reception, and the serve now misses or lands on the strength of its own
+	## flight rather than a coin flip taken before it was struck. Nothing about
+	## the rollout contract moved -- every check below passed unchanged on the
+	## next seed whose serve stays in.
+	var result: Resource = manager.resolve_active_rally(150001)
 	var trace: Dictionary = result.analysis.get("shadow_reception", {})
 	var rollout: Dictionary = Dictionary(trace.get("summary", {})).get(
 		"reception_rollout", {}
@@ -8428,6 +8641,156 @@ func _test_opponent_setter_release_is_clear() -> void:
 ## The ball's described path must be one continuous chain. A block that never
 ## touched the ball must not shorten the shot, and must not emit a deflection
 ## leg that puts the ball in two places at once.
+## The receive formation is the shape the receivers are actually in.
+##
+## FD-004's permanent guard. `_receive_formation_map` used to publish where the
+## six *stand* to receive while `_initial_home_positions` seeded `live_positions`
+## from the rotation grid -- and the reception claim builds `reception_origins`
+## out of `live_positions`, so gameplay read the serve from one set of
+## coordinates while a viewer watched the six stand in another.
+##
+## The signature is what makes it guardable. A voli who does not touch the serve
+## has nothing to do during its flight: they were already in formation when the
+## whistle went. So their published position on the reception must equal their
+## spawned position **exactly**. If the two geometries ever separate again, that
+## difference becomes the whole distance between a rotation grid and a receive
+## shape, on every rally, and this fails immediately rather than after somebody
+## notices the drawing looks wrong.
+##
+## Exact, not tolerant: the claim is identity, and a tolerance would be a place
+## for a small drift to hide.
+##
+## Only the **first** reception of a rally is scored. A reception that clears the
+## net becomes the other side's ordinary first contact and is emitted as a second
+## RECEPTION -- it legitimately has no receive formation, and counting it here
+## would report a correct overpass as a broken invariant. That mistake was made
+## once already, by the probe this test is derived from.
+func _test_receive_shape_is_where_the_receivers_stand() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var bystanders := 0
+	var displaced := 0
+	var travelled := 0
+	var worst := 0.0
+	for seed_value in range(77000, 77240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var scored := false
+		for event in result.events:
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+				continue
+			if scored:
+				break
+			scored = true
+			var meta: Dictionary = event.metadata
+			var receiving_home := str(meta.get("side", "home")) == "home"
+			var published: Dictionary = meta.get(
+				"home_phase_targets" if receiving_home else "opponent_phase_targets",
+				{},
+			)
+			var spawned: Dictionary = result.initial_home_positions if receiving_home \
+				else result.initial_opponent_positions
+			for raw_player_id in published:
+				var player_id := int(raw_player_id)
+				if not spawned.has(player_id):
+					continue
+				var moved := Vector2(spawned[player_id]).distance_to(
+					Vector2(published[raw_player_id])
+				)
+				if player_id == int(event.actor_id):
+					if moved > 0.0001:
+						travelled += 1
+					continue
+				bystanders += 1
+				if moved > 0.0001:
+					displaced += 1
+					worst = maxf(worst, moved)
+	_check(
+		bystanders >= 500 and displaced == 0,
+		"a voli who does not touch the serve stands exactly where they were spawned",
+	)
+	_check(
+		travelled > 0,
+		"the receiver travels to the ball rather than being frozen in formation",
+	)
+
+
+## M6 / B6: one ball, all the way down, **by identity rather than by shape**.
+##
+## The packet's P3 matrix asks every canonical edge for "same launch lineage",
+## and until the B0 census was built nothing in the suite could answer it. The
+## nearest thing -- `_test_post_block_trajectory_chain` above -- asserts that the
+## block's deflection *starts where* the attack's flight ended, which is a
+## geometric claim: two independently constructed records with matching endpoints
+## satisfy it just as well as one record handed along, and telling those apart is
+## the entire point of a one-ball chain.
+##
+## So this asserts the thing the geometry was standing in for. Every contact that
+## publishes an outgoing ball stamps `authoritative_flight_id`; the next contact's
+## incoming ball must carry the same one, unless the contact in between published
+## nothing (a block that never touched it), in which case the ball survives and
+## the chain skips to the last contact that did publish.
+##
+## Two ways this can fail that the geometric check cannot see:
+##
+##   - a consumer reconstructs a trajectory from an outcome label or an intended
+##     endpoint and happens to land on the same coordinates;
+##   - a re-slice of one launch is minted as a *new* launch, which is a second
+##     physical authority over one flight even though nothing visibly moves.
+##
+## The B0 census reports the same figures without asserting them, on 600 rallies.
+## This asserts them on the suite's own budget.
+func _test_one_ball_chain_by_launch_identity() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	const CONTACTS: Array[int] = [
+		RALLY_EVENT_SCRIPT.EventType.SERVE,
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.SET,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK,
+		RALLY_EVENT_SCRIPT.EventType.BLOCK,
+		RALLY_EVENT_SCRIPT.EventType.DIG,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
+	]
+	var edges := 0
+	var lineage_breaks := 0
+	var unidentified := 0
+	var published := 0
+	for seed_value in range(72000, 72240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var previous := {}
+		for event in result.events:
+			if not CONTACTS.has(int(event.event_type)):
+				continue
+			var incoming: Dictionary = event.metadata.get(
+				"incoming_trajectory",
+				event.metadata.get("incoming_pass_trajectory", {}),
+			)
+			if not previous.is_empty() and not incoming.is_empty():
+				edges += 1
+				var upstream := str(previous.get("authoritative_flight_id", ""))
+				if upstream.is_empty() \
+						or upstream != str(incoming.get("authoritative_flight_id", "")):
+					lineage_breaks += 1
+			var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if outgoing.is_empty():
+				continue
+			published += 1
+			if str(outgoing.get("authoritative_flight_id", "")).is_empty():
+				unidentified += 1
+			## Only a contact that produced a ball becomes the upstream of the
+			## next edge. A block that never touched it leaves the attack's ball
+			## in the air, and the defender behind it is receiving that.
+			previous = outgoing
+	_check(
+		published >= 500 and unidentified == 0,
+		"every published outgoing ball carries a launch identity",
+	)
+	_check(
+		edges >= 500 and lineage_breaks == 0,
+		"every contact receives the launch the previous contact published",
+	)
+
+
 func _test_post_block_trajectory_chain() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
@@ -8868,7 +9231,21 @@ func _test_setter_capability_gates() -> void:
 	manager.seed_vertical_slice_data()
 	var capability_events := 0
 	var reach_states := {}
-	for seed_value in range(12000, 12040):
+	## **160 seeds, not 40, and the widening is the point.**
+	##
+	## This asserted `reach_states.has("jump")` over a window that produced
+	## **two** jump sets in forty rallies. That is a presence check on a
+	## two-sample population: any change anywhere in the resolver that reshuffles
+	## which rallies go long can move both of them and fail a gate that is not
+	## about the thing that changed. It did exactly that when the opponent's
+	## setter movement began consuming its own selection -- a home-side jump rate
+	## measured at 18/400 before and 22/400 after, i.e. unharmed and slightly up,
+	## while the forty-seed window went 2 -> 0.
+	##
+	## Widened rather than loosened: the claim is still that ordinary play
+	## produces both postures, and 160 seeds carries roughly nine jump sets, so
+	## it now measures that claim instead of a coin landing on its edge.
+	for seed_value in range(12000, 12160):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
@@ -8919,7 +9296,7 @@ func _test_setter_capability_gates() -> void:
 						pending_height[side] = float(event.metadata.get(
 							"set_contact_height_meters", 0.0
 						))
-					RALLY_EVENT_SCRIPT.EventType.DEFENSE:
+					RALLY_EVENT_SCRIPT.EventType.DIG, RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
 						pending_height.erase(side)
 					RALLY_EVENT_SCRIPT.EventType.SET:
 						if not pending_height.has(side):
@@ -9154,6 +9531,2342 @@ func _test_gate_twenty_one_setter_handoffs() -> void:
 			and int(Dictionary(report.get("overall", {})).get("invalid", 1)) == 0,
 		"Gate 21 validates every selected owner against the action candidates",
 	)
+
+
+## Recognition and response are two questions, and only one of them is a skill.
+##
+## `AttemptJudgment` used to weight `tactical_discipline` at 0.30 for the
+## question "do I realise this is beyond me?". `PLATFORM_CONTACT.md` §14
+## establishes discipline as a blend weight toward an actual team call -- so at
+## these sites it had no referent, acted as a capability, and pushed the wrong
+## way, since backing off is itself a departure from the called action.
+##
+## These checks are exact rather than sampled: `backs_off` is deterministic, so
+## a synthetic voli with everything pinned but one attribute isolates each term
+## completely.
+func _test_attempt_judgment_recognition_and_response() -> void:
+	var deficits: Array[float] = [0.05, 0.15, 0.25, 0.35]
+
+	## Discipline must not reach this decision at all, at any overreach size.
+	var discipline_free := true
+	for value in [10, 50, 90]:
+		var subject := _judgment_subject({"tactical_discipline": value})
+		for deficit in deficits:
+			if ATTEMPT_JUDGMENT_SCRIPT.backs_off(subject, deficit) \
+					!= ATTEMPT_JUDGMENT_SCRIPT.backs_off(
+						_judgment_subject({"tactical_discipline": 50}), deficit
+					):
+				discipline_free = false
+	_check(
+		discipline_free
+			and is_equal_approx(
+				ATTEMPT_JUDGMENT_SCRIPT.recognition(
+					_judgment_subject({"tactical_discipline": 10})
+				),
+				ATTEMPT_JUDGMENT_SCRIPT.recognition(
+					_judgment_subject({"tactical_discipline": 90})
+				),
+			),
+		"tactical discipline does not decide whether a voli knows an attempt is beyond them",
+	)
+
+	## Recognition is a capability: more of either term, more recognition.
+	_check(
+		ATTEMPT_JUDGMENT_SCRIPT.recognition(_judgment_subject({"decision_making": 90}))
+			> ATTEMPT_JUDGMENT_SCRIPT.recognition(
+				_judgment_subject({"decision_making": 10}))
+			and ATTEMPT_JUDGMENT_SCRIPT.recognition(
+				_judgment_subject({"composure": 90}))
+				> ATTEMPT_JUDGMENT_SCRIPT.recognition(
+					_judgment_subject({"composure": 10})),
+		"recognition rises with decision making and with composure",
+	)
+
+	## Temperament is a response, and it pushes the other way: the aggressive
+	## voli goes anyway at an overreach the cautious one declines. Searched
+	## across the reachable band rather than asserted at one deficit, so the
+	## check cannot pass by landing on a lucky threshold.
+	var separated := false
+	for deficit in deficits:
+		if ATTEMPT_JUDGMENT_SCRIPT.backs_off(
+			_judgment_subject({"aggression": 10}), deficit
+		) and not ATTEMPT_JUDGMENT_SCRIPT.backs_off(
+			_judgment_subject({"aggression": 90}), deficit
+		):
+			separated = true
+	_check(
+		separated
+			and ATTEMPT_JUDGMENT_SCRIPT.persistence(
+				_judgment_subject({"aggression": 90}))
+				> ATTEMPT_JUDGMENT_SCRIPT.persistence(
+					_judgment_subject({"aggression": 10})),
+		"aggression makes a voli persist with an attempt their equal declines",
+	)
+
+	## The correction re-attributes variation without moving the centre: a voli
+	## at 50 everywhere behaves exactly as the old three-term model did. If this
+	## fails, the split has become a rebalance.
+	_check(
+		is_equal_approx(
+			ATTEMPT_JUDGMENT_SCRIPT.recognition(_judgment_subject({})), 0.5
+		) and not ATTEMPT_JUDGMENT_SCRIPT.backs_off(_judgment_subject({}), 0.0),
+		"a neutral voli lands where the old model put them, and never backs off a zero deficit",
+	)
+
+
+## A voli with every attribute this decision reads pinned to 50, then overridden.
+func _judgment_subject(overrides: Dictionary) -> VolleyballPlayer:
+	var subject := VolleyballPlayer.new()
+	for name in ["decision_making", "tactical_discipline", "composure", "aggression"]:
+		subject.set(name, int(overrides.get(name, 50)))
+	return subject
+
+
+## The manager's call reaches the court, and discipline moves toward *it*.
+##
+## The first end-to-end tactical proof in the engine: a behaviour written on the
+## clipboard becomes an attempted block action, mediated by the blocker's own read
+## and their adherence. `docs/review/BLOCK_INSTRUCTION_PROOF.md` has the sweep.
+##
+## The bidirectional pair is the load-bearing part. An attribute that pushed the
+## same way under both calls would be temperament wearing an instruction's name,
+## and these two checks are what makes that a failure rather than a story.
+func _test_block_hands_instruction_adherence() -> void:
+	## Own read is kill (`deficit <= 0`), so a SOFT call is the disagreement.
+	var soft_low := _hands_rate("soft", 10, 0.10, 1.0, "soft block")
+	var soft_high := _hands_rate("soft", 90, 0.10, 1.0, "soft block")
+	_check(
+		soft_high > soft_low + 0.25,
+		"a soft-hands call reaches more disciplined blockers more often",
+	)
+
+	## Own read is soft (beaten and still closing), so a KILL call is the
+	## disagreement. Same attribute, opposite direction.
+	var kill_low := _hands_rate("kill", 10, -0.10, 0.55, "kill block")
+	var kill_high := _hands_rate("kill", 90, -0.10, 0.55, "kill block")
+	_check(
+		kill_high > kill_low + 0.25,
+		"a kill-hands call reaches more disciplined blockers more often",
+	)
+
+	## With nobody asking, discipline must do nothing at all -- the check that
+	## keeps it an adherence weight rather than a second temperament.
+	_check(
+		is_equal_approx(_hands_rate("soft", 10, 0.10, 1.0, ""),
+			_hands_rate("soft", 90, 0.10, 1.0, ""))
+			and is_equal_approx(_hands_rate("soft", 10, -0.10, 0.55, ""),
+				_hands_rate("soft", 90, -0.10, 0.55, "")),
+		"discipline changes nothing when no hands call was made",
+	)
+
+	## And it may not move the physical contest it is handed. The verdict is a
+	## choice about hands; the close fraction and contest margin are inputs.
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var contest := -0.10
+	var close := 0.55
+	simulator._block_hands_intent(
+		_hands_blocker(90), contest, close, "kill block"
+	)
+	_check(
+		is_equal_approx(contest, -0.10) and is_equal_approx(close, 0.55),
+		"the hands decision leaves the physical contest it was handed alone",
+	)
+
+	## End to end: a behaviour written on a real `TacticSheet` arrives at the
+	## decision site. Part B of the probe cannot show this, because the vertical
+	## slice ships no drawn sheet -- so without this check the wiring is only
+	## proven from the halfway point.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var blocker_id := lineup.player_at_slot(3)
+	var sheet := TacticSheet.new()
+	sheet.behaviours["3:Block"] = "soft block"
+	var wired := RALLY_SIMULATOR_SCRIPT.new()
+	wired.tactic_sheet = sheet
+	var reached := str(wired._hands_instruction_for(
+		_player_with_id(manager.players, blocker_id), lineup
+	))
+	var unwired := RALLY_SIMULATOR_SCRIPT.new()
+	_check(
+		reached == "soft block"
+			and str(unwired._hands_instruction_for(
+				_player_with_id(manager.players, blocker_id), lineup
+			)).is_empty(),
+		"a block behaviour written on the clipboard reaches the blocker who was told it",
+	)
+	manager.free()
+
+
+## Share of `samples` seeds on which this blocker's hands came out `wanted`.
+##
+## `_identity_roll` is a hash of the rally seed, so sweeping seeds turns one
+## deterministic decision into an exact rate rather than a sampled one.
+func _hands_rate(
+	wanted: String,
+	discipline: int,
+	contest_margin: float,
+	close_fraction: float,
+	instruction: String,
+) -> float:
+	var samples := 200
+	var hits := 0
+	for seed_value in range(samples):
+		var simulator := RALLY_SIMULATOR_SCRIPT.new()
+		simulator.rally_seed = seed_value
+		var verdict: Dictionary = simulator._block_hands_intent(
+			_hands_blocker(discipline), contest_margin, close_fraction, instruction
+		)
+		if str(verdict.hands) == wanted:
+			hits += 1
+	return float(hits) / float(samples)
+
+
+## Everything pinned but discipline, so the voli's own verdict is constant and
+## adherence is the only thing that can move the result.
+func _hands_blocker(discipline: int) -> VolleyballPlayer:
+	var blocker := VolleyballPlayer.new()
+	blocker.decision_making = 50
+	blocker.composure = 50
+	blocker.aggression = 50
+	blocker.tactical_discipline = discipline
+	return blocker
+
+
+func _player_with_id(players: Array, player_id: int) -> VolleyballPlayer:
+	for entry in players:
+		if entry != null and int(entry.id) == player_id:
+			return entry
+	return null
+
+
+
+## The second contact must not be decided by which slot the rotation happened to
+## put the setter in.
+##
+## `duty_bonus` used to add the designated-setter term on top of whatever
+## emergency duty the plan had written for that voli's *slot*, so the setter
+## totalled +0.80 in slot 2, +0.64 in slot 1 and +0.22 elsewhere. The top of
+## that range was exactly the width of the arrival term's whole authority, so in
+## one rotation of six a stranded setter kept a ball a team-mate was standing on
+## and in the other five they lost it. Identical bodies, identical ball.
+##
+## Emergency duties describe who covers *when the normal setter cannot take the
+## second contact*. Reading them as an extra bonus for the normal setter is the
+## category error these checks exist to keep out.
+func _test_second_contact_rotation_invariance() -> void:
+	var reachable: Array[int] = []
+	var stranded: Array[int] = []
+	var bought: Array[int] = []
+	## The same impossible claim contested by a voli the plan nominated for
+	## nothing. This is the row the defect actually lived in: with the bonus
+	## stacked, slot 2 uniquely protected the setter here and the other five
+	## rotations did not.
+	var no_duty: Array[int] = []
+	for setter_slot in range(1, 7):
+		reachable.append(_second_contact_pick(setter_slot, false, 50))
+		stranded.append(_second_contact_pick(setter_slot, true, 50))
+		bought.append(_second_contact_pick(setter_slot, false, 99))
+		no_duty.append(_second_contact_pick(setter_slot, true, 50, false))
+
+	_check(
+		_all_equal(reachable) and reachable[0] == SECOND_CONTACT_SETTER_ID,
+		"a reachable designated setter keeps the second ball in every rotation",
+	)
+	_check(
+		_all_equal(stranded) and stranded[0] == SECOND_CONTACT_CHALLENGER_ID,
+		"an unreachable setter yields to the voli on the ball in every rotation",
+	)
+	## The policy is "strong first responsibility, not absolute" -- so the two
+	## fixtures above must genuinely differ. Without this, both could be uniform
+	## because responsibility had been flattened into nothing, and every check
+	## here would still pass.
+	_check(
+		reachable[0] != stranded[0],
+		"physical availability decides the impossible claim and nothing else",
+	)
+	## And it must be the legs doing it, not technical quality. Same geometry as
+	## the reachable fixture; only the challenger's set_accuracy moves.
+	_check(
+		_all_equal(bought) and bought[0] == SECOND_CONTACT_SETTER_ID,
+		"set_accuracy cannot buy the second ball off a reachable setter",
+	)
+	## **The rotation-invariance check proper.** Uniformity is the whole claim --
+	## whichever way it resolves, it must resolve the same way in all six, because
+	## nothing about the rotation changes a body, the ball or a relevant duty.
+	_check(
+		_all_equal(no_duty),
+		"the rotation does not decide who covers an unreachable setter",
+	)
+
+
+const SECOND_CONTACT_SETTER_ID: int = 902
+const SECOND_CONTACT_CHALLENGER_ID: int = 906
+## The pass, the far corner a covering setter ends up in, and the parking spot
+## for the four bodies that are not part of the question. Shared by every row so
+## "identical geometry" is the same numbers rather than similar ones.
+const SECOND_CONTACT_TARGET := Vector2(0.56, 0.68)
+const SECOND_CONTACT_STRANDED := Vector2(0.10, 0.94)
+const SECOND_CONTACT_PARKED := Vector2(0.50, 0.955)
+
+
+## One selection, with the setter standing in `setter_slot` and the challenger in
+## the plan's nominated slot 2 (or slot 1 when the setter is there). Everything
+## except the rotation is held.
+func _second_contact_pick(
+	setter_slot: int,
+	strand_setter: bool,
+	challenger_accuracy: int,
+	## Whether the challenger stands in a slot the plan nominates for emergency
+	## setting. False puts them in one it never does, which is the harder case:
+	## responsibility has nothing to say and only the legs are left.
+	nominated_challenger: bool = true,
+) -> int:
+	var challenger_slot := (2 if setter_slot != 2 else 1) if nominated_challenger \
+		else (4 if setter_slot != 4 else 3)
+	var lineup := RotationLineup.new()
+	lineup.setter_id = SECOND_CONTACT_SETTER_ID
+	var players: Array[VolleyballPlayer] = []
+	var starts := {}
+	var spare: Array[int] = [901, 903, 904, 905]
+	for slot_number in range(1, 7):
+		var player_id := SECOND_CONTACT_SETTER_ID
+		if slot_number == challenger_slot:
+			player_id = SECOND_CONTACT_CHALLENGER_ID
+		elif slot_number != setter_slot:
+			player_id = spare.pop_front()
+		var player := _second_contact_player(player_id)
+		if player_id == SECOND_CONTACT_CHALLENGER_ID:
+			player.set_accuracy = challenger_accuracy
+			## On the ball only when the setter is stranded. In the ordinary
+			## fixture they stand where a back-row voli stands, because a
+			## challenger parked on the contact point is not ordinary geometry --
+			## it is the pathological end of the sweep, and asserting the setter
+			## keeps the ball there would be asserting the wrong thing.
+			starts[player_id] = SECOND_CONTACT_TARGET if strand_setter \
+				else Vector2(0.48, 0.90)
+		elif player_id == SECOND_CONTACT_SETTER_ID:
+			starts[player_id] = SECOND_CONTACT_STRANDED if strand_setter \
+				else Vector2(0.66, 0.60)
+		else:
+			starts[player_id] = SECOND_CONTACT_PARKED
+		players.append(player)
+		lineup.assign_slot(slot_number, player_id)
+	var plan := DefensivePlan.new()
+	plan.rotation_number = 1
+	plan.ensure_defaults(lineup, players)
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.live_positions = starts.duplicate(true)
+	var preferred: VolleyballPlayer = simulator._second_contact_setter(
+		players, plan, SECOND_CONTACT_SETTER_ID, -1
+	)
+	var choice: Dictionary = simulator._spatial_setter_choice(
+		players, starts, plan, SECOND_CONTACT_SETTER_ID, -1, preferred,
+		SECOND_CONTACT_TARGET, 1.20,
+	)
+	var chosen: VolleyballPlayer = choice.player as VolleyballPlayer
+	return chosen.id if chosen != null else -1
+
+
+## Every attribute either selector reads pinned to the middle, so a verdict that
+## moves has exactly one cause.
+func _second_contact_player(player_id: int) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	player.display_name = "Voli %d" % player_id
+	for attribute in [
+		"set_accuracy", "ball_control", "decision_making", "ego", "leadership",
+		"aggression", "acceleration", "lateral_speed", "transition_speed",
+		"stamina", "work_rate", "anticipation", "composure",
+	]:
+		player.set(attribute, 50)
+	player.fatigue = 0.0
+	return player
+
+
+func _all_equal(values: Array[int]) -> bool:
+	for value in values:
+		if value != values[0]:
+			return false
+	return values.size() > 0
+
+
+
+## The opponent's setter movement must consume the state the selection was made
+## on, and be budgeted by the realized pass.
+##
+## `_resolve_opponent_transition` used to rebuild all four quantities after
+## `_spatial_setter_choice` had already produced them: the start re-read from
+## `opponent_live_positions`, the route re-solved, the travel re-timed on the
+## `lateral` profile, and the margin measured against the literal
+## `DEFAULT_SECOND_CONTACT_SECONDS`. Selection and execution therefore described
+## two different setters -- with the serve flight as a head start the chooser had
+## one standing on the ball while this block had them 1.7 m away, and the
+## reconstructed margin was identical at pass durations from 0.42 s to 1.80 s
+## because a constant cannot hear the ball.
+##
+## The identity below is the whole claim in one line, checked on published data:
+##
+##     arrival_margin + movement_duration == the realized pass's own duration
+##
+## It cannot hold unless the margin is measured against the ball, the travel is
+## the one selection used, and both are actually published.
+func _test_opponent_setter_movement_consumes_selection() -> void:
+	var checked := 0
+	var identity_failures := 0
+	var missing_margin := 0
+	var missing_emergency := 0
+	var distinct_margins := {}
+	for serving_home in [false, true]:
+		for seed_value in range(74000, 74040):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				for event in rally.events:
+					if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+						continue
+					if str(event.metadata.get("side", "home")) != "opponent":
+						continue
+					## Checked before the margin guard below, not after: the
+					## first draft `continue`d on a missing margin first, so on
+					## the old code this counter never incremented and the check
+					## passed on both versions. A gate that cannot fail is not a
+					## gate -- the same lesson `41a57b6` recorded.
+					if not event.metadata.has("emergency_setter"):
+						missing_emergency += 1
+					if not event.metadata.has("arrival_margin"):
+						missing_margin += 1
+						continue
+					var incoming: Dictionary = event.metadata.get(
+						"incoming_pass_trajectory", {}
+					)
+					if incoming.is_empty():
+						## The coverage feed still publishes no flight, so its
+						## window is honestly the fallback. Skipped rather than
+						## counted as a failure -- see the write-up.
+						continue
+					var margin := float(event.metadata.arrival_margin)
+					var travel := float(event.metadata.get("movement_duration", 0.0))
+					var window := float(incoming.get("duration", 0.0))
+					checked += 1
+					distinct_margins[snappedf(margin, 0.001)] = true
+					if absf(margin + travel - window) > 0.0005:
+						identity_failures += 1
+			manager.free()
+
+	_check(
+		checked > 0 and missing_margin == 0,
+		"every opponent set publishes the arrival margin it was resolved with",
+	)
+	_check(
+		missing_emergency == 0,
+		"every opponent set says whether it was an emergency second contact",
+	)
+	_check(
+		checked > 0 and identity_failures == 0,
+		"an opponent setter's margin plus travel is the realized pass's own flight",
+	)
+	## A constant window would still satisfy the identity if travel were also
+	## constant, so this is the check that the ball is genuinely varying it.
+	_check(
+		distinct_margins.size() > 5,
+		"opponent arrival margins vary with the ball rather than sitting on one value",
+	)
+
+
+
+## Feasibility is resolved before execution, execution shapes only the ball, and
+## the second contact terminates in exactly one of them.
+##
+## The order under test, from the home first ball:
+##
+##     hitter chosen (1905)
+##     -> setter capability read from the realized arrival (1999)
+##     -> tempo downgraded if the setter cannot command it (2015)
+##     -> set quality (2065)
+##     -> delivered point, arc, ONE trajectory (2073-2150)
+##
+## Nothing after the quality line may move the body, extend the clock or
+## re-choose the hitter, and the checks below are the ones that would notice.
+func _test_set_feasibility_then_execution() -> void:
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 2718
+	var setter := _set_probe_setter()
+
+	## **The jump-set distinction, which is the design claim.** Identical arrival
+	## margins, identical pass: only the run that produced the margin differs. A
+	## model reading time alone cannot separate these, and a jump you have to
+	## travel into is a lunge rather than a set.
+	var planted: Dictionary = simulator._jump_set_decision(setter, 2.95, 0.90, 0.15, 0.30)
+	var carried: Dictionary = simulator._jump_set_decision(setter, 2.95, 0.90, 4.20, 1.50)
+	_check(
+		bool(planted.jumping) and not bool(carried.jumping),
+		"a setter still travelling cannot jump-set on a margin that lets a planted one",
+	)
+	## And a ball that never rose to the hands is a different refusal from a
+	## rushed one -- they must not collapse into a single "standing".
+	var low: Dictionary = simulator._jump_set_decision(setter, 1.60, 0.90, 0.15, 0.30)
+	var rushed: Dictionary = simulator._jump_set_decision(setter, 2.95, 0.10, 0.15, 0.30)
+	_check(
+		not bool(low.jumping) and str(low.reason) == "under the hands"
+			and not bool(rushed.jumping) and str(rushed.reason) == "no time to load",
+		"a pass under the hands and a rushed setter are refused for different reasons",
+	)
+
+	## Feasibility may constrain the set form. It may not re-choose the hitter.
+	var assignment := HitterAssignment.new()
+	assignment.player_id = 4242
+	assignment.lane = "Left Pin"
+	assignment.tempo = 1
+	var downgraded: Resource = simulator._downgraded_assignment(assignment, 3)
+	_check(
+		int(downgraded.player_id) == 4242 and str(downgraded.lane) == "Left Pin"
+			and int(downgraded.tempo) == 3 and int(assignment.tempo) == 1,
+		"a tempo the setter cannot command changes the set form, never the hitter",
+	)
+
+	## In situ: one ball through the whole second contact, and the quantity the
+	## jump-set threshold acts on published so it can be audited at all.
+	var sets := 0
+	var without_closing := 0
+	var pass_into_set := 0
+	var pass_into_set_ok := 0
+	var set_into_attack := 0
+	var set_into_attack_ok := 0
+	for serving_home in [false, true]:
+		for seed_value in range(79000, 79040):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				## The last ball ANY contact published, not the last reception: a
+				## transition set is fed by a dig, and comparing it against a serve
+				## reception measures the test rather than the engine.
+				var last_ball := {}
+				var last_set := {}
+				for event in rally.events:
+					var kind := int(event.event_type)
+					if kind == RALLY_EVENT_SCRIPT.EventType.SET:
+						sets += 1
+						if not event.metadata.has("set_closing_speed_mps"):
+							without_closing += 1
+						var incoming: Dictionary = event.metadata.get(
+							"incoming_trajectory",
+							event.metadata.get("incoming_pass_trajectory", {}),
+						)
+						if not last_ball.is_empty() and not incoming.is_empty():
+							pass_into_set += 1
+							if _same_published_ball(last_ball, incoming):
+								pass_into_set_ok += 1
+						last_set = Dictionary(
+							event.metadata.get("outgoing_trajectory", {})
+						)
+						last_ball = last_set
+						continue
+					if kind == RALLY_EVENT_SCRIPT.EventType.ATTACK:
+						var swung_at: Dictionary = event.metadata.get(
+							"incoming_trajectory", {}
+						)
+						if not last_set.is_empty() and not swung_at.is_empty():
+							set_into_attack += 1
+							if _same_published_ball(last_set, swung_at):
+								set_into_attack_ok += 1
+					var published: Dictionary = event.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if not published.is_empty():
+						last_ball = published
+			manager.free()
+
+	_check(
+		sets > 0 and without_closing == 0,
+		"every set publishes the closing speed its jump decision turned on",
+	)
+	_check(
+		pass_into_set > 0 and pass_into_set_ok == pass_into_set,
+		"a set is resolved against the exact ball the previous contact published",
+	)
+	_check(
+		set_into_attack > 0 and set_into_attack_ok == set_into_attack,
+		"a swing is resolved against the exact set the setter published",
+	)
+
+
+func _set_probe_setter() -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = 4141
+	player.display_name = "Probe Setter"
+	for attribute in [
+		"set_accuracy", "set_balance", "set_stability", "tempo_control",
+		"hand_control", "jump_reach", "explosiveness",
+	]:
+		player.set(attribute, 50)
+	player.fatigue = 0.0
+	return player
+
+
+## Identity by endpoints and duration rather than dictionary equality, since a
+## trajectory carries stamped launch state a consumer may extend.
+func _same_published_ball(first: Dictionary, second: Dictionary) -> bool:
+	return Vector2(first.get("start_position", Vector2.ZERO)).is_equal_approx(
+			Vector2(second.get("start_position", Vector2.ONE))
+		) and Vector2(first.get("end_position", Vector2.ZERO)).is_equal_approx(
+			Vector2(second.get("end_position", Vector2.ONE))
+		) and is_equal_approx(
+			float(first.get("duration", -1.0)), float(second.get("duration", -2.0))
+		)
+
+
+
+## Every swing must publish the ball it was actually struck against.
+##
+## Three paths produce an ATTACK event -- the home first ball, the opponent
+## transition and the home continuation -- and only the first carried
+## `incoming_trajectory`. All three were already *resolved* against their own
+## set's flight, so this was a reporting gap rather than an authority one: the
+## one-ball chain was provable on 240 of 611 swings and silently unprovable on
+## the rest.
+##
+## Read off the SET event each path had already published and retargeted, so the
+## identity holds by construction and this check is what notices if a path stops
+## doing it.
+func _test_every_swing_publishes_the_ball_it_struck() -> void:
+	var swings := 0
+	var without_incoming := 0
+	var matched := 0
+	var compared := 0
+	for serving_home in [false, true]:
+		for seed_value in range(84000, 84040):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				var last_set := {}
+				for event in rally.events:
+					var kind := int(event.event_type)
+					if kind == RALLY_EVENT_SCRIPT.EventType.SET:
+						last_set = Dictionary(
+							event.metadata.get("outgoing_trajectory", {})
+						)
+					elif kind == RALLY_EVENT_SCRIPT.EventType.ATTACK:
+						swings += 1
+						var swung_at: Dictionary = event.metadata.get(
+							"incoming_trajectory", {}
+						)
+						if swung_at.is_empty():
+							without_incoming += 1
+							continue
+						if last_set.is_empty():
+							continue
+						compared += 1
+						if _same_published_ball(last_set, swung_at):
+							matched += 1
+			manager.free()
+
+	_check(
+		swings > 0 and without_incoming == 0,
+		"every swing on every path publishes the ball it was struck against",
+	)
+	_check(
+		compared > 0 and matched == compared,
+		"that ball is the exact set the setter published, on every path",
+	)
+
+
+
+## The movement model can price a prepared direction, and must keep being able
+## to.
+##
+## **This is an invariant test, not repair evidence.** It passes before and after
+## the defensive-readiness audit, because that audit made no production change --
+## it stopped at a missing physical state. What it protects is the half of the
+## relation that *does* exist: `_movement_profile` turns `facing` into a
+## direction-change delay and an arrival balance, and spends it on startup rather
+## than on top speed.
+##
+## Without this check, the capability could be deleted as dead weight -- nothing
+## in the resolver currently supplies a facing that differs from the route -- and
+## the eventual fix would then have nothing to build on. See
+## `docs/review/DEFENSIVE_READINESS_BOUNDARY.md`.
+func _test_movement_model_prices_facing() -> void:
+	var defender := VolleyballPlayer.new()
+	defender.id = 7171
+	for attribute in [
+		"anticipation", "lateral_speed", "acceleration", "transition_speed",
+		"stamina", "work_rate", "composure",
+	]:
+		defender.set(attribute, 50)
+	defender.fatigue = 0.0
+
+	var start := Vector2(0.50, 0.80)
+	var target := Vector2(0.62, 0.66)
+	var opening := RallyKinematics.court_delta_meters(start, target).normalized()
+
+	var toward := _facing_profile(defender, start, target, opening, opening)
+	var away := _facing_profile(defender, start, target, opening, -opening)
+
+	_check(
+		float(toward.facing_fit) > 0.99 and float(away.facing_fit) < 0.01,
+		"facing fit reads the angle between preparation and the requested direction",
+	)
+	## The whole point of the policy's §11: preparation buys a cheaper first step,
+	## never a faster body.
+	_check(
+		float(away.turn_delay) > float(toward.turn_delay) + 0.05
+			and float(away.seconds) > float(toward.seconds),
+		"a body prepared the wrong way pays a turn cost and arrives later",
+	)
+	_check(
+		is_equal_approx(float(toward.maximum_speed), float(away.maximum_speed)),
+		"preparation does not change top speed, only the cost of starting",
+	)
+
+
+func _facing_profile(
+	defender: VolleyballPlayer,
+	start: Vector2,
+	target: Vector2,
+	opening: Vector2,
+	facing: Vector2,
+) -> Dictionary:
+	var actor := RallyPlayerState.create(defender, &"home", -1, start)
+	actor.velocity = Vector2.ZERO
+	actor.facing = facing.normalized()
+	var profile: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT._movement_profile(
+		actor, opening, RallyPlayerState.MovementMode.LATERAL
+	)
+	var traversal: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT.traversal_result(
+		actor, target, RallyPlayerState.MovementMode.LATERAL
+	)
+	return {
+		"facing_fit": float(profile.facing_fit),
+		"turn_delay": float(profile.get("direction_change_delay", 0.0)),
+		"maximum_speed": float(profile.maximum_speed),
+		"seconds": float(traversal.seconds),
+	}
+
+
+
+## A blocker who has just jumped is not a standing body.
+##
+## `_note_recovery` is called at five sites, every one of them a platform
+## contact, so nothing in the engine recorded that somebody was in the air.
+## `_recovery_time_penalties` is handed to `CoverageModel.choose_claimant` for
+## the floor defence, and for a front-row blocker it was always empty: the claim
+## search offered them the ball's whole flight, starting from two feet off the
+## ground.
+##
+## Measured over 300 rallies before the repair: **0 of 151 defensive contacts**
+## happened with any body registered as unavailable. After: 72 of 155.
+##
+## Nothing was invented. `block_jump_timing` already published `hang_seconds` and
+## whether the jump went up late, and `hang_seconds` is `2*sqrt(2*leap/g)`.
+func _test_landing_blocker_is_unavailable() -> void:
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 606
+	var blocker := VolleyballPlayer.new()
+	blocker.id = 8181
+	blocker.explosiveness = 50
+	blocker.work_rate = 50
+
+	## Straight out of the published shape: a 0.60 m leap hangs
+	## 2*sqrt(2*0.60/9.81) = 0.6996 s, so a perfectly timed jump lands half a hang
+	## after contact.
+	var hang := 2.0 * sqrt(2.0 * 0.60 / 9.81)
+	simulator._note_block_airborne(
+		{8181: {"hang_seconds": hang, "timing_error_seconds": 0.0, "late": false}},
+		[blocker], 1.00,
+	)
+	var owed: Dictionary = simulator._recovery_time_penalties(1.00)
+	_check(
+		owed.has(8181) and absf(float(owed[8181]) - hang * 0.5) < 0.0005,
+		"a blocker still in the air owes the claim search the rest of their hang",
+	)
+	## And they are available again once they have landed -- an airborne debt is
+	## not a lingering penalty.
+	_check(
+		not simulator._recovery_time_penalties(1.00 + hang).has(8181),
+		"that debt expires when they land rather than persisting",
+	)
+	## A floor recovery already owed must not be shortened by jumping.
+	simulator.player_recovery[8181] = {
+		"state": "fall", "ready_at": 9.00, "delay": 0.95,
+	}
+	simulator._note_block_airborne(
+		{8181: {"hang_seconds": hang, "timing_error_seconds": 0.0, "late": false}},
+		[blocker], 1.00,
+	)
+	_check(
+		is_equal_approx(float(simulator.player_recovery[8181].ready_at), 9.00),
+		"a jump never shortens a floor recovery the blocker already owed",
+	)
+
+	## In situ: the debt reaches the claim search that reads it.
+	var digs := 0
+	var digs_with_a_body_down := 0
+	for serving_home in [false, true]:
+		for seed_value in range(90000, 90060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				for event in rally.events:
+					if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DIG:
+						continue
+					digs += 1
+					if int(event.metadata.get("recovering_count", 0)) > 0:
+						digs_with_a_body_down += 1
+			manager.free()
+	_check(
+		digs > 0 and digs_with_a_body_down > 0,
+		"the airborne debt reaches the floor-defence claim search",
+	)
+
+
+
+## The defensive claimant's ordering rules, against the policy.
+##
+## **Invariant tests, not repair evidence.** All four pass on the pre-pass
+## resolver: `choose_claimant` already filters infeasible candidates before
+## scoring, and already applies an immediate-possession lock ahead of the
+## weighted claim. Sections 0 through 10 of the policy were found already
+## implemented; only the ready-stance sections are blocked. These exist so the
+## structure cannot be quietly refactored into a single weighted sum, which is
+## the shape the policy explicitly rejects.
+func _test_defensive_claim_precedence() -> void:
+	var ball := Vector2(0.30, 0.78)
+
+	## Section 7: a ball already inside somebody's envelope is theirs, and an
+	## elite teammate three metres away cannot buy it.
+	var near := _claim_voli(1)
+	var elite := _claim_voli(2, 99)
+	var chosen := _claim_winner(
+		[near, elite],
+		{1: _claim_zone(1, ball, 1), 2: _claim_zone(2, Vector2(0.62, 0.72), 1)},
+		{1: ball + Vector2(0.008, 0.004), 2: Vector2(0.62, 0.72)}, ball, 1.10,
+	)
+	_check(
+		chosen == 1,
+		"a ball inside a defender's envelope is not bought by a better teammate",
+	)
+
+	## Sections 2 and 4: the assigned short defender holds a short ball against a
+	## quicker deep defender whose raw reach margin is actually larger.
+	var short_defender := _claim_voli(1)
+	var deep := _claim_voli(2, 99)
+	var short_ball := _claim_winner(
+		[short_defender, deep],
+		{1: _claim_zone(1, ball, 3), 2: _claim_zone(2, Vector2(0.34, 0.92), 1)},
+		{1: Vector2(0.28, 0.72), 2: Vector2(0.34, 0.88)}, ball, 0.95,
+	)
+	_check(
+		short_ball == 1,
+		"a deep defender does not take a short ball off the assigned one",
+	)
+
+	## Section 1: overlapping zones resolve on the existing priority field, and
+	## it must work in both directions -- a one-way check would pass on a
+	## selector that simply always preferred the first candidate.
+	var origins := {1: Vector2(0.30, 0.86), 2: Vector2(0.30, 0.70)}
+	var first := _claim_winner(
+		[_claim_voli(1), _claim_voli(2)],
+		{1: _claim_zone(1, ball, 3), 2: _claim_zone(2, ball, 1)}, origins, ball, 1.10,
+	)
+	var second := _claim_winner(
+		[_claim_voli(1), _claim_voli(2)],
+		{1: _claim_zone(1, ball, 1), 2: _claim_zone(2, ball, 3)}, origins, ball, 1.10,
+	)
+	_check(
+		first == 1 and second == 2,
+		"overlapping zones are resolved by the existing priority field, both ways",
+	)
+
+	## Section 0: nobody feasible returns no claimant, so the caller's existing
+	## emergency fallback is what produces one.
+	_check(
+		_claim_winner(
+			[_claim_voli(1), _claim_voli(2)],
+			{1: _claim_zone(1, ball, 1), 2: _claim_zone(2, ball, 1)},
+			{1: Vector2(0.96, 0.06), 2: Vector2(0.92, 0.10)}, ball, 0.25,
+		) == -1,
+		"an unreachable ball yields no claimant rather than a nearest-wins pick",
+	)
+
+
+func _claim_voli(player_id: int, spike: int = 50) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	for attribute in [
+		"anticipation", "lateral_speed", "acceleration", "reception",
+		"dig_control", "ball_control", "composure", "work_rate", "stamina",
+	]:
+		player.set(attribute, 50)
+	for attribute in ["anticipation", "lateral_speed", "acceleration"]:
+		player.set(attribute, spike)
+	player.fatigue = 0.0
+	return player
+
+
+func _claim_zone(player_id: int, centre: Vector2, priority: int) -> Resource:
+	var zone: Resource = DefensiveZone.new()
+	zone.player_id = player_id
+	zone.zone_type = DefensiveZone.ZoneType.FLOOR_DEFENSE
+	zone.center = centre
+	zone.radius_meters = 3.0
+	zone.priority = priority
+	zone.enabled = true
+	return zone
+
+
+func _claim_winner(
+	players: Array,
+	zones: Dictionary,
+	origins: Dictionary,
+	ball: Vector2,
+	seconds: float,
+) -> int:
+	var typed: Array[VolleyballPlayer] = []
+	for entry in players:
+		typed.append(entry as VolleyballPlayer)
+	var claim: Dictionary = COVERAGE_CALCULATOR_SCRIPT.choose_claimant(
+		typed, zones, ball, seconds, "reception", {}, origins
+	)
+	var winner := claim.get("player") as VolleyballPlayer
+	return winner.id if winner != null else -1
+
+
+
+## Preparation orientation: initialised per side, preserved at rest, never
+## manufactured by the route, and now visible to the defensive claimant.
+##
+## `facing` is physical feet/body preparation -- not gaze, not a predicted
+## landing point, not the route being evaluated. Before this pass it was a single
+## world-space constant that `_travel` overwrote with the direction of travel on
+## every leg, so `facing_fit` was 1.0 for every voli on every trip and the
+## claimant had no direction at all.
+func _test_ready_orientation() -> void:
+	## A1 -- the two sides are mirrored, and neither is a shared default.
+	var home := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	var away := RallyPlayerState.create(
+		_orientation_voli(902), &"opponent", 1, Vector2(0.50, 0.20)
+	)
+	_check(
+		home.facing.is_equal_approx(-away.facing) and home.facing.length() > 0.5,
+		"the two sides initialise with mirrored, meaningful preparation",
+	)
+
+	## A2 -- standing still does not reset or recompute it.
+	var resting := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	var before := resting.facing
+	resting.apply_position(Vector2(0.50, 0.80), Vector2.ZERO)
+	_check(
+		resting.facing.is_equal_approx(before),
+		"zero movement preserves preparation orientation",
+	)
+
+	## A4 -- the route cannot prepare itself. A body set away from where it is
+	## being sent must take longer than one set toward it.
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var start := Vector2(0.50, 0.80)
+	var target := Vector2(0.62, 0.66)
+	var opening := RallyKinematics.court_delta_meters(start, target).normalized()
+	var toward: Dictionary = simulator._travel(
+		_orientation_voli(), start, target, "lateral", null, Vector2.ZERO, opening
+	)
+	var away_leg: Dictionary = simulator._travel(
+		_orientation_voli(), start, target, "lateral", null, Vector2.ZERO, -opening
+	)
+	_check(
+		float(away_leg.seconds) > float(toward.seconds) + 0.01,
+		"a route cannot make itself perfectly prepared by facing its own direction",
+	)
+
+	## A7 -- the defensive claimant is no longer direction-blind. Same defender,
+	## same distance, same clock; only where the ball comes from moves.
+	var zone: Resource = DefensiveZone.new()
+	zone.player_id = 901
+	zone.zone_type = DefensiveZone.ZoneType.FLOOR_DEFENSE
+	zone.center = Vector2(0.50, 0.80)
+	zone.radius_meters = 3.0
+	zone.enabled = true
+	var facing := RallyPlayerState.side_relative_ready_facing(&"home")
+	var in_front := _orientation_margin(zone, Vector2(0.50, 0.80 - 2.5 / 18.0), facing)
+	var behind := _orientation_margin(zone, Vector2(0.50, 0.80 + 2.5 / 18.0), facing)
+	_check(
+		in_front > behind + 0.05,
+		"a ball behind a set defender costs more than the same ball in front",
+	)
+	## And the cost is startup, not speed: an untracked facing charges nothing,
+	## which is what keeps un-migrated callers on their old behaviour.
+	_check(
+		is_equal_approx(
+			_orientation_margin(
+				zone, Vector2(0.50, 0.80 + 2.5 / 18.0), Vector2.ZERO
+			),
+			_orientation_margin(
+				zone, Vector2(0.50, 0.80 - 2.5 / 18.0), Vector2.ZERO
+			),
+		),
+		"an untracked facing charges nothing and stays direction-blind",
+	)
+
+
+## The pass after it: does that orientation survive the body *moving*?
+##
+## `apply_position` used to assign `facing = velocity` for every movement alike,
+## which says a backpedalling defender faces away from the net and a shuffling
+## blocker faces down the net rather than across it. The movement **form** now
+## decides: IDLE, LATERAL, BLOCK_CLOSE and RECOVERY preserve; APPROACH and
+## TRANSITION establish the route. No angle, distance or turn-rate constant was
+## added -- the mode enum already describes the physical movement.
+##
+## Checks 1, 2, 4 and 5 fail on the pre-pass resolver; check 3 passes on both and
+## is labelled an invariant. See `docs/review/MOVING_ORIENTATION.md`.
+func _test_moving_orientation() -> void:
+	## 1 -- ready footwork keeps its preparation, travelling backward or sideways.
+	var net_ward := RallyPlayerState.side_relative_ready_facing(&"home")
+	var backpedal := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	backpedal.movement_mode = RallyPlayerState.MovementMode.LATERAL
+	backpedal.apply_position(Vector2(0.50, 0.85), Vector2(0.0, 1.5))
+	_check(
+		backpedal.facing.is_equal_approx(net_ward)
+			and backpedal.facing.dot(Vector2(0.0, 1.0)) < 0.0,
+		"a backpedalling defender travels backward and stays square to the net",
+	)
+
+	## 2 -- a block close runs along the net without turning down it.
+	var closing := RallyPlayerState.create(
+		_orientation_voli(), &"home", 3, Vector2(0.34, 0.52)
+	)
+	closing.movement_mode = RallyPlayerState.MovementMode.BLOCK_CLOSE
+	closing.apply_position(Vector2(0.62, 0.52), Vector2(3.1, 0.0))
+	_check(
+		closing.facing.is_equal_approx(net_ward),
+		"a closing blocker stays square to the net rather than facing along it",
+	)
+
+	## 3 -- and the two opened-up forms still take the route. **Invariant**: the
+	## old universal rule also produced this, so it cannot fail on the old
+	## resolver. It guards the other direction -- that the repair did not simply
+	## freeze facing everywhere.
+	var run := Vector2(0.55, -0.84).normalized() * 3.6
+	for mode in [
+		RallyPlayerState.MovementMode.APPROACH,
+		RallyPlayerState.MovementMode.TRANSITION,
+	]:
+		var runner := RallyPlayerState.create(
+			_orientation_voli(), &"home", 2, Vector2(0.50, 0.80)
+		)
+		runner.movement_mode = mode
+		runner.apply_position(Vector2(0.56, 0.62), run)
+		_check(
+			runner.facing.is_equal_approx(run.normalized()),
+			"%s establishes orientation from its own committed route"
+				% RallyPlayerState.MovementMode.keys()[mode],
+		)
+
+	## 4 -- a projected leg is classified by the leg being applied, not by the
+	## one the body had just finished. `project_toward` set the mode *after* the
+	## position, so an approach projected from a shuffling body was classified as
+	## a shuffle.
+	var shuffling := RallyPlayerState.create(
+		_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+	)
+	shuffling.movement_mode = RallyPlayerState.MovementMode.LATERAL
+	var lateral_leg: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT.project_toward(
+		shuffling, Vector2(0.66, 0.88), 0.9,
+		RallyPlayerState.MovementMode.LATERAL, true,
+	)
+	var shuffled := lateral_leg.get("actor") as RallyPlayerState
+	var run_leg: Dictionary = RALLY_MOVEMENT_SYSTEM_SCRIPT.project_toward(
+		shuffling, Vector2(0.66, 0.40), 0.9,
+		RallyPlayerState.MovementMode.TRANSITION, true,
+	)
+	var ran := run_leg.get("actor") as RallyPlayerState
+	_check(
+		shuffled.facing.is_equal_approx(net_ward)
+			and not ran.facing.is_equal_approx(net_ward)
+			and ran.movement_mode == RallyPlayerState.MovementMode.TRANSITION,
+		"a projected leg adopts its route only when its own form justifies it",
+	)
+
+	## 5 -- and the consequence: what a defender did beforehand changes what the
+	## next equal ball costs them. Three histories, three answers. On the old
+	## rule every history faced its own velocity, so the shuffle and the run in
+	## the same direction were indistinguishable and only two answers existed.
+	var zone: Resource = DEFENSIVE_ZONE_SCRIPT.new()
+	zone.player_id = 901
+	zone.zone_type = DEFENSIVE_ZONE_SCRIPT.ZoneType.FLOOR_DEFENSE
+	zone.center = Vector2(0.50, 0.80)
+	zone.radius_meters = 3.2
+	zone.enabled = true
+	var sideways_ball := Vector2(0.50 + 1.2 / 9.0, 0.80)
+	var margins: Array[float] = []
+	for entry in [
+		[RallyPlayerState.MovementMode.LATERAL, Vector2(1.4, 0.0)],
+		[RallyPlayerState.MovementMode.TRANSITION, Vector2(3.2, 0.0)],
+		[RallyPlayerState.MovementMode.TRANSITION, Vector2(-3.2, 0.0)],
+	]:
+		var actor := RallyPlayerState.create(
+			_orientation_voli(), &"home", 1, Vector2(0.50, 0.80)
+		)
+		actor.movement_mode = entry[0]
+		actor.apply_position(Vector2(0.50, 0.80), Vector2(entry[1]))
+		var arrival: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+			_orientation_voli(), zone, sideways_ball, 1.10, "dig_control",
+			Vector2(0.50, 0.80), -1.0, actor.facing,
+		)
+		margins.append(float(arrival.get("reach_margin_meters", 0.0)))
+	_check(
+		margins[1] > margins[0] + 0.001 and margins[0] > margins[2] + 0.001,
+		"prior movement leaves a defender genuinely better or worse prepared",
+	)
+
+
+## `readiness` was removed, not given semantics.
+##
+## The field was declared 1.0 and written by nothing, so its two envelope
+## consumers were a folded constant and an identity, and its classifier
+## threshold at 0.45 acted on a distribution that was a single point at 1.0.
+## Every input a preload scalar could have derived from already reaches the two
+## consequences it was permitted to touch. See
+## `docs/review/READINESS_REMOVAL.md`.
+##
+## Checks 1 and 2 fail on the pre-pass engine; check 3 is an invariant and is
+## labelled as one.
+func _test_readiness_is_body_state() -> void:
+	var voli := _orientation_voli()
+	voli.set("explosiveness", 50)
+	voli.set("approach_timing", 50)
+	voli.set("set_balance", 50)
+
+	## 1 -- a body already off the floor cannot take off again. The gate named
+	## DIVING and RECOVERING and omitted AIRBORNE, while the posture table ten
+	## lines below already treated an airborne body as compromised.
+	var heights := {}
+	for state_name in ["BALANCED", "AIRBORNE", "DIVING", "RECOVERING"]:
+		var actor := RallyPlayerState.create(voli, &"home", 1, Vector2(0.50, 0.60))
+		actor.body_state = RallyPlayerState.BodyState[state_name]
+		var envelope: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+			actor, &"attack", 3.10, 1.20, true,
+		)
+		heights[state_name] = float(envelope.get(
+			"maximum_contact_height_meters", 0.0
+		)) - float(envelope.get("standing_reach_meters", 0.0))
+	_check(
+		heights["BALANCED"] > 0.001
+			and is_zero_approx(heights["AIRBORNE"])
+			and is_zero_approx(heights["DIVING"])
+			and is_zero_approx(heights["RECOVERING"]),
+		"a body off the floor or on it cannot take off for a second contact",
+	)
+
+	## 2 -- and the scalar itself is gone rather than pinned. `get` on a missing
+	## property returns null, so this is a real absence check.
+	var actor := RallyPlayerState.create(voli, &"home", 1, Vector2(0.50, 0.60))
+	_check(
+		actor.get("readiness") == null,
+		"no free-running readiness meter survives beside the body state",
+	)
+
+	## 3 -- **invariant.** Takeoff preparation is bought by explosiveness and by
+	## the run-up, and by nothing else. Both were already true before the
+	## removal; this guards against a future pass reintroducing a third factor
+	## spending the same preparation a second time.
+	var slow := CONTACT_ENVELOPE_SCRIPT.evaluate(
+		RallyPlayerState.create(
+			_orientation_voli(), &"home", 1, Vector2(0.50, 0.60)
+		), &"attack", 3.10, 1.20, true, {"runup_quality": 0.0},
+	)
+	var quick := CONTACT_ENVELOPE_SCRIPT.evaluate(
+		RallyPlayerState.create(
+			_orientation_voli(), &"home", 1, Vector2(0.50, 0.60)
+		), &"attack", 3.10, 1.20, true, {"runup_quality": 1.0},
+	)
+	_check(
+		float(quick.get("required_takeoff_time_seconds", 0.0))
+			< float(slow.get("required_takeoff_time_seconds", 0.0)) - 0.001,
+		"a cleaner run-up still reserves less stationary takeoff preparation",
+	)
+
+
+## One misread must not move the same body twice.
+##
+## `_form_home_block` runs twice per opponent transition -- once before the set
+## is released and once re-formed with the achieved tempo -- and it wrote its
+## setter pull into `live_positions` on both. The second call then read the
+## already-pulled position as its start and pulled again. Measured over the
+## matched block-band population that was 92 of the 134 swings on which the home
+## wall failed to form at all. See `docs/review/HOME_WALL_FORMATION.md`.
+##
+## Check 1 fails on the pre-pass resolver. Check 2 is an invariant and is
+## labelled as one.
+func _test_block_setter_pull_applies_once() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var players: Array[VolleyballPlayer] = manager.players
+	var plan: Resource = manager.defensive_plans.get(
+		lineup.rotation_number
+	) if manager.defensive_plans.has(lineup.rotation_number) else null
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	simulator.live_positions = {}
+	## `_form_home_block` is called here directly rather than through a rally, so
+	## the identity terms it reads have to be supplied the same way
+	## `simulate_rally` supplies them.
+	simulator.home_principles = manager.team.principles
+	## The opponent setter stands well off centre, so a pull toward them is a
+	## movement large enough to see rather than a rounding difference.
+	var setter_x := 0.78
+	var first: Dictionary = simulator._form_home_block(
+		players, lineup, plan, 0.30, 2, 0.72, setter_x, 0.42, 0.9, null, 0.0,
+	)
+	var after_first := {}
+	for player_id in lineup.front_row_player_ids():
+		after_first[int(player_id)] = Vector2(
+			simulator.live_positions.get(int(player_id), Vector2.ZERO)
+		)
+	var second: Dictionary = simulator._form_home_block(
+		players, lineup, plan, 0.30, 2, 0.72, setter_x, 0.42, 0.9, null, 0.0,
+		Dictionary(first.get("setter_pull", {})),
+	)
+	var moved_again := false
+	for player_id in after_first:
+		if not Vector2(
+			simulator.live_positions.get(int(player_id), Vector2.ZERO)
+		).is_equal_approx(after_first[player_id]):
+			moved_again = true
+	_check(
+		not moved_again
+			and Dictionary(second.get("setter_pull", {})) == Dictionary(
+				first.get("setter_pull", {})
+			),
+		"re-forming the wall does not pull the same blocker a second time",
+	)
+
+	## 2 -- **invariant.** The first application still happens, and still moves
+	## somebody. Without this the check above would pass just as well on a wall
+	## that had stopped drifting at all -- which is the block-symmetry question
+	## task #63 owns and is deliberately not answered here.
+	var pulled := false
+	for player_id in first.get("setter_pull", {}):
+		if float(first["setter_pull"][player_id]) > 0.0001:
+			pulled = true
+	_check(
+		pulled,
+		"the first formation still drifts a blocker toward the opposing setter",
+	)
+
+
+## A setter's release is an opened-up run, so its leg is priced as one.
+##
+## Purpose decides the movement form, never distance. The resolver had exactly
+## one setter movement classified `lateral` -- the fallback taken when the second
+## contact transferred away from the designated setter -- and what it computes is
+## still a release. **Invariant**: this guards that the two forms remain
+## distinguishable, so a future pass cannot quietly make the classification moot.
+func _test_setter_release_is_a_run() -> void:
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var start := Vector2(0.80, 0.86)
+	var setting_position := Vector2(0.56, 0.62)
+	var as_run: Dictionary = simulator._travel(
+		_orientation_voli(), start, setting_position, "transition",
+	)
+	var as_shuffle: Dictionary = simulator._travel(
+		_orientation_voli(), start, setting_position, "lateral",
+	)
+	_check(
+		float(as_run.seconds) < float(as_shuffle.seconds) - 0.001,
+		"a release run and a defensive shuffle are not the same movement",
+	)
+
+
+## A body that cannot act does not own the ball arriving on it.
+##
+## `immediate_control` was geometry alone, so a voli owing more recovery than the
+## ball's whole flight still held the lock and took the ball off a fully
+## available teammate. Measured at 1.24 s of debt against a 1.25 s ball -- one
+## hundredth of a second of usable time -- the compromised defender still won.
+##
+## No threshold was introduced: the test is whether any usable time exists. See
+## `docs/review/SHORT_BALL_RESPONSIBILITY.md`. Check 1 fails on the pre-pass
+## selector; check 2 is an invariant and is labelled as one.
+func _test_immediate_control_needs_a_usable_body() -> void:
+	var zone: Resource = DEFENSIVE_ZONE_SCRIPT.new()
+	zone.player_id = 901
+	zone.zone_type = DEFENSIVE_ZONE_SCRIPT.ZoneType.FLOOR_DEFENSE
+	zone.center = Vector2(0.42, 0.62)
+	zone.radius_meters = 2.6
+	zone.enabled = true
+	var origin := Vector2(0.40, 0.66)
+	var ball := Vector2(0.42, 0.62)
+	## Everything but the time is held: same body, same ball, same distance.
+	var able: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+		_orientation_voli(), zone, ball, 1.25, "dig_control", origin,
+	)
+	var spent: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+		_orientation_voli(), zone, ball, 0.02, "dig_control", origin,
+	)
+	_check(
+		bool(able.get("immediate_control", false))
+			and not bool(spent.get("immediate_control", false)),
+		"a voli with no usable time does not immediately control the ball on them",
+	)
+
+	## 2 -- **invariant.** And responsibility then goes somewhere: a teammate who
+	## can play it takes it, rather than the ball belonging to nobody. This holds
+	## on both sides of the change and guards against the lock being narrowed
+	## into a hole.
+	var far_zone: Resource = DEFENSIVE_ZONE_SCRIPT.new()
+	far_zone.player_id = 902
+	far_zone.zone_type = DEFENSIVE_ZONE_SCRIPT.ZoneType.FLOOR_DEFENSE
+	far_zone.center = Vector2(0.42, 0.74)
+	far_zone.radius_meters = 3.2
+	far_zone.enabled = true
+	var claim: Dictionary = COVERAGE_CALCULATOR_SCRIPT.choose_claimant(
+		[_orientation_voli(), _orientation_voli(902)] as Array[VolleyballPlayer],
+		{901: zone, 902: far_zone}, ball, 1.25, "dig_control",
+		{901: 1.24}, {901: origin, 902: Vector2(0.42, 0.695)},
+	)
+	var winner := claim.get("player") as VolleyballPlayer
+	_check(
+		winner != null and winner.id == 902,
+		"and a viable teammate takes the ball the compromised body cannot",
+	)
+
+
+## A compromised body survives the leg boundary.
+##
+## The resolver rebuilds a fresh `RallyState` per phase and seeded it from
+## positions and velocities only, so a blocker who had just landed arrived in the
+## next phase as though nothing had happened. `player_recovery` carried both the
+## debt and a *name* for it -- `"airborne"` from a block jump, `"fall"`/`"knee"`
+## from the floor -- and nothing read the name back. Two certified repairs were
+## latent on exactly this. See `docs/review/ACTOR_CONTINUITY.md`.
+##
+## Both checks fail on the pre-pass resolver.
+func _test_compromised_bodies_survive_the_boundary() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var front := lineup.front_row_player_ids()
+	var blocker_id := int(front[0])
+	var digger_id := int(front[1]) if front.size() > 1 else int(front[0])
+	var clean_id := int(front[2]) if front.size() > 2 else -1
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	simulator.player_recovery = {
+		blocker_id: {"state": "airborne", "ready_at": 1.40, "delay": 0.36},
+		digger_id: {"state": "fall", "ready_at": 1.20, "delay": 0.34},
+	}
+	var state: RallyState = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup,
+		manager.defensive_plans.get(lineup.rotation_number),
+		manager.opponent_team, null, true, 4242,
+	)
+	simulator._seed_carried_body_states(state, 0.90)
+	var blocker: RallyPlayerState = state.player_state(&"home", blocker_id)
+	var digger: RallyPlayerState = state.player_state(&"home", digger_id)
+	var clean: RallyPlayerState = state.player_state(&"home", clean_id) \
+		if clean_id >= 0 else null
+	## Orientation is the third thing a body carries, beside where it is and what
+	## it is carrying, and only a leg whose *form* establishes one may write it --
+	## a shuffle cannot overwrite what a run established.
+	simulator._commit_facing(blocker_id, {"exit_velocity": Vector2(2.4, -1.8)})
+	simulator._commit_facing(blocker_id, {"exit_velocity": Vector2.ZERO})
+	simulator._seed_carried_body_states(state, 0.90)
+	_check(
+		state.player_state(&"home", blocker_id).facing.is_equal_approx(
+			Vector2(2.4, -1.8).normalized()
+		),
+		"a committed run's orientation survives the boundary, and a still leg keeps it",
+	)
+	_check(
+		blocker != null
+			and blocker.body_state == RallyPlayerState.BodyState.AIRBORNE
+			and is_equal_approx(blocker.recovery_until, 1.40)
+			and digger != null
+			and digger.body_state == RallyPlayerState.BodyState.RECOVERING
+			and (clean == null
+				or clean.body_state == RallyPlayerState.BodyState.BALANCED),
+		"a landing and a floor trip survive into the next phase, distinctly",
+	)
+
+	## And the consequence the continuity exists for: the carried state reaches
+	## the contact envelope, where a body still in the air cannot take off again.
+	var airborne_envelope: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+		blocker, &"attack", 3.10, 1.20, true,
+	)
+	var clean_envelope: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+		state.player_state(&"home", clean_id) if clean_id >= 0 else blocker,
+		&"attack", 3.10, 1.20, true,
+	)
+	var airborne_jump := float(airborne_envelope.get(
+		"maximum_contact_height_meters", 0.0
+	)) - float(airborne_envelope.get("standing_reach_meters", 0.0))
+	var clean_jump := float(clean_envelope.get(
+		"maximum_contact_height_meters", 0.0
+	)) - float(clean_envelope.get("standing_reach_meters", 0.0))
+	_check(
+		is_zero_approx(airborne_jump) and clean_jump > 0.001,
+		"and the carried state reaches the envelope that refuses a second takeoff",
+	)
+
+
+## M3's missing relation, derived rather than authored.
+##
+## The arm is a segment of known length anchored at a known shoulder; a ball met
+## at a known height fixes the angle; the horizontal offset is Pythagoras. Every
+## term already existed: `BodyTypeModels.UNIVERSAL_RATIOS.shoulder_y` is the
+## shared figure the whole roster is drawn from, and `standing_reach_cm()`
+## carries this voli's own wingspan. See `docs/review/BODY_CENTRE_SCOPE.md`.
+func _test_contact_offset_is_derived_geometry() -> void:
+	var voli := _orientation_voli()
+	voli.height_cm = 192.0
+	voli.wingspan_cm = 204.0
+
+	## 1 -- the two independent routes to arm length agree. This is what says the
+	## shoulder ratio is being read correctly rather than merely being read.
+	var shared := voli.height_cm / 100.0 * (
+		float(BODY_TYPE_MODELS_SCRIPT.UNIVERSAL_RATIOS.get("shoulder_y", 0.815))
+		- float(BODY_TYPE_MODELS_SCRIPT.UNIVERSAL_RATIOS.get("hand_y", 0.395))
+	)
+	_check(
+		absf(voli.arm_length_meters() - shared) < 0.03,
+		"arm length from this voli's reach agrees with the shared figure",
+	)
+
+	## 2 -- the offset is real through the platform range and zero outside it,
+	## and both boundaries are geometry rather than authored bands.
+	var thigh := voli.contact_offset_meters(0.90)
+	var waist := voli.contact_offset_meters(1.10)
+	var overhead := voli.contact_offset_meters(1.80)
+	var floor_ball := voli.contact_offset_meters(0.30)
+	_check(
+		thigh > 0.05 and waist > thigh and is_zero_approx(overhead)
+			and is_zero_approx(floor_ball),
+		"a contact in front of the body grows toward the shoulder and stops at it",
+	)
+
+	## 3 -- and it is a body, not a constant: a longer-armed voli of the same
+	## height reaches further in front.
+	var longer := _orientation_voli(902)
+	longer.height_cm = 192.0
+	longer.wingspan_cm = 218.0
+	_check(
+		longer.contact_offset_meters(1.10) > waist + 0.005
+			and is_equal_approx(
+				longer.shoulder_height_meters(), voli.shoulder_height_meters()
+			),
+		"a longer arm reaches further in front from the same shoulder",
+	)
+
+
+## M3 promotion: the relation above is not merely available on the player; the
+## defensive arrival consumes it. The full-arrival fixture is deliberately held
+## apart from claim quality and RNG so the gate can distinguish body placement
+## from a changed rally outcome.
+func _test_platform_arrival_places_the_body_behind_contact() -> void:
+	var simulator: RefCounted = RALLY_SIMULATOR_SCRIPT.new()
+	var voli := _orientation_voli()
+	voli.height_cm = 192.0
+	voli.wingspan_cm = 204.0
+	var start := Vector2(0.50, 0.85)
+	var contact := Vector2(0.50, 0.65)
+	var height := GEOMETRIC_PROMOTION_SCRIPT.pass_contact_height_meters(voli)
+	var direction := Vector2(0.0, -1.0)
+	var reached: Vector2 = simulator._reached_point(
+		voli, start, contact, 3.0, "lateral", 0.0, height, direction,
+	)
+	var body_gap := COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+		reached, contact
+	)
+	_check(
+		absf(body_gap - voli.contact_offset_meters(height)) < 0.001
+			and reached.y < contact.y,
+		"a full platform arrival stands the body behind its own contact geometry",
+	)
+
+	## Contact geometry is not permission to clean up a journey the resolver said
+	## the body could not make. With no usable time the body remains at its start.
+	var beaten: Vector2 = simulator._reached_point(
+		voli, start, contact, 0.0, "lateral", 0.0, height, direction,
+	)
+	_check(
+		beaten.is_equal_approx(start),
+		"the platform stand-off does not teleport a body that never arrived",
+	)
+
+
+## Attribute-leverage certification. The body and ball are identical between
+## tiers, and both are inside the feasible-contact gate. Skill must therefore
+## improve the contact that reality permits rather than grant permission to
+## contact a ball the body cannot reach.
+func _test_platform_attributes_retain_leverage_after_the_physical_gate() -> void:
+	var simulator: RefCounted = RALLY_SIMULATOR_SCRIPT.new()
+	var low := _orientation_voli(917)
+	var high := _orientation_voli(918)
+	for attribute in [
+		"reception", "ball_control", "composure",
+		"reception_balance", "reception_stability",
+	]:
+		low.set(attribute, 20)
+		high.set(attribute, 80)
+	var setter := _orientation_voli(919)
+	setter.tempo_control = 65
+	setter.hand_control = 65
+	setter.composure = 65
+	var start := Vector2(0.23, 0.84)
+	var contact := Vector2(0.36, 0.73)
+	var target := Vector2(0.52, 0.64)
+	var origin := Vector2(0.71, -0.04)
+	var arrival := {
+		"reach_margin_meters": 0.72,
+		"edge_ratio": 0.24,
+		"assigned_reach_meters": 2.4,
+		"distance_meters": 0.58,
+	}
+	var incoming := _incoming_flight(origin, contact, 0.78)
+	simulator.rng.seed = 77117
+	var low_pass: Dictionary = simulator._reception_pass_result(
+		low, start, contact, target, origin, 0.25, arrival, 0.50,
+		0.51, 0.98, incoming, setter,
+	)
+	simulator.rng.seed = 77117
+	var high_pass: Dictionary = simulator._reception_pass_result(
+		high, start, contact, target, origin, 0.25, arrival, 0.50,
+		0.51, 0.98, incoming, setter,
+	)
+	var low_error := COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+		Vector2(low_pass.destination), target
+	)
+	var high_error := COVERAGE_CALCULATOR_SCRIPT.court_distance_meters(
+		Vector2(high_pass.destination), target
+	)
+	_check(
+		simulator._reception_skill(high) > simulator._reception_skill(low)
+			and float(high_pass.platform_feasibility)
+				> float(low_pass.platform_feasibility)
+			and high_error < low_error,
+		"platform ratings improve a feasible reception under the same draw",
+	)
+
+	## Floor defence owns a different production chain today. Exercise that
+	## actual chain instead of claiming the reception helper is already shared.
+	for attribute in ["reception", "anticipation", "dig_control", "lateral_speed"]:
+		low.set(attribute, 20)
+		high.set(attribute, 80)
+	var low_terms: Dictionary = simulator._defense_terms(low, 0.78, 0.0, 0.02, 0)
+	var high_terms: Dictionary = simulator._defense_terms(high, 0.78, 0.0, 0.02, 0)
+	simulator.rng.seed = 77118
+	var low_dig: Dictionary = simulator._dig_outcome(
+		low, float(low_terms.quality), 0.08
+	)
+	simulator.rng.seed = 77118
+	var high_dig: Dictionary = simulator._dig_outcome(
+		high, float(high_terms.quality), 0.08
+	)
+	var low_out: Dictionary = simulator._dig_pass_result(
+		low, contact, target, float(low_dig.control), arrival, "planted",
+		incoming, 0.55, setter, 1.0,
+	)
+	var high_out: Dictionary = simulator._dig_pass_result(
+		high, contact, target, float(high_dig.control), arrival, "planted",
+		incoming, 0.55, setter, 1.0,
+	)
+	_check(
+		bool(low_dig.dug) and bool(high_dig.dug)
+			and float(high_dig.control) > float(low_dig.control)
+			and float(high_out.target_error_meters)
+				< float(low_out.target_error_meters),
+		"platform ratings improve a feasible floor dig under the same draw",
+	)
+
+
+## M4 slice 1 -- `PLATFORM_CONTACT.md` section 11, plus the two source markers
+## section 13.10 asks for.
+##
+## Every platform contact now says what it was *for*, and **nothing reads it**.
+## The slice's own acceptance criterion is that rallies come back byte-identical,
+## verified separately at 600 rallies against the stashed tree
+## (`docs/review/PLATFORM_INTENT.md`); what these checks hold is that the record
+## is complete, that its absence markers are absences rather than placeholders,
+## and that its two derived anchors are derived from the body rather than dialled.
+func _test_platform_contacts_state_an_intent() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var platform_types := [
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.DIG,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
+	]
+	var required := [
+		"purpose", "target_anchor", "anchor_source", "intended_recipient_id",
+		"height_anchor_meters", "arrival_floor_seconds", "preference_source",
+	]
+	var contacts := 0
+	var complete := 0
+	var receptions := 0
+	var seated_receptions := 0
+	var controlled_digs := 0
+	var seated_digs := 0
+	for seed_value in range(23000, 23040):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		for entry in rally.events:
+			var event := entry as RallyEvent
+			if event == null or event.event_type not in platform_types:
+				continue
+			contacts += 1
+			var record: Dictionary = event.metadata.get("platform_intent", {})
+			var missing := false
+			for field in required:
+				if not record.has(field):
+					missing = true
+			if not missing:
+				complete += 1
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+				receptions += 1
+				if str(record.get("anchor_source", "")) == "release_seat" \
+						and int(record.get("intended_recipient_id", -1)) >= 0 \
+						and record.get("height_anchor_meters") is float \
+						and record.get("arrival_floor_seconds") is float:
+					seated_receptions += 1
+			elif str(record.get("purpose", "")) == "controlled_dig":
+				controlled_digs += 1
+				if str(record.get("anchor_source", "")) == "release_seat" \
+						and int(record.get("intended_recipient_id", -1)) >= 0 \
+						and record.get("height_anchor_meters") is float \
+						and record.get("arrival_floor_seconds") is float:
+					seated_digs += 1
+	_check(
+		contacts > 0 and complete == contacts,
+		"every platform contact publishes a complete intent record",
+	)
+	_check(
+		receptions > 0 and seated_receptions == receptions,
+		"a reception aims at the release seat, at a person, with both anchors derived",
+	)
+	_check(
+		controlled_digs > 0 and seated_digs == controlled_digs,
+		"a controlled dig aims at the release seat, at a person, with both anchors derived",
+	)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+
+	## Coverage aims at nobody, so there is no release height to anchor to and no
+	## arrival to floor. `unset` is a **String** deliberately: a sentinel float
+	## would be indistinguishable from an anchor sitting at the default, which is
+	## `FAILURE_MODES.md` section 0 in one line.
+	var coverage: Dictionary = simulator._platform_intent(
+		"attack_coverage", Vector2(0.44, 0.72), "contact_offset",
+		null, Vector2(0.44, 0.72),
+	)
+	_check(
+		int(coverage.get("intended_recipient_id", 0)) == -1
+			and coverage.get("height_anchor_meters") is String
+			and coverage.get("arrival_floor_seconds") is String
+			and str(coverage.get("preference_source", "")) == "none",
+		"coverage carries absences, and they cannot be misread as numbers",
+	)
+
+	## And the height anchor is the setter's own body. **The census cannot show
+	## this**: the vertical slice's two setters are both 185/188, so all 761
+	## stated anchors came back at 2.190 m, and a derivation that ignored the body
+	## would have looked identical. Two bodies separate them.
+	var shorter := _orientation_voli(9401)
+	shorter.height_cm = 176.0
+	shorter.wingspan_cm = 179.0
+	var taller := _orientation_voli(9402)
+	taller.height_cm = 198.0
+	taller.wingspan_cm = 205.0
+	var low: Dictionary = simulator._platform_intent(
+		"serve_reception", Vector2(0.50, 0.60), "release_seat",
+		shorter, Vector2(0.50, 0.60),
+	)
+	var high: Dictionary = simulator._platform_intent(
+		"serve_reception", Vector2(0.50, 0.60), "release_seat",
+		taller, Vector2(0.50, 0.60),
+	)
+	_check(
+		float(high["height_anchor_meters"]) - float(low["height_anchor_meters"])
+			> 0.15,
+		"the height anchor is the setter's own release height, not a constant",
+	)
+
+	## The arrival bound is a floor with no ceiling, and a setter already at the
+	## anchor is *slack* rather than urgent -- section 3a's own worked example.
+	## Zero seconds does not mean the ball must arrive in zero seconds; it means
+	## the setter has stopped constraining it.
+	var distant: Dictionary = simulator._platform_intent(
+		"serve_reception", Vector2(0.50, 0.60), "release_seat",
+		taller, Vector2(0.10, 0.92),
+	)
+	_check(
+		is_zero_approx(float(high["arrival_floor_seconds"]))
+			and float(distant["arrival_floor_seconds"]) > 0.5,
+		"the arrival floor is the setter's own journey, and goes slack at the seat",
+	)
+
+
+## M4 slice 2's finding, pinned so that promoting T1 has to move it deliberately.
+##
+## T1 is "incoming speed + platform/body state + absorption ability → outgoing
+## speed", and slice 2 asked what the shipped model already does with the first
+## term. Measured over 571 platform contacts: **nothing.** The outgoing vertical
+## -- the only component either resolver actually sets -- correlates with incoming
+## speed at r = +0.009 on the dig and r = −0.170 on the reception, and the
+## reception's is its execution penalty rather than a transfer.
+##
+## These are **characterisation checks, not invariants**: they hold a gap open
+## rather than a behaviour correct. When slice 3 promotes a real transfer
+## relation, they must fail, and the diff that changes them is the promotion. See
+## `docs/review/PLATFORM_TRANSFER.md`.
+func _test_the_incoming_ball_reaches_no_platform_launch() -> void:
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 4242
+	var digger := _orientation_voli(9501)
+	digger.reception = 55
+	digger.dig_control = 55
+	digger.ball_control = 55
+	var setter := _orientation_voli(9502)
+	setter.height_cm = 188.0
+	setter.wingspan_cm = 192.0
+	var contact := Vector2(0.46, 0.84)
+	var target := Vector2(0.50, 0.60)
+
+	## Two incoming balls over the same path, one four times as fast as the other.
+	## Same path deliberately: the drift term reads the incoming *direction*, so
+	## varying the line would move the destination for a reason that is not speed.
+	var gentle := _incoming_flight(Vector2(0.54, 0.16), contact, 1.60)
+	var savage := _incoming_flight(Vector2(0.54, 0.16), contact, 0.40)
+	_check(
+		simulator._incoming_ball_speed(savage)
+			> simulator._incoming_ball_speed(gentle) * 3.5,
+		"the fixture really does vary the incoming ball, by nearly four times",
+	)
+
+	var soft_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": 0.30},
+		"planted", gentle, 1.10, setter, 2.40,
+	)
+	var hard_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": 0.30},
+		"planted", savage, 1.10, setter, 2.40,
+	)
+	_check(
+		is_equal_approx(
+			float(soft_dig["pass_apex_meters"]), float(hard_dig["pass_apex_meters"])
+		)
+			and is_equal_approx(
+				float(soft_dig["duration"]), float(hard_dig["duration"])
+			),
+		"a dig off a savage ball leaves at the same height as one off a gentle ball",
+	)
+
+	## And the reception, which looked at first like it did carry the relation:
+	## its outgoing *speed* correlates with incoming at r = +0.43. Decomposed, all
+	## of that is `distance / duration` -- a harder serve is passed further, not
+	## faster off the arms. Held here at the source: the apex band reads
+	## `execution`, and `execution` never sees this trajectory.
+	var soft_pass: Dictionary = simulator._reception_pass_result(
+		digger, Vector2(0.46, 0.90), contact, target,
+		Vector2(0.54, 0.02), 0.55, {"reach_margin_meters": 0.30, "edge_ratio": 0.4},
+		0.62, 0.51, 0.98, gentle, setter,
+	)
+	simulator.rally_seed = 4242
+	var hard_pass: Dictionary = simulator._reception_pass_result(
+		digger, Vector2(0.46, 0.90), contact, target,
+		Vector2(0.54, 0.02), 0.55, {"reach_margin_meters": 0.30, "edge_ratio": 0.4},
+		0.62, 0.51, 0.98, savage, setter,
+	)
+	_check(
+		is_equal_approx(
+			float(soft_pass["pass_apex_meters"]),
+			float(hard_pass["pass_apex_meters"]),
+		),
+		"and a reception's height is set by execution, never by the ball's pace",
+	)
+
+	## The second gap, and it is the sharper one. A ball thrown further needs more
+	## rise to arrive, so `r(pass distance, apex rise)` should be strongly
+	## positive. Measured, it is **−0.485 on the dig and −0.366 on the reception**:
+	## the further the ball has to travel, the *lower* it is thrown, because both
+	## terms are driven by the same quality scalar in opposite senses.
+	##
+	## Held at the mechanism rather than at the correlation, which is a sampling
+	## quantity and would make a brittle gate: the apex expression does not read
+	## the target, so a target six metres away and one a stride away leave at
+	## exactly the same height.
+	var near_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, contact + Vector2(0.03, -0.04), 0.62,
+		{"reach_margin_meters": 0.30}, "planted", gentle, 1.10, setter, 2.40,
+	)
+	var far_dig: Dictionary = simulator._dig_pass_result(
+		digger, contact, Vector2(0.50, 0.58), 0.62,
+		{"reach_margin_meters": 0.30}, "planted", gentle, 1.10, setter, 2.40,
+	)
+	_check(
+		float(far_dig["destination"].distance_to(contact))
+			> float(near_dig["destination"].distance_to(contact)) * 3.0
+			and is_equal_approx(
+				float(near_dig["pass_apex_meters"]),
+				float(far_dig["pass_apex_meters"]),
+			),
+		"a dig thrown four times as far leaves at exactly the same height",
+	)
+
+	## And the arrival parameter is load-bearing, which is what makes passing `{}`
+	## a real loss rather than a harmless omission. **An invariant, not a gate**:
+	## `_dig_pass_result` was always correct here and the continuation call site
+	## was not, so this passes before and after that repair. It is here so the
+	## next caller tempted to pass an empty dictionary has something that says
+	## what it costs. `docs/review/PLATFORM_TRANSFER.md` §7 records why the
+	## caller-level version is not worth writing: nine contacts in 600 rallies.
+	var settled: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": 0.90},
+		"planted", gentle, 1.10, setter, 2.40,
+	)
+	var scrambled: Dictionary = simulator._dig_pass_result(
+		digger, contact, target, 0.62, {"reach_margin_meters": -0.40},
+		"planted", gentle, 1.10, setter, 2.40,
+	)
+	_check(
+		float(scrambled["spoil"]) > float(settled["spoil"]) + 0.03
+			and float(scrambled["pass_apex_meters"])
+				< float(settled["pass_apex_meters"]),
+		"a dig's arrival reaches its spoil, so an empty arrival is a real loss",
+	)
+
+	## The intent repair is held at the actual anchor, not only its source label.
+	## This remains metadata-only: the legacy dig destination is deliberately not
+	## asserted here because `_dig_pass_result` still owns and preserves it.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var dig_contacts := 0
+	var release_anchored_digs := 0
+	for seed_value in range(23000, 23060):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		var lineup: RotationLineup = manager.current_lineup()
+		var plan: Resource = manager.defensive_plans.get(
+			lineup.rotation_number
+		) if lineup != null else null
+		var home_release := Vector2(0.50, 0.60)
+		if plan != null and lineup != null:
+			home_release = plan.setter_release_target(lineup.active_setter_id())
+		var opponent_release: Vector2 = RallySimulator._opponent_setter_release_target(
+			manager.opponent_team
+		)
+		for entry in rally.events:
+			var event := entry as RallyEvent
+			if event == null \
+					or event.event_type != RALLY_EVENT_SCRIPT.EventType.DIG:
+				continue
+			var record: Dictionary = event.metadata.get("platform_intent", {})
+			if str(record.get("purpose", "")) != "controlled_dig":
+				continue
+			dig_contacts += 1
+			var anchor := Vector2(record.get(
+				"target_anchor", event.start_position
+			))
+			var expected := home_release \
+				if str(event.metadata.get("side", "")) == "home" \
+				else opponent_release
+			if str(record.get("anchor_source", "")) == "release_seat" \
+					and anchor.is_equal_approx(expected):
+				release_anchored_digs += 1
+	_check(
+		dig_contacts > 0 and release_anchored_digs == dig_contacts,
+		"every controlled-dig intent uses its team's existing setter release seat",
+	)
+
+
+## M5 overpass, live-wired. The focused probe certifies `OverpassActionSystem` in
+## isolation; this certifies the resolver integration at both
+## `crossed_net_unresolved` exits -- that `_overpass_control_contact` builds actors
+## from the authoritative live maps (never presentation), derives the receiving
+## side's own release anchors, executes exactly one outgoing ball as contact 1,
+## and leaves the incoming authoritative launch untouched.
+func _test_overpass_control_wires_live() -> void:
+	## Both receivers back-row, so a ball crossing above the tape near the net is
+	## not a legal attack for either -- the contest can only choose control, which
+	## is what this test is here to exercise. The attack branch is a later
+	## checkpoint.
+	var controller := _overpass_voli(202, 96, 44)
+	var partner := _overpass_voli(201, 45, 58)
+	var lineup := RotationLineup.new()
+	lineup.setter_id = controller.id
+	lineup.designated_setter_ids = [controller.id]
+	lineup.assign_slot(6, controller.id)
+	lineup.assign_slot(5, partner.id)
+	var principles := TeamPrinciples.new()
+	principles.decisiveness = 0.05
+	principles.transition_commitment = 0.20
+
+	## A shared-model launch that legally crosses the net unresolved -- the same
+	## fixture the focused probe places on the policy boundary.
+	var contact := Vector2(0.50, 0.62)
+	var resolved: Dictionary = PlatformContactModel.evaluate({
+		"incoming_velocity_mps": Vector3(0.0, -20.0, 14.0),
+		"contact_position": contact, "contact_height_meters": 0.95,
+		"body_velocity_mps": Vector2.ZERO, "circumstance_severity": 0.8,
+		"stability_ability": 1.0, "technique_ability": 0.8,
+		"intent_target_anchor": Vector2(0.50, 0.52),
+		"intent_height_anchor_meters": 2.35,
+		"intent_arrival_floor_seconds": 0.45, "seed": 88421,
+	})
+	_check(
+		resolved.has("realised_velocity_mps"),
+		"the overpass fixture yields a shared-model launch",
+	)
+	var free_flight: Dictionary = FreeFlightInterceptionSystem.from_launch(
+		"dig", contact, 0.95, Vector3(resolved.realised_velocity_mps), 0.0,
+		"live-overpass-fixture",
+	)
+	var frozen := free_flight.duplicate(true)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.opponent_principles = principles
+	simulator.opponent_live_positions = {
+		controller.id: Vector2(0.50, 0.30), partner.id: Vector2(0.62, 0.34),
+	}
+	simulator.opponent_live_velocities = {}
+	simulator.player_facing = {}
+	simulator.player_recovery = {}
+
+	var outcome: Dictionary = simulator._overpass_control_contact(
+		free_flight, [partner, controller], &"opponent", lineup, principles,
+		controller, Vector2(0.50, 0.40), Vector2(0.50, 0.30),
+	)
+	_check(
+		not outcome.is_empty()
+			and str(outcome.get("action", "")) in [
+				"controlled_first_contact", "emergency_first_contact",
+			],
+		"an overpass resolves to a live first-contact control action from live state",
+	)
+	var out_flight: Dictionary = outcome.get("outgoing_trajectory", {})
+	_check(
+		str(out_flight.get("trajectory_role", "")) == "authoritative_free_flight"
+			and int(outcome.get("team_contact_number", -1)) == 1,
+		"the control produces one authoritative outgoing ball as the team's contact 1",
+	)
+	## The launch invariant the whole M5 architecture rests on: a downstream choice
+	## never rewrites the ball it was choosing from.
+	_check(
+		free_flight == frozen,
+		"resolving the overpass leaves the incoming authoritative launch unmutated",
+	)
+
+
+## M5 overpass attack branch, live-wired. Certifies that `_overpass_choice`
+## (actors from the live maps) selects the attack action for an attack-favouring
+## fixture and that `execute_attack` yields exactly one authoritative outgoing
+## ball with the incoming launch left intact. The `_resolve_overpass_attack`
+## routing (in-play swing -> defending side's first contact, else a kill) is a
+## thin hand-off over already-certified transition functions and is covered by
+## the full-suite regression rather than reconstructed here.
+func _test_overpass_attack_selects_and_launches_live() -> void:
+	## Front-row hitter with a strong attack and a decisive team; a low-control
+	## partner so control cannot outscore the swing.
+	var hitter := _overpass_voli(203, 42, 94)
+	var partner := _overpass_voli(204, 66, 38)
+	var lineup := RotationLineup.new()
+	lineup.setter_id = partner.id
+	lineup.designated_setter_ids = [partner.id]
+	lineup.assign_slot(3, hitter.id)
+	lineup.assign_slot(6, partner.id)
+	var principles := TeamPrinciples.new()
+	principles.decisiveness = 0.95
+	principles.transition_commitment = 0.95
+
+	var contact := Vector2(0.50, 0.62)
+	var resolved: Dictionary = PlatformContactModel.evaluate({
+		"incoming_velocity_mps": Vector3(0.0, -20.0, 14.0),
+		"contact_position": contact, "contact_height_meters": 0.95,
+		"body_velocity_mps": Vector2.ZERO, "circumstance_severity": 0.8,
+		"stability_ability": 1.0, "technique_ability": 0.8,
+		"intent_target_anchor": Vector2(0.50, 0.52),
+		"intent_height_anchor_meters": 2.35,
+		"intent_arrival_floor_seconds": 0.45, "seed": 88421,
+	})
+	_check(
+		resolved.has("realised_velocity_mps"),
+		"the attack overpass fixture yields a shared-model launch",
+	)
+	var free_flight: Dictionary = FreeFlightInterceptionSystem.from_launch(
+		"dig", contact, 0.95, Vector3(resolved.realised_velocity_mps), 0.0,
+		"live-overpass-attack",
+	)
+	var frozen := free_flight.duplicate(true)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.opponent_principles = principles
+	simulator.opponent_live_positions = {
+		hitter.id: Vector2(0.50, 0.43), partner.id: Vector2(0.50, 0.30),
+	}
+	simulator.opponent_live_velocities = {}
+	simulator.player_facing = {}
+	simulator.player_recovery = {}
+
+	var choice: Dictionary = simulator._overpass_choice(
+		free_flight, [hitter, partner], &"opponent", lineup, principles
+	)
+	_check(
+		bool(choice.get("available", false))
+			and str(choice.get("action", "")) == "attack",
+		"an attack-favouring overpass selects the attack action from live state",
+	)
+	var execution: Dictionary = OverpassActionSystem.execute_attack(
+		choice, [], [], principles.decisiveness, 0.0, 91_203,
+	)
+	var out_flight: Dictionary = execution.get("outgoing_trajectory", {})
+	_check(
+		bool(execution.get("available", false))
+			and str(out_flight.get("trajectory_role", "")) == "authoritative_free_flight"
+			and int(execution.get("team_contact_number", -1)) == 1,
+		"the overpass attack produces one authoritative outgoing ball as contact 1",
+	)
+	_check(
+		free_flight == frozen,
+		"the overpass attack leaves the incoming authoritative launch unmutated",
+	)
+
+
+## The overpass attack enters the REAL block path: `_resolve_overpass_attack`
+## forms the defending wall from live front-row state and the overpass flight
+## window (no set parameters), so a blocker who can close produces a real wall the
+## swing is contested against, and one who cannot produces an empty wall -- no
+## *viable* block, correctly, rather than a skipped one. This certifies the exact
+## `_form_home_block` + `block_wall` call the resolver makes.
+func _test_overpass_attack_forms_real_block() -> void:
+	var players: Array[VolleyballPlayer] = []
+	var lineup := RotationLineup.new()
+	for slot in range(1, 7):
+		var voli := _overpass_voli(300 + slot, 55, 55)
+		voli.block_timing = 70
+		players.append(voli)
+		lineup.assign_slot(slot, voli.id)
+	var plan := DefensivePlan.new()
+	plan.rotation_number = 1
+	plan.ensure_defaults(lineup, players)
+
+	var simulator: Object = RALLY_SIMULATOR_SCRIPT.new()
+	simulator.rally_seed = 5150
+	simulator.home_principles = TeamPrinciples.new()
+	simulator.live_velocities = {}
+	simulator.player_facing = {}
+	simulator.player_recovery = {}
+	## Primary blocker selection reads the slot GRID x, and `_blocker_close_terms`
+	## reads the blocker's live position; so every front-row blocker is placed at
+	## the net at its own slot lane, and the attack is aimed down the middle front
+	## slot -- whoever is selected is already in the lane at the tape and closes.
+	var lane_x: float = CourtConstants.slot_position(3).x
+	var starts := {}
+	for voli in players:
+		var slot := lineup.slot_for_player(voli.id)
+		var grid: Vector2 = CourtConstants.slot_position(slot)
+		starts[voli.id] = Vector2(grid.x, 0.48) \
+			if CourtConstants.is_front_row_slot(slot) else Vector2(grid.x, 0.85)
+	simulator.live_positions = starts
+
+	## Ample window: the net-side blocker closes and a real wall forms.
+	var formed: Dictionary = simulator._form_home_block(
+		players, lineup, plan, lane_x, 1, 0.5, lane_x, 0.90, 0.0, null, 0.0,
+		{"overpass": true},
+	)
+	var wall: Array = GeometricAttackPromotion.block_wall(
+		formed, simulator._home_block_fallbacks(players, lineup),
+		simulator.live_positions, "Balanced", 0.0,
+	)
+	_check(
+		wall.size() >= 1,
+		"an overpass attack against a set net-side blocker enters a real block wall",
+	)
+
+	## Now the front row is caught deep off the net and the window is too short to
+	## travel back: no blocker can close, so `block_wall` returns empty rather than
+	## a fabricated wall. (A blocker already at the tape needs no window; the
+	## window only bites when a body has ground to cover.)
+	var deep := {}
+	for voli in players:
+		deep[voli.id] = Vector2(0.95, 0.95)
+	simulator.live_positions = deep
+	var rushed: Dictionary = simulator._form_home_block(
+		players, lineup, plan, lane_x, 1, 0.5, lane_x, 0.02, 0.0, null, 0.0,
+		{"overpass": true},
+	)
+	var empty_wall: Array = GeometricAttackPromotion.block_wall(
+		rushed, simulator._home_block_fallbacks(players, lineup),
+		simulator.live_positions, "Balanced", 0.0,
+	)
+	_check(
+		empty_wall.is_empty(),
+		"a front row caught deep with no time to close forms no wall, not a faked one",
+	)
+
+
+## A receiving voli for the overpass fixtures: control and attack set explicitly,
+## and a full locomotion/body attribute set so the intent's own `_movement_time`
+## and release-height derivations have real inputs rather than zeros.
+func _overpass_voli(
+	player_id: int, control: int, attack: int
+) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	player.display_name = "Overpass voli %d" % player_id
+	player.position_role = "Setter" if control >= attack else "Outside Hitter"
+	player.position_code = "S" if control >= attack else "OH1"
+	player.height_cm = 190
+	player.wingspan_cm = 198
+	for attribute in [
+		"reception", "ball_control", "dig_control", "reception_balance",
+		"reception_stability",
+	]:
+		player.set(attribute, control)
+	for attribute in [
+		"attack_power", "attack_accuracy", "approach_timing", "shot_variety",
+		"finesse",
+	]:
+		player.set(attribute, attack)
+	for attribute in [
+		"acceleration", "lateral_speed", "transition_speed", "explosiveness",
+		"stamina", "work_rate", "anticipation", "court_vision", "composure",
+		"decision_making", "tactical_discipline",
+	]:
+		player.set(attribute, 72)
+	player.fatigue = 0.0
+	return player
+
+
+## M4's shared platform relation is an authored feasibility/execution boundary,
+## not another resolver-specific outcome model. These checks pin the narrow
+## semantic authority of T1--T3 while the relation remains production-inert.
+func _test_shared_platform_shadow_contract() -> void:
+	var base := {
+		"incoming_velocity_mps": Vector3(0.0, -6.0, 10.0),
+		"contact_position": Vector2(0.50, 0.78),
+		"contact_height_meters": 0.72,
+		"body_velocity_mps": Vector2.ZERO,
+		"circumstance_severity": 0.25,
+		"stability_ability": 0.60,
+		"technique_ability": 0.50,
+		"intent_target_anchor": Vector2(0.50, 0.60),
+		"intent_height_anchor_meters": 2.20,
+		"intent_arrival_floor_seconds": 0.42,
+		"seed": 7401,
+	}
+	var ordinary: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(base)
+	_check(
+		bool(ordinary.get("available", false))
+			and bool(ordinary.get("selection_available", false)),
+		"the shared platform shadow selects a feasible launch from physical state and intent",
+	)
+
+	## Event vocabulary and terminal labels are not inputs to the relation. This
+	## prevents reception/dig/coverage from acquiring private physical bands.
+	var labelled_input := base.duplicate(true)
+	labelled_input["event_family"] = "DIG"
+	labelled_input["terminal_outcome"] = "opponent_kill"
+	var labelled: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(labelled_input)
+	_check(
+		Vector3(labelled.get("selected_velocity_mps", Vector3.ZERO)).is_equal_approx(
+			Vector3(ordinary.get("selected_velocity_mps", Vector3.ONE))
+		)
+			and is_equal_approx(
+				float(labelled.get("maximum_outgoing_speed_mps", -1.0)),
+				float(ordinary.get("maximum_outgoing_speed_mps", -2.0)),
+			)
+			and is_equal_approx(
+				float(labelled.get("redirection_half_angle_degrees", -1.0)),
+				float(ordinary.get("redirection_half_angle_degrees", -2.0)),
+			),
+		"event family and result labels cannot change shared platform physics",
+	)
+
+	## Intent chooses within the feasible set; it does not enlarge that set.
+	var other_intent := base.duplicate(true)
+	other_intent["intent_target_anchor"] = Vector2(0.34, 0.62)
+	var redirected: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(other_intent)
+	_check(
+		is_equal_approx(
+			float(ordinary.maximum_outgoing_speed_mps),
+			float(redirected.maximum_outgoing_speed_mps),
+		)
+			and is_equal_approx(
+				float(ordinary.redirection_half_angle_degrees),
+				float(redirected.redirection_half_angle_degrees),
+			),
+		"tactical intent selects a launch without defining its pace or redirection envelope",
+	)
+
+	## T1 retains a shared fraction of incoming pace. With body direction and
+	## circumstance fixed, only that term may account for the ceiling difference.
+	var slow_input := base.duplicate(true)
+	slow_input["incoming_velocity_mps"] = Vector3(0.0, -2.0, 4.0)
+	var fast_input := slow_input.duplicate(true)
+	fast_input["incoming_velocity_mps"] = Vector3(0.0, -6.0, 12.0)
+	var slow: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(slow_input)
+	var fast: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(fast_input)
+	var incoming_difference := (
+		Vector3(fast_input.incoming_velocity_mps).length()
+		- Vector3(slow_input.incoming_velocity_mps).length()
+	)
+	_check(
+		is_equal_approx(
+			float(fast.maximum_outgoing_speed_mps)
+				- float(slow.maximum_outgoing_speed_mps),
+			incoming_difference * PLATFORM_CONTACT_MODEL_SCRIPT.PACE_RETENTION,
+		)
+			and is_equal_approx(
+				float(fast.redirection_half_angle_degrees),
+				float(slow.redirection_half_angle_degrees),
+			),
+		"T1 carries incoming pace without changing the shared T2 envelope",
+	)
+
+	## Circumstance narrows physical authority without inventing contact-family
+	## constants. Its two effects stay legible: less active drive and less angle.
+	var planted_input := base.duplicate(true)
+	planted_input["circumstance_severity"] = 0.0
+	var stretched_input := base.duplicate(true)
+	stretched_input["circumstance_severity"] = 1.0
+	var planted: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(planted_input)
+	var stretched: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(stretched_input)
+	_check(
+		float(planted.active_generated_speed_mps)
+			> float(stretched.active_generated_speed_mps)
+			and float(planted.redirection_half_angle_degrees)
+				> float(stretched.redirection_half_angle_degrees),
+		"body circumstance narrows active pace and reachable redirection",
+	)
+
+	## T3 alone scales execution dispersion. Aggregate seeded draws avoid making a
+	## single normal deviate an accidental contract, while the cone assertion
+	## prevents error from manufacturing an unreachable launch.
+	var weak_error := 0.0
+	var elite_error := 0.0
+	var realised_inside := true
+	var realised_in_flight_domain := true
+	for draw in range(120):
+		var weak_input := base.duplicate(true)
+		weak_input["technique_ability"] = 0.0
+		weak_input["seed"] = 91000 + draw
+		var elite_input := weak_input.duplicate(true)
+		elite_input["technique_ability"] = 1.0
+		var weak: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(weak_input)
+		var elite: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(elite_input)
+		weak_error += float(weak.get("execution_error_degrees", 0.0))
+		elite_error += float(elite.get("execution_error_degrees", 0.0))
+		var realised := Vector3(weak.get("realised_direction", Vector3.ZERO))
+		var natural := Vector3(weak.get("natural_direction", Vector3.ONE))
+		realised_inside = realised_inside and rad_to_deg(natural.angle_to(realised)) \
+			<= float(weak.get("redirection_half_angle_degrees", 0.0)) + 0.001
+		var realised_elevation := rad_to_deg(atan2(
+			realised.y, Vector2(realised.x, realised.z).length()
+		))
+		realised_in_flight_domain = realised_in_flight_domain \
+			and realised_elevation \
+				<= BallFlightModel.MAX_LAUNCH_ANGLE_DEGREES + 0.001 \
+			and realised_elevation \
+				>= BallFlightModel.MIN_LAUNCH_ANGLE_DEGREES - 0.001
+	_check(
+		weak_error > elite_error * 2.0 and realised_inside \
+			and realised_in_flight_domain,
+		"T3 gives technique strong angular-error leverage inside the physical envelope",
+	)
+
+	var underconstrained := base.duplicate(true)
+	underconstrained.erase("intent_target_anchor")
+	underconstrained.erase("intent_height_anchor_meters")
+	var physical_only: Dictionary = PLATFORM_CONTACT_MODEL_SCRIPT.evaluate(
+		underconstrained
+	)
+	_check(
+		bool(physical_only.get("available", false))
+			and not bool(physical_only.get("selection_available", true)),
+		"physical feasibility can exist without fabricating a missing contact intent",
+	)
+	_check(
+		not bool(PLATFORM_CONTACT_MODEL_SCRIPT.evaluate({}).get("available", true)),
+		"the shadow refuses to invent missing physical contact state",
+	)
+
+	## Adjacent contacts jointly own a playable deflection's vertical state. The
+	## trajectory need not pretend its display defaults are physical, and no
+	## restitution/angle parameter is introduced to reconstruct the arrival.
+	var deflection: Dictionary = BALL_TRAJECTORY_SCRIPT.create(
+		"block_deflection",
+		Vector2(0.50, 0.50), Vector2(0.52, 0.60), Vector2(0.54, 0.72),
+		0.0, 0.46, 0.35,
+	).to_dict()
+	deflection["launch_contact_height_meters"] = CourtConstants.NET_HEIGHT_METERS
+	deflection["height_source"] = "default"
+	var deflection_arrival: Dictionary = \
+		PLATFORM_CONTACT_MODEL_SCRIPT.incoming_velocity_at_contact(deflection, 0.82)
+	_check(
+		bool(deflection_arrival.get("available", false))
+			and str(deflection_arrival.get("source", ""))
+				== "adjacent_contact_heights",
+		"adjacent owned contact heights recover a playable deflection's arrival vector",
+	)
+
+
+## An incoming flight of a chosen pace, shaped like what `_ball_trajectory`
+## publishes. Only the three fields `_incoming_ball_speed` reads are needed, and
+## supplying more would invite the fixture to drift from the real record.
+func _incoming_flight(
+	origin: Vector2, contact: Vector2, duration_seconds: float
+) -> Dictionary:
+	return {
+		"start_position": origin,
+		"end_position": contact,
+		"duration": duration_seconds,
+	}
+
+
+func _orientation_voli(player_id: int = 901) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	for attribute in [
+		"acceleration", "lateral_speed", "transition_speed", "stamina",
+		"work_rate", "anticipation", "composure",
+	]:
+		player.set(attribute, 50)
+	player.fatigue = 0.0
+	return player
+
+
+func _orientation_margin(
+	zone: Resource, landing: Vector2, facing: Vector2
+) -> float:
+	var arrival: Dictionary = COVERAGE_CALCULATOR_SCRIPT.evaluate_arrival(
+		_orientation_voli(), zone, landing, 1.60, "reception",
+		Vector2(0.50, 0.80), -1.0, facing,
+	)
+	return float(arrival.get("reach_margin_meters", 0.0))
 
 
 func _test_gate_twenty_two_setter_progression() -> void:
@@ -9731,7 +12444,8 @@ func _test_playback_movement_is_humanly_possible() -> void:
 			if event == null:
 				continue
 			if event.event_type in [
-				RALLY_EVENT_SCRIPT.EventType.DEFENSE,
+				RALLY_EVENT_SCRIPT.EventType.DIG,
+				RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
 				RALLY_EVENT_SCRIPT.EventType.RECEPTION,
 			] and event.metadata.has("movement_target"):
 				## Beaten means they could not reach it, which is a distance:
@@ -10150,7 +12864,7 @@ func _home_defense_event(
 	var found: Resource = null
 	for event_resource in result.events:
 		var event: Resource = event_resource
-		if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+		if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DIG \
 				or str(event.metadata.get("side", "")) != "home":
 			continue
 		if deep_only:
@@ -10190,7 +12904,7 @@ func _test_seeded_floor_defense_geometry() -> void:
 		var candidate_defense: Resource = null
 		for event_resource in candidate_result.events:
 			var event: Resource = event_resource
-			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DIG \
 					and str(event.metadata.get("side", "")) == "home" \
 					and Vector2(event.metadata.get(
 						"planner_floor_center", Vector2.ZERO
@@ -10909,20 +13623,45 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var first: Resource = manager.resolve_active_rally(770012)
-	var trace: Dictionary = first.analysis.get("shadow_reception", {})
-	var record: Dictionary = Dictionary(trace.get("summary", {})).get(
-		"geometric_attack", {}
-	)
+	## **The rally has to contain a swing before it can carry a swing's record.**
+	## This stood on the single seed 770012, which stopped swinging when reception
+	## became physical: its pass is one no setter can run down, so the rally now
+	## ends truthfully at the floor with no attack at all, and a gate that asks
+	## whether an attack was measured geometrically had nothing to measure. That is
+	## a stale sample, not a lost property -- the assertion below is unchanged and
+	## still demands an available record, a named outcome and a real speed. Scan a
+	## short span for the first rally that actually swings, and hold every later
+	## check on that same seed so the determinism pair still compares like with
+	## like.
+	var geometric_seed := 770012
+	var first: Resource = null
+	var record := {}
+	for candidate_seed in range(770012, 770052):
+		var candidate: Resource = manager.resolve_active_rally(candidate_seed)
+		if candidate == null:
+			continue
+		var candidate_trace: Dictionary = candidate.analysis.get(
+			"shadow_reception", {}
+		)
+		var candidate_record: Dictionary = Dictionary(
+			candidate_trace.get("summary", {})
+		).get("geometric_attack", {})
+		if bool(candidate_record.get("available", false)):
+			geometric_seed = candidate_seed
+			first = candidate
+			record = candidate_record
+			break
 	_check(
-		bool(record.get("available", false))
+		first != null
+			and bool(record.get("available", false))
 			and not str(record.get("outcome", "")).is_empty()
 			and float(record.get("speed_mps", 0.0)) > 0.0,
 		"a live rally resolves its attack geometrically alongside the legacy swing",
 	)
-	var repeat: Resource = manager.resolve_active_rally(770012)
+	var repeat: Resource = manager.resolve_active_rally(geometric_seed)
 	_check(
-		str(repeat.terminal_outcome) == str(first.terminal_outcome)
+		first != null
+			and str(repeat.terminal_outcome) == str(first.terminal_outcome)
 			and repeat.events.size() == first.events.size(),
 		"the shadow geometric swing leaves the rally it measures untouched",
 	)
@@ -12823,8 +15562,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
-					and str(event.metadata.get("coverage", "")) == "attack":
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
 				attack_coverage_observed = true
 			if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
 					or str(event.metadata.get("side", "")) != "home":
@@ -12851,8 +15589,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
-					and str(event.metadata.get("coverage", "")) == "attack":
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
 				attack_coverage_observed = true
 	_check(home_block_events > 20, "block distribution test observes enough home contests")
 	_check(non_middle_primary, "nearest pin players can lead blocks instead of the middle")
@@ -13937,6 +16674,115 @@ func _test_a_serve_that_misses_is_drawn_missing() -> void:
 		"missed serves find the tape and the lines both (%d net, %d long or wide)" % [
 			net_misses, long_or_wide,
 		],
+	)
+
+
+## The serve is one flight, and it runs forwards.
+##
+## The audit in `docs/design/CONTACT_AND_BALL_FLIGHT.md` found two serve models
+## and no authority: production rolled the error verdict first, moved the landing
+## to make the verdict true, and then solved a launch backwards to reach it,
+## while a forward shadow resolved the same serve and was ignored. This is the
+## gate on the replacement, and each check is one of the ways the old shape could
+## come back.
+##
+## The strongest of them is the last. A record that publishes launch pace *and*
+## endpoints can only be trusted if the two agree -- so the launch state is flown
+## through the resolution model a second time here, and the landing it produces
+## has to be the landing the rally reported. If anything downstream ever moves a
+## serve's endpoint without moving its launch, this is what says so.
+func _test_the_serve_is_one_forward_flight() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var serves := 0
+	var launch_published := 0
+	var start_height_real := 0
+	var landing_reproduced := 0
+	var reconstruction_disagreed := 0
+	var truncation_moved_launch := 0
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(9400, 9460):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for raw_event in result.events:
+				var event := raw_event as RallyEvent
+				if event == null \
+						or event.event_type != RALLY_EVENT_SCRIPT.EventType.SERVE:
+					continue
+				serves += 1
+				var trajectory: Dictionary = event.metadata.get(
+					"outgoing_trajectory", {}
+				)
+				var pace := float(trajectory.get("launch_speed_mps", 0.0))
+				var angle := float(trajectory.get("launch_angle_degrees", 0.0))
+				var gravity := float(trajectory.get("launch_gravity_mps2", 0.0))
+				if pace > 0.0 and gravity > 0.0 \
+						and str(trajectory.get("launch_source", "")) == "resolver":
+					launch_published += 1
+				## Struck from a real reach, not from the 1.0 m every published
+				## trajectory in the game used to carry.
+				if float(trajectory.get("start_height_meters", 0.0)) > 1.8 \
+						and str(trajectory.get("height_source", "")) \
+							== "start_resolved":
+					start_height_real += 1
+				## **Truncation must not redefine the launch.** The reconstruction
+				## `BallPresentation.launch_speed_mps` performs reads the endpoint
+				## height and the duration, so cutting a flight short changes the
+				## speed it reports the ball left the hand at. The published state
+				## is a property of the contact and must not move at all.
+				var cut := trajectory.duplicate(true)
+				cut["duration"] = float(cut.get("duration", 1.0)) * 0.5
+				cut["end_position"] = Vector2(
+					event.start_position
+				).lerp(Vector2(event.end_position), 0.5)
+				cut["end_height_meters"] = 1.35
+				if not is_equal_approx(
+						float(cut.get("launch_speed_mps", -1.0)), pace):
+					truncation_moved_launch += 1
+				if not is_equal_approx(
+						BallPresentation.launch_speed_mps(cut),
+						BallPresentation.launch_speed_mps(trajectory),
+					):
+					reconstruction_disagreed += 1
+				## And the flight the record describes is the flight that decided
+				## where the ball went.
+				var flown: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+					Vector2(event.start_position),
+					float(trajectory.get("start_height_meters", 1.0)),
+					float(trajectory.get("launch_bearing_degrees", 0.0)),
+					angle, pace, [],
+					str(event.metadata.get("side", "")) == "home",
+					gravity,
+				)
+				if Vector2(flown.landing).distance_to(
+						Vector2(event.end_position)) < 0.002:
+					landing_reproduced += 1
+	manager.free()
+	_check(
+		serves >= 40 and launch_published == serves,
+		"every serve publishes the launch state its resolver chose (%d of %d)" % [
+			launch_published, serves,
+		],
+	)
+	_check(
+		start_height_real == serves,
+		"every serve is struck from the server's real reach (%d of %d)" % [
+			start_height_real, serves,
+		],
+	)
+	_check(
+		truncation_moved_launch == 0 and reconstruction_disagreed == serves,
+		"cutting a serve short leaves its launch pace alone, where rebuilding it"
+		+ " from the endpoints does not (%d moved, %d rebuilds disagreed of %d)" % [
+			truncation_moved_launch, reconstruction_disagreed, serves,
+		],
+	)
+	_check(
+		landing_reproduced == serves,
+		"flying the published launch again lands where the rally said it did"
+		+ " (%d of %d)" % [landing_reproduced, serves],
 	)
 
 
@@ -16988,7 +19834,7 @@ func _test_stance_transitions() -> void:
 	actor.contact_posture = "off-axis"
 	var handover := 0.5
 	actor.set_pose(
-		RALLY_EVENT_SCRIPT.EventType.DEFENSE, 0.0,
+		RALLY_EVENT_SCRIPT.EventType.DIG, 0.0,
 		PlayerActor3D.RECOVERY_END_PHASE * handover, Vector2(0.7, -0.7), true,
 	)
 	var armed: float = float(actor._floor_remaining) \

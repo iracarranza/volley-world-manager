@@ -63,7 +63,7 @@ func _ready() -> void:
 			"standing_reach_meters": 2.50, "jumping_reach_meters": 3.24,
 		})
 		actor.rotation_degrees = Vector3(0.0, 152.0, 0.0)
-		actor.set_pose(RallyEventModel.EventType.DEFENSE, 0.0, -0.08,
+		actor.set_pose(RallyEventModel.EventType.DIG, 0.0, -0.08,
 			Vector2(0.0, 1.0), true)
 		actor.rotation_degrees = Vector3(0.0, 152.0, 0.0)
 		if float(draft.grow) > 0.0:

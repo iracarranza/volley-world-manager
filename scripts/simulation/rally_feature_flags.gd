@@ -14,6 +14,63 @@ const ALLOW_DEVELOPMENT_ATTACK_OVERRIDE: bool = true
 const ENABLE_CONTINUOUS_BLOCK_EVENTS: bool = false
 const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 
+## M4/M5 physical platform contact -- **promoted to production.**
+##
+## The paired rollout proves truthful same-side continuation: the intended setter
+## can miss, another viable voli can intercept en route, and every played segment
+## is a prefix of one unchanged launch. Production was held closed for one
+## remaining reason -- a valid authored platform launch can clear the net, and
+## deciding which opponent plays that overpass and how is materially different
+## volleyball semantics rather than a physics default. **That blocker is cleared:**
+## M5 now resolves a legal net crossing as the receiving side's ordinary first
+## team contact through `OverpassActionSystem`, in both the control and attack
+## branches, at both live exits (M5 DONE). Attack coverage -- the last platform
+## family still fabricating its outgoing ball -- now launches through this same
+## shared resolver, its intended recipient named by the existing second-contact
+## policy.
+##
+## Promoted on measured evidence, not distribution comfort. With this open the
+## full suite is 2161/2161 (down nine from the flag-off 2170 purely as sampling
+## gates draw differently -- no acceptance bound fails), the paired dig and
+## coverage rollouts still PASS every invariant, and `run_rally_balance_probe`
+## reads swing balance 1.032, stuff 0.120 (in band), dig 0.353 (in band). Two
+## reporting corrections rode along and are not cosmetic: a set fed by a physical
+## interception now reports the **realised prefix** that actually reached the
+## setter as its incoming ball, not the full flight to the floor, so the
+## dig-to-set one-ball chain holds by identity and the setter's window is the
+## interception time it was resolved against. See
+## `docs/review/FREE_FLIGHT_INTERCEPTION.md` and `PLATFORM_DIG_PROMOTION.md`.
+##
+## The legacy apex/spoil dig arm is retired from production but kept behind the
+## development override so the paired census stays a live protocol, not a stale
+## one. Flipping this back to `false` restores it.
+const ENABLE_PHYSICAL_PLATFORM_DIG: bool = true
+const ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE: bool = true
+
+## Reception is the third and last platform family on the shared physical
+## authority, and the hardest: the home first-ball reception->set path was a
+## pre-M5 inline resolver that chose the setter spatially against the pass
+## destination, so this was a retrofit rather than a wiring change. It now runs
+## the same shape as the other two -- T1--T3 launch, one authoritative free
+## flight, M5 interception deciding the second contact, realised prefix into the
+## SET -- with the intended setter as soft intent only.
+##
+## Its development override is its own (`development_physical_reception` ->
+## `platform_reception_development_open`), deliberately not the dig's field, so a
+## paired census can open one family without the other. The shared legacy-force
+## still forces every family back to legacy together.
+##
+## Promoting it required reconciling four places where the *authored pass
+## endpoint* was still standing in for the *actual interception*: the setter's
+## capability height, the published pass target, the opponent set's displayed
+## contact, and the SET_DECISION moment (which read the untouched flight's floor
+## and so stamped the decision after the set it precedes -- 33 causality-floor
+## corrections). One instrument gap rode along: the first-ball SET never
+## published `body_contact_position` or `movement_entry_velocity`, which the
+## other two set paths already did, so the movement-agreement gate was comparing
+## a longer leg against a standing start. See `PLATFORM_RECEPTION_PROMOTION.md`.
+const ENABLE_PHYSICAL_RECEPTION: bool = true
+
 ## Gate E: the geometric attack. Where the other rollouts promote one *contact*,
 ## this one replaces how an attack is decided and resolved end to end -- course,
 ## power, swing, flight, block intersection and in/out.

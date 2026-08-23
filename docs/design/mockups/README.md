@@ -85,9 +85,47 @@ as a colour — placket, ticks, panels, columns, uneven bands, seams, sponsor
 blocks, one heritage band — marked front and back, so a side is nameable from a
 grayscale frame without making any kit louder.
 
-**Pāwa Hitō is mid-tune and shipped that way.** The backdrop is in frame for the
-first time, but the islands and headland are still over-scaled and read as
-slabs, and the open-air camera framing (lifted and levelled, since it is the one
-venue with something above the horizon worth seeing) has not been balanced
-against the court. Scale, haze and framing are the next pass. The other seven
-venues are unaffected — they keep the original broadcast seat exactly.
+**Pāwa Hitō's next pass has landed**, and the three things named here — scale,
+haze and framing — each turned out to be a different defect than the label
+suggested. The other seven venues are unaffected; every change is inside the
+open-air branch.
+
+**Haze was not a tuning problem, it was a unit.** `_sky()` switches this venue
+alone to `FOG_MODE_DEPTH`, where `fog_density` means *opacity over the depth
+ramp*. The venue then set it to `0.004` — the number Spëddigh and Ĭspayk both use
+correctly as a per-metre **exponential** density, which is what every other venue
+leaves the mode at. Four tenths of one percent of opacity, over a depth ramp
+whose begin and end had been carefully argued about in a comment directly
+underneath. The ramp was right; there was nothing to apply it with. This is
+`FAILURE_MODES.md` §0 arriving in a renderer: a value measured with the wrong
+instrument, where the instrument changed underneath the number.
+
+**Scale was not the reason they read as slabs.** With the fog working, the
+islands receded properly in value and *still* looked like blocks — which is the
+diagnosis: a single axis-aligned box seen near face-on is a rectangle, and no
+amount of haze fixes a silhouette. Each island is now three descending lumps
+sharing a base sixteen metres under the water, so the outline steps and no base
+edge shows. Tops came down from 25 m above the water to 8–20 m at the same
+distance.
+
+**The ridge needed the opposite of what it had.** Six tall towers became nine
+tapered masses and immediately read as a *skyline*, because evenly spaced
+same-height objects that do not touch is what a city looks like. It is now
+fourteen segments spaced well under their own width so they merge, with heights
+from two sine terms at incommensurate rates — a few high points, long low cols,
+no catchable period — plus a second range at the far end of the fog ramp that
+arrives as a pale suggestion.
+
+**Framing was one number.** The lifted open-air seat aimed at 4.0 m, above the
+net, which sank the court into the bottom-left quarter and gave the far terrace
+the rest of the frame. Aiming at 2.6 m and standing slightly closer brings the
+subject back to the middle and still leaves the horizon a fifth down from the
+top.
+
+Two things the pass found that were not on the list. The terraces were 3.4 m
+plates with water visible underneath — the same *visible base* defect as the
+islands, one scale up — and now cut down to −60 so they read as one mass. And the
+establishing frame's camera stood at z = 54 with the hillside reaching forward to
+z = 55, so a 150 m flank sat beside the lens and filled two thirds of the shot;
+moved out over the water, where the terracing, the drop and the court on top of
+it are finally all in one frame.

@@ -145,6 +145,12 @@ static func _seal_blocker(
 	if blocker == null:
 		return
 	var sealed_position := Vector2(target_x, NET_Y - 0.04)
+	## Closing a block is lateral net movement: the shuffle runs along the net
+	## while the body stays square to it. Classified before the position is
+	## applied so that stays true structurally rather than by the accident of a
+	## zero arrival velocity -- a blocker who sealed while still moving must not
+	## end up set along the net instead of across it.
+	blocker.movement_mode = RallyPlayerState.MovementMode.BLOCK_CLOSE
 	blocker.apply_position(sealed_position, Vector2.ZERO)
 	blocker.body_state = RallyPlayerState.BodyState.AIRBORNE if airborne \
 		else RallyPlayerState.BodyState.REACHING

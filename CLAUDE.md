@@ -12,8 +12,111 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-15 on `58fd72a`: **1,858 checks
-pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-23 on the M6/M7 first-draft pass at
+`413eee5`: **2,139 checks pass, 0 fail**. Treat any test failure as a regression.
+
+**And that number cannot be attributed, which is the point of saying so.** Two
+checks were written this pass (`_test_one_ball_chain_by_launch_identity`), and
+C5 made floor defenders walk into their defensive shape instead of appearing in
+it -- so rallies resolve differently and every sampling gate draws against a
+different population. No pre-change count was measured on this branch state, so
+how much of the move is the two checks and how much is the defence is simply not
+known. What is known is the FAIL line: zero.
+
+Two figures were already on record for the *same* M4 promotion and they disagree:
+`RALLY_MILESTONES.md` says "Suite **2,132 PASS**" and the
+`ENABLE_PHYSICAL_RECEPTION` comment says "the full suite is 2161/2161". Both were
+true when written; at least one was measured on a slightly different tree. Left
+standing rather than reconciled, because guessing which is which is exactly the
+mistake this section keeps warning about -- but noted here so the next reader
+does not treat either as the number to beat.
+
+That is 2,142 plus six checks written **minus one**, and the minus one is the
+interesting half: the continuation dig stopped fabricating a constant stretch, so
+rallies resolve differently and a sampling gate drew one fewer. The 600-rally
+outcome mix is nevertheless unchanged, because the repair touches nine contacts.
+
+Five of those six are **characterisation checks rather than invariants** -- they
+hold open the finding that the incoming ball's speed reaches no platform launch
+and that a dig thrown four times as far leaves at the same height, and slice 3 is
+supposed to make them fail. Adding a two-line transfer term moved the count to
+2,149. See `docs/review/PLATFORM_TRANSFER.md`.
+
+Before it, 2,137 plus exactly the five checks written, on a pass that was *required*
+to move nothing: slice 1 publishes what a platform contact was for and nothing
+reads it. The outcome mix over 600 rallies was verified byte-identical by running
+one probe twice -- production, then `git stash` -- which is the only comparison
+worth making, because the census quoted two entries below was taken on a
+different seed base and could not have detected a change. See
+`docs/review/PLATFORM_INTENT.md`.
+
+Before it, 2,133 plus exactly the three checks written, and 2,133 was 2,131 plus
+two. Four consecutive passes have
+now moved the count by precisely what they wrote while moving populations by
+wildly different amounts -- one halved the home wall's failure rows, two changed
+no outcome at all -- so the count is measuring test authorship and nothing else.
+
+Before it, 2,129 plus exactly the two checks written, on a change that moved no
+outcome at all -- the mix over 600 rallies came back byte-identical, because no
+live claim ever reaches the condition the repair added. A repair can be correct
+and latent at the same time, and the count says nothing about which.
+
+Before it, 2,126 plus exactly the three checks written -- a *repair* that moved a
+population hard (the home wall's "no wall" rows fell 134 to 42 on the matched
+block-band fixture) and still moved the count by precisely what it wrote, because
+none of the sampling gates draw on the block census. Which is the reminder worth
+keeping: a count that behaves says nothing about whether the population under it
+moved. Read the FAIL line, then read the probe.
+
+Before it, 2,123 plus exactly the three checks written, and 2,123 was itself 2,117
+plus exactly the six before it. Two consecutive passes that moved the count by
+precisely what they wrote -- which says only that neither disturbed a sampling
+population, never that either was correct. The second of them *deleted a field*
+and the outcome mix over 600 rallies came back byte-identical, which is what an
+exactly-folded constant has to look like. See `docs/review/MOVING_ORIENTATION.md`
+and `docs/review/READINESS_REMOVAL.md`.
+
+Before them, 2,111 plus five checks written plus one: defenders now pay a turn cost
+when the ball is behind them, so rallies resolve differently and a sampling gate
+drew one more. See `docs/review/READY_ORIENTATION.md`.
+
+That is 2,106 plus eleven checks written *minus six*: a landing blocker is now
+unavailable to the floor-defence claim search, so rallies resolve differently and
+several sampling gates drew fewer checks. A negative delta with checks added is
+exactly what a real behaviour change looks like. See
+`docs/review/DEFENSIVE_READINESS_BOUNDARY.md`.
+
+The pass before it moved 2,104 → 2,106: two checks written and, again, no
+sampling movement. See `docs/review/FORWARD_WALK_ATTACK_CHAIN.md`.
+
+The pass before it moved 2,098 → 2,104: six checks written and, again, no
+sampling movement. See `docs/review/SET_QUALITY_AND_GENERATION.md`.
+
+The pass before it moved 2,095 → 2,098: four checks written and one sampling
+gate drawing a check fewer, because the opponent's second contact began
+consuming the state it was selected on and rallies resolve differently. See
+`docs/review/FORWARD_WALK_HITTER_AND_SETTER_MOVEMENT.md`.
+
+That one arrived in two moves and they mean opposite things. 2,087 → 2,090 came
+with **no checks written at all**: the second contact may now transfer away from
+an unreachable setter, so rallies resolve differently and the sampling gates
+drew three more samples than before. Then 2,090 → 2,095 is exactly the five
+checks that pass added, which says the test addition disturbed no sampling
+population. See `docs/review/SECOND_CONTACT_TRANSFER.md`.
+
+The two passes before it moved 2,078 → 2,082 → 2,087, each by precisely the
+number of checks written — production behaviour changed and **no sampling gate's
+population changed size**. See `docs/review/BLOCK_INSTRUCTION_PROOF.md` and
+`docs/review/ATTEMPT_JUDGMENT_SPLIT.md`.
+A count that moves by precisely the number of checks you wrote is the one case
+where the total is worth reading — and it still is not evidence the change was
+correct, only that it did not disturb coverage.
+
+It does not always behave. The 2,078 entry was *fewer* than the 2,083 recorded
+the day before with nothing deleted, because the forward serve changed which
+rallies reach a reception and several sampling gates draw a check per sample. A
+delta can therefore be negative, zero, or exactly what you wrote, and only the
+last of those tells you anything.
 
 The count itself is not the signal and should not be read as one -- sampling
 tests emit a variable number of checks, and this line sat at 1,048 for four days
@@ -58,6 +161,9 @@ Then, by subject:
 | Staff, how they get things wrong, reports and interpretation | `docs/design/STAFF_AND_FALLIBILITY.md` **and** `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` |
 | Contractors, outsourcing, services, when a role belongs inside the club | `docs/design/CONTRACTORS_AND_SERVICES.md` |
 | **Anything in the rally, and whether it looks like volleyball** | `docs/design/VOLLEYBALL_FIDELITY.md` |
+| **Who owns a physical fact: contact, launch, flight, the drawn ball** | `docs/design/CONTACT_AND_BALL_FLIGHT.md` |
+| The forearm contacts -- reception, dig, emergency dig, coverage | `docs/design/PLATFORM_CONTACT.md` |
+| Why the rally simulator is shaped the way it is, and what was tried | `docs/review/RALLY_SIMULATOR_REDESIGN_LOG.md` |
 | Club culture, philosophy, what a team believes | `docs/design/TEAM_IDENTITY_AND_PHILOSOPHY.md` |
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
 | The title screen | `docs/design/TITLE_SCREEN.md` |

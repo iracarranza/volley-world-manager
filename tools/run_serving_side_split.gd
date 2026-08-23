@@ -126,7 +126,7 @@ func _collect(result: Resource, bucket: Dictionary) -> void:
 			RallyEventScript.EventType.ATTACK:
 				totals.attacks += 1
 				totals.attack_quality += float(event.quality)
-			RallyEventScript.EventType.DEFENSE:
+			RallyEventScript.EventType.DIG:
 				totals.dig_attempts += 1
 				if event.success:
 					totals.digs += 1

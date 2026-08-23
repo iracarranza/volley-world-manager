@@ -20,6 +20,13 @@ static func apply(state: RallyState, setter_candidate: Dictionary) -> Dictionary
 		"center_position", setter.position
 	))
 	var velocity := Vector2(setter_candidate.get("velocity_mps", Vector2.ZERO))
+	## A setter releasing to the ball is an opened-up run, and
+	## `ShadowSetterResponseSystem` already resolves every leg of that release in
+	## TRANSITION. Carrying that classification here is what makes the arrival
+	## orientation the route they actually ran rather than the stance they left.
+	## Only the movement establishes it -- squaring to the intended target is a
+	## contact mechanic and is not claimed here.
+	setter.movement_mode = RallyPlayerState.MovementMode.TRANSITION
 	setter.apply_position(center_position, velocity)
 	setter.body_state = RallyPlayerState.BodyState.AIRBORNE \
 		if bool(setter_candidate.get("requires_jump", false)) \

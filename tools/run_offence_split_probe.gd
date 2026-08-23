@@ -103,7 +103,7 @@ func _collect(result: Resource, sides: Dictionary) -> void:
 			last_pass_quality = float(event.quality)
 			fed_by = "pass"
 			continue
-		if int(event.event_type) == RallyEventScript.EventType.DEFENSE:
+		if int(event.event_type) == RallyEventScript.EventType.DIG:
 			last_pass_quality = float(event.quality)
 			fed_by = "dig"
 			continue

@@ -1186,7 +1186,8 @@ func _build_movement_plan(
 	if not bool(next_contact.success) \
 			and int(next_contact.event_type) in [
 				RallyEventModel.EventType.RECEPTION,
-				RallyEventModel.EventType.DEFENSE,
+				RallyEventModel.EventType.DIG,
+				RallyEventModel.EventType.ATTACK_COVERAGE,
 			] and next_contact.metadata.has("movement_target"):
 		action_target = Vector2(next_contact.metadata["movement_target"])
 	## Nobody moves unless something actually says they move.
@@ -2152,7 +2153,8 @@ func _sample_cognition(
 ## meaningful against where the voli is actually facing.
 func _platform_aim(event: RallyEvent) -> Dictionary:
 	if event.event_type != RallyEventModel.EventType.RECEPTION \
-			and event.event_type != RallyEventModel.EventType.DEFENSE:
+			and event.event_type != RallyEventModel.EventType.DIG \
+			and event.event_type != RallyEventModel.EventType.ATTACK_COVERAGE:
 		return {}
 	var solved := _platform_surface(event)
 	if not bool(solved.get("valid", false)):

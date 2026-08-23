@@ -42,6 +42,15 @@ const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout
 const RallyActionVocabularyModel := preload("res://scripts/simulation/rally_action_vocabulary.gd")
 const CognitionCompilerModel := preload("res://scripts/simulation/cognition_compiler.gd")
 const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
+const PlatformContactModel := preload(
+	"res://scripts/simulation/platform_contact_model.gd"
+)
+const FreeFlightInterceptionModel := preload(
+	"res://scripts/simulation/free_flight_interception_system.gd"
+)
+const OverpassActionModel := preload(
+	"res://scripts/simulation/overpass_action_system.gd"
+)
 const GeometricAttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
@@ -454,19 +463,34 @@ const BLOCK_DEPTH_RELIEF_WEIGHT: float = 0.10
 ## `deficit` is how far the swing is beyond this block, on the 0-to-0.4 scale
 ## `AttemptJudgment` documents: zero when the contest is winning, growing as the
 ## swing pulls ahead.
+## Returns `{hands, call, followed}` rather than a bare string, so a rally record
+## can say what was *asked* as well as what was done. An instruction nobody can
+## see obeyed or ignored is not an instruction.
 func _block_hands_intent(
 	blocker: VolleyballPlayer,
 	contest_margin: float,
 	close_fraction: float,
 	instruction: String = "",
-) -> String:
+) -> Dictionary:
+	## **The call names an action; it does not perform one.** This used to be a
+	## `match` that returned outright, which made every blocker obey identically
+	## -- and it never fired anyway, because nothing wrote the key. Both halves
+	## were wrong in the same direction: an instruction is something a voli
+	## *adheres to*, in proportion to `tactical_discipline`, not something that
+	## replaces them.
+	##
+	## Only the two hands behaviours map. `close line` and `close cross` are lane
+	## instructions from the same clipboard page and say nothing about the hands;
+	## treating them as a hands call would be inventing a call the manager did not
+	## make.
+	var call := ""
 	match instruction:
 		"soft block":
-			return "soft"
+			call = "soft"
 		"kill block":
-			return "kill"
+			call = "kill"
 	if blocker == null:
-		return "neutral"
+		return {"hands": "neutral", "call": call, "followed": false}
 	## **Late and low, not behind on the contest.**
 	##
 	## The first version read the deficit off `contest - attack_quality`, and every
@@ -488,9 +512,29 @@ func _block_hands_intent(
 		short_of_the_ball + beaten_on_the_contest,
 		0.0, AttemptJudgmentModel.OBVIOUS_DEFICIT,
 	)
-	if deficit <= 0.0:
-		return "kill"
-	return "soft" if AttemptJudgmentModel.backs_off(blocker, deficit) else "kill"
+	## What this voli would do left alone: recognition and temperament, exactly as
+	## `AttemptJudgment` splits them. `tactical_discipline` is deliberately absent
+	## here -- it decides adherence below, never self-assessment.
+	var own := "kill" if deficit <= 0.0 \
+		else ("soft" if AttemptJudgmentModel.backs_off(blocker, deficit) else "kill")
+	if call.is_empty() or call == own:
+		## No call, or the call is what they were going to do anyway. Nothing for
+		## discipline to act on, and it must not act: an attribute that moves a
+		## voli when nobody asked them anything is temperament.
+		return {"hands": own, "call": call, "followed": not call.is_empty()}
+	## They disagree with the call. **The sign comes from `call`, not from the
+	## attribute** -- discipline returns whatever was asked, so it pushes toward
+	## soft under a soft call and toward kill under a kill call. An attribute that
+	## always produced the same action would be temperament again, and the gate in
+	## `test_runner.gd` fails if it is.
+	##
+	## `_identity_roll` rather than a fresh draw: it is the repeatable per-rally
+	## channel the identity calls already use, so this adds no RNG stream and
+	## nothing downstream reseeds.
+	var follows := _identity_roll(
+		"block-hands|%d" % blocker.id
+	) < _rating(blocker, "tactical_discipline")
+	return {"hands": call if follows else own, "call": call, "followed": follows}
 
 
 ## How a ball off the block flies. The angle is a squirt off the hands rather
@@ -992,11 +1036,44 @@ var geometric_serves: Dictionary = {}
 ## different functions, so it is held for the rally rather than threaded
 ## through every continuation signature.
 var geometric_development_open: bool = false
+## M4's controlled-dig rollout is independent of the continuous-rally stack.
+## A probe can open this contact alone without also promoting reception, setter,
+## attack and block implementations and contaminating the comparison.
+var platform_dig_development_open: bool = false
+## Debug-only paired measurement can still run the retired ball beside the
+## promoted one. This preserves the validation protocol after production opens;
+## ordinary callers never set it and cannot disable production authority.
+var platform_dig_development_force_legacy: bool = false
+## Reception's own development-open, decoupled from the dig's so a probe can open
+## physical reception without the dig's dev override reaching it (or vice versa).
+## The legacy-force above is shared: forcing legacy forces it for every family.
+var platform_reception_development_open: bool = false
 ## The opponent's defensive plan for this rally, built on first use.
 var opponent_plan: Resource = null
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
+## Every voli's position as of the last contact, so the next one can say where
+## its actor started.
+##
+## M8 asks each boundary for `actor_start -> traversal -> contact`. The contact
+## end is `body_contact_position`; the *start* is where that voli was when the
+## previous contact happened, and it existed only inside whichever resolver
+## branch had moved them. Snapshotting the live maps once per contact answers it
+## uniformly and derives nothing: the leg for contact N is the interval between
+## contact N-1 and contact N, so the position at N-1 is the start by definition.
+var _positions_at_last_contact: Dictionary = {}
+## The receiving side's own labels for its receive shape, captured where the
+## shape is built.
+##
+## `_receive_formation_map` separates the passers from the front-row volis
+## staging off the passing lanes from the setter, and its own note says the
+## distinction exists so the cognition layer does not have to re-derive, from a
+## coordinate, a fact the formation builder already had. The shape now lives in
+## `live_positions` from rally initialization, so the labels have to be carried
+## rather than recomputed -- recomputing them at the reception is what made the
+## drawn formation a second representation in the first place.
+var receive_formation_intents: Dictionary = {}
 ## What each player is carrying, alongside where they are.
 ##
 ## `live_positions` has always been the resolver's authoritative state and it
@@ -1007,6 +1084,21 @@ var opponent_live_positions: Dictionary = {}
 ## and by the resolver never. These two dictionaries are the missing half.
 var live_velocities: Dictionary = {}
 var opponent_live_velocities: Dictionary = {}
+## Which way a body was set when it finished its last committed leg.
+##
+## The third of the three things a body carries, beside where it is and what it
+## is carrying. Only a leg whose *form* establishes an orientation writes here --
+## `movement_establishes_facing()` decides, so a shuffle or a block close leaves
+## whatever was already set. A voli with no entry is seeded from their side's
+## ready facing by `RallyStateBuilder`, which is what every actor got before this
+## existed.
+##
+## **Expected inert for defenders, and that is not a failure.** Every defensive
+## leg in the resolver is `"lateral"` and LATERAL preserves, so a defender cannot
+## change their own orientation while the form comparison is blocked -- measured
+## at 2 of 796 defensive contacts made by a body that had run. See
+## `docs/review/ACTOR_CONTINUITY.md`.
+var player_facing: Dictionary = {}
 ## Who is still getting up, on either side of the net. Keyed by player id, and
 ## holding the state, the moment they are a defender again, and how long the debt
 ## was -- so a dig taken halfway through a recovery is priced on how much of it is
@@ -1040,6 +1132,14 @@ var recovery_fatigue_cost: Dictionary = {}
 ## already is, and for the same reason: a resolver that writes to the roster it
 ## is resolving breaks replay determinism, and the gate catches it immediately.
 var exertion_cost: Dictionary = {}
+## What the manager drew on the clipboard, handed in before the resolve like
+## `pair_familiarity` beside it. The resolver deliberately never sees the
+## `VolleyballTeam`; it sees the sheet, which is the same boundary
+## `defensive_plan` and `team_principles` already respect.
+##
+## Home only, and that asymmetry is honest rather than an omission: the sheet is
+## the manager's own club's, and an opponent hands-call would have to be invented.
+var tactic_sheet: Resource = null
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
 var opponent_principles: Resource
@@ -1104,10 +1204,13 @@ func resolve(
 	home_serving: bool,
 	seed_value: int,
 	development_continuous_reception: bool = false,
+	development_physical_platform_dig: bool = false,
 	team_principles: Resource = null,
 	home_team_name: String = "",
 	serve_context: Dictionary = {},
 	match_flow: float = 0.0,
+	development_legacy_platform_dig: bool = false,
+	development_physical_reception: bool = false,
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
@@ -1127,6 +1230,10 @@ func resolve(
 	geometric_swing_index = 0
 	geometric_serves = {}
 	geometric_development_open = development_continuous_reception
+	platform_dig_development_open = development_physical_platform_dig
+	platform_reception_development_open = development_physical_reception
+	platform_dig_development_force_legacy = development_legacy_platform_dig \
+		and OS.is_debug_build()
 	opponent_plan = null
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
@@ -1158,12 +1265,20 @@ func resolve(
 	player_recovery = {}
 	recovery_fatigue_cost = {}
 	exertion_cost = {}
-	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
+	receive_formation_intents = {}
+	_positions_at_last_contact = {}
+	live_positions = _initial_home_positions(
+		lineup, defensive_plan, not home_serving, true,
+		players if not home_serving else [], receive_formation_intents,
+	)
 	## Everyone starts the rally genuinely at rest -- this is the one moment the
 	## old assumption was true.
 	live_velocities = {}
 	opponent_live_velocities = {}
-	opponent_live_positions = _initial_opponent_positions(opponent_team, home_serving)
+	player_facing = {}
+	opponent_live_positions = _initial_opponent_positions(
+		opponent_team, home_serving, true, receive_formation_intents
+	)
 	var result: Resource = RallyResultModel.new()
 	result.initial_home_positions = live_positions.duplicate(true)
 	result.initial_opponent_positions = opponent_live_positions.duplicate(true)
@@ -1243,46 +1358,52 @@ func resolve(
 	var opponent_serve_origin := CourtConstants.serve_origin(
 		opponent_serve_base.x, false
 	)
-	var serve_error_chance := _serve_error_chance(opponent_server, opponent_risk)
-	var serve_error := rng.randf() < serve_error_chance
-	var serve_landing := _serve_landing_point(
+	## **Drawn and discarded.** The verdict this used to decide now comes off the
+	## flight, but the draw stays where it was so every downstream consumer of
+	## `rng` keeps the stream it had -- a serve pass that also reshuffled the
+	## reception, the set and the swing would be unmeasurable. It decides
+	## nothing; `_serve_error_chance` survives only to keep the shape of it.
+	## Removing it is a separate, purely mechanical change.
+	var _retired_serve_error_draw := \
+		rng.randf() < _serve_error_chance(opponent_server, opponent_risk)
+	var serve_aim := _serve_landing_point(
 		str(serve_decision.target), opponent_server, players, lineup, true,
 		_receive_formation_positions(lineup, players, false), opponent_serve_origin,
 		serve_decision,
 	)
-	## Gate E: the same serve through the shared ballistics, in shadow.
-	_geometric_serve_record(
+	var canonical_serve := _canonical_serve(
 		"geometric_serve_opponent", opponent_server,
-		opponent_serve_origin, serve_landing, false, opponent_risk,
+		opponent_serve_origin, serve_aim, false, opponent_risk,
 	)
-	## Recorded against the intent above, moved below: the shadow resolver aims
-	## where the server aimed and reaches its own verdict, while the official
-	## ball has to go where the official verdict already says it went.
-	if serve_error:
-		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
-	var opponent_serve_distance := RallyKinematics.court_distance_meters(
-		opponent_serve_origin, serve_landing
+	var serve_landing: Vector2 = canonical_serve.get("landing", serve_aim)
+	var serve_error := bool(canonical_serve.get("error", true))
+	var serve_spin: Dictionary = canonical_serve.get(
+		"spin", _serve_spin(opponent_server)
 	)
-	var serve_arc := _serve_arc(
-		"geometric_serve_opponent",
-		opponent_serve_distance,
-		_serve_launch_angle_degrees(opponent_server, serve_quality),
-		GeometricAttackPromotionModel.serve_contact_height_meters(
-			opponent_server,
-			GeometricAttackPromotionModel.serve_effort_for_style(
-				str(opponent_server.primary_serve_style)
-			),
-		),
-		_ground_to_net_meters(
-			opponent_serve_origin, serve_landing, opponent_serve_distance
-		),
-		_serve_spin(opponent_server),
-	)
-	var serve_time := float(serve_arc.duration_seconds)
+	var serve_time := float(canonical_serve.get("duration_seconds", 1.0))
 	var serve_trajectory := _ball_trajectory(
 		"serve", opponent_serve_origin, serve_landing, serve_time,
-		float(serve_arc.apex_height_meters),
+		float(canonical_serve.get("apex_rise_meters", 0.0)),
+		-1.0, NAN, NAN,
+		float(canonical_serve.get("contact_height_meters", NAN)),
+		## **`end_height` stays NAN, and that is a ruling rather than a gap.**
+		##
+		## Publishing a real one was tried: `out_reason` already says whether this
+		## serve stopped at the tape or reached the floor, so the flight's own
+		## endpoint is a fact and not a choice. The suite refused it -- 60 of 120
+		## serves -- and the refusal was correct. `end_height_meters` is not read
+		## as this flight's endpoint. `BallFlight.from_trajectory` reads it as the
+		## height of the **next contact**, and the comment inside
+		## `_ball_trajectory` already names the conflict: *"Those are different
+		## numbers and choosing between them is `CONTACT_AND_BALL_FLIGHT.md`'s
+		## unresolved item 5, not something to settle as a side effect of owning
+		## the launch."*
+		##
+		## So the 1.000 m default is a placeholder standing in for an unresolved
+		## design question, not a bug to repair. See
+		## `docs/review/BODY_CENTRE_SCOPE.md` section 6.
 	)
+	_stamp_launch_state(serve_trajectory, canonical_serve)
 	## Where this server belongs once the ball is gone: their own defensive spot,
 	## the same one every other opponent gets from `court_position`.
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
@@ -1302,6 +1423,18 @@ func resolve(
 			"serve_style": opponent_server.primary_serve_style,
 			"flight_time": serve_time,
 			"event_time": 0.0, "contact_time": serve_time,
+			## What the ball did, from the one flight that decided all of it.
+			## `serve_out_reason` is empty on a serve that stayed in; on one that
+			## did not it names the line or the tape, which the old path could not
+			## do because the verdict predated the ball.
+			"serve_out_reason": canonical_serve.get("out_reason", ""),
+			"net_clearance_meters": canonical_serve.get(
+				"net_clearance_meters", 0.0
+			),
+			"launch_speed_mps": serve_trajectory.get("launch_speed_mps", 0.0),
+			"launch_angle_degrees": serve_trajectory.get(
+				"launch_angle_degrees", 0.0
+			),
 			## Struck from behind the baseline, then onto the court.
 			##
 			## A server is off the court when they contact the ball and back in it
@@ -1379,6 +1512,7 @@ func resolve(
 			players, lineup, defensive_plan, opponent_team,
 			active_play, false, seed_value
 		)
+		_seed_carried_body_states(live_state, rally_clock)
 		live_reception_integration = LiveReceptionIntegratorModel.apply(
 			live_state, shadow_summary, selected_live_reception
 		)
@@ -1427,7 +1561,12 @@ func resolve(
 	var arrival: Dictionary = _read_adjusted_arrival(
 		Dictionary(reception_claim.get("arrival", {})),
 		_read_error_meters(
-			receiver, serve_trajectory, _serve_spin(opponent_server),
+			## The spin the launch search *settled on*, not the whole of what this
+			## server can put on a ball. They are different numbers -- the sweep
+			## trades brush against range and usually keeps less than all of it --
+			## and novelty, which is what makes a ball hard to track, is computed
+			## from the rotation the ball actually carries.
+			receiver, serve_trajectory, serve_spin,
 			float(serve_trajectory.get("start_time", rally_clock)),
 		),
 	)
@@ -1513,6 +1652,14 @@ func resolve(
 	var receiver_reach := _reached_point(
 		receiver, receiver_start, serve_landing, serve_time, "lateral",
 		float(arrival.get("read_error_meters", 0.0)),
+		## The contact family's own body-derived height, not the trajectory's
+		## ambiguous endpoint height. A reception already computes this exact
+		## quantity for the outgoing pass; using it here closes M3 without making
+		## either meaning of `end_height_meters` authoritative by accident.
+		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
+		_incoming_ball_direction(
+			serve_trajectory, serve_landing, opponent_serve_origin
+		),
 	)
 	if not using_live_reception:
 		## Short of the ball is where a beaten passer actually is, and it is what
@@ -1522,11 +1669,27 @@ func resolve(
 	var preferred_release: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id()) \
 		if defensive_plan != null else Vector2(0.50, 0.60)
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
+	var home_reception_setter := _player_by_id(players, lineup.active_setter_id())
+	## Captured before the pass resolves, because the anchor is what this contact
+	## was aimed at and the destination is where it went. Conflating them is how
+	## an intent record comes to be unfalsifiable.
+	var home_reception_intent := _platform_intent(
+		"serve_reception", desired_pass_target, "release_seat",
+		home_reception_setter,
+		Vector2(live_positions.get(
+			lineup.active_setter_id(), preferred_release
+		)),
+	)
 	var reception_pass := _reception_pass_result(
 		receiver, receiver_start, serve_landing, desired_pass_target,
 		opponent_serve_origin, serve_quality, arrival,
 		float(result.reception_quality), 0.51, 0.98, serve_trajectory,
 		_player_by_id(players, lineup.active_setter_id()),
+		home_reception_intent,
+		_platform_body_velocity(
+			receiver_start, receiver_reach, receiver_move_time, serve_time
+		),
+		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
 	)
 	if using_live_reception:
 		var selected_metadata: Dictionary = selected_live_reception.get(
@@ -1558,7 +1721,6 @@ func resolve(
 	## Book the cost of the contact before the rally moves on, so the transition
 	## below reads a receiver who is still getting up rather than one who is not.
 	_note_recovery(receiver, str(reception_pass.contact_recovery), rally_clock)
-	var home_receive_intents := {}
 	## The side that just served, taking base while their serve is in the air.
 	var opponent_serve_intents := {}
 	var opponent_by_id := {}
@@ -1581,6 +1743,7 @@ func resolve(
 			_arrival_phrase(arrival, receiver_arrived, support_count) \
 			+ (" Equal-priority passers hesitated at the seam." if seam_conflict else ""),
 		], {"side": "home", "landing": serve_landing,
+			"platform_intent": home_reception_intent,
 			## Where the home six stand to receive this serve.
 			##
 			## On the *reception* event rather than the serve, because playback
@@ -1590,10 +1753,8 @@ func resolve(
 			## serve event they were never drawn at all -- nothing precedes the
 			## first contact of a rally, so that leg does not exist. Measured
 			## after the fact: 400 serves of 400 had no preceding flight.
-			"home_phase_targets": _receive_formation_map(
-				lineup, players, false, home_receive_intents
-			),
-			"home_phase_intents": home_receive_intents,
+			"home_phase_targets": _lineup_live_shape(lineup, live_positions),
+			"home_phase_intents": receive_formation_intents,
 			"opponent_phase_targets": opponent_serve_transition,
 			"opponent_phase_intents": opponent_serve_intents,
 			"planner_zone_center": Vector2(receiver_zone.center) \
@@ -1674,6 +1835,12 @@ func resolve(
 			)),
 			"persistent_state_update": live_reception_integration.duplicate(true) \
 				if using_live_reception else {}})
+	## The shared platform record, only when the physical reception launched one --
+	## the legacy scatter carries none, so the key is absent and the event metadata
+	## is unchanged with the flag off.
+	if reception_pass.has("platform_contact"):
+		(result.events[-1] as RallyEvent).metadata["platform_contact"] = \
+			reception_pass.platform_contact
 	if seam_conflict:
 		result.key_factors.append(_factor("seam_conflict"))
 	if not reception_success:
@@ -1717,6 +1884,7 @@ func resolve(
 			players, lineup, defensive_plan, opponent_team,
 			active_play, false, seed_value
 		)
+		_seed_carried_body_states(attack_state, rally_clock)
 	var setter_response := Dictionary(
 		shadow_summary.get("shadow_setter_response", {})
 	)
@@ -1770,39 +1938,87 @@ func resolve(
 		home_second_contact.candidates, defensive_plan,
 		lineup.active_setter_id(), receiver.id,
 	)
-	var set_contact: Vector2 = reception_pass.destination
-	var second_contact_window := float(pass_trajectory.get("duration", 0.68))
-	var setter_choice := _spatial_setter_choice(
-		home_second_contact.candidates, home_second_contact.starts,
-		defensive_plan, lineup.active_setter_id(), receiver.id, setter,
-		set_contact, second_contact_window,
-		## The serve's own flight. A setter releases toward their target when the
-		## ball is struck, not when the platform touches it -- so this is the run
-		## they have already made by the time the pass exists, and it is the
-		## first of the overlapping timelines `OUTSTANDING` §1 asks for.
-		float(serve_trajectory.get("duration", 0.0)),
-		## **Held, with the reason measured.** This should pass the plan's
-		## `setter_release_target` -- the zone the setter is supposed to set
-		## from, which exists before the serve is struck -- because running them
-		## at `set_contact` is running them at the resolved pass destination,
-		## a coordinate that does not exist yet. That is precognition and the
-		## handoff is right to call it out.
-		##
-		## Passing it turns the movement-agreement gate red, and the direction
-		## says why: SET falls from 0.8344 to 0.7466 and the perceptible-leg
-		## rate goes 0.0579 to 0.1294. A setter who has already reached their
-		## zone has a *short* remaining leg, and a short leg is where the
-		## resolver's allotted duration and the stepped movement model disagree
-		## most -- the fixed costs, the standing start and the turn, are a much
-		## larger share of two tenths of a second than of one and a half.
-		##
-		## So the correct change exposes a real instrument limit rather than
-		## causing a regression, and widening that band a second time to admit
-		## it would be the thing this repository keeps being told not to do.
-		## `OUTSTANDING` §1 carries it: the short-leg timing wants fixing first,
-		## and then this line becomes one word.
-		Vector2.ZERO,
-	)
+	## When the reception published an authoritative free flight, the second
+	## contact is chosen by physical interception -- the same M5 machinery the
+	## transition set uses -- not by `_spatial_setter_choice` against the pass
+	## destination. The intended setter is soft intent; the actual interceptor owns
+	## contact two, may be an emergency setter, and consumes the realised prefix.
+	## A pass no teammate can reach terminates truthfully (floor/net/out gives the
+	## serving team the point; a legal crossing is the opponent's ordinary first
+	## contact). Legacy feeds carry no free flight and keep the spatial choice, so
+	## the flag-off path is unchanged.
+	var physical_choice := {}
+	if str(pass_trajectory.get("trajectory_role", "")) \
+			== "authoritative_free_flight":
+		physical_choice = _physical_second_contact_choice(
+			pass_trajectory, home_second_contact.candidates,
+			home_second_contact.starts, defensive_plan,
+			lineup.active_setter_id(), receiver.id, setter, &"home",
+			defensive_plan.setter_release_target(lineup.active_setter_id()),
+			GeometricAttackPromotionModel.set_contact_height_meters(setter),
+			float(serve_trajectory.get("duration", 0.0)),
+		)
+		_stamp_free_flight_resolution(result, physical_choice)
+		if physical_choice.get("player") == null:
+			var terminal_reason := str(Dictionary(physical_choice.get(
+				"terminal", {}
+			)).get("reason", "unresolved"))
+			if terminal_reason == "crossed_net_unresolved":
+				## The received ball crossed the net unplayed: the opponent makes
+				## their ordinary first team contact, symmetric to every other exit.
+				var opponent_overpass := _resolve_overpass_into_opponent(
+					result, players, lineup, pass_trajectory, opponent_team,
+					defensive_plan, 1, float(result.reception_quality), receiver,
+				)
+				if opponent_overpass != null:
+					return opponent_overpass
+				return _finish(result, "m5_unresolved_overpass", false, receiver.id, {
+					"hitter": receiver.display_name,
+				})
+			## Nobody on the receiving side could set the pass: the point goes to
+			## the serving side. No prior attack exists on a first ball, so the
+			## credit falls back to a bare opponent point.
+			var opponent_attacker := _latest_attack_credit(result, "opponent")
+			return _finish(
+				result, "opponent_kill", false, int(opponent_attacker.id),
+				{"hitter": str(opponent_attacker.name)},
+			)
+	var set_contact := Vector2(physical_choice.get(
+		"contact_position", reception_pass.destination
+	))
+	var second_contact_window := float(physical_choice.get(
+		"contact_time", 0.0
+	)) - float(pass_trajectory.get("start_time", 0.0)) \
+		if not physical_choice.is_empty() \
+		else float(pass_trajectory.get("duration", 0.68))
+	var setter_choice := physical_choice if not physical_choice.is_empty() \
+		else _spatial_setter_choice(
+			home_second_contact.candidates, home_second_contact.starts,
+			defensive_plan, lineup.active_setter_id(), receiver.id, setter,
+			set_contact, second_contact_window,
+			## The serve's own flight. A setter releases toward their target when
+			## the ball is struck, not when the platform touches it -- the run they
+			## have already made by the time the pass exists.
+			float(serve_trajectory.get("duration", 0.0)),
+			## Held for the short-leg timing reason recorded in `OUTSTANDING` §1;
+			## only the legacy spatial arm reaches this.
+			Vector2.ZERO,
+		)
+	## **The height this setter actually takes the ball at.** Under a physical
+	## reception the pass has no authored endpoint, so the height is a property of
+	## the interception rather than of the launch: `_stamp_free_flight_resolution`
+	## has already published exactly this value onto the reception event, and the
+	## capability read below has to consume the same one or the two describe
+	## different contacts. The legacy arm keeps the pass's own delivered height.
+	var delivered_set_contact_height := float(physical_choice.get(
+		"contact_height_meters", NAN
+	)) if not physical_choice.is_empty() \
+		else float(reception_pass.get(
+			"set_contact_height_meters",
+			SetterCapabilityModel.pass_contact_height_meters(
+				float(result.reception_quality), rng.randf()
+			),
+		))
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
@@ -1917,6 +2133,12 @@ func resolve(
 	result.key_factors.append(_factor(
 		"good_pass" if result.reception_quality >= 0.58 else "poor_pass"
 	))
+	## When this ball actually reaches the setter's hands: the interception the
+	## flight was resolved to, or the authored pass's own landing when there was no
+	## flight to intercept.
+	var set_decision_moment := float(physical_choice.contact_time) \
+		if not physical_choice.is_empty() \
+		else _contact_time(pass_trajectory, rally_clock)
 	_add_event(result, RallyEventModel.EventType.SET_DECISION, setter.id, setter.display_name,
 		Vector2(0.50, 0.67), Vector2(0.50, 0.60), true,
 		result.reception_quality,
@@ -1929,9 +2151,17 @@ func resolve(
 			"first_contact_id": receiver.id,
 			## The decision is taken when the ball reaches the setter, and the
 			## window runs from there.
-			"event_time": _contact_time(pass_trajectory, rally_clock),
-			"deadline": _contact_time(pass_trajectory, rally_clock)
-				+ second_contact_window,
+			##
+			## **Which moment that is depends on who ends the flight.** A legacy pass
+			## is authored to land on the setter, so its `end_time` *is* the arrival.
+			## A physical pass is not: its `end_time` is where the untouched ball
+			## would have hit the floor, which is strictly later than the point a
+			## body actually met it. Reading the flight's end there stamped the
+			## decision after the set it precedes, and the causality floor spent 33
+			## corrections putting it back -- the one remaining place where the
+			## untouched endpoint still stood in for the interception.
+			"event_time": set_decision_moment,
+			"deadline": set_decision_moment + second_contact_window,
 			"incoming_trajectory": pass_trajectory})
 
 	## What this setter can do with the ball they are about to receive, and what
@@ -1948,18 +2178,14 @@ func resolve(
 	)
 	var setter_capability := SetterCapabilityModel.evaluate(
 		setter, assignment.tempo, float(result.reception_quality),
-		## The height the pass actually delivered, not a second guess at it.
+		## The height this contact actually happens at, not a second guess at it.
 		## `SetterCapabilitySystem.pass_contact_height_meters` drew this from a
 		## table against a random sail value -- a third model of a fact the pass
 		## itself now computes from its own apex under gravity, and one whose floor
 		## sat above every setter's forehead, so the underhand set it was meant to
-		## produce could never happen.
-		float(reception_pass.get(
-			"set_contact_height_meters",
-			SetterCapabilityModel.pass_contact_height_meters(
-				float(result.reception_quality), rng.randf()
-			),
-		)),
+		## produce could never happen. Resolved once above, so the legacy arm reads
+		## the pass's delivered height and the physical arm reads the interception's.
+		delivered_set_contact_height,
 		setter_approach_quality,
 	)
 	var resolved_tempo := int(setter_capability.resolved_tempo)
@@ -2094,7 +2320,23 @@ func resolve(
 	var release_interval := _release_interval(release_profile, float(result.set_quality))
 	## The instant the ball leaves the setter's hands. The set flight, the SET
 	## event, and the hitter's approach window are all timed from this one value.
-	var set_contact_time := rally_clock + second_contact_window + release_interval
+	##
+	## **The two arms measure from different origins, and only one of them can add
+	## a duration to `rally_clock`.** On the home first ball the clock is never
+	## advanced to the reception -- the reception derives its own moment from the
+	## serve's `end_time` instead -- so `rally_clock` sits behind the pass. The
+	## legacy window is a duration measured from that same lagging origin, so the
+	## sum stays self-consistent. A physical interception is not: its `contact_time`
+	## is an absolute moment on the free flight's own timeline, and adding the
+	## interval between two absolute moments back onto the lagging clock lands the
+	## set *before* the reception that fed it -- which is what the causality floor
+	## was correcting. Read the interception's own moment instead. The transition
+	## paths reach the identical quantity by the other route, because there the
+	## clock has already been advanced to the feeding contact.
+	var set_contact_time := (
+		float(physical_choice.contact_time) + release_interval
+	) if not physical_choice.is_empty() \
+		else rally_clock + second_contact_window + release_interval
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
 		float(set_arc.apex_height_meters),
@@ -2129,6 +2371,23 @@ func resolve(
 			"set_terms": home_set_terms, "emergency_setter": emergency_setter,
 			"first_contact_id": receiver.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
+			## **The leg this setter was actually timed on**, published on the same
+			## terms the opponent first ball and the home continuation already
+			## publish theirs. `movement_duration` under a physical interception is
+			## the travel to the *body* contact -- a reach short of the ball -- and
+			## it is charged against a setter who is already moving. An instrument
+			## that reads the ball position and rebuilds the body at rest is
+			## therefore comparing a different leg against a different assumption,
+			## which is the whole of the movement-agreement residual on this path.
+			## Both values come from the interception that was selected; the legacy
+			## spatial arm falls back to the ball contact and a standing start,
+			## exactly as before.
+			"body_contact_position": Vector2(physical_choice.get(
+				"body_contact_position", set_contact
+			)),
+			"movement_entry_velocity": Vector2(physical_choice.get(
+				"entry_velocity_mps", Vector2.ZERO
+			)),
 			"arrival_margin": setter_arrival_margin,
 			"deadline": set_contact_time,
 			"event_time": set_contact_time,
@@ -2154,6 +2413,17 @@ func resolve(
 	(result.events[-1] as RallyEvent).metadata["height_difficulty"] = set_height_difficulty
 	var set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(set_event, setter_choice)
+	## The ball this set was struck against is the realised prefix that actually
+	## reached the setter, not the full free flight to the floor -- the same
+	## segment stamped onto the reception. This holds the reception-to-set chain by
+	## identity; the legacy spatial arm carries no realised segment and keeps the
+	## pass as stamped above.
+	if set_event != null and not physical_choice.is_empty():
+		var reception_realised := Dictionary(physical_choice.get(
+			"realised_trajectory", {}
+		))
+		if not reception_realised.is_empty():
+			set_event.metadata["incoming_trajectory"] = reception_realised
 	## Which posture this set was released from, and why it was not the other
 	## one. `reason` is diagnostic rather than narratable -- a rushed setter
 	## should read as a setter with their feet on the floor, not as a caption --
@@ -2163,6 +2433,9 @@ func resolve(
 		set_event.metadata["set_posture"] = "jump" if bool(jump_set.jumping) \
 			else "standing"
 		set_event.metadata["set_posture_reason"] = str(jump_set.reason)
+		set_event.metadata["set_closing_speed_mps"] = float(
+			jump_set.get("closing_speed_mps", 0.0)
+		)
 		set_event.metadata["set_release_height_meters"] = set_release_height
 		set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			setter, bool(jump_set.jumping)
@@ -2365,6 +2638,7 @@ func resolve(
 		)
 		hitter_move_time = float(actual_hitter_leg.seconds)
 		live_velocities[hitter.id] = actual_hitter_leg.exit_velocity
+		_commit_facing(hitter.id, actual_hitter_leg)
 		if prepared_actor != null:
 			resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
 				prepared_actor, hitter_body_contact, set_flight_time
@@ -2983,6 +3257,10 @@ func resolve(
 			float(attack_event.metadata.get("event_time", rally_clock)),
 			float(attack_to_block_arc.get("vertical_speed_mps", NAN)),
 			float(attack_to_block_arc.get("swing_duration_seconds", NAN)),
+			NAN, NAN,
+			## The swing's own identity, carried through the re-slice. This is the
+			## same launch met sooner, not a second ball built at the tape.
+			str(attack_trajectory.get("authoritative_flight_id", "")),
 		)
 	## Walk the opponent's blockers to their wall during the *set's* flight,
 	## which is when a block actually forms. Without this they were drawn
@@ -3010,12 +3288,17 @@ func resolve(
 	## met a spike from a position nothing had chosen. This is the same
 	## preparation the home six get on the opponent's attack, pointed the other
 	## way.
-	var opponent_floor_stage := _floor_phase_positions(
-		opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
-		set_target.x,
-		opponent_blocker.id if opponent_blocker != null else -1,
-		assisting_blocker.id if assisting_blocker != null else -1,
-		true, opponent_wall_x,
+	var opponent_floor_intents := {}
+	var opponent_floor_stage := _establish_shape(
+		_floor_phase_positions(
+			opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
+			set_target.x,
+			opponent_blocker.id if opponent_blocker != null else -1,
+			assisting_blocker.id if assisting_blocker != null else -1,
+			true, opponent_wall_x,
+		),
+		opponent_team.on_court_players(), opponent_live_positions,
+		float(set_flight_time), opponent_floor_intents,
 	)
 	for raw_floor_id in opponent_floor_stage:
 		var floor_id := int(raw_floor_id)
@@ -3033,6 +3316,13 @@ func resolve(
 		var opponent_stage_intents := _uniform_intents(
 			opponent_block_stage, &"defending"
 		)
+		## The four behind the wall took a real journey to get there, so their
+		## uniform stamp is replaced by what the traversal actually cost them.
+		## `_uniform_intents` stays for the two blockers, whose staging is the
+		## block path's to describe.
+		for raw_floor_id in opponent_floor_intents:
+			opponent_stage_intents[int(raw_floor_id)] = \
+				opponent_floor_intents[raw_floor_id]
 		if opponent_blocker != null:
 			opponent_stage_intents[opponent_blocker.id] = {
 				"intent": &"blocking", "progress": 0.0,
@@ -3158,6 +3448,10 @@ func resolve(
 			## swing into a waiting digger did exactly what it meant to.
 			"block_intent": str(block_resolution.get("block_intent", "Balanced")),
 			"block_hands": str(block_resolution.get("block_hands", "neutral")),
+			"block_hands_call": str(block_resolution.get("block_hands_call", "")),
+			"block_hands_followed": bool(
+				block_resolution.get("block_hands_followed", false)
+			),
 			## And *how* the wall was beaten, which the attack event already
 			## carried and this one did not. Over the top is a reach problem and
 			## around the edge is a read problem -- they want opposite fixes, and
@@ -3271,11 +3565,66 @@ func resolve(
 		var coverer_reach := _reached_point(
 			coverer, coverer_start, recycle_target,
 			float(opponent_block_trajectory.get("duration", 0.24)), "lateral",
+			0.0,
+			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
+			_incoming_ball_direction(
+				opponent_block_trajectory, recycle_target, attack_target
+			),
 		) if coverer != null else recycle_target
+		var coverage_contact_state := _attack_coverage_contact_state(
+			coverer, coverer_start, recycle_target,
+			float(opponent_block_trajectory.get("duration", 0.24)),
+		)
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
+		## Coverage happens when the blocked ball comes back down, which is the
+		## end of the deflection's own arc. `rally_clock` here is still the set's
+		## contact time -- earlier than the block itself -- so reading the
+		## deflection's end is what stops the cover stamping before the touch it
+		## covers.
+		var coverage_contact_time := float(opponent_block_trajectory.get(
+			"end_time", rally_clock + float(set_flight_time)
+		))
+		var home_coverage_second := _home_second_contact_candidates(players, lineup)
+		var coverage_flight := _coverage_keep_alive_flight(
+			coverer, recycle_target, opponent_block_trajectory,
+			coverage_contact_state.get("arrival", {}),
+			_platform_body_velocity(
+				coverer_start, coverer_reach, coverer_move_time,
+				float(opponent_block_trajectory.get("duration", 0.24)),
+			),
+			coverage_contact_time,
+			home_coverage_second.candidates, home_coverage_second.starts,
+			defensive_plan, lineup.active_setter_id(),
+			defensive_plan.setter_release_target(lineup.active_setter_id()),
+		)
 		var coverage_pass_target := recycle_target + Vector2(0.04, -0.05)
-		_add_event(result, RallyEventModel.EventType.DEFENSE,
+		## `unset` recipient only on the legacy fabricated ball; the physical
+		## keep-alive names the actor the second-contact policy chose. Either way
+		## it is intent, never the endpoint.
+		var coverage_intent: Dictionary = _platform_intent(
+			"attack_coverage", coverage_pass_target, "contact_offset",
+			null, coverage_pass_target,
+		)
+		var coverage_incoming := {}
+		if not coverage_flight.is_empty():
+			coverage_pass_target = Vector2(coverage_flight.destination)
+			coverage_intent = coverage_flight.platform_intent
+			coverage_incoming = coverage_flight.authoritative_free_flight
+		var coverage_meta := {"side": "home", "coverage": "attack",
+			"platform_intent": coverage_intent,
+			"blocked_hitter_id": hitter.id,
+			"movement_start": coverer_start,
+			"movement_target": coverer_reach,
+			"movement_duration": coverer_move_time,
+			"arrival": coverage_contact_state.arrival,
+			"contact_posture": coverage_contact_state.posture,
+			"pass_contact_height_meters": coverage_contact_state.contact_height,
+			"incoming_trajectory": opponent_block_trajectory,
+			"event_time": coverage_contact_time}
+		if not coverage_flight.is_empty():
+			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
+		_add_event(result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Attack coverage",
 			recycle_target, coverage_pass_target,
@@ -3285,22 +3634,8 @@ func resolve(
 			),
 			"%d%% recycle control from the assigned attack-coverage shape." % roundi(
 				coverage_quality * 100.0
-			), {"side": "home", "coverage": "attack",
-				"blocked_hitter_id": hitter.id,
-				"movement_start": coverer_start,
-				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time,
-				## Coverage happens when the blocked ball comes back down, which
-				## is the end of the deflection's own arc. `rally_clock` here is
-				## still the set's contact time -- earlier than the block itself,
-				## so this stamped the cover as happening before the touch it
-				## covers.
-				"event_time": float(opponent_block_trajectory.get(
-					"end_time", rally_clock + float(set_flight_time)
-				))})
-		rally_clock = maxf(rally_clock, float(opponent_block_trajectory.get(
-			"end_time", rally_clock + float(set_flight_time)
-		)))
+			), coverage_meta)
+		rally_clock = maxf(rally_clock, coverage_contact_time)
 		if not coverage_success:
 			return _finish(result, "blocked", false, hitter.id, {
 				"hitter": hitter.display_name,
@@ -3309,13 +3644,20 @@ func resolve(
 		## A ball that came off the block is not a clean one. The coverage
 		## contact's own control is what the setter has to work with, and a
 		## formed wall degrades it further -- which is the only channel a
-		## blocker has to the result other than a stuff.
+		## blocker has to the result other than a stuff. When the physical path is
+		## open the setter is now reached against the coverage ball's own flight;
+		## the trailing arguments are the defaults otherwise, so the legacy call is
+		## unchanged.
 		return _resolve_home_continuation(
 			result, players, lineup, coverer, coverage_pass_target,
 			opponent_team, defensive_plan, 1,
 			coverage_quality * lerpf(
 				1.0, BLOCK_DEFLECTION_CARRY, clampf(block_strength, 0.0, 1.0)
 			),
+			float(coverage_flight.get("duration", 0.0)),
+			float(opponent_block_trajectory.get("duration", 0.0)) \
+				if not coverage_flight.is_empty() else 0.0,
+			coverage_incoming,
 		)
 
 	## A deflected ball reaches the floor slower, and the defence gets that time.
@@ -3419,6 +3761,19 @@ func resolve(
 		float(opponent_defense.distance_meters),
 	)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
+	## Intent names the release seat the setter is trying to reach. The legacy
+	## pass below still aims at `opponent_pass_target`; publishing the honest
+	## anchor must not smuggle a destination or trajectory change into slice 2.
+	var opponent_dig_setter := opponent_team.setter() as VolleyballPlayer
+	var opponent_dig_release := _opponent_setter_release_target(opponent_team)
+	var opponent_dig_intent := _platform_intent(
+		"controlled_dig", opponent_dig_release, "release_seat",
+		opponent_dig_setter,
+		Vector2(opponent_live_positions.get(
+			opponent_dig_setter.id if opponent_dig_setter != null else -1,
+			opponent_dig_release,
+		)),
+	)
 	## When the ball actually reaches the defender, which is the end of the
 	## swing's own arc. The transition that follows builds its second-contact
 	## window from `rally_clock`, so the clock has to arrive here too -- left at
@@ -3432,8 +3787,48 @@ func resolve(
 		opponent_defender, Vector2(opponent_defense.start), attack_target,
 		opponent_defense_time, "lateral",
 		float(opponent_defense.get("read_error_meters", 0.0)),
+		GeometricAttackPromotionModel.pass_contact_height_meters(opponent_defender),
+		_incoming_ball_direction(
+			opponent_arriving_trajectory, attack_target,
+			Vector2(opponent_arriving_trajectory.get("start_position", attack_target)),
+		),
 	)
-	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
+	## The ball that leaves this dig, resolved once, here. Only a successful dig
+	## has an outgoing flight -- a defender who never controlled it did not pass
+	## anything, and stamping a trajectory on a miss is exactly the event-truth
+	## corruption that would make a beaten dig indistinguishable from a poor one.
+	var opponent_dig_pass := {}
+	if dug:
+		opponent_dig_pass = _dig_pass_result(
+			opponent_defender, attack_target, opponent_pass_target,
+			opponent_dig_control,
+			Dictionary(opponent_defense.get("arrival", {})),
+			last_dig_posture, opponent_arriving_trajectory,
+			float(opponent_defense.distance_meters),
+			opponent_team.setter() as VolleyballPlayer, opponent_dig_time,
+			_platform_body_velocity(
+				Vector2(opponent_defense.start), opponent_defender_reach,
+				float(opponent_defense.travel_time), opponent_defense_time,
+			),
+			opponent_dig_intent,
+		)
+		opponent_pass_target = Vector2(opponent_dig_pass.destination)
+	## Where they actually ended up, not where the ball was. A defender who was
+	## beaten to it starts the next phase short of it, which is the position the
+	## rest of the rally should reason from.
+	##
+	## **Above the event, because the event reads it.** This sat below the
+	## `_add_event` call, alone among the four floor-defence sites -- the home dig
+	## and the transition dig both write the reach before appending. Nothing
+	## between the two lines resolved anything, so the drift was invisible until
+	## two published facts started reading `opponent_live_positions` at append
+	## time: `body_contact_position` reported every opponent digger contacting
+	## the ball from the spot they started at (13 of 13 diggers, mean travel to
+	## the ball 1.97 m, mean travel to the published body 0.000 m), and
+	## `opponent_phase_targets` below published a defensive shape in which the
+	## digger had not moved while the caption said "after moving 1.8m".
+	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
+	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
 		opponent_dig_control, "Defensive contact",
@@ -3442,6 +3837,7 @@ func resolve(
 			str(attack_choice.direction), float(opponent_defense.distance_meters),
 			" Scouting anticipated this lane." if floor_defense_bonus >= 0.035 else "",
 		], {"side": "opponent", "dig_terms": opponent_dig_terms,
+			"platform_intent": opponent_dig_intent,
 			"movement_start": opponent_defense.start,
 			"movement_duration": opponent_defense.travel_time,
 			"reach_margin_meters": opponent_defense.reach_margin_meters,
@@ -3475,12 +3871,23 @@ func resolve(
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
 			"recovering_count": _recovering_count(rally_clock),
-			"adaptation_bonus": floor_defense_bonus})
+			"adaptation_bonus": floor_defense_bonus,
+			## Published by the dig itself, so the ball the setter is resolved
+			## against and the ball that gets drawn are the same object.
+			"outgoing_trajectory": opponent_dig_pass.get("trajectory", {}),
+			"pass_apex_meters": opponent_dig_pass.get("pass_apex_meters", 0.0),
+			"pass_contact_height_meters": opponent_dig_pass.get(
+				"pass_contact_height_meters", 0.0
+			),
+			"set_contact_height_meters": opponent_dig_pass.get(
+				"set_contact_height_meters", 0.0
+			),
+			"pass_duration_seconds": opponent_dig_pass.get("duration", 0.0),
+			"target_error_meters": opponent_dig_pass.get("target_error_meters", 0.0),
+			"pass_spoil": opponent_dig_pass.get("spoil", 0.0),
+			"platform_contact": opponent_dig_pass.get("platform_contact", {}),
+		})
 	_note_recovery(opponent_defender, opponent_dig_recovery, opponent_dig_time)
-	## Where they actually ended up, not where the ball was. A defender who was
-	## beaten to it starts the next phase short of it, which is the position the
-	## rest of the rally should reason from.
-	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
 	rally_clock = maxf(rally_clock, opponent_dig_time)
 	if dug:
 		result.key_factors.append(_factor("strong_defense"))
@@ -3488,6 +3895,10 @@ func resolve(
 			result, players, lineup, hitter, opponent_pass_target,
 			opponent_team, defensive_plan, 1, opponent_dig_control, false,
 			opponent_defender.id,
+			float(opponent_dig_pass.get("set_contact_height_meters", NAN)),
+			float(opponent_dig_pass.get("pass_apex_meters", 0.0)),
+			Dictionary(opponent_dig_pass.get("trajectory", {})),
+			float(attack_trajectory.get("duration", 0.0)),
 		)
 	result.key_factors.append(_factor("attack_control"))
 	return _finish(result, "kill", true, hitter.id, {
@@ -3536,9 +3947,10 @@ func _resolve_home_serve(
 		+ (0.06 if str(serve_decision.mode) == "aggressive" else -0.015)
 		+ rng.randf_range(-0.14, 0.14), 0.05, 0.98
 	)
-	var error_chance := _serve_error_chance(server, serve_risk)
-	var serve_error := rng.randf() < error_chance
-	var opponent_landing := _serve_landing_point(
+	## See the opponent serve: drawn to hold the RNG stream, and deciding nothing.
+	var _retired_serve_error_draw := \
+		rng.randf() < _serve_error_chance(server, serve_risk)
+	var serve_aim := _serve_landing_point(
 		str(serve_decision.target), server,
 		opponent_team.players if opponent_team != null else [],
 		opponent_team.current_lineup() if opponent_team != null else null,
@@ -3552,40 +3964,27 @@ func _resolve_home_serve(
 		CourtConstants.serve_origin(0.82, true),
 		serve_decision,
 	)
-	_geometric_serve_record(
-		"geometric_serve_home", server,
-		CourtConstants.serve_origin(0.82, true), opponent_landing, true, serve_risk,
-	)
-	if serve_error:
-		opponent_landing = _errant_serve_landing(
-			opponent_landing, serve_quality, false
-		)
 	var home_serve_origin := CourtConstants.serve_origin(0.82, true)
-	var home_serve_distance := RallyKinematics.court_distance_meters(
-		home_serve_origin, opponent_landing
+	## The same call the opponent makes, in the same order, off the same model.
+	## Every asymmetry ever found in this engine was one side modelled fully and
+	## the other as a parallel implementation, and the serve had two of them.
+	var canonical_serve := _canonical_serve(
+		"geometric_serve_home", server,
+		home_serve_origin, serve_aim, true, serve_risk,
 	)
-	var serve_arc := _serve_arc(
-		"geometric_serve_home",
-		home_serve_distance,
-		_serve_launch_angle_degrees(server, serve_quality),
-		GeometricAttackPromotionModel.serve_contact_height_meters(
-			server,
-			GeometricAttackPromotionModel.serve_effort_for_style(
-				str(server.primary_serve_style)
-			),
-		),
-		_ground_to_net_meters(
-			home_serve_origin, opponent_landing, home_serve_distance
-		),
-		_serve_spin(server),
-	)
-	var serve_time := float(serve_arc.duration_seconds)
+	var opponent_landing: Vector2 = canonical_serve.get("landing", serve_aim)
+	var serve_error := bool(canonical_serve.get("error", true))
+	var serve_spin: Dictionary = canonical_serve.get("spin", _serve_spin(server))
+	var serve_time := float(canonical_serve.get("duration_seconds", 1.0))
 	## Named so the reception can carry it as its incoming ball, exactly as the
 	## opponent-serve path already does.
 	var serve_trajectory := _ball_trajectory(
-		"serve", CourtConstants.serve_origin(0.82, true), opponent_landing,
-		serve_time, float(serve_arc.apex_height_meters),
+		"serve", home_serve_origin, opponent_landing,
+		serve_time, float(canonical_serve.get("apex_rise_meters", 0.0)),
+		-1.0, NAN, NAN,
+		float(canonical_serve.get("contact_height_meters", NAN)),
 	)
+	_stamp_launch_state(serve_trajectory, canonical_serve)
 	## Their floor-defence spot, from the plan if there is one and the rotation
 	## grid if there is not -- the same fallback `_initial_home_positions` uses.
 	var home_serve_base: Vector2 = CourtConstants.slot_position(1)
@@ -3607,8 +4006,17 @@ func _resolve_home_serve(
 			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style,
 			"event_time": 0.0, "contact_time": serve_time,
-			## See the opponent serve: struck from behind the baseline, then onto
-			## the court over the serve's own flight.
+			## See the opponent serve: what the ball did, from its own flight.
+			"serve_out_reason": canonical_serve.get("out_reason", ""),
+			"net_clearance_meters": canonical_serve.get(
+				"net_clearance_meters", 0.0
+			),
+			"launch_speed_mps": serve_trajectory.get("launch_speed_mps", 0.0),
+			"launch_angle_degrees": serve_trajectory.get(
+				"launch_angle_degrees", 0.0
+			),
+			## Struck from behind the baseline, then onto the court over the
+			## serve's own flight.
 			"movement_start": CourtConstants.serve_origin(0.82, true),
 			"movement_target": home_serve_base,
 			"outgoing_trajectory": serve_trajectory})
@@ -3638,7 +4046,8 @@ func _resolve_home_serve(
 	var opponent_arrival: Dictionary = _read_adjusted_arrival(
 		Dictionary(opponent_claim.get("arrival", {})),
 		_read_error_meters(
-			receiver, serve_trajectory, _serve_spin(server),
+			## The spin the launch search settled on. See the opponent's read.
+			receiver, serve_trajectory, serve_spin,
 			float(serve_trajectory.get("start_time", rally_clock)),
 		),
 	)
@@ -3692,7 +4101,12 @@ func _resolve_home_serve(
 	var reception_success := receiver_arrived \
 		and reception_quality >= RECEPTION_PLAYABLE_FLOOR
 	var opponent_receiver_reach := _reached_point(
-		receiver, receiver_start, opponent_landing, serve_time, "lateral"
+		receiver, receiver_start, opponent_landing, serve_time, "lateral", 0.0,
+		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
+		_incoming_ball_direction(
+			serve_trajectory, opponent_landing,
+			CourtConstants.serve_origin(0.82, true),
+		),
 	)
 	opponent_live_positions[receiver.id] = opponent_receiver_reach
 	## Where the setter will stand, resolved before the pass rather than after it
@@ -3705,15 +4119,28 @@ func _resolve_home_serve(
 	## further down -- two independent draws, so the pass that was drawn and the
 	## pass that was played landed in different places. The home side has always
 	## used one result for both.
+	var opponent_reception_setter := _opponent_setter(opponent_team)
+	var opponent_reception_intent := _platform_intent(
+		"serve_reception", opponent_setter_release, "release_seat",
+		opponent_reception_setter,
+		Vector2(opponent_live_positions.get(
+			opponent_reception_setter.id if opponent_reception_setter != null else -1,
+			opponent_setter_release,
+		)),
+	)
 	var opponent_pass := _reception_pass_result(
 		receiver, receiver_start, opponent_landing, opponent_setter_release,
 		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
 		reception_quality, 0.02, 0.49, serve_trajectory,
 		_opponent_setter(opponent_team),
+		opponent_reception_intent,
+		_platform_body_velocity(
+			receiver_start, opponent_receiver_reach, receiver_move_time, serve_time
+		),
+		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
 	)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
-	var opponent_receive_intents := {}
 	var home_serve_intents := {}
 	var home_by_id := {}
 	for entry in players:
@@ -3732,14 +4159,14 @@ func _resolve_home_serve(
 			_arrival_phrase(opponent_arrival, receiver_arrived, support_count),
 			" Scouting anticipated this target." if serve_receive_bonus >= 0.035 else "",
 		], {"side": "opponent", "landing": opponent_landing,
+			"platform_intent": opponent_reception_intent,
 			## The other side's receive shape, on the same event and for the same
 			## reason as the home one above.
-			"opponent_phase_targets": _receive_formation_map(
+			"opponent_phase_targets": _lineup_live_shape(
 				opponent_team.current_lineup() if opponent_team != null else null,
-				opponent_team.players if opponent_team != null else [],
-				true, opponent_receive_intents,
+				opponent_live_positions,
 			),
-			"opponent_phase_intents": opponent_receive_intents,
+			"opponent_phase_intents": receive_formation_intents,
 			"home_phase_targets": home_serve_transition,
 			"home_phase_intents": home_serve_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
@@ -3788,6 +4215,11 @@ func _resolve_home_serve(
 			"incoming_speed_mps": opponent_pass.get("incoming_speed_mps", 0.0),
 			"setter_release_target": opponent_setter_release,
 			"actual_pass_target": opponent_pass_destination})
+	## The shared platform record, only when the physical reception launched one;
+	## absent (and byte-neutral) on the legacy scatter.
+	if opponent_pass.has("platform_contact"):
+		(result.events[-1] as RallyEvent).metadata["platform_contact"] = \
+			opponent_pass.platform_contact
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
 	## `opponent_setter_release` is resolved above, before the pass, because the
@@ -3856,6 +4288,19 @@ func _resolve_home_serve(
 		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
 		float(opponent_pass.get("set_contact_height_meters", NAN)),
 		float(opponent_pass.get("pass_apex_meters", 0.0)),
+		## **The pass this setter is actually taking.** Passed `{}` until now, so
+		## `second_contact_window` fell through to the 0.68 literal and the
+		## opponent's first-ball setter was timed against a constant while the
+		## realized flight sat two lines above, already published on the
+		## reception event as its `outgoing_trajectory`. The home first ball has
+		## used `pass_trajectory.duration` since it existed; the dig callers into
+		## this function already pass their own. This was the last feed on either
+		## side still handing the second contact a number instead of a ball.
+		Dictionary(opponent_pass.get("trajectory", {})),
+		## The serve's own flight, which is exactly what the home first ball
+		## passes. This side's setter has been running since the ball was struck
+		## too, and until now was timed as though they had watched it land.
+		serve_time,
 	)
 
 
@@ -3907,8 +4352,44 @@ func _resolve_opponent_transition(
 	## the same honest gap `pass_contact_height_meters` above already carries --
 	## and a jump set is refused rather than guessed at.
 	pass_apex_meters: float = 0.0,
+	## **The actual ball, not a description of one.** Everything above is a
+	## summary the caller extracted; this is the flight the feeding contact
+	## published, and the setter is now reached against its own duration rather
+	## than against `DEFAULT_SECOND_CONTACT_SECONDS`. Empty for the feeds that
+	## still have no physical model -- see the fallback note at the window below.
+	incoming_pass_trajectory: Dictionary = {},
+	## **How long these volis have already been running when the pass is played**,
+	## which on this side of the net was nothing at all.
+	##
+	## The home side has passed the feeding ball's own flight into
+	## `_spatial_setter_choice` since that parameter existed -- the serve's for a
+	## first ball, the swing's for a transition -- because a setter releases
+	## toward their zone when the ball is *struck*, not when the platform touches
+	## it. This path passed nothing, so every opponent second contact was timed
+	## from a standing start.
+	##
+	## That was invisible while the designated setter's duty bonus was large
+	## enough to win regardless. Once responsibility stopped being absolute the
+	## two sides began answering identical physical situations differently: on a
+	## stranded-setter fixture the home side kept the setter and the opponent
+	## transferred the ball, with nothing between them but this argument. Gate
+	## `HOME/OPPONENT SYMMETRY` in `tools/run_second_contact_probe.gd`.
+	##
+	## **Last in the list deliberately**, for the same reason
+	## `incoming_pass_trajectory` above is: four callers pass this function
+	## positionally, and inserting a parameter in the middle silently hands one
+	## of them a float where a trajectory belongs.
+	head_start_seconds: float = 0.0,
 ) -> Resource:
 	var transition_penalty := float(exchange_number - 1) * 0.035
+	## **How long the setter actually has.** This was the literal 0.68 that
+	## `DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS` names, applied to every
+	## continuation regardless of what the ball did -- so a floated dig and a
+	## flat one gave the setter the same budget to reach the same point, and no
+	## dig could ever make a setter late. A dug ball now states its own duration.
+	var second_contact_window := float(incoming_pass_trajectory.get(
+		"duration", DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS
+	))
 	## The pass destination is the setter's physical contact point. Keeping a
 	## separate display-only setter coordinate made the ball originate away from
 	## the marker and introduced a visible snap at every opponent set.
@@ -3925,36 +4406,130 @@ func _resolve_opponent_transition(
 	)
 	if opponent_setter == null:
 		opponent_setter = opponent_team.setter() as VolleyballPlayer
-	var opponent_setter_choice := _spatial_setter_choice(
-		opponent_second_contact.candidates, opponent_second_contact.starts,
-		opponent_plan_for_setter, int(opponent_team.setter_id),
-		first_contact_player_id, opponent_setter,
-		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
-	)
+	var physical_choice := {}
+	if str(incoming_pass_trajectory.get("trajectory_role", "")) \
+			== "authoritative_free_flight":
+		physical_choice = _physical_second_contact_choice(
+			incoming_pass_trajectory,
+			opponent_second_contact.candidates, opponent_second_contact.starts,
+			opponent_plan_for_setter, int(opponent_team.setter_id),
+			first_contact_player_id, opponent_setter, &"opponent",
+			_opponent_setter_release_target(opponent_team),
+			GeometricAttackPromotionModel.set_contact_height_meters(opponent_setter),
+			head_start_seconds,
+		)
+		_stamp_free_flight_resolution(result, physical_choice)
+		if physical_choice.get("player") == null:
+			var terminal_reason := str(Dictionary(physical_choice.get(
+				"terminal", {}
+			)).get("reason", "unresolved"))
+			if terminal_reason == "crossed_net_unresolved":
+				## The opponent's ball crossed back: home makes the ordinary first
+				## team contact. Falls through to the old terminal when the overpass
+				## is not a control contact this checkpoint wires.
+				var home_overpass := _resolve_overpass_into_home(
+					result, incoming_pass_trajectory, players, lineup,
+					opponent_team, defensive_plan, exchange_number, incoming_quality,
+				)
+				if home_overpass != null:
+					return home_overpass
+				return _finish(result, "m5_unresolved_overpass", true,
+					first_contact_player_id, {})
+			var home_attacker := _latest_attack_credit(result, "home")
+			return _finish(
+				result, "kill", true, int(home_attacker.id),
+				{"hitter": str(home_attacker.name)},
+			)
+		opponent_setter_position = Vector2(physical_choice.contact_position)
+		second_contact_window = float(physical_choice.contact_time) \
+			- float(incoming_pass_trajectory.get("start_time", 0.0))
+	var opponent_setter_choice := physical_choice \
+		if not physical_choice.is_empty() \
+		else _spatial_setter_choice(
+			opponent_second_contact.candidates, opponent_second_contact.starts,
+			opponent_plan_for_setter, int(opponent_team.setter_id),
+			first_contact_player_id, opponent_setter,
+			opponent_setter_position, second_contact_window,
+			## The run these volis had already made. Zero until a caller supplies the
+			## feeding ball's flight, which is today the serve-receive path only --
+			## see the parameter's own note for which three callers still pass
+			## nothing and why they were not changed on an unmeasured hunch.
+			head_start_seconds,
+		)
 	if opponent_setter_choice.player != null:
 		opponent_setter = opponent_setter_choice.player as VolleyballPlayer
 	if opponent_setter == null:
 		opponent_setter = opponent_team.setter() as VolleyballPlayer
-	var setter_start: Vector2 = opponent_live_positions.get(
-		opponent_setter.id, opponent_team.court_position(opponent_setter.id, "transition")
-	)
-	## The corner this setter has to turn, from the same chooser the home side
-	## uses. Only the detour is taken across, not the chooser's travel time: that
-	## is timed on the `transition` profile and this path has always used
-	## `lateral`, and swapping the profile here would be a second change wearing
-	## this one's name.
-	var opponent_detour: Variant = _navigation_waypoint(
-		opponent_setter, setter_start, opponent_setter_position,
-		opponent_second_contact.starts,
-	)
-	var setter_move_time := _movement_time(
-		opponent_setter, setter_start, opponent_setter_position, "lateral",
-		opponent_detour["corner"] if opponent_detour != null else null,
-	)
+	## **Consume the selection rather than rebuilding a second one.**
+	##
+	## These four values used to be reconstructed here from scratch: the start
+	## re-read from `opponent_live_positions`, the route re-solved, the travel
+	## re-timed on the `lateral` profile, and the margin measured against the
+	## literal `DEFAULT_SECOND_CONTACT_SECONDS`. All four already existed on
+	## `opponent_setter_choice`, computed from the state the voli was actually
+	## selected on -- so the side effect was that selection and execution
+	## described two different setters.
+	##
+	## Measured on one selection with both recipes applied to it: with the serve
+	## flight as a head start the chooser had the setter standing **on** the ball
+	## (0.000 m, margin +0.420 s) while this block had them 1.698 m away with a
+	## margin of -0.287 s. Worse, that -0.287 was **identical at pass durations
+	## of 0.42, 0.68, 0.95, 1.30 and 1.80 s**, because a constant cannot hear the
+	## ball. The home side has measured the same quantity against
+	## `second_contact_window` since it existed.
+	##
+	## The profile change from `lateral` to `transition` rides along and is not
+	## cosmetic: it is the profile the chooser timed the decision on, so keeping
+	## `lateral` here would be preserving the disagreement rather than the model.
+	## An earlier note held the travel time back to avoid "a second change
+	## wearing this one's name" -- correct then, when both recipes at least
+	## started from the same position; the head start ended that.
+	##
+	## The fallbacks matter: `_spatial_setter_choice` can return a `player` that
+	## is not `opponent_setter` after the two null-guards above, and consuming
+	## another voli's run would be a worse error than rebuilding one. Guarded.
+	var setter_choice_matches: bool = \
+		opponent_setter_choice.get("player") == opponent_setter
+	var setter_start: Vector2 = Vector2(opponent_setter_choice.start) \
+		if setter_choice_matches \
+		else Vector2(opponent_live_positions.get(
+			opponent_setter.id,
+			opponent_team.court_position(opponent_setter.id, "transition"),
+		))
+	var opponent_detour: Variant = opponent_setter_choice.get("navigation") \
+		if setter_choice_matches \
+		else _navigation_waypoint(
+			opponent_setter, setter_start, opponent_setter_position,
+			opponent_second_contact.starts,
+		)
+	## **A release is a run, so this leg is `transition`.**
+	##
+	## It was `lateral`, and it was the only setter movement in the engine that
+	## was: `_spatial_setter_choice` -- the selector both sides and the shadow
+	## systems go through -- resolves a release as `transition` at both of its
+	## movement sites. This is the fallback taken when the second contact
+	## transferred away from the designated setter, and what it computes is still
+	## a *release*: the designated setter travelling from where they stand to the
+	## setting position. Purpose decides the form, not distance. A setter opening
+	## up and running to the ball is the same movement whether or not they end up
+	## being the one who sets it.
+	##
+	## The policy's other half -- an established setter *adjusting* to a realized
+	## pass is `lateral` -- has no site in the resolver today. There is one setter
+	## movement, base to setting position. Recorded rather than given a site it
+	## does not have. See `docs/review/HOME_WALL_FORMATION.md`.
+	var setter_move_time: float = float(opponent_setter_choice.travel_time) \
+		if setter_choice_matches \
+		else _movement_time(
+			opponent_setter, setter_start, opponent_setter_position, "transition",
+			opponent_detour["corner"] if opponent_detour != null else null,
+		)
 	## The same quantity the home setter is scored on: how much of the pass
 	## flight is left once they have reached the ball. A setter who arrives
-	## early can load a jump set; one still scrambling takes it flat-footed.
-	var setter_arrival_margin := DEFAULT_SECOND_CONTACT_SECONDS - setter_move_time
+	## early can load a jump set; one still scrambling takes it flat-footed --
+	## and now, as on the home side, it is the realized pass that says how long
+	## that flight was.
+	var setter_arrival_margin := second_contact_window - setter_move_time
 	var set_geometry := _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48), 1.0,
@@ -3965,7 +4540,10 @@ func _resolve_opponent_transition(
 	var opponent_transition_intents := {}
 	var opponent_transition_targets := _opponent_transition_phase_map(
 		opponent_team, first_contact_player_id, opponent_setter.id,
-		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
+		## The realized pass's own flight, not the 0.68 literal. The other five
+		## volis were being moved on a fixed budget while the ball they are
+		## transitioning behind took whatever time it took.
+		opponent_setter_position, second_contact_window,
 		setter_arrival_margin, opponent_transition_intents,
 	)
 	## Same model as the home transition set, and now the same attributes. The
@@ -4002,6 +4580,8 @@ func _resolve_opponent_transition(
 	## exact shape this engine has produced eleven times now. A setter taking a
 	## dug ball is doing the same thing they do off a pass: reaching for a
 	## contact at some height, off some approach, for some tempo.
+	if physical_choice.has("contact_height_meters"):
+		pass_contact_height_meters = float(physical_choice.contact_height_meters)
 	var opponent_capability := SetterCapabilityModel.evaluate(
 		opponent_setter, opponent_tempo_call, incoming_quality,
 		pass_contact_height_meters if is_finite(pass_contact_height_meters) \
@@ -4252,19 +4832,27 @@ func _resolve_opponent_transition(
 	## The same posture question the home side asks. This side released standing
 	## on every ball in the game because nothing here ever passed `true`.
 	var opponent_jump_set := _jump_set_decision(
-		opponent_setter, pass_apex_meters, setter_arrival_margin,
+		opponent_setter,
+		pass_contact_height_meters if is_finite(pass_contact_height_meters) \
+			else pass_apex_meters,
+		setter_arrival_margin,
 		RallyKinematics.court_distance_meters(
 			Vector2(opponent_setter_choice.get("origin", setter_start)),
 			opponent_setter_position,
 		),
 		float(opponent_setter_choice.get("total_travel_seconds", setter_move_time)),
 	)
-	var opponent_release_height := GeometricAttackPromotionModel \
-		.set_contact_height_meters(opponent_setter, bool(opponent_jump_set.jumping))
+	if bool(physical_choice.get("requires_jump", false)):
+		opponent_jump_set["jumping"] = true
+		opponent_jump_set["reason"] = "required by physical interception"
+	var opponent_release_height := pass_contact_height_meters \
+		if not physical_choice.is_empty() \
+		else GeometricAttackPromotionModel.set_contact_height_meters(
+			opponent_setter, bool(opponent_jump_set.jumping)
+		)
 	var set_arc := _set_arc(
 		opponent_setter, opponent_tempo, opponent_set_quality,
-		minf(opponent_release_height, maxf(pass_apex_meters, 0.01)) \
-			if pass_apex_meters > 0.0 else opponent_release_height,
+		opponent_release_height,
 		GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
 		RallyKinematics.court_distance_meters(
 			opponent_setter_position, opponent_contact
@@ -4313,9 +4901,17 @@ func _resolve_opponent_transition(
 	)
 	var opponent_set_contact_time := rally_clock \
 		+ opponent_second_contact_window + opponent_release_interval
+	## **The set begins where the setter actually touched the ball.**
+	## `dig_position` is where the feeding contact was *aimed*; under a physical
+	## interception `opponent_setter_position` is where a body actually met the
+	## flight, and the two are different points. The event's own start position has
+	## to be the second one, or the displayed contact, the published flight origin
+	## and the setter's marker describe three different places. Identical to
+	## `dig_position` on the legacy arm, where the setter is placed on the pass
+	## destination by construction.
 	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
 		opponent_setter.display_name,
-		dig_position, opponent_contact, true, opponent_set_quality,
+		opponent_setter_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
 		{"side": "opponent",
@@ -4330,6 +4926,22 @@ func _resolve_opponent_transition(
 			"option_evaluation": opponent_option_evaluation,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
+			"body_contact_position": Vector2(physical_choice.get(
+				"body_contact_position", opponent_setter_position
+			)),
+			"movement_entry_velocity": Vector2(physical_choice.get(
+				"entry_velocity_mps", Vector2.ZERO
+			)),
+			## **Both were absent on this side and present on the other.**
+			## `_stamp_second_contact_claim` deliberately leaves `arrival_margin`
+			## to each call site because the live-setter override can move the
+			## window after the choice was made -- and its note said every call
+			## site stamps its own, which was true of the home paths and not of
+			## this one. Measured: 0 of 310 opponent sets carried either key,
+			## so no opponent second contact in the game could be audited for
+			## how comfortably it arrived or for whether it was an emergency.
+			"arrival_margin": setter_arrival_margin,
+			"emergency_setter": opponent_setter.id != int(opponent_team.setter_id),
 			"set_distance_meters": resolved_set_geometry.distance_meters,
 			"set_angle_degrees": resolved_set_geometry.angle_degrees,
 			"release_distance_meters": resolved_set_geometry.release_distance_meters,
@@ -4351,8 +4963,30 @@ func _resolve_opponent_transition(
 		opponent_set_event.metadata["set_posture_reason"] = str(
 			opponent_jump_set.reason
 		)
+		opponent_set_event.metadata["set_closing_speed_mps"] = float(
+			opponent_jump_set.get("closing_speed_mps", 0.0)
+		)
 		opponent_set_event.metadata["set_release_height_meters"] = \
 			opponent_release_height
+		## **The ball this set was resolved against.** Stamped so the chain from
+		## a dig to its set can be proven by identity rather than by two
+		## endpoints happening to be close. Empty for feeds that publish no
+		## physical flight, which is what makes the remaining gaps countable.
+		##
+		## Under a physical interception the ball that reached this setter is the
+		## **realised prefix**, not the full authoritative flight to the floor --
+		## the very segment `_stamp_free_flight_resolution` wrote onto the feeding
+		## contact as its outgoing ball. Report that same object here, so the
+		## dig-to-set chain holds by identity and the setter's window is the
+		## interception time it was actually resolved against, rather than the time
+		## the untouched ball would have taken to land. Legacy and spatial feeds
+		## carry no realised segment and fall through to the full flight unchanged.
+		var opponent_set_incoming := Dictionary(
+			opponent_setter_choice.get("realised_trajectory", {})
+		)
+		opponent_set_event.metadata["incoming_pass_trajectory"] = \
+			opponent_set_incoming if not opponent_set_incoming.is_empty() \
+			else incoming_pass_trajectory
 		opponent_set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			opponent_setter, bool(opponent_jump_set.jumping)
 		)
@@ -4466,6 +5100,7 @@ func _resolve_opponent_transition(
 		rng.seed + exchange_number * 2411,
 	)
 	opponent_state.simulation_time = maxf(rally_clock - 0.55, 0.0)
+	_seed_carried_body_states(opponent_state, opponent_state.simulation_time)
 	var opponent_hitter_actor := opponent_state.player_state(
 		&"opponent", opponent_hitter.id
 	)
@@ -4624,6 +5259,9 @@ func _resolve_opponent_transition(
 		opponent_setter_position.x, set_flight_time,
 		opponent_second_contact_window + opponent_release_interval,
 		opponent_hitter, opponent_set_height_extra,
+		## The drift the pre-release call already applied. This is a re-formation
+		## of the same wall with better information, not a second misread.
+		Dictionary(home_block_formation.get("setter_pull", {})),
 	)
 	home_block_read_tags = [
 		"attack:%s" % str(attack_choice.get("attack_type", "Attack"))
@@ -5006,6 +5644,33 @@ func _resolve_opponent_transition(
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
 			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## **Answering the complaint immediately above.**
+			##
+			## `wall_size` says how many blockers joined; it does not say why the
+			## others did not, and "nobody was assigned" wants the opposite fix from
+			## "nobody arrived". The home wall reports no wall at all on roughly a
+			## quarter of opponent swings while the opponent's wall never does, and
+			## that asymmetry cannot be attributed from `wall_size` alone. These are
+			## the formation's own terms, forwarded rather than recomputed, so they
+			## cannot disagree with the wall that was actually built.
+			"home_block_terms": {
+				"front_blockers": int(home_block_formation.get("front_blocker_count", 0)),
+				"primary_id": staged_home_primary.id if staged_home_primary != null else -1,
+				"primary_close": float(home_block_formation.get("primary_close", 0.0)),
+				"assist_close_attempted": float(home_block_formation.get(
+					"assist_close_attempted", 0.0
+				)),
+				"primary_close_terms": Dictionary(home_block_formation.get(
+					"primary_close_terms", {}
+				)).duplicate(true),
+				"read_quality": float(home_block_formation.get("read_quality", 0.0)),
+				"preset_window_seconds": float(home_block_formation.get(
+					"preset_window_seconds", 0.0
+				)),
+				"set_flight_seconds": float(home_block_formation.get(
+					"set_flight_seconds", 0.0
+				)),
+			},
 			## When each blocker jumped, so playback can draw the apex where the
 			## blocker actually put it. Without this the drawn jump was centred on
 			## the contact for everybody, which makes a mistimed block look
@@ -5041,7 +5706,20 @@ func _resolve_opponent_transition(
 			"movement_duration": opponent_move_time,
 			"movement_entry_velocity": opponent_entry_velocity,
 			"outgoing_trajectory": opponent_attack_trajectory})
+	## **The ball this swing was actually struck against.**
+	##
+	## Read straight off the SET event this path already published and retargeted,
+	## so the identity is by construction rather than by two endpoints happening to
+	## agree. The home first ball has carried it since it existed; this path and
+	## the home continuation did not, so the one-ball chain could be audited on one
+	## of the three attack paths and was silently unprovable on the other two.
+	## Reporting only -- the swing was already resolved against `set_flight_time`
+	## and this set's arc.
 	var opponent_attack_event := result.events[-1] as RallyEvent
+	if opponent_attack_event != null and opponent_set_event != null:
+		opponent_attack_event.metadata["incoming_trajectory"] = Dictionary(
+			opponent_set_event.metadata.get("outgoing_trajectory", {})
+		)
 	opponent_live_positions[opponent_hitter.id] = opponent_body_contact
 	## The opponent could not miss a swing. Not "rarely" -- there was no branch
 	## for it anywhere on this path, so every transition ball the opponent hit
@@ -5106,7 +5784,36 @@ func _resolve_opponent_transition(
 			float(opponent_flight.get("start_time", rally_clock)),
 			float(to_block_arc.get("vertical_speed_mps", NAN)),
 			float(to_block_arc.get("swing_duration_seconds", NAN)),
+			NAN, NAN,
+			## Same rule as the home side's re-slice: a prefix keeps the launch it
+			## is a prefix of.
+			str(opponent_flight.get("authoritative_flight_id", "")),
 		)
+	## **The swing the wall actually met, re-read after the truncation above.**
+	##
+	## The block event used to publish `opponent_attack_trajectory` -- the local
+	## captured *before* that re-slice -- as both its incoming ball and the source
+	## of its own timestamp. So on every home block that touched the ball, the
+	## wall was recorded intersecting an arc the attack no longer had: measured at
+	## 100 of 100 touching home blocks against 0 of 113 on the opponent side,
+	## which is the tell that this is one path drifting from its twin rather than
+	## a shared rule being wrong.
+	##
+	## The timestamp came with it. `_contact_time` is the flight's `end_time`, and
+	## on an *untruncated* swing that is the moment the ball reaches the floor
+	## behind the blockers -- so the hands were being stamped up to 1.140 s after
+	## the ball they were supposedly touching had landed. `_swing_reaches_net`
+	## exists for exactly this and its own note says why: reception, set and dig
+	## happen when a flight finishes, a block happens partway through one.
+	##
+	## Read through the event rather than kept in a second local, because the
+	## event's metadata *is* the published ball and a local copy is how the two
+	## came apart in the first place.
+	var opponent_swing_flight: Dictionary = opponent_attack_trajectory
+	if opponent_attack_event != null:
+		opponent_swing_flight = Dictionary(opponent_attack_event.metadata.get(
+			"outgoing_trajectory", opponent_attack_trajectory
+		))
 	## Same correction as the home block's: the ball has to arrive before the
 	## hands can touch it.
 	var home_block_trajectory := _block_deflection_trajectory(
@@ -5160,18 +5867,21 @@ func _resolve_opponent_transition(
 	var blocker_id := blocker.id if blocker != null else -1
 	var assisting_blocker_id := assisting_blocker.id \
 		if assisting_blocker != null else -1
-	var floor_phase_positions := _home_floor_phase_positions(
-		lineup, defensive_plan, opponent_contact.x,
-		blocker_id, assisting_blocker_id, home_wall_x,
+	var home_floor_intents := {}
+	var floor_phase_positions := _establish_shape(
+		_home_floor_phase_positions(
+			lineup, defensive_plan, opponent_contact.x,
+			blocker_id, assisting_blocker_id, home_wall_x,
+		),
+		players, live_positions, float(set_flight_time), home_floor_intents,
 	)
 	for raw_player_id in floor_phase_positions:
 		live_positions[int(raw_player_id)] = Vector2(
 			floor_phase_positions[raw_player_id]
 		)
 	if opponent_attack_event != null:
-		opponent_attack_event.metadata["home_phase_intents"] = _uniform_intents(
-			floor_phase_positions, &"defending"
-		)
+		opponent_attack_event.metadata["home_phase_intents"] = \
+			_defensive_intents(floor_phase_positions, home_floor_intents)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
@@ -5212,6 +5922,10 @@ func _resolve_opponent_transition(
 			)),
 			"signature_actor_id": int(geometric.get("signature_actor_id", blocker_id)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
+			"block_hands_call": str(block_result.get("block_hands_call", "")),
+			"block_hands_followed": bool(
+				block_result.get("block_hands_followed", false)
+			),
 			## Alongside the hands, and for the same reason -- see the note on the
 			## opponent block above. The plan's intent is what separates a funnel
 			## that funnelled from a seal that was beaten.
@@ -5232,8 +5946,8 @@ func _resolve_opponent_transition(
 			"net_crossing_x": float(geometric.get("net_crossing_x", 0.5)),
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
-			"home_phase_intents": _uniform_intents(
-				floor_phase_positions, &"defending"
+			"home_phase_intents": _defensive_intents(
+				floor_phase_positions, home_floor_intents
 			),
 			"primary_close": block_result.primary_close,
 			"primary_close_terms": Dictionary(
@@ -5258,9 +5972,17 @@ func _resolve_opponent_transition(
 			"setter_pull": block_result.setter_pull,
 			"read_quality": block_result.read_quality,
 			"opponent_setter_position": opponent_setter_position,
-			"event_time": _contact_time(opponent_attack_trajectory, rally_clock),
-			"incoming_trajectory": opponent_attack_trajectory,
+			"event_time": _swing_reaches_net(opponent_swing_flight, rally_clock),
+			"incoming_trajectory": opponent_swing_flight,
 			"outgoing_trajectory": home_block_trajectory})
+	## The home blockers are in the air. Registered before the floor-defence
+	## claim below reads `_recovery_time_penalties`, so a blocker who has just
+	## jumped is not offered the next ball as a standing body.
+	_note_block_airborne(
+		Dictionary(geometric.get("block_jump_timing", {})),
+		[blocker, assisting_blocker],
+		_contact_time(opponent_attack_trajectory, rally_clock),
+	)
 	## The mirror of the home side's net-decided point: through the hands, off
 	## them and out, or placed off them on purpose. Claimed before the touch and
 	## funnel branches, which would otherwise hand the ball back to a home
@@ -5313,16 +6035,62 @@ func _resolve_opponent_transition(
 			coverer, coverer_start, home_block_target, "lateral"
 		) if coverer != null else 4.0
 		var coverer_reach := _reached_point(
-			coverer, coverer_start, home_block_target, coverage_time, "lateral"
+			coverer, coverer_start, home_block_target, coverage_time, "lateral",
+			0.0,
+			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
+			_incoming_ball_direction(
+				home_block_trajectory, home_block_target, opponent_contact
+			),
 		) if coverer != null else home_block_target
+		var coverage_contact_state := _attack_coverage_contact_state(
+			coverer, coverer_start, home_block_target, coverage_time,
+		)
 		if coverer != null:
 			opponent_live_positions[coverer.id] = coverer_reach
-		var coverage_pass_target := home_block_target + Vector2(0.04, 0.05)
 		var coverage_contact_time := float(home_block_trajectory.get(
 			"end_time", rally_clock + coverage_time
 		))
+		var opponent_coverage_second := _opponent_second_contact_candidates(
+			opponent_team
+		)
+		var coverage_flight := _coverage_keep_alive_flight(
+			coverer, home_block_target, home_block_trajectory,
+			coverage_contact_state.get("arrival", {}),
+			_platform_body_velocity(
+				coverer_start, coverer_reach, coverer_move_time, coverage_time,
+			),
+			coverage_contact_time,
+			opponent_coverage_second.candidates, opponent_coverage_second.starts,
+			opponent_coverage_plan, int(opponent_team.setter_id),
+			_opponent_setter_release_target(opponent_team),
+		)
+		var coverage_pass_target := home_block_target + Vector2(0.04, 0.05)
+		var coverage_intent: Dictionary = _platform_intent(
+			"attack_coverage", coverage_pass_target, "contact_offset",
+			null, coverage_pass_target,
+		)
+		var coverage_incoming := {}
+		if not coverage_flight.is_empty():
+			coverage_pass_target = Vector2(coverage_flight.destination)
+			coverage_intent = coverage_flight.platform_intent
+			coverage_incoming = coverage_flight.authoritative_free_flight
+		var coverage_meta := {
+			"side": "opponent", "coverage": "attack",
+			"platform_intent": coverage_intent,
+			"blocked_hitter_id": opponent_hitter.id,
+			"movement_start": coverer_start,
+			"movement_target": coverer_reach,
+			"movement_duration": coverer_move_time,
+			"arrival": coverage_contact_state.arrival,
+			"contact_posture": coverage_contact_state.posture,
+			"pass_contact_height_meters": coverage_contact_state.contact_height,
+			"incoming_trajectory": home_block_trajectory,
+			"event_time": coverage_contact_time,
+		}
+		if not coverage_flight.is_empty():
+			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
 		_add_event(
-			result, RallyEventModel.EventType.DEFENSE,
+			result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Opponent attack coverage",
 			home_block_target, coverage_pass_target,
@@ -5333,15 +6101,7 @@ func _resolve_opponent_transition(
 			"%d%% control on opponent attack coverage." % roundi(
 				coverage_quality * 100.0
 			),
-			{
-				"side": "opponent", "coverage": "attack",
-				"blocked_hitter_id": opponent_hitter.id,
-				"movement_start": coverer_start,
-				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time,
-				"incoming_trajectory": home_block_trajectory,
-				"event_time": coverage_contact_time,
-			},
+			coverage_meta,
 		)
 		rally_clock = maxf(rally_clock, coverage_contact_time)
 		if not coverage_success:
@@ -5367,6 +6127,7 @@ func _resolve_opponent_transition(
 				1.0, BLOCK_DEFLECTION_CARRY, clampf(home_block, 0.0, 1.0)
 			),
 			false, coverer.id if coverer != null else -1,
+			NAN, 0.0, coverage_incoming,
 		)
 	if block_outcome == "touch":
 		result.key_factors.append(_factor("block_touch"))
@@ -5463,6 +6224,11 @@ func _resolve_opponent_transition(
 		## Anyone still getting up from the last ball has that long less to reach
 		## this one.
 		_recovery_time_penalties(rally_clock),
+		floor_phase_positions,
+		-1.0,
+		## And which way each of them is set. A ball arriving behind a defender
+		## costs them the turn their own locomotion prices.
+		_ready_facings(floor_phase_positions.keys(), &"home"),
 	)
 	var defender := defense_claim.get("player") as VolleyballPlayer
 	var defender_arrived := defender != null
@@ -5561,9 +6327,28 @@ func _resolve_opponent_transition(
 	var defender_reach := _reached_point(
 		defender, defender_start, home_target, attack_time, "lateral",
 		float(defense_arrival.get("read_error_meters", 0.0)),
+		GeometricAttackPromotionModel.pass_contact_height_meters(defender),
+		_incoming_ball_direction(
+			home_block_trajectory if not home_block_trajectory.is_empty()
+				else visible_opponent_attack,
+			home_target, Vector2(
+				visible_opponent_attack.get("start_position", home_target)
+			),
+		),
 	)
 	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
+	var home_dig_setter := _player_by_id(players, lineup.active_setter_id())
+	var home_dig_release: Vector2 = defensive_plan.setter_release_target(
+		lineup.active_setter_id()
+	)
+	var home_dig_intent := _platform_intent(
+		"controlled_dig", home_dig_release, "release_seat",
+		home_dig_setter,
+		Vector2(live_positions.get(
+			lineup.active_setter_id(), home_dig_release
+		)),
+	)
 	## See the mirrored site on the home swing: the continuation's second-contact
 	## window is measured from `rally_clock`, so the clock has to reach the dig.
 	var home_arriving_trajectory := home_block_trajectory \
@@ -5578,7 +6363,21 @@ func _resolve_opponent_transition(
 		var defence_player := entry as VolleyballPlayer
 		if defence_player != null:
 			home_by_id_for_defense[defence_player.id] = defence_player
-	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
+	var home_dig_pass := {}
+	if defense_success:
+		home_dig_pass = _dig_pass_result(
+			defender, home_target, defense_pass_target, home_dig_control,
+			defense_arrival, str(last_dig_posture), opponent_attack_trajectory,
+			float(defense_arrival.get("distance_meters", 0.0)),
+			_player_by_id(players, lineup.active_setter_id()), rally_clock,
+			_platform_body_velocity(
+				defender_start, defender_reach, defender_move_time, attack_time,
+			),
+			home_dig_intent,
+			home_arriving_trajectory,
+		)
+		defense_pass_target = Vector2(home_dig_pass.destination)
+	_add_event(result, RallyEventModel.EventType.DIG, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
 		home_dig_control, "%s defends" % defender.display_name,
 		"%d%% defensive contact against a %d%% attack. %s %s" % [
@@ -5586,6 +6385,7 @@ func _resolve_opponent_transition(
 			_responsibility_phrase(defensive_plan, defender.id, attack_type),
 			_arrival_phrase(defense_arrival, defender_arrived, support_count),
 		], {"side": "home", "dig_terms": home_dig_terms,
+			"platform_intent": home_dig_intent,
 			"attack_type": attack_type,
 			## The same pair the reception publishes: nearest against winner.
 			"nearest_id": int(defense_claim.get("nearest_id", -1)),
@@ -5631,6 +6431,20 @@ func _resolve_opponent_transition(
 			"incoming_force": last_dig_force,
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
+			## The ball this dig actually put up. Published here rather than
+			## invented later, so the setter and the drawing share one object.
+			"outgoing_trajectory": home_dig_pass.get("trajectory", {}),
+			"pass_apex_meters": home_dig_pass.get("pass_apex_meters", 0.0),
+			"pass_contact_height_meters": home_dig_pass.get(
+				"pass_contact_height_meters", 0.0
+			),
+			"set_contact_height_meters": home_dig_pass.get(
+				"set_contact_height_meters", 0.0
+			),
+			"pass_duration_seconds": home_dig_pass.get("duration", 0.0),
+			"target_error_meters": home_dig_pass.get("target_error_meters", 0.0),
+			"pass_spoil": home_dig_pass.get("spoil", 0.0),
+			"platform_contact": home_dig_pass.get("platform_contact", {}),
 			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": home_dig_time})
@@ -5655,13 +6469,14 @@ func _resolve_opponent_transition(
 	return _resolve_home_continuation(
 		result, players, lineup, defender, defense_pass_target,
 		opponent_team, defensive_plan, exchange_number, home_dig_control,
-		## No dig flight yet -- a dug ball has no modelled arc, so the second
-		## contact keeps the fallback window rather than being handed a zero.
-		0.0,
+		## The dig's own flight, which this parameter has been waiting for. It
+		## was 0.0 with a note saying a dug ball had no modelled arc; it has one.
+		float(home_dig_pass.get("duration", 0.0)),
 		## The swing they just dug. The home side has been transitioning since
 		## the ball was struck, not since it came off the platform, which is the
 		## same head start the first ball takes from the serve.
 		float(opponent_attack_trajectory.get("duration", 0.0)),
+		Dictionary(home_dig_pass.get("trajectory", {})),
 	)
 
 
@@ -5687,15 +6502,57 @@ func _resolve_home_continuation(
 	## has not been given them is unchanged rather than silently worse.
 	dig_flight_seconds: float = 0.0,
 	transition_head_start_seconds: float = 0.0,
+	## The dug ball itself, for the same reason the opponent path takes one: a
+	## set has to be resolved against a flight, not against a duration lifted out
+	## of one. **Last in the list deliberately** -- two callers pass this
+	## function positionally, and inserting it in the middle silently handed one
+	## of them a float where a trajectory belongs.
+	incoming_pass_trajectory: Dictionary = {},
 ) -> Resource:
 	var cont_second_contact := _home_second_contact_candidates(players, lineup)
 	var setter := _second_contact_setter(
 		cont_second_contact.candidates, defensive_plan,
 		lineup.active_setter_id(), defender.id,
 	)
+	var physical_choice := {}
+	if str(incoming_pass_trajectory.get("trajectory_role", "")) \
+			== "authoritative_free_flight":
+		physical_choice = _physical_second_contact_choice(
+			incoming_pass_trajectory,
+			cont_second_contact.candidates, cont_second_contact.starts,
+			defensive_plan, lineup.active_setter_id(), defender.id, setter,
+			&"home", defensive_plan.setter_release_target(
+				lineup.active_setter_id()
+			), GeometricAttackPromotionModel.set_contact_height_meters(setter),
+			transition_head_start_seconds,
+		)
+		_stamp_free_flight_resolution(result, physical_choice)
+		if physical_choice.get("player") == null:
+			var terminal_reason := str(Dictionary(physical_choice.get(
+				"terminal", {}
+			)).get("reason", "unresolved"))
+			if terminal_reason == "crossed_net_unresolved":
+				## The home ball crossed over: the opponent makes the ordinary first
+				## team contact. Symmetric to the home path; old terminal on fall-through.
+				var opponent_overpass := _resolve_overpass_into_opponent(
+					result, players, lineup, incoming_pass_trajectory, opponent_team,
+					defensive_plan, exchange_number, incoming_quality, defender,
+				)
+				if opponent_overpass != null:
+					return opponent_overpass
+				return _finish(result, "m5_unresolved_overpass", false, defender.id, {
+					"hitter": defender.display_name,
+				})
+			var opponent_attacker := _latest_attack_credit(result, "opponent")
+			return _finish(
+				result, "opponent_kill", false, int(opponent_attacker.id),
+				{"hitter": str(opponent_attacker.name)},
+			)
 	# Preserve contact continuity: the transition set begins where the dig
 	# actually finishes instead of teleporting the ball to center court.
-	var set_contact := dig_position
+	var set_contact := Vector2(physical_choice.get(
+		"contact_position", dig_position
+	))
 	## **The hardcoded 0.68 the movement-agreement gate has been naming for
 	## months.** It is the one window in the engine that was not derived from a
 	## ball: the first-ball set takes the pass's own flight and this took a
@@ -5703,17 +6560,22 @@ func _resolve_home_continuation(
 	## chasing a flat one had exactly the same time. The constant stays as the
 	## fallback for a dig with no modelled flight, which is what the zero
 	## default above means.
-	var second_contact_window := dig_flight_seconds if dig_flight_seconds > 0.0 \
-		else DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS
-	var setter_choice := _spatial_setter_choice(
-		cont_second_contact.candidates, cont_second_contact.starts,
-		defensive_plan, lineup.active_setter_id(), defender.id, setter,
-		set_contact, second_contact_window,
-		## The opponent's attack flight. The home side has been transitioning out
-		## of defence since the swing was struck, not since the dig came off the
-		## platform -- the same head start the first ball gets from the serve.
-		transition_head_start_seconds,
-	)
+	var second_contact_window := float(physical_choice.get(
+		"contact_time", 0.0
+	)) - float(incoming_pass_trajectory.get("start_time", 0.0)) \
+		if not physical_choice.is_empty() \
+		else (dig_flight_seconds if dig_flight_seconds > 0.0 \
+			else DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS)
+	var setter_choice := physical_choice if not physical_choice.is_empty() \
+		else _spatial_setter_choice(
+			cont_second_contact.candidates, cont_second_contact.starts,
+			defensive_plan, lineup.active_setter_id(), defender.id, setter,
+			set_contact, second_contact_window,
+			## The opponent's attack flight. The home side has been transitioning out
+			## of defence since the swing was struck, not since the dig came off the
+			## platform -- the same head start the first ball gets from the serve.
+			transition_head_start_seconds,
+		)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
@@ -5766,11 +6628,16 @@ func _resolve_home_continuation(
 	## dig is contacting the ball below their standing reach or above what the
 	## approach lets them jump to, and that is priced identically for a first
 	## ball. It was simply never asked on this path.
+	var realised_pass_contact_height := float(physical_choice.get(
+		"contact_height_meters", NAN
+	))
+	if is_nan(realised_pass_contact_height):
+		realised_pass_contact_height = SetterCapabilityModel.pass_contact_height_meters(
+			incoming_quality, rng.randf()
+		)
 	var setter_capability := SetterCapabilityModel.evaluate(
 		setter, assignment.tempo, incoming_quality,
-		SetterCapabilityModel.pass_contact_height_meters(
-			incoming_quality, rng.randf()
-		),
+		realised_pass_contact_height,
 		clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
 	)
 	## Capability is not permission here either. The first ball abandons a tempo
@@ -5858,15 +6725,21 @@ func _resolve_home_continuation(
 	## implied -- when a dig grows an arc, this line is where it arrives.
 	var cont_jump_set := _jump_set_decision(
 		setter,
-		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		realised_pass_contact_height,
 		setter_arrival_margin,
 		RallyKinematics.court_distance_meters(
 			Vector2(setter_choice.get("origin", setter_start)), set_contact
 		),
 		float(setter_choice.get("total_travel_seconds", setter_move_time)),
 	)
-	var cont_release_height := GeometricAttackPromotionModel \
-		.set_contact_height_meters(setter, bool(cont_jump_set.jumping))
+	if bool(physical_choice.get("requires_jump", false)):
+		cont_jump_set["jumping"] = true
+		cont_jump_set["reason"] = "required by physical interception"
+	var cont_release_height := realised_pass_contact_height \
+		if not physical_choice.is_empty() \
+		else GeometricAttackPromotionModel.set_contact_height_meters(
+			setter, bool(cont_jump_set.jumping)
+		)
 	var continuation_set_arc := _set_arc(
 		setter, assignment.tempo, set_quality,
 		cont_release_height,
@@ -5929,6 +6802,12 @@ func _resolve_home_continuation(
 			"emergency_setter": emergency_setter,
 			"first_contact_id": defender.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
+			"body_contact_position": Vector2(physical_choice.get(
+				"body_contact_position", set_contact
+			)),
+			"movement_entry_velocity": Vector2(physical_choice.get(
+				"entry_velocity_mps", Vector2.ZERO
+			)),
 			"arrival_margin": setter_arrival_margin,
 			"flight_time": continuation_flight_time,
 			"release_interval": cont_release_interval,
@@ -5942,12 +6821,28 @@ func _resolve_home_continuation(
 				"set", set_contact, set_target, continuation_flight_time,
 				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
 			)})
+	## Lineage, as on the opponent side: the flight this set was resolved
+	## against, so a probe can prove the chain instead of comparing endpoints.
+	## Under a physical interception that flight is the realised prefix that
+	## actually reached the setter -- the same segment stamped onto the feeding
+	## contact -- not the full authoritative flight to the floor. Legacy feeds
+	## carry no realised segment and fall through unchanged.
+	if not result.events.is_empty():
+		var cont_set_incoming := Dictionary(
+			physical_choice.get("realised_trajectory", {})
+		)
+		result.events[-1].metadata["incoming_pass_trajectory"] = \
+			cont_set_incoming if not cont_set_incoming.is_empty() \
+			else incoming_pass_trajectory
 	var cont_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(cont_set_event, setter_choice)
 	if cont_set_event != null:
 		cont_set_event.metadata["set_posture"] = "jump" \
 			if bool(cont_jump_set.jumping) else "standing"
 		cont_set_event.metadata["set_posture_reason"] = str(cont_jump_set.reason)
+		cont_set_event.metadata["set_closing_speed_mps"] = float(
+			cont_jump_set.get("closing_speed_mps", 0.0)
+		)
 		cont_set_event.metadata["back_set"] = bool(cont_set_geometry.back_set)
 		cont_set_event.metadata["behind_meters"] = float(
 			cont_set_geometry.behind_meters
@@ -5966,6 +6861,7 @@ func _resolve_home_continuation(
 		rng.seed + exchange_number * 1009,
 	)
 	transition_state.simulation_time = maxf(rally_clock - 0.55, 0.0)
+	_seed_carried_body_states(transition_state, transition_state.simulation_time)
 	for raw_player_id in transition_state.home_players:
 		var phase_actor := transition_state.player_state(&"home", int(raw_player_id))
 		if phase_actor != null:
@@ -6102,6 +6998,7 @@ func _resolve_home_continuation(
 	)
 	var hitter_move_time := float(continuation_leg.seconds)
 	live_velocities[hitter.id] = continuation_leg.exit_velocity
+	_commit_facing(hitter.id, continuation_leg)
 	var continuation_set_path_contact := SetPathReadModelRef.assess_contact(
 		hitter, continuation_body_contact, continuation_ideal_body
 	)
@@ -6450,6 +7347,20 @@ func _resolve_home_continuation(
 			"flight_time": continuation_attack_flight,
 			"event_time": cont_set_contact_time + continuation_flight_time,
 			"outgoing_trajectory": continuation_attack_trajectory})
+	## **The ball this swing was actually struck against.**
+	##
+	## Read straight off the SET event this path already published and retargeted,
+	## so the identity is by construction rather than by two endpoints happening to
+	## agree. The home first ball has carried it since it existed; this path and
+	## the opponent transition did not, so the one-ball chain could be audited on one
+	## of the three attack paths and was silently unprovable on the other two.
+	## Reporting only -- the swing was already resolved against `set_flight_time`
+	## and this set's arc.
+	var cont_swing_event := result.events[-1] as RallyEvent
+	if cont_swing_event != null and cont_set_event != null:
+		cont_swing_event.metadata["incoming_trajectory"] = Dictionary(
+			cont_set_event.metadata.get("outgoing_trajectory", {})
+		)
 	live_positions[hitter.id] = continuation_body_contact
 	## The continuation now owns a real timeline instead of stamping every
 	## contact with the dig's clock: set contact, then the set flight, then the
@@ -6492,12 +7403,17 @@ func _resolve_home_continuation(
 		cont_block_stage[opponent_blocker.id] = Vector2(cont_wall.primary_position)
 	if assisting_blocker != null:
 		cont_block_stage[assisting_blocker.id] = Vector2(cont_wall.assist_position)
-	var cont_floor_stage := _floor_phase_positions(
-		opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
-		set_target.x,
-		opponent_blocker.id if opponent_blocker != null else -1,
-		assisting_blocker.id if assisting_blocker != null else -1,
-		true, cont_wall_x,
+	var cont_floor_intents := {}
+	var cont_floor_stage := _establish_shape(
+		_floor_phase_positions(
+			opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
+			set_target.x,
+			opponent_blocker.id if opponent_blocker != null else -1,
+			assisting_blocker.id if assisting_blocker != null else -1,
+			true, cont_wall_x,
+		),
+		opponent_team.on_court_players(), opponent_live_positions,
+		float(continuation_flight_time), cont_floor_intents,
 	)
 	for raw_floor_id in cont_floor_stage:
 		var floor_id := int(raw_floor_id)
@@ -6510,6 +7426,10 @@ func _resolve_home_continuation(
 	if not cont_block_stage.is_empty():
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_targets"] = \
 			cont_block_stage
+		## This site published where the continuation defence stood and never why
+		## or for how long, which the other two both did. Same map, same shape.
+		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
+			_defensive_intents(cont_block_stage, cont_floor_intents)
 	var cont_net_contact := Vector2(set_target.x, 0.50)
 	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
 		else Vector2(set_target.x, 0.47)
@@ -6602,6 +7522,10 @@ func _resolve_home_continuation(
 					if opponent_blocker != null else -1
 			)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
+			"block_hands_call": str(block_result.get("block_hands_call", "")),
+			"block_hands_followed": bool(
+				block_result.get("block_hands_followed", false)
+			),
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			## When each blocker jumped, so playback can draw the apex where the
 			## blocker actually put it. Without this the drawn jump was centred on
@@ -6697,16 +7621,60 @@ func _resolve_home_continuation(
 			coverer, coverer_start, block_event_end, "lateral"
 		) if coverer != null else 4.0
 		var coverer_reach := _reached_point(
-			coverer, coverer_start, block_event_end, coverage_time, "lateral"
+			coverer, coverer_start, block_event_end, coverage_time, "lateral",
+			0.0,
+			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
+			_incoming_ball_direction(
+				cont_block_trajectory, block_event_end, attack_target
+			),
 		) if coverer != null else block_event_end
+		var coverage_contact_state := _attack_coverage_contact_state(
+			coverer, coverer_start, block_event_end, coverage_time,
+		)
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
-		var coverage_pass_target := block_event_end + Vector2(0.04, -0.05)
 		var coverage_contact_time := float(cont_block_trajectory.get(
 			"end_time", rally_clock + coverage_time
 		))
+		var cont_coverage_second := _home_second_contact_candidates(players, lineup)
+		var coverage_flight := _coverage_keep_alive_flight(
+			coverer, block_event_end, cont_block_trajectory,
+			coverage_contact_state.get("arrival", {}),
+			_platform_body_velocity(
+				coverer_start, coverer_reach, coverer_move_time, coverage_time,
+			),
+			coverage_contact_time,
+			cont_coverage_second.candidates, cont_coverage_second.starts,
+			defensive_plan, lineup.active_setter_id(),
+			defensive_plan.setter_release_target(lineup.active_setter_id()),
+		)
+		var coverage_pass_target := block_event_end + Vector2(0.04, -0.05)
+		var coverage_intent: Dictionary = _platform_intent(
+			"attack_coverage", coverage_pass_target, "contact_offset",
+			null, coverage_pass_target,
+		)
+		var coverage_incoming := {}
+		if not coverage_flight.is_empty():
+			coverage_pass_target = Vector2(coverage_flight.destination)
+			coverage_intent = coverage_flight.platform_intent
+			coverage_incoming = coverage_flight.authoritative_free_flight
+		var coverage_meta := {
+			"side": "home", "coverage": "attack",
+			"platform_intent": coverage_intent,
+			"blocked_hitter_id": hitter.id,
+			"movement_start": coverer_start,
+			"movement_target": coverer_reach,
+			"movement_duration": coverer_move_time,
+			"arrival": coverage_contact_state.arrival,
+			"contact_posture": coverage_contact_state.posture,
+			"pass_contact_height_meters": coverage_contact_state.contact_height,
+			"incoming_trajectory": cont_block_trajectory,
+			"event_time": coverage_contact_time,
+		}
+		if not coverage_flight.is_empty():
+			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
 		_add_event(
-			result, RallyEventModel.EventType.DEFENSE,
+			result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Attack coverage",
 			block_event_end, coverage_pass_target,
@@ -6717,15 +7685,7 @@ func _resolve_home_continuation(
 			"%d%% recycle control in exchange %d." % [
 				roundi(coverage_quality * 100.0), exchange_number,
 			],
-			{
-				"side": "home", "coverage": "attack",
-				"blocked_hitter_id": hitter.id,
-				"movement_start": coverer_start,
-				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time,
-				"incoming_trajectory": cont_block_trajectory,
-				"event_time": coverage_contact_time,
-			},
+			coverage_meta,
 		)
 		rally_clock = maxf(rally_clock, coverage_contact_time)
 		if not coverage_success:
@@ -6749,8 +7709,9 @@ func _resolve_home_continuation(
 			coverage_quality * lerpf(
 				1.0, BLOCK_DEFLECTION_CARRY, clampf(block_quality, 0.0, 1.0)
 			),
-			coverage_time,
+			float(coverage_flight.get("duration", coverage_time)),
 			float(continuation_visible_attack_trajectory.get("duration", 0.0)),
+			coverage_incoming,
 		)
 	## A transition dig is the same act as any other; the defender is simply
 	## already in the rally rather than reading a first-ball swing. It was not
@@ -6853,6 +7814,13 @@ func _resolve_home_continuation(
 		opponent_defender, transition_defender_start, attack_target,
 		cont_defense_time, "lateral",
 		float(cont_defense.get("read_error_meters", 0.0)),
+		GeometricAttackPromotionModel.pass_contact_height_meters(opponent_defender),
+		_incoming_ball_direction(
+			continuation_arriving_trajectory, attack_target,
+			Vector2(continuation_arriving_trajectory.get(
+				"start_position", attack_target
+			)),
+		),
 	)
 	if opponent_defender != null:
 		opponent_live_positions[opponent_defender.id] = transition_defender_reach
@@ -6860,12 +7828,54 @@ func _resolve_home_continuation(
 		"end_time", rally_clock + cont_defense_time
 	))
 	rally_clock = maxf(rally_clock, cont_dig_time)
-	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
+	var cont_desired_target := attack_target + Vector2(0.04, -0.03)
+	var cont_dig_setter := opponent_team.setter() as VolleyballPlayer
+	var cont_dig_release := _opponent_setter_release_target(opponent_team)
+	var cont_dig_intent := _platform_intent(
+		"controlled_dig", cont_dig_release, "release_seat",
+		cont_dig_setter,
+		Vector2(opponent_live_positions.get(
+			cont_dig_setter.id if cont_dig_setter != null else -1,
+			cont_dig_release,
+		)),
+	)
+	var cont_dig_pass := {}
+	if dug:
+		cont_dig_pass = _dig_pass_result(
+			opponent_defender, attack_target, cont_desired_target,
+			cont_dig_control,
+			## The arrival, which was `{}` -- so `reach_margin` defaulted to 0.0 and
+			## `stretched` computed a constant 0.294 on every continuation dig,
+			## whatever the defender actually did. `PLATFORM_CONTACT.md` section 4b
+			## traced it and stopped; it is not a design question, because
+			## `cont_defense` carries the arrival and the two lines above already
+			## read it.
+			##
+			## Measured over 600 rallies before the repair: 9 resolved continuation
+			## passes, reach margins spanning -0.160 to 1.866, and the stretch they
+			## imply is **0.000 at the median** -- so 8 of the 9 were charged a
+			## stretch penalty for a ball they reached comfortably. A term that
+			## cannot vary is not a weak term; it is an absent one wearing a weight.
+			Dictionary(cont_defense.get("arrival", {})),
+			str(last_dig_posture),
+			continuation_arriving_trajectory,
+			transition_defender_start.distance_to(transition_defender_reach)
+				* CourtConstants.COURT_WIDTH_METERS,
+			opponent_team.setter() as VolleyballPlayer, cont_dig_time,
+			_platform_body_velocity(
+				transition_defender_start, transition_defender_reach,
+				float(cont_defense.travel_time), cont_defense_time,
+			),
+			cont_dig_intent,
+		)
+		cont_desired_target = Vector2(cont_dig_pass.destination)
+	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
-		attack_target + Vector2(0.04, -0.03), dug, cont_dig_control,
+		cont_desired_target, dug, cont_dig_control,
 		"Opponent dig · exchange %d" % exchange_number,
 		"Contact 1 of 3 · %d%% control." % roundi(cont_dig_control * 100.0),
 		{"side": "opponent",
+			"platform_intent": cont_dig_intent,
 			"incoming_trajectory": continuation_arriving_trajectory,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
@@ -6876,6 +7886,20 @@ func _resolve_home_continuation(
 			"incoming_force": last_dig_force,
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
+			## The ball this dig actually put up. Published here rather than
+			## invented later, so the setter and the drawing share one object.
+			"outgoing_trajectory": cont_dig_pass.get("trajectory", {}),
+			"pass_apex_meters": cont_dig_pass.get("pass_apex_meters", 0.0),
+			"pass_contact_height_meters": cont_dig_pass.get(
+				"pass_contact_height_meters", 0.0
+			),
+			"set_contact_height_meters": cont_dig_pass.get(
+				"set_contact_height_meters", 0.0
+			),
+			"pass_duration_seconds": cont_dig_pass.get("duration", 0.0),
+			"target_error_meters": cont_dig_pass.get("target_error_meters", 0.0),
+			"pass_spoil": cont_dig_pass.get("spoil", 0.0),
+			"platform_contact": cont_dig_pass.get("platform_contact", {}),
 			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": cont_dig_time})
@@ -6887,9 +7911,13 @@ func _resolve_home_continuation(
 			"play": "Default T3 Outside",
 		}, "kill_default")
 	return _resolve_opponent_transition(
-		result, players, lineup, hitter, attack_target,
+		result, players, lineup, hitter, cont_desired_target,
 		opponent_team, defensive_plan, exchange_number + 1, cont_dig_control,
 		false, opponent_defender.id,
+		float(cont_dig_pass.get("set_contact_height_meters", NAN)),
+		float(cont_dig_pass.get("pass_apex_meters", 0.0)),
+		Dictionary(cont_dig_pass.get("trajectory", {})),
+		float(continuation_attack_trajectory.get("duration", 0.0)),
 	)
 
 
@@ -7163,11 +8191,14 @@ func _contest_block(
 	## What the hands mean to do, decided before the bands are read because it
 	## moves one of them. The margin is the block's own lead over the swing, which
 	## is what a blocker in the air can feel.
-	var hands := _block_hands_intent(
+	var hands_intent := _block_hands_intent(
 		formation.get("primary") as VolleyballPlayer, contest - attack_quality,
 		primary_close, str(formation.get("hands_instruction", "")),
 	)
+	var hands := str(hands_intent.hands)
 	resolved["block_hands"] = hands
+	resolved["block_hands_call"] = str(hands_intent.call)
+	resolved["block_hands_followed"] = bool(hands_intent.followed)
 	var hands_stuff_shift := 0.0
 	match hands:
 		"kill":
@@ -7514,61 +8545,6 @@ func _missed_set_drop_trajectory(
 	)
 
 ## The same three numbers for a serve, and the same reasoning behind them.
-##
-## A serve misses in one of three ways and the tape is the commonest, so the
-## net channel is entered on a wider band of quality than the attack's.
-const SERVE_ERROR_OVERSHOOT_METERS: float = 0.60
-const SERVE_NET_ERROR_DROP_METERS: float = 0.50
-const SERVE_NET_ERROR_QUALITY: float = 0.42
-
-
-## Where a serve that misses actually lands.
-##
-## `_serve_landing_point` clamps its result to the receiving half -- x into
-## [0.06, 0.94] and y into the legal depth band -- so it is structurally
-## incapable of producing a ball that is out. The error verdict is a separate
-## coin flip against `_serve_error_chance`, taken before the landing point is
-## computed and never fed into it, so a serve ruled out was drawn landing
-## cleanly inside the court and the rally then ended with "the serve does not
-## enter the court". That is the same defect `_errant_attack_target` was written
-## for, on the one contact that starts every rally, and it went unfixed because
-## the attack fix was made where the attack was wrong rather than where the
-## engine was.
-##
-## Deterministic, like the attack version: it reads the intended target and the
-## quality that already decided the outcome, so a replayed seed draws the
-## identical miss.
-func _errant_serve_landing(
-	intended: Vector2,
-	serve_quality: float,
-	landing_on_home_side: bool,
-) -> Vector2:
-	var wide_overshoot := SERVE_ERROR_OVERSHOOT_METERS \
-		/ CourtConstants.COURT_WIDTH_METERS
-	var deep_overshoot := SERVE_ERROR_OVERSHOOT_METERS \
-		/ CourtConstants.COURT_LENGTH_METERS
-	var net_drop := SERVE_NET_ERROR_DROP_METERS / CourtConstants.COURT_LENGTH_METERS
-	var lane_x := clampf(intended.x, 0.06, 0.94)
-	if serve_quality < SERVE_NET_ERROR_QUALITY:
-		## Into the tape, dropping on the server's own side of it -- which is
-		## the half the ball came from, the opposite one to where it was aimed.
-		return Vector2(lane_x, CourtConstants.NET_Y
-			+ (-net_drop if landing_on_home_side else net_drop))
-	## Otherwise it carried. Past whichever line the intended target already sat
-	## nearest, so a deep serve sails long and one aimed near a sideline sails
-	## wide, rather than every miss landing on one arbitrary spot.
-	var endline := 1.0 if landing_on_home_side else 0.0
-	var to_endline := absf(intended.y - endline)
-	var to_left := intended.x
-	var to_right := 1.0 - intended.x
-	if to_endline <= to_left and to_endline <= to_right:
-		return Vector2(lane_x, endline
-			+ (deep_overshoot if landing_on_home_side else -deep_overshoot))
-	if to_left <= to_right:
-		return Vector2(-wide_overshoot, intended.y)
-	return Vector2(1.0 + wide_overshoot, intended.y)
-
-
 ## Depth a shot family naturally wants, as a fraction from the net (0) to the
 ## endline (1). Power swings drive deep; rolls and tips die short.
 const ATTACK_DEPTH_PREFERENCE := {
@@ -7738,6 +8714,8 @@ func _choose_opponent_defender(
 	var claim := CoverageModel.choose_claimant(
 		defenders, zones, target, flight_time, "reception",
 		_recovery_time_penalties(rally_clock),
+		opponent_live_positions, -1.0,
+		_ready_facings(opponent_live_positions.keys(), &"opponent"),
 	)
 	var claimant := claim.get("player") as VolleyballPlayer
 	var arrival: Dictionary = claim.get("arrival", {})
@@ -7917,6 +8895,17 @@ func _reached_point(
 	## and defaulted to nothing so the approach and coverage sites keep the exact
 	## arrival they have always had.
 	shortfall_meters: float = 0.0,
+	## **Where the ball is met, and where it came from.** M3: a voli does not
+	## stand on the ball, they get behind it and play it in front of their own
+	## body. `VolleyballPlayer.contact_offset_meters` says how far in front, from
+	## the shoulder anchor the body data already carries and this voli's own arm;
+	## `incoming_direction` says which way "behind" is, in court space.
+	##
+	## Both default to nothing, and with either absent the arrival is exactly the
+	## one every caller had before -- the same shape `entry_facing` used to land
+	## before every caller was migrated. See `docs/review/BODY_CENTRE_SCOPE.md`.
+	contact_height_meters: float = 0.0,
+	incoming_direction: Vector2 = Vector2.ZERO,
 ) -> Vector2:
 	## **Every journey in the game passes through here**, which is what makes this
 	## the honest place to charge for one. Charged on the distance *asked for*
@@ -7942,7 +8931,9 @@ func _reached_point(
 		## short of it` was written to catch, and it caught it. A defender who
 		## went to the wrong place is drawn at the wrong place.
 		if shortfall_meters <= 0.0:
-			return target
+			return _body_behind_contact(
+				mover, target, contact_height_meters, incoming_direction
+			)
 		var lane := target - start
 		if lane.length_squared() < 0.000001:
 			return target
@@ -7961,6 +8952,40 @@ func _reached_point(
 		else:
 			high = middle
 	return start.lerp(target, low)
+
+
+## **Where the body stands, given where the contact is.**
+##
+## M3's whole content in one place. A passer gets *behind* the ball -- further
+## along its own line of travel -- and plays it in front of their platform, so
+## the body sits `contact_offset_meters` beyond the contact point along the
+## incoming direction. The offset is Pythagoras from the shoulder anchor
+## `BodyTypeModels.UNIVERSAL_RATIOS` already authors and this voli's own arm, and
+## it is zero above the shoulder and zero at the floor because the geometry says
+## so rather than because a band was drawn.
+##
+## Returns the contact point unchanged when either input is absent, which is what
+## keeps an un-migrated caller on exactly its old arrival.
+func _body_behind_contact(
+	mover: VolleyballPlayer,
+	contact: Vector2,
+	contact_height_meters: float,
+	incoming_direction: Vector2,
+) -> Vector2:
+	if mover == null or contact_height_meters <= 0.0:
+		return contact
+	if incoming_direction.length_squared() < 0.000001:
+		return contact
+	var offset := mover.contact_offset_meters(contact_height_meters)
+	if offset <= 0.0:
+		return contact
+	var heading := incoming_direction.normalized()
+	## Metres out, court units back: the offset is a real distance and the court
+	## is not square, so it cannot be added to a normalised position directly.
+	return Vector2(
+		clampf(contact.x + heading.x * offset / CourtConstants.COURT_WIDTH_METERS, 0.0, 1.0),
+		clampf(contact.y + heading.y * offset / CourtConstants.COURT_LENGTH_METERS, 0.0, 1.0),
+	)
 
 
 func _choose_opponent_attack(
@@ -8137,13 +9162,39 @@ func _attack_direction(contact_x: float, target: Vector2) -> String:
 ## first frame of a rally and wrong for anywhere else -- a base posture that puts
 ## somebody behind the baseline would have them walk back off the court every
 ## time the ball crossed the net.
+## **Where a side stands when the whistle goes.**
+##
+## FD-001 / FD-004. A receiving side used to be placed on the rotation grid --
+## or on the plan's serve-receive zone where one existed -- while
+## `_receive_formation_map` separately published, onto the reception event, the
+## shape the six *actually take up* to receive: passers on their seams, front row
+## off the passing lanes, setter at the release. Two answers to one physical
+## question, and gameplay believed neither of the drawn one: the reception claim
+## builds `reception_origins` out of `live_positions`, so a receiver read the
+## serve from the rotation grid while a viewer watched them stand in formation.
+##
+## The formation is the answer. A receiving side is in its receive shape *before*
+## the ball is struck -- that is what serve receive is -- so the shape belongs in
+## the state the whistle starts from rather than in a map drawn afterwards. Now
+## the same call seeds `live_positions`, `result.initial_home_positions` (which
+## is what the 3D court spawns actors at) and the origin of every later traversal.
+##
+## `players` is needed only to pick the passers. Empty keeps the old rotation-grid
+## behaviour, and `home_base_positions` deliberately passes nothing: a *defending*
+## base is not a receive shape and asking for one there would have been the third
+## representation rather than the removal of the second.
 func _initial_home_positions(
 	lineup: RotationLineup,
 	defensive_plan: Resource,
 	receiving: bool,
 	stage_server: bool = true,
+	players: Array = [],
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var positions := {}
+	var formation := {}
+	if receiving and not players.is_empty():
+		formation = _receive_formation_map(lineup, players, false, out_intents)
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		var position := CourtConstants.slot_position(slot_number)
@@ -8158,12 +9209,26 @@ func _initial_home_positions(
 		if stage_server and not receiving and slot_number == 1:
 			positions[player_id] = CourtConstants.serve_origin(position.x, true)
 			continue
+		if receiving and formation.has(player_id):
+			position = Vector2(formation[player_id])
 		if defensive_plan != null:
 			if receiving:
+				## **`enabled` is checked here now, and was not.**
+				##
+				## `_initial_opponent_positions` below has always required a zone to
+				## be enabled before it moves anybody; this side took any zone that
+				## existed. So a serve-receive zone the manager had switched off
+				## still relocated a home receiver and never an opponent one --
+				## the same shape of home/opponent drift the block's stale swing
+				## turned out to be, found while tracing this one.
+				##
+				## An enabled zone still wins over the formation, and should: the
+				## formation is the structural default and the zone is the manager
+				## saying otherwise. That is one resolution, not two geometries.
 				var zone: Resource = defensive_plan.zone_for(
 					player_id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 				)
-				if zone != null:
+				if zone != null and bool(zone.enabled):
 					position = Vector2(zone.center)
 			else:
 				position = defensive_plan.defender_position(player_id, position)
@@ -8177,14 +9242,24 @@ func _initial_opponent_positions(
 	opponent_team: Resource,
 	receiving: bool,
 	stage_server: bool = true,
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var positions := {}
 	if opponent_team == null:
 		return positions
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
 	var reception_zones: Dictionary = {}
+	var formation := {}
+	## The mirror of the home side's seeding above, and mirrored deliberately:
+	## the defect being closed here is one representation of a fact existing in
+	## two places, and giving the two sides different ways to take up a receive
+	## shape would rebuild it sideways.
 	if receiving:
 		reception_zones = _opponent_reception_coverage(opponent_team).zones
-	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+		if opponent_lineup != null:
+			formation = _receive_formation_map(
+				opponent_lineup, opponent_team.players, true, out_intents
+			)
 	var serving_id := opponent_lineup.player_at_slot(1) \
 		if stage_server and opponent_lineup != null and not receiving else -1
 	for player_resource in opponent_team.on_court_players():
@@ -8192,6 +9267,8 @@ func _initial_opponent_positions(
 		if player == null:
 			continue
 		var position: Vector2 = opponent_team.court_position(player.id, "defense")
+		if formation.has(player.id):
+			position = Vector2(formation[player.id])
 		var zone: Resource = reception_zones.get(player.id) as Resource
 		if zone != null and bool(zone.enabled):
 			position = Vector2(zone.center)
@@ -8223,19 +9300,35 @@ func _playback_physical_profiles(
 	opponent_team: Resource,
 ) -> Dictionary:
 	var profiles := {}
+	## **One region for the whole side, resolved once.** A kit belongs to a club,
+	## and reading each player's own `club_region` would dress a squad whose data
+	## has drifted -- a half-applied transfer, a generated voli nobody assigned --
+	## in a different shirt per body. `side_region` takes the mode, so one
+	## outlier cannot split a team.
+	##
+	## Only the home side carries one. The opposition wears the universal change
+	## strip by direction, and plumbing a region here that nothing reads would be
+	## a knob with no range, which this file has enough of already.
+	var home_region := RegionalKits.side_region(players)
 	for player in players:
-		profiles[player.id] = _physical_playback_profile(player)
+		profiles[player.id] = _physical_playback_profile(player, home_region)
 	if opponent_team != null:
 		for player_resource in opponent_team.on_court_players():
 			var player := player_resource as VolleyballPlayer
 			if player != null:
-				profiles[player.id] = _physical_playback_profile(player)
+				profiles[player.id] = _physical_playback_profile(player, "")
 	return profiles
 
 
-func _physical_playback_profile(player: VolleyballPlayer) -> Dictionary:
+func _physical_playback_profile(
+	player: VolleyballPlayer, club_region: String = ""
+) -> Dictionary:
 	return {
 		"height_cm": player.height_cm,
+		## Which club's strip this voli is drawn in. Empty for the opposition and
+		## for every caller that has no club, which keeps the palette colours
+		## those were drawn against.
+		"club_region": club_region,
 		"wingspan_cm": player.wingspan_cm,
 		"stride_length_m": player.stride_length_m,
 		## What this player is. Generation has assigned a body type since it
@@ -8320,6 +9413,84 @@ func _home_floor_phase_positions(
 ## Nothing about standing in your defensive shape is home-specific, so the side
 ## is now a parameter rather than a copy: the y axis mirrors, the depth and
 ## posture adjustments flip with it, and both sixes get the same preparation.
+## Walk a side **into** a defensive shape instead of teleporting them into it.
+##
+## `_floor_phase_positions` below computes the shape the plan asks for -- zones,
+## depth, seam, the wall's two shoulders -- and every one of its three callers
+## then wrote that shape straight into the live position map. So the defence
+## *arrived* in the diagram the instant the attacker swung, from wherever the
+## previous phase had left them, across any distance, for free.
+##
+## The C0 action-window census counted the consequence exactly: of 1,350 volis
+## placed on an `ATTACK` event, **none** had spent any time getting there. Every
+## other journey in this file goes through `_reached_point`; the defensive base
+## was the one that did not, which is why it was also the only one that always
+## succeeded.
+##
+## This is gameplay and not drawing. The shape is handed to
+## `CoverageModel.choose_claimant` as the defenders' real positions for the dig
+## reach check, so a defender who had no time to get to their zone was still
+## reaching from inside it.
+##
+## C5 states the rule in one sentence -- "the attack launch may change who
+## ultimately owns the ball, but it does not create the defender's entire
+## pre-swing position from scratch" -- and adds a second: partial establishment
+## stays partial. `_reached_point` already does that. A defender who cannot cover
+## the distance in the set's flight stops where the time ran out.
+##
+## **Nothing new is authored here.** The traversal authority, the cost per metre
+## and the lateral mode are the ones every other off-ball leg already uses; the
+## window is the set flight the defence genuinely has. What changes is that the
+## journey is now taken rather than assumed, and defensive establishment is
+## billed the exertion it always cost in the sport and never cost here.
+func _establish_shape(
+	shape: Dictionary,
+	roster: Array,
+	live: Dictionary,
+	window_seconds: float,
+	out_intents: Dictionary = {},
+) -> Dictionary:
+	var by_id := {}
+	for entry in roster:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var established := {}
+	for raw_player_id in shape:
+		var player_id := int(raw_player_id)
+		var target := Vector2(shape[raw_player_id])
+		var player := by_id.get(player_id, null) as VolleyballPlayer
+		## No window and no body are both "we cannot say", and the honest answer
+		## to that is the shape as asked for -- the behaviour every caller had.
+		if player == null or window_seconds <= 0.0:
+			established[player_id] = target
+			continue
+		var here: Vector2 = live.get(player_id, target)
+		## Lateral, not a sprint. Taking a defensive base is a read and a shuffle;
+		## the two volis who genuinely sprint on this ball are closing the wall,
+		## and the block staging has already moved them before this runs -- so
+		## their remaining distance here is nearly nothing and they are charged
+		## nearly nothing.
+		var reached := _reached_point(player, here, target, window_seconds, "lateral")
+		established[player_id] = reached
+		## **The shape's own label wins if it has one.**
+		##
+		## A defensive base has one reason and every voli in it shares it, so
+		## `defending` is the whole story. A receive formation does not:
+		## `_receive_formation_map` separates the passers from the front-row
+		## volis staging off the passing lanes from the setter, and its own note
+		## says the distinction exists so the cognition layer does not have to
+		## re-derive from a coordinate a fact the formation builder already knew.
+		## Stamping `defending` over that would throw it away to reuse a helper.
+		var authored: Dictionary = out_intents.get(player_id, {})
+		out_intents[player_id] = _travel_intent(
+			player,
+			StringName(authored.get("intent", &"defending")),
+			here, target, reached, "lateral", window_seconds,
+		)
+	return established
+
+
 func _floor_phase_positions(
 	lineup: RotationLineup,
 	defensive_plan: Resource,
@@ -8588,6 +9759,9 @@ func _travel(
 	movement_kind: String,
 	waypoint: Variant = null,
 	entry_velocity: Vector2 = Vector2.ZERO,
+	## The orientation this body is actually set in, independent of where it is
+	## being asked to go. `Vector2.ZERO` means the caller does not track it.
+	entry_facing: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
 	if player == null:
 		return {"seconds": 4.0, "exit_velocity": Vector2.ZERO}
@@ -8598,12 +9772,21 @@ func _travel(
 	## amortises away on long ones. It now asks the same model.
 	var actor := RallyPlayerState.create(player, &"home", -1, start)
 	actor.velocity = entry_velocity
-	var opening := RallyKinematicsModel.court_delta_meters(start, target)
-	if opening.length() > 0.0001:
-		## The resolver does not track facing at this point, and charging a full
-		## reorientation the player may not need would reintroduce a second
-		## disagreement. Face the route; the turn floor still applies.
-		actor.facing = opening.normalized()
+	## **The route no longer chooses the orientation.**
+	##
+	## This used to read `actor.facing = opening.normalized()` -- face the way you
+	## are going -- which made every movement in the engine perfectly prepared by
+	## construction. `facing_fit` was 1.0 for every voli on every leg, so the turn
+	## cost the locomotion model computes could never fire, and a defender caught
+	## flat-footed with the ball behind them was timed as though they were already
+	## squared to it.
+	##
+	## Zero means **unknown**, and `_movement_profile` leaves `facing_fit` at 1.0
+	## for an unreadable facing -- so a caller that has nothing to say keeps
+	## exactly the behaviour it had, and only a caller that actually knows the
+	## body's orientation pays for it. That is what makes this safe to land before
+	## every caller has been migrated.
+	actor.facing = entry_facing
 	return RallyMovementSystemModel.traversal_result(
 		actor, target, _movement_mode_for_kind(movement_kind), waypoint
 	)
@@ -8978,7 +10161,7 @@ func _block_deflection_trajectory(
 		var physical_duration := deflection_duration_seconds \
 			if deflection_duration_seconds > 0.0 \
 			else float(physical_arc.duration_seconds)
-		return _ball_trajectory(
+		return _stamp_launch_contact_height(_ball_trajectory(
 			"block_deflection", from_point, to_point,
 			maxf(
 				physical_duration,
@@ -8992,24 +10175,24 @@ func _block_deflection_trajectory(
 			NAN if deflection_playable else float(physical_arc.get(
 				"vertical_speed_mps", NAN
 			)),
-		)
+		), contact_height)
 	if stuffed:
-		return _ball_trajectory(
+		return _stamp_launch_contact_height(_ball_trajectory(
 			"block_deflection", from_point, to_point,
 			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
-		)
+		), contact_height)
 	if incoming_speed_mps <= 0.0:
 		## No swing speed to read -- the legacy solve, which at least always has
 		## an answer.
 		var solved := RallyKinematics.solve_struck_arc(
 			distance, BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,
 		)
-		return _ball_trajectory(
+		return _stamp_launch_contact_height(_ball_trajectory(
 			"block_deflection", from_point, to_point,
 			maxf(float(solved.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
 			maxf(float(solved.apex_height_meters), apex_hint),
 			start_time,
-		)
+		), contact_height)
 	## Timing decides how much of the band a blocker commands; the hands decide
 	## which end of it they are trying to reach. Both, because a well-timed kill
 	## block and a well-timed soft block are the same pair of hands making
@@ -9027,13 +10210,25 @@ func _block_deflection_trajectory(
 		distance, maxf(incoming_speed_mps * (1.0 - absorbed), MIN_DEFLECTION_MPS),
 		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,
 	)
-	return _ball_trajectory(
+	return _stamp_launch_contact_height(_ball_trajectory(
 		"block_deflection", from_point, to_point,
 		maxf(float(arc.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
 		maxf(float(arc.apex_height_meters), apex_hint),
 		start_time,
 		float(arc.get("vertical_speed_mps", NAN)),
-	)
+	), contact_height)
+
+
+## A block owns where its hands contacted the ball even when the next contact
+## has not been chosen yet. Keep that fact beside the flight without rewriting
+## `start_height_meters`: legacy presentation/gameplay still uses that field's
+## existing contract. The next platform contact can pair this height with its own
+## derived contact height and recover the arrival vertical without a new number.
+func _stamp_launch_contact_height(
+	trajectory: Dictionary, contact_height_meters: float
+) -> Dictionary:
+	trajectory["launch_contact_height_meters"] = contact_height_meters
+	return trajectory
 
 
 ## The ball is contacted where the hitter can be, not where the set wanted them.
@@ -9356,16 +10551,70 @@ func _ball_trajectory(
 	## the struck flights supply them.
 	launch_vertical_mps: float = NAN,
 	swing_duration_seconds: float = NAN,
+	## **Where the ball actually was, vertically, at each end of this flight.**
+	##
+	## `BallTrajectory.create` has taken these since it was written and no caller
+	## ever passed them, so every published trajectory in the game carried the
+	## 1.0 m defaults. That was invisible because `apex_height_meters` is a
+	## *relative rise* -- a documented contract with its own gate -- and because
+	## presentation rebuilds the real heights from body profiles before drawing.
+	##
+	## It stopped being invisible the moment anything asked the trajectory itself:
+	## `height_at_progress`, `height_at_time` and `earliest_contact_time` all
+	## derive from these two fields, so on seed 20010's dig the record answered
+	## 1.000 m at the far end where the ball really arrives at 2.190 -- a metre
+	## and a fifth of fiction, in the exact methods a future interception resolver
+	## has to trust.
+	##
+	## NAN means "this writer does not know", which is honest and keeps the old
+	## default. `height_source` records which it was so the gap stays countable.
+	start_height: float = NAN,
+	end_height: float = NAN,
+	## **Which launch this flight belongs to.**
+	##
+	## The B0 census found four families -- serve, set, attack and block --
+	## publishing balls with no identity on them at all. Every edge between them
+	## still handed over the right ball, but the strongest thing a certification
+	## could say was "the same *shape* arrived", and P3's matrix asks each edge
+	## for "same launch lineage". Two geometrically identical records are
+	## indistinguishable from one record passed along, which is precisely the
+	## substitution a one-ball chain exists to rule out.
+	##
+	## Empty mints a new identity: this contact is a new launch. A **re-slice of
+	## an existing launch** -- the swing truncated to the tape when a block
+	## touches it -- passes the source's id instead, because it is a prefix of
+	## that launch and not a second one. That is the whole distinction, and it is
+	## stated by the caller rather than inferred from coincident floats.
+	flight_id: String = "",
 ) -> Dictionary:
 	var timestamp := rally_clock if start_timestamp < 0.0 else start_timestamp
 	var direction := end - start
 	var perpendicular := Vector2(-direction.y, direction.x).normalized()
 	var curve_amount := clampf(direction.length() * 0.08, 0.0, 0.035)
 	var control := start.lerp(end, 0.5) + perpendicular * curve_amount
+	var start_known := not is_nan(start_height)
+	var end_known := not is_nan(end_height)
 	var trajectory: Resource = BallTrajectoryModel.create(
-		kind, start, control, end, timestamp, flight_time, apex_height
+		kind, start, control, end, timestamp, flight_time, apex_height,
+		start_height if start_known else 1.0,
+		end_height if end_known else 1.0,
 	)
 	var data: Dictionary = trajectory.to_dict()
+	## **Three states, not two, because the serve genuinely has three.** Its
+	## launch height is now known exactly; its *ending* height is the open
+	## question -- `end_height_meters` is read by `BallFlight.from_trajectory` as
+	## the height of the **next contact**, while the serve's own flight solves to
+	## the floor. Those are different numbers and choosing between them is
+	## `CONTACT_AND_BALL_FLIGHT.md`'s unresolved item 5, not something to settle
+	## as a side effect of owning the launch. Publishing the half that is known
+	## and marking the half that is not keeps the gap countable, which is the
+	## whole reason this marker exists.
+	var height_source := "default"
+	if start_known and end_known:
+		height_source = "resolved"
+	elif start_known:
+		height_source = "start_resolved"
+	data["height_source"] = height_source
 	## RallyKinematics solves vertical displacement above launch level. Preserve
 	## that contract explicitly; legacy `apex_height_meters` is retained because
 	## calibration reads it for the duration/rise invariant.
@@ -9375,7 +10624,112 @@ func _ball_trajectory(
 		data["launch_vertical_mps"] = launch_vertical_mps
 	if not is_nan(swing_duration_seconds):
 		data["swing_duration_seconds"] = swing_duration_seconds
+	## The id and **not** `trajectory_role`.
+	##
+	## `authoritative_free_flight` is M5's word for a flight M5 resolved, and
+	## `FreeFlightInterceptionModel.opportunities` and `realised_prefix` both
+	## refuse to act on anything that does not carry it. Stamping it here would
+	## let a serve or a set arc walk into the interception system, which is a
+	## second physical authority arriving through a label -- the exact thing this
+	## identity is being added to make detectable.
+	data["authoritative_flight_id"] = flight_id if not flight_id.is_empty() \
+		else "%d:%s:%.6f:%.4f,%.4f" % [
+			rally_seed, kind, timestamp, start.x, start.y,
+		]
 	return data
+
+
+## Put the launch state on the published flight, so nothing has to rebuild it.
+##
+## **`BallPresentation.launch_speed_mps` reconstructs launch speed from the two
+## endpoint heights and the duration**, which makes it a property of wherever the
+## flight was cut rather than of the contact that made it -- the §3 violation the
+## spec names, and it is read by `_read_error_meters`, which is gameplay. A ball
+## dug at six metres left the hand at the same speed as one that reached the
+## floor, and a record that cannot say so will keep being asked to guess.
+##
+## Only the serve carries this today. Every other family still reconstructs, and
+## `_read_error_meters` still falls back to the reconstruction for them, so the
+## marker is also the migration's own to-do list.
+func _stamp_launch_state(trajectory: Dictionary, resolved: Dictionary) -> void:
+	var launch: Dictionary = resolved.get("launch", {})
+	if launch.is_empty():
+		return
+	trajectory["launch_speed_mps"] = float(launch.get("speed_mps", 0.0))
+	trajectory["launch_angle_degrees"] = float(launch.get("angle_degrees", 0.0))
+	trajectory["launch_bearing_degrees"] = float(launch.get("bearing_degrees", 0.0))
+	trajectory["launch_horizontal_mps"] = float(
+		launch.get("horizontal_speed_mps", 0.0)
+	)
+	trajectory["launch_vertical_mps"] = float(launch.get("vertical_speed_mps", 0.0))
+	trajectory["launch_gravity_mps2"] = float(launch.get("gravity_mps2", 0.0))
+	trajectory["launch_source"] = "resolver"
+
+
+## The marker a platform-contact intent field carries when there is genuinely no
+## intent to state, rather than an intent whose policy is missing.
+##
+## A string, deliberately, so it cannot be read as a number by anything that
+## forgets to check. A sentinel float would be indistinguishable from an anchor
+## that happens to sit at the default, which is `docs/FAILURE_MODES.md` section 0
+## in one line.
+const PLATFORM_INTENT_UNSET: String = "unset"
+
+
+## What a platform contact was *for*, published beside what it did.
+##
+## `PLATFORM_CONTACT.md` section 11, slice 1, plus the two source markers section
+## 13.10 asks for. **Nothing reads any of it.** The slice's own acceptance
+## criterion is that rallies come back byte-identical, and publishing it inert is
+## the point: it makes countable, for the first time, how many platform contacts
+## in this engine have any stated intent at all.
+##
+## The three shapes are not a stylistic choice and section 3a is the reasoning.
+## The target and the height have derived *anchors* and no derived widths; the
+## arrival has a derived *floor* and no derived ceiling. A uniform representation
+## would have had to invent whatever the uniformity demanded and the data does not
+## supply -- four of five bounds, by section 3a's own count.
+##
+## `anchor_source` separates a manager-set release seat, which is steerable, from
+## a fixed contact offset. Receptions and controlled digs state the former;
+## coverage still has only the latter because it has no recipient or pass intent.
+func _platform_intent(
+	purpose: String,
+	target_anchor: Vector2,
+	anchor_source: String,
+	## Who the ball is aimed at. **Intent and nothing else** -- it may not
+	## terminate a flight and it may not pick the second contact, because the
+	## actual second-contact actor differs from the designated setter on about
+	## 22.8% of successful digs. It exists so that aiming can be wrong.
+	recipient: VolleyballPlayer,
+	## Where the recipient is now, from whichever live map owns their side. Passed
+	## rather than looked up, because the two sides keep separate maps and a
+	## helper that guessed which one would be right half the time.
+	recipient_position: Vector2,
+) -> Dictionary:
+	var record := {
+		"purpose": purpose,
+		"target_anchor": target_anchor,
+		"anchor_source": anchor_source,
+		"intended_recipient_id": recipient.id if recipient != null else -1,
+		"height_anchor_meters": PLATFORM_INTENT_UNSET,
+		"arrival_floor_seconds": PLATFORM_INTENT_UNSET,
+		## Honest current value. Nothing supplies a tactical preference yet, and
+		## publishing the field with an absence marker is what stops the schema
+		## changing when tactics arrive: the marker takes a new value, the record
+		## does not grow a new shape.
+		"preference_source": "none",
+	}
+	if recipient == null:
+		return record
+	## Both class C -- computed from models that already exist, reading neither the
+	## dig's apex band nor its outgoing trajectory.
+	record["height_anchor_meters"] = \
+		GeometricAttackPromotionModel.set_contact_height_meters(recipient, false)
+	record["arrival_floor_seconds"] = _movement_time(
+		recipient, recipient_position, target_anchor, "transition"
+	)
+	return record
 
 
 func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -> Vector2:
@@ -9496,6 +10850,375 @@ const SHANK_EXECUTION: float = 0.18
 const SHANK_EXTRA_RISE_METERS: float = 1.60
 
 
+## The ball that physically leaves a successful floor dig.
+##
+## **Before this, a dug ball had no flight.** The dig event carried a destination
+## and nothing else -- no apex, no duration, no contact height -- and the two
+## transition resolvers filled the hole with constants: a 0.68 s second-contact
+## window for setter reachability, and a table-drawn contact height. Both were
+## labelled as gaps in place; `_resolve_opponent_transition` still says
+## "NAN when the feeding contact has no height model, which today is every dug
+## ball on either side". This is that model. The display trajectory that
+## `_ensure_event_trajectories` used to invent afterwards was never the ball the
+## setter had been resolved against, so the drawn flight and the simulated one
+## were two different balls that happened to share an endpoint.
+##
+## **Reuses the reception primitives, not the reception helper.**
+## `_reception_pass_result` computes exactly this physics -- contact height,
+## apex, set-contact height, `BallFlightModel.duration_for_apex` -- but takes a
+## serve origin and a serve force and is calibrated against reception platform
+## feasibility. A dig is not a reception: it is played off a swing, from a
+## posture, at a reach margin, and often while falling. So the primitives are
+## shared and the geometry is its own.
+##
+## **No new random draw.** Everything below is derived from what the dig already
+## resolved: its control, its posture, its reach margin, how far the defender
+## travelled and how fast the ball was coming. The dig contest has already
+## consumed its randomness; a second roll here would make the same dig produce
+## two different balls.
+func _dig_pass_result(
+	digger: VolleyballPlayer,
+	contact_position: Vector2,
+	desired_target: Vector2,
+	dig_control: float,
+	arrival: Dictionary,
+	posture: String,
+	incoming_trajectory: Dictionary,
+	movement_distance_meters: float,
+	setter: VolleyballPlayer,
+	contact_time: float,
+	body_velocity_mps: Vector2 = Vector2.ZERO,
+	platform_intent: Dictionary = {},
+	physical_incoming_trajectory: Dictionary = {},
+) -> Dictionary:
+	if _physical_platform_dig_enabled():
+		var physical := _physical_platform_dig_result(
+			digger, contact_position,
+			physical_incoming_trajectory \
+				if not physical_incoming_trajectory.is_empty() \
+				else incoming_trajectory,
+			arrival,
+			body_velocity_mps, platform_intent, contact_time,
+		)
+		if not physical.is_empty():
+			return physical
+	var control := clampf(dig_control, 0.0, 1.0)
+	## **What the dig could not absorb goes somewhere.** Three things spoil a
+	## platform, and the dig already measured all of them: arriving late (a
+	## negative reach margin means reaching, not planted), being off-axis, and
+	## having crossed ground to get there. They are combined rather than picked
+	## between because a scrambling dig is usually all three at once.
+	var reach_margin := float(arrival.get("reach_margin_meters", 0.0))
+	var stretched := clampf((0.25 - reach_margin) / 0.85, 0.0, 1.0)
+	var posture_penalty := 0.0
+	match posture:
+		"off-axis": posture_penalty = 0.35
+		"reaching": posture_penalty = 0.55
+		"emergency", "fall": posture_penalty = 0.80
+	var travel := clampf(movement_distance_meters / 3.2, 0.0, 1.0)
+	var spoil := clampf(
+		(1.0 - control) * 0.55 + stretched * 0.20
+		+ posture_penalty * 0.17 + travel * 0.08,
+		0.0, 1.0,
+	)
+	## **Drift is a direction, not a radius.** A spoiled platform sends the ball
+	## on along the line it was already travelling -- off the arms rather than
+	## off the target -- so the error is biased downrange of the incoming ball
+	## instead of scattered around the setter. That is what makes a bad dig go
+	## over the net or into the antenna rather than randomly sideways.
+	var incoming_direction := Vector2.ZERO
+	## `start_position`, which is what `BallTrajectory.to_dict()` publishes. The
+	## first draft read "start", found nothing, and fell back to the contact
+	## point -- so the incoming direction was zero and every dig, however
+	## spoiled, landed exactly on its target. The probe caught it as a
+	## destination error of 0.000 at the median.
+	var incoming_start := Vector2(
+		incoming_trajectory.get("start_position", contact_position)
+	)
+	if incoming_start.distance_to(contact_position) > 0.01:
+		incoming_direction = (contact_position - incoming_start).normalized()
+	var desired_vector := desired_target - contact_position
+	var lateral := Vector2(-incoming_direction.y, incoming_direction.x)
+	var destination := desired_target \
+		+ incoming_direction * spoil * 0.20 \
+		+ lateral * (spoil * 0.11 * (1.0 if int(digger.id) % 2 == 0 else -1.0))
+	destination.x = clampf(destination.x, 0.04, 0.96)
+	destination.y = clampf(destination.y, 0.04, 0.96)
+	## Height, from the same two model calls a reception makes. A clean dig is
+	## played up to a setter; a spoiled one stays flat, which is what takes the
+	## options away rather than a penalty applied to them later.
+	var pass_contact_height := GeometricAttackPromotionModel \
+		.pass_contact_height_meters(digger)
+	var pass_apex := pass_contact_height + lerpf(1.35, 3.05, 1.0 - spoil)
+	var set_contact_height := minf(
+		pass_apex,
+		GeometricAttackPromotionModel.set_contact_height_meters(setter) \
+			if setter != null else pass_apex,
+	)
+	var flight_time := BallFlightModel.duration_for_apex(
+		pass_contact_height, set_contact_height, pass_apex
+	)
+	## The rise stays the published apex, per the `relative_rise` contract; the
+	## two absolute heights are what the record was missing.
+	var trajectory := _ball_trajectory(
+		"dig", contact_position, destination, flight_time,
+		maxf(pass_apex - pass_contact_height, 0.0), contact_time,
+		NAN, NAN, pass_contact_height, set_contact_height,
+	)
+	return {
+		"trajectory": trajectory,
+		"destination": destination,
+		"duration": flight_time,
+		"pass_apex_meters": pass_apex,
+		"pass_contact_height_meters": pass_contact_height,
+		"set_contact_height_meters": set_contact_height,
+		"target_error_meters": destination.distance_to(desired_target)
+			* CourtConstants.COURT_WIDTH_METERS,
+		"spoil": spoil,
+		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
+	}
+
+
+## M4 slice 3's one promoted context. Success/ownership has already been
+## resolved before this function is called; this stage owns only the physical
+## ball a successful forearm contact produces. The model cannot see `DIG`, the
+## terminal outcome or the old control/spoil bands.
+func _physical_platform_dig_result(
+	digger: VolleyballPlayer,
+	contact_position: Vector2,
+	incoming_trajectory: Dictionary,
+	arrival: Dictionary,
+	body_velocity_mps: Vector2,
+	platform_intent: Dictionary,
+	contact_time: float,
+	## The platform family this contact belongs to, used only to label the flight
+	## and keep the deterministic seed streams distinct. The physics is identical
+	## across families -- this is the shared resolver, not a per-family fork.
+	contact_family: String = "dig",
+) -> Dictionary:
+	if digger == null:
+		return {}
+	var contact_height := GeometricAttackPromotionModel \
+		.pass_contact_height_meters(digger)
+	var incoming := PlatformContactModel.incoming_velocity_at_contact(
+		incoming_trajectory, contact_height
+	)
+	if not bool(incoming.get("available", false)):
+		return {}
+	var target_value: Variant = platform_intent.get("target_anchor", null)
+	var height_value: Variant = platform_intent.get("height_anchor_meters", null)
+	if not target_value is Vector2 \
+			or not (height_value is float or height_value is int):
+		return {}
+	var stability := (
+		_rating(digger, "reception_balance")
+		+ _rating(digger, "reception_stability")
+	) * 0.5
+	var technique := (
+		_rating(digger, "reception") + _rating(digger, "ball_control")
+	) * 0.5
+	var severity := clampf(float(arrival.get("edge_ratio", 0.0)), 0.0, 1.0)
+	var shadow := PlatformContactModel.evaluate({
+		"incoming_velocity_mps": incoming.velocity_mps,
+		"contact_position": contact_position,
+		"contact_height_meters": contact_height,
+		"body_velocity_mps": body_velocity_mps,
+		"circumstance_severity": severity,
+		"stability_ability": stability,
+		"technique_ability": technique,
+		"intent_target_anchor": target_value,
+		"intent_height_anchor_meters": height_value,
+		"intent_arrival_floor_seconds": float(platform_intent.get(
+			"arrival_floor_seconds", 0.0
+		)),
+		## Separate deterministic stream: opening the rollout cannot resequence
+		## any perception, contest or tactical draw around this contact.
+		"seed": hash("%d|platform-%s|%d|%.6f" % [
+			rally_seed, contact_family, digger.id, contact_time,
+		]),
+	})
+	if not bool(shadow.get("selection_available", false)) \
+			or not shadow.has("realised_velocity_mps"):
+		return {}
+	var realised: Dictionary = shadow.realised
+	var apex_height := maxf(
+		float(realised.apex_height_meters), contact_height
+	)
+	var launch_velocity := Vector3(shadow.realised_velocity_mps)
+	## M5: the platform contact owns a launch, so the unconstrained projectile
+	## owns its endpoint. The target plane remains a diagnostic about intent; it
+	## is not promoted into the next voli's hands. A later physical interception
+	## may realize a prefix of this exact record without rewriting the launch.
+	var trajectory := FreeFlightInterceptionModel.from_launch(
+		contact_family, contact_position, contact_height, launch_velocity,
+		contact_time,
+		"%d:%s:%d:%.6f" % [rally_seed, contact_family, digger.id, contact_time],
+	)
+	if trajectory.is_empty():
+		return {}
+	var destination := Vector2(trajectory.end_position)
+	var duration := float(trajectory.duration)
+	return {
+		"trajectory": trajectory,
+		"authoritative_free_flight": trajectory,
+		"destination": destination,
+		"duration": duration,
+		"pass_apex_meters": apex_height,
+		"pass_contact_height_meters": contact_height,
+		## There is no setter contact yet. M5 supplies this only after a body
+		## actually intercepts the free flight.
+		"set_contact_height_meters": NAN,
+		"target_error_meters": float(realised.horizontal_error_meters),
+		"incoming_speed_mps": float(incoming.speed_mps),
+		"platform_contact": {
+			"source": "shared_physical_platform",
+			"incoming_source": str(incoming.get("source", "missing")),
+			"maximum_outgoing_speed_mps": float(
+				shadow.maximum_outgoing_speed_mps
+			),
+			"redirection_half_angle_degrees": float(
+				shadow.redirection_half_angle_degrees
+			),
+			"selected_velocity_mps": Vector3(shadow.selected_velocity_mps),
+			"realised_velocity_mps": launch_velocity,
+			"execution_error_degrees": float(shadow.execution_error_degrees),
+			"intent_satisfiable": bool(shadow.intent_satisfiable),
+			"binding_constraint": str(shadow.binding_constraint),
+			"circumstance_severity": severity,
+			"reaches_target_plane": bool(realised.reaches_target_plane),
+			"target_plane_position": Vector2(realised.target_plane_position),
+			"target_plane_time_seconds": float(
+				realised.target_plane_time_seconds
+			),
+			"target_plane_height_meters": float(
+				realised.target_plane_height_meters
+			),
+		},
+	}
+
+
+func _physical_platform_dig_enabled() -> bool:
+	return not platform_dig_development_force_legacy \
+		and (RallyFeatureFlagsModel.ENABLE_PHYSICAL_PLATFORM_DIG \
+		or (
+			platform_dig_development_open and OS.is_debug_build()
+			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
+		))
+
+
+## Reception's own production gate, independent of the dig. It is deliberately
+## NOT wired to the dig's development-open field: until the home first-ball
+## reception->set path carries an M5 interception branch, enabling physical
+## reception there produces a setter aimed at the free flight's floor endpoint, so
+## coupling it to the dig's dev override would break every dev-override probe
+## (the dig rollout among them) before the retrofit lands. A decoupled
+## `development_physical_reception` override is added with the home retrofit, for
+## the paired reception census; production stays legacy until this const flips.
+func _physical_platform_reception_enabled() -> bool:
+	return not platform_dig_development_force_legacy \
+		and (RallyFeatureFlagsModel.ENABLE_PHYSICAL_RECEPTION \
+		or (
+			platform_reception_development_open and OS.is_debug_build()
+			and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_PLATFORM_DIG_OVERRIDE
+		))
+
+
+## The keep-alive ball a successful attack-coverage contact launches.
+##
+## **Coverage owns no recipient policy of its own.** The intended target is
+## exactly the actor the existing second-contact policy names --
+## `_second_contact_setter`, the one selector every dig and transition already
+## goes through -- with the coverer excluded as its `first_contact_player_id`, so
+## a coverer is never named their own recipient and an unavailable designated
+## setter falls to that selector's existing emergency-setter branch. Coverage
+## adds no ranking, no weight and no coefficient here; it reuses the policy whole.
+##
+## From that intent this is the shared physical platform contact and nothing
+## bespoke: the authoritative incoming ball, the coverer's own body/contact
+## state, and the T1--T3 model produce one authoritative free flight. The launch
+## selects nothing about who touches the ball next -- M5 interception decides that
+## against the flight, so the intended actor may miss, a teammate may intercept,
+## or the ball may floor, sail or cross the net untouched.
+##
+## Returns `{}` when the physical platform path is closed (the same flag and
+## development override `_dig_pass_result` gates on), when the policy can name no
+## available second-contact actor besides the coverer, or when the model declines
+## the contact. The caller then keeps its legacy fabricated trajectory, so
+## production is byte-unchanged until the flag opens.
+func _coverage_keep_alive_flight(
+	coverer: VolleyballPlayer,
+	contact_position: Vector2,
+	incoming_trajectory: Dictionary,
+	arrival: Dictionary,
+	body_velocity_mps: Vector2,
+	contact_time: float,
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
+	plan: Resource,
+	designated_setter_id: int,
+	release_seat: Vector2,
+) -> Dictionary:
+	if not _physical_platform_dig_enabled() or coverer == null:
+		return {}
+	var intent_actor := _second_contact_setter(
+		candidates, plan, designated_setter_id, coverer.id
+	)
+	if intent_actor == null:
+		return {}
+	## The aim point is the team's own set-up seat -- the same anchor the dig and
+	## the downstream M5 second-contact chooser both target -- so the keep-alive
+	## and the set it feeds converge on one point rather than two. Height and the
+	## arrival floor track the named actor, which is where the soft intent lives.
+	var recipient_position := Vector2(starts.get(intent_actor.id, release_seat))
+	var intent := _platform_intent(
+		"attack_coverage", release_seat, "release_seat",
+		intent_actor, recipient_position,
+	)
+	var physical := _physical_platform_dig_result(
+		coverer, contact_position, incoming_trajectory,
+		arrival, body_velocity_mps, intent, contact_time,
+	)
+	if physical.is_empty():
+		return {}
+	physical["platform_intent"] = intent
+	return physical
+
+
+## Stamp a coverage event with the physical keep-alive's own ball, the same keys
+## the DIG event carries, so the setter and the drawing share one object instead
+## of the coverage contact inventing a second flight afterwards.
+func _merge_coverage_flight_metadata(meta: Dictionary, flight: Dictionary) -> void:
+	meta["outgoing_trajectory"] = flight.get("trajectory", {})
+	meta["platform_contact"] = flight.get("platform_contact", {})
+	meta["pass_apex_meters"] = flight.get("pass_apex_meters", 0.0)
+	meta["pass_contact_height_meters"] = flight.get(
+		"pass_contact_height_meters", 0.0
+	)
+	meta["set_contact_height_meters"] = flight.get("set_contact_height_meters", 0.0)
+	meta["pass_duration_seconds"] = flight.get("duration", 0.0)
+	meta["target_error_meters"] = flight.get("target_error_meters", 0.0)
+
+
+## Body velocity is a derived journey, in the same court frame as the incoming
+## ball. Required movement can end before the ball arrives; a settled body then
+## contributes no fictional extra travel merely because the flight continued.
+func _platform_body_velocity(
+	start: Vector2,
+	contact: Vector2,
+	required_seconds: float,
+	available_seconds: float,
+) -> Vector2:
+	var duration := available_seconds
+	if required_seconds > 0.0 and available_seconds > 0.0:
+		duration = minf(required_seconds, available_seconds)
+	if duration <= 0.0001:
+		return Vector2.ZERO
+	return Vector2(
+		(contact.x - start.x) * CourtConstants.COURT_WIDTH_METERS / duration,
+		(contact.y - start.y) * CourtConstants.COURT_LENGTH_METERS / duration,
+	)
+
+
 func _reception_pass_result(
 	receiver: VolleyballPlayer,
 	start_position: Vector2,
@@ -9516,6 +11239,14 @@ func _reception_pass_result(
 	## what decides the pass's hang time -- and, when the pass is bad enough,
 	## whether they get hands on it at all.
 	setter: VolleyballPlayer = null,
+	## The soft intent this reception is aimed at (the designated setter's release
+	## seat), the receiver's own body velocity through the contact, and when the
+	## serve reaches them. Supplied so the physical branch can launch one
+	## authoritative ball through the shared resolver; empty/zero leaves the legacy
+	## scatter untouched, which is what keeps the flag-off path byte-identical.
+	platform_intent: Dictionary = {},
+	body_velocity_mps: Vector2 = Vector2.ZERO,
+	contact_time: float = 0.0,
 ) -> Dictionary:
 	var movement_vector := contact_position - start_position
 	var desired_vector := desired_target - contact_position
@@ -9629,7 +11360,7 @@ func _reception_pass_result(
 		posture = "off-axis"
 	elif edge_ratio > POSTURE_MOVING_EDGE_RATIO:
 		posture = "moving"
-	return {
+	var reception_result := {
 		"destination": destination,
 		"body_alignment": body_alignment,
 		"platform_feasibility": platform_feasibility,
@@ -9663,9 +11394,13 @@ func _reception_pass_result(
 		"movement_alignment": movement_alignment,
 		"incoming_force": _incoming_ball_force(incoming_trajectory, serve_force),
 		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
+		## Same repair as the dig: the rise stays the published apex and the two
+		## absolute heights, which this model has computed all along, now reach
+		## the record instead of stopping at the event metadata.
 		"trajectory": _ball_trajectory(
 			"reception_pass", contact_position, destination,
-			flight_time, maxf(pass_apex - pass_contact_height, 0.0), rally_clock
+			flight_time, maxf(pass_apex - pass_contact_height, 0.0), rally_clock,
+			NAN, NAN, pass_contact_height, set_contact_height
 		),
 		## The three numbers the second contact needs, stated rather than
 		## re-derived. `set_contact_height_meters` is what `SetterCapabilitySystem`
@@ -9675,6 +11410,32 @@ func _reception_pass_result(
 		"pass_contact_height_meters": pass_contact_height,
 		"set_contact_height_meters": set_contact_height,
 	}
+	## Physical reception overlays one authoritative launch on the legacy result.
+	## The receiver-state fields above (recovery, posture, feasibility, alignment)
+	## are what the contact did to the passer and stay as measured; only the
+	## outgoing ball is replaced, and the free flight is handed to M5 for the
+	## actual second contact. `set_contact_height_meters` becomes NaN because there
+	## is no setter contact yet -- M5 supplies it once a body intercepts.
+	if _physical_platform_reception_enabled() and not platform_intent.is_empty():
+		var physical := _physical_platform_dig_result(
+			receiver, contact_position, incoming_trajectory, arrival,
+			body_velocity_mps, platform_intent, contact_time, "reception",
+		)
+		if not physical.is_empty():
+			reception_result["trajectory"] = physical.trajectory
+			reception_result["authoritative_free_flight"] = \
+				physical.authoritative_free_flight
+			reception_result["destination"] = physical.destination
+			reception_result["pass_apex_meters"] = physical.pass_apex_meters
+			reception_result["pass_contact_height_meters"] = \
+				physical.pass_contact_height_meters
+			reception_result["set_contact_height_meters"] = \
+				physical.set_contact_height_meters
+			reception_result["platform_contact"] = physical.platform_contact
+			reception_result["target_error_meters"] = physical.get(
+				"target_error_meters", 0.0
+			)
+	return reception_result
 
 
 ## Whether a defender stayed on their feet, and what happened to them if not.
@@ -9972,6 +11733,21 @@ func _incoming_ball_force(trajectory: Dictionary, fallback: float) -> float:
 	)
 
 
+## Court-space direction in which the ball reaches a contact. The trajectory's
+## launch point is authoritative when present; `fallback_start` is an already-
+## resolved origin held by the call site, never a guessed bearing. M3 consumes
+## only this direction, so no speed, endpoint-height or presentation quantity is
+## smuggled into body placement with it.
+func _incoming_ball_direction(
+	trajectory: Dictionary,
+	contact_position: Vector2,
+	fallback_start: Vector2,
+) -> Vector2:
+	var start := Vector2(trajectory.get("start_position", fallback_start))
+	var travel := contact_position - start
+	return travel.normalized() if travel.length_squared() > 0.000001 else Vector2.ZERO
+
+
 ## Ground speed of the drawn arc, in metres per second, or zero when there is no
 ## arc to read. Separate from the force so the census can report the raw figure --
 ## the first version of the band was set from real volleyball speeds and left
@@ -10171,6 +11947,62 @@ func _contact_recovery_state(
 ## rally -- it is why a defender who dug off the floor is not the one covering
 ## the next ball -- and the *fatigue* is spent across the match. Both are booked
 ## here so no call site can take the pose without the price.
+## **What a body is still carrying when a new phase state is built.**
+##
+## `RallyStateBuilder` makes every actor at rest, BALANCED and IDLE, and the
+## resolver rebuilds a phase state several times per rally. So a blocker who had
+## just landed, or a defender still getting up off the floor, arrived in the next
+## phase as though nothing had happened -- the debt was still charged against
+## their *clock* through `_recovery_time_penalties`, but the body the contact
+## envelope looked at was fresh.
+##
+## `player_recovery` has carried both the debt and a **name** for it since it was
+## written (`"airborne"` from a block jump, `"fall"`, `"knee"`, `"blown_away"`,
+## `"platform"` from a floor contact). Nothing ever read the name back. This does,
+## and nothing else: no new state, no new value, no new relation. A voli who owes
+## nothing at this moment is left exactly as the builder made them.
+##
+## This is what `ContactEnvelopeSystem`'s AIRBORNE takeoff exclusion and the
+## claimant's usable-time requirement were both waiting on -- two certified
+## repairs that could not fire because the state they test never survived a leg.
+## See `docs/review/ACTOR_CONTINUITY.md`.
+## Records the orientation a committed leg left a body in, when its form
+## establishes one at all. A `"transition"` or `"approach"` leg opens the body up
+## and the route becomes the orientation; every other form preserves what was
+## already there, so nothing is written and nothing is overwritten.
+func _commit_facing(player_id: int, leg: Dictionary) -> void:
+	var exit_velocity := Vector2(leg.get("exit_velocity", Vector2.ZERO))
+	if exit_velocity.length_squared() <= 0.0001:
+		return
+	player_facing[player_id] = exit_velocity.normalized()
+
+
+func _seed_carried_body_states(state: RallyState, at_time: float) -> void:
+	if state == null:
+		return
+	for actor in state.all_player_states():
+		## Orientation first, and independently of the recovery debt below: a
+		## body that owes nothing still finished its last leg facing somewhere.
+		if player_facing.has(actor.player_id):
+			actor.facing = Vector2(player_facing[actor.player_id])
+		var record: Dictionary = player_recovery.get(actor.player_id, {})
+		if record.is_empty():
+			continue
+		var ready_at := float(record.get("ready_at", 0.0))
+		if ready_at <= at_time:
+			continue
+		actor.recovery_until = maxf(actor.recovery_until, ready_at)
+		## A body still owing a block jump has not landed; every other debt is a
+		## body getting back up. The distinction is the one `player_recovery`
+		## already draws, not a new one.
+		actor.body_state = RallyPlayerState.BodyState.AIRBORNE \
+			if str(record.get("state", "")) == "airborne" \
+			else RallyPlayerState.BodyState.RECOVERING
+		## Recovery preserves whatever orientation the last real movement
+		## established, which is what the moving-orientation policy says it does.
+		actor.movement_mode = RallyPlayerState.MovementMode.RECOVERY
+
+
 func _note_recovery(
 	player: VolleyballPlayer, state: String, at_time: float
 ) -> void:
@@ -10216,6 +12048,88 @@ func _note_recovery(
 func _recovering_count(at_time: float) -> int:
 	return _recovery_time_penalties(at_time).size()
 
+
+
+## How long each blocker is still off the floor when the ball comes down.
+##
+## **A blocker who has just jumped was competing for the next ball as though
+## they were standing ready.** `_note_recovery` is called at exactly five sites,
+## all of them platform contacts -- a reception or a dig -- so nothing in the
+## engine ever recorded that a body is airborne. `_recovery_time_penalties` is
+## handed to `CoverageModel.choose_claimant` for the floor defence, and for a
+## front-row blocker it was always empty: the claim search gave them the ball's
+## whole flight to reach it, starting from a body two feet in the air.
+##
+## Measured over 300 rallies: **0 of 151 defensive contacts** happened with any
+## body registered unavailable. After this, 72 of 155.
+##
+## Nothing here is invented. `block_jump_timing` already publishes each blocker's
+## `hang_seconds` and whether they went up late, and `BlockJumpModel.jump_timeline`
+## already turns that into a landing instant -- `hang_seconds` itself is
+## `2 * sqrt(2 * leap / g)`, ballistics rather than a tuned number. All of it was
+## consumed only by playback, so the engine drew the jump correctly and then
+## forgot about it when deciding who could reach the next ball.
+##
+## Written straight into `player_recovery` rather than through `_note_recovery`,
+## because that function looks its delay up in `RECOVERY_DELAY_SECONDS` by name
+## and the four states there are floor recoveries -- knee, fall, blown away.
+## Adding a fifth would be inventing a duration for something the jump model
+## already measures. The record shape is the one `_recovery_time_penalties` and
+## `_recovery_debt` read, so the existing mechanism carries it unchanged.
+##
+## An airborne blocker is not "recovering" the way a dug-out defender is. The
+## state is named so that stays legible, and it deliberately takes no fatigue
+## cost: `RECOVERY_FATIGUE_COST` prices hitting the floor, and the jump is
+## already charged elsewhere.
+func _note_block_airborne(
+	timing: Dictionary, blockers: Array, contact_time: float
+) -> void:
+	for blocker in blockers:
+		var body: VolleyballPlayer = blocker as VolleyballPlayer
+		if body == null or not timing.has(body.id):
+			continue
+		var entry: Dictionary = timing[body.id]
+		var hang := float(entry.get("hang_seconds", 0.0))
+		if hang <= 0.0:
+			continue
+		var error := absf(float(entry.get("timing_error_seconds", 0.0)))
+		var peak := contact_time + (error if bool(entry.get("late", false)) else -error)
+		var landing := peak + hang * 0.5
+		var owed := landing - contact_time
+		if owed <= 0.0:
+			continue
+		## Never shorten a debt this voli already owes. A blocker who was still
+		## getting up from the previous ball and jumped anyway keeps the longer
+		## of the two, rather than having the jump wipe the floor recovery.
+		var existing := float(
+			Dictionary(player_recovery.get(body.id, {})).get("ready_at", 0.0)
+		)
+		if existing >= landing:
+			continue
+		player_recovery[body.id] = {
+			"state": "airborne",
+			"ready_at": landing,
+			"delay": owed,
+		}
+
+
+## Which way each of these bodies is set, for the claim search.
+##
+## **Side-relative and toward the net**, which is where a voli waiting for the
+## other team's attack stands -- and it is mirrored, because the two sides face
+## opposite ways down the same axis. Not toward the ball: preparation must not
+## gain information from the action it is about to be tested against.
+##
+## This is the *standing* case, and it is the honest one for a defender who has
+## not moved since the rally reset them. A defender who has chased a ball has no
+## established post-movement orientation anywhere in this engine -- see
+## `docs/review/READY_ORIENTATION.md` for why that transition is the boundary
+## this pass stops at, and why guessing it here would be inventing a turn model.
+func _ready_facings(player_ids: Array, side: StringName) -> Dictionary:
+	var facings := {}
+	for raw_id in player_ids:
+		facings[int(raw_id)] = RallyPlayerState.side_relative_ready_facing(side)
+	return facings
 
 func _recovery_time_penalties(at_time: float) -> Dictionary:
 	var penalties := {}
@@ -10501,8 +12415,20 @@ func _stamp_navigation(event: RallyEvent, navigation: Variant) -> void:
 ##   only a slight pull toward being the one who touches it. If this term grows
 ##   it is a sign the second contact is being modelled as an attack.
 ##
-## Sized against `duty_bonus`, whose extremes are +0.46 for the designated
-## setter and -0.24 for no duty at all -- a spread of 0.70.
+## Sized against `duty_bonus` -- but **this paragraph used to state that spread
+## wrongly and the constants below were sized against the wrong number.** It
+## read "+0.46 for the designated setter and -0.24 for no duty at all -- a
+## spread of 0.70", which takes the designated-setter term as if it were the
+## whole of that voli's duty. It is not: it is added *on top of* whatever the
+## plan already gave them, so the real extreme is +0.80 -- the plan's own
+## "Primary emergency setter" (+0.34) plus the designated-setter term (+0.46) --
+## and the real spread is **1.04**. Measured, not reasoned:
+## `tools/run_second_contact_probe.gd` and `docs/review/SECOND_CONTACT_AUDIT.md`.
+##
+## The constants are left where they are. 0.09 against 1.04 is still well under
+## the tenth the paragraph below claims, so the sizing conclusion survives its
+## own arithmetic being wrong -- which is worth saying plainly rather than
+## quietly correcting, because it was luck and not judgement.
 ##
 ## **The first sizing said a tenth and was a third.** 0.14 + 0.07 + 0.04 reaches
 ## 0.25 for a voli at the top of all three, which is enough to hand a second
@@ -10530,6 +12456,54 @@ func _second_contact_temperament(candidate: VolleyballPlayer) -> float:
 	return (float(candidate.ego) - 50.0) / 50.0 * SECOND_CONTACT_EGO_PULL \
 		+ (float(candidate.leadership) - 50.0) / 50.0 * SECOND_CONTACT_LEADERSHIP_PULL \
 		+ (float(candidate.aggression) - 50.0) / 50.0 * SECOND_CONTACT_AGGRESSION_PULL
+
+
+## The existing second-contact decision policy, separated from the endpoint
+## search so M5 can apply the same attributes and tactical responsibilities to
+## physically discovered interception opportunities. This extraction changes no
+## weight and introduces no new preference.
+func _second_contact_duty_bonus(
+	candidate: VolleyballPlayer,
+	defensive_plan: Resource,
+	designated_setter_id: int,
+	preferred_setter: VolleyballPlayer,
+) -> float:
+	if candidate == null:
+		return -1000.0
+	var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
+		if defensive_plan != null else null
+	var duty := str(assignment.second_contact_responsibility) \
+		if assignment != null else "No second-contact duty"
+	var duty_bonus := 0.0
+	match duty:
+		"Primary emergency setter": duty_bonus = 0.34
+		"Secondary emergency setter": duty_bonus = 0.18
+		"Stay available to attack": duty_bonus = -0.16
+		"No second-contact duty": duty_bonus = -0.24
+	if candidate.id == designated_setter_id:
+		duty_bonus = 0.46
+	elif candidate == preferred_setter:
+		duty_bonus += 0.20
+	return duty_bonus
+
+
+func _second_contact_claim_score(
+	candidate: VolleyballPlayer,
+	arrival_margin: float,
+	defensive_plan: Resource,
+	designated_setter_id: int,
+	preferred_setter: VolleyballPlayer,
+) -> float:
+	if candidate == null:
+		return -1000.0
+	var arrival_score := clampf(arrival_margin / 1.2, -1.0, 1.0)
+	return arrival_score * 0.52 \
+		+ _rating(candidate, "set_accuracy") * 0.28 \
+		+ _rating(candidate, "decision_making") * 0.12 \
+		+ _second_contact_duty_bonus(
+			candidate, defensive_plan, designated_setter_id, preferred_setter
+		) \
+		+ _second_contact_temperament(candidate)
 
 
 ## What a teammate nearby is worth, which is not always positive.
@@ -10588,6 +12562,589 @@ func _support_term(support_count: int, nearest_teammate_meters: float) -> float:
 	)
 	return SUPPORT_HELP_CEILING * closeness \
 		* minf(float(support_count) / 2.0, 1.0)
+
+
+## M5's launch-time body state. Positions, velocity, facing and recovery are all
+## carried facts. The pre-contact release is the same transition head start the
+## legacy chooser already used, but it runs toward the intent's release seat --
+## a fact available before the dig -- rather than toward the realised ball.
+func _second_contact_actor_states(
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
+	side: StringName,
+	expected_area: Vector2,
+	head_start_seconds: float,
+	launch_time: float,
+) -> Array[RallyPlayerState]:
+	var actors: Array[RallyPlayerState] = []
+	var velocities: Dictionary = opponent_live_velocities \
+		if side == &"opponent" else live_velocities
+	for candidate in candidates:
+		if candidate == null:
+			continue
+		var start := Vector2(starts.get(candidate.id, expected_area))
+		var actor := RallyPlayerState.create(candidate, side, -1, start)
+		actor.velocity = Vector2(velocities.get(candidate.id, Vector2.ZERO))
+		actor.facing = Vector2(player_facing.get(
+			candidate.id, RallyPlayerState.side_relative_ready_facing(side)
+		))
+		var recovery: Dictionary = player_recovery.get(candidate.id, {})
+		var recovery_delay := float(recovery.get("delay", 0.0))
+		var running := maxf(head_start_seconds - recovery_delay, 0.0)
+		if running > 0.0 and expected_area != Vector2.ZERO:
+			var projected := RallyMovementSystemModel.project_toward(
+				actor, expected_area, running,
+				RallyPlayerState.MovementMode.TRANSITION,
+			)
+			var projected_actor := projected.get("actor") as RallyPlayerState
+			if projected_actor != null:
+				actor = projected_actor
+		var ready_at := float(recovery.get("ready_at", 0.0))
+		if ready_at > launch_time:
+			actor.recovery_until = ready_at
+			actor.committed_until = maxf(actor.committed_until, ready_at)
+			actor.body_state = RallyPlayerState.BodyState.AIRBORNE \
+				if str(recovery.get("state", "")) == "airborne" \
+				else RallyPlayerState.BodyState.RECOVERING
+			actor.movement_mode = RallyPlayerState.MovementMode.RECOVERY
+		actors.append(actor)
+	return actors
+
+
+## The receiving side's shared action-choice contest on a ball that crossed the
+## net unresolved -- an overpass. Builds the whole receiving six as actors from
+## the authoritative live maps (position/velocity/facing/recovery/commitment via
+## the existing `_second_contact_actor_states` recipe, never presentation) and
+## asks `OverpassActionSystem.choose()` which physically and legally feasible
+## action wins. Returns the choice dict, or `{}` when nothing is feasible.
+##
+## The legacy resolver drives no persistent `RallyState`, so the wrappers use
+## `choose()`/`execute_control()`/`execute_attack()` (which need none) and hand the
+## generated free flight to the existing transition machinery, rather than
+## `apply_first_contact()`, which is built for the live-integrator `RallyState`.
+func _overpass_choice(
+	free_flight: Dictionary,
+	receiving_players: Array,
+	receiving_side: StringName,
+	lineup: RotationLineup,
+	principles: Resource,
+) -> Dictionary:
+	if lineup == null:
+		return {}
+	## The whole receiving six, at their live positions when the ball crosses.
+	## `OverpassActionSystem` applies its own eligibility and rotation legality;
+	## this only has to present every actor with authoritative state.
+	var typed: Array[VolleyballPlayer] = []
+	var starts := {}
+	var positions: Dictionary = opponent_live_positions \
+		if receiving_side == &"opponent" else live_positions
+	for entry in receiving_players:
+		var player := entry as VolleyballPlayer
+		if player == null:
+			continue
+		typed.append(player)
+		starts[player.id] = Vector2(positions.get(
+			player.id, Vector2(free_flight.get("start_position", Vector2.ZERO))
+		))
+	## `expected_area = Vector2.ZERO` disables the pre-contact projection: an
+	## overpass is reacted to from where the body actually is, not walked toward a
+	## known seat, because nobody called this ball to anyone.
+	var launch_time := float(free_flight.get("start_time", rally_clock))
+	var actors := _second_contact_actor_states(
+		typed, starts, receiving_side, Vector2.ZERO, 0.0, launch_time
+	)
+	return OverpassActionModel.choose(
+		free_flight, actors, lineup, receiving_side, principles
+	)
+
+
+## Execute a chosen controlled/emergency first contact. The intent is the
+## receiving side's own release anchors, all class C -- the same seat and contact
+## height every reception and dig already use. `arrival_floor_seconds` is the
+## setter's own journey to the seat; slack means the ball is not rushed. Returns
+## `{}` when the platform model cannot realise a launch.
+func _overpass_execute_control(
+	choice: Dictionary,
+	setter: VolleyballPlayer,
+	setter_release_seat: Vector2,
+	setter_position: Vector2,
+) -> Dictionary:
+	if setter == null:
+		return {}
+	var intent := {
+		"target_anchor": setter_release_seat,
+		"height_anchor_meters": GeometricAttackPromotionModel \
+			.set_contact_height_meters(setter),
+		"arrival_floor_seconds": _movement_time(
+			setter, setter_position, setter_release_seat, "transition"
+		),
+	}
+	## Derived, not drawn from `rng`: perturbing the rally RNG here would move every
+	## downstream draw on a path that is meant to be inert until it fires.
+	var seed_value := rally_seed + 90_000 + int(choice.get("player_id", 0))
+	var execution := OverpassActionModel.execute_control(choice, intent, seed_value)
+	if not bool(execution.get("available", false)):
+		return {}
+	execution["contact_position"] = Vector2(choice.get(
+		"contact_position", setter_release_seat
+	))
+	execution["contact_time"] = float(choice.get("contact_time", 0.0))
+	execution["realised_trajectory"] = choice.get("realised_trajectory", {})
+	execution["platform_intent"] = intent
+	return execution
+
+
+## Backwards-compatible composition used by the focused live-wiring gate: choose,
+## then execute the control half. `{}` when the contest picks an attack or nothing
+## is feasible.
+func _overpass_control_contact(
+	free_flight: Dictionary,
+	receiving_players: Array,
+	receiving_side: StringName,
+	lineup: RotationLineup,
+	principles: Resource,
+	setter: VolleyballPlayer,
+	setter_release_seat: Vector2,
+	setter_position: Vector2,
+) -> Dictionary:
+	var choice := _overpass_choice(
+		free_flight, receiving_players, receiving_side, lineup, principles
+	)
+	if not bool(choice.get("available", false)) \
+			or str(choice.get("action", "")) == "attack":
+		return {}
+	return _overpass_execute_control(
+		choice, setter, setter_release_seat, setter_position
+	)
+
+
+## Home receives an overpass (the ball crossed back to the home court). Runs the
+## shared contest and either plays the first team contact into the home
+## transition (control) or swings and hands the ball to the opponent defence
+## (attack), or returns `null` so the caller keeps its terminal. `null` also
+## covers the exchange cap: an overpass is a net crossing, and resolving it past
+## `MAX_EXCHANGES` would run a contact beyond the rally's own bound.
+func _resolve_overpass_into_home(
+	result: Resource,
+	free_flight: Dictionary,
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	opponent_team: Resource,
+	defensive_plan: Resource,
+	exchange_number: int,
+	incoming_quality: float,
+) -> Resource:
+	if exchange_number >= MAX_EXCHANGES or defensive_plan == null:
+		return null
+	var choice := _overpass_choice(
+		free_flight, players, &"home", lineup, home_principles
+	)
+	if not bool(choice.get("available", false)):
+		return null
+	var actor := _player_by_id(players, int(choice.get("player_id", -1)))
+	if actor == null:
+		return null
+	if str(choice.get("action", "")) == "attack":
+		return _resolve_overpass_attack(
+			result, choice, free_flight, actor, &"home", players, lineup,
+			opponent_team, defensive_plan, exchange_number, incoming_quality,
+		)
+	var setter := _player_by_id(players, lineup.active_setter_id())
+	if setter == null:
+		return null
+	var seat: Vector2 = defensive_plan.setter_release_target(
+		lineup.active_setter_id()
+	)
+	var contact := _overpass_execute_control(
+		choice, setter, seat, Vector2(live_positions.get(setter.id, seat))
+	)
+	var generated: Dictionary = contact.get("outgoing_trajectory", {})
+	if contact.is_empty() or generated.is_empty():
+		return null
+	var contact_pos := Vector2(contact.get("contact_position", seat))
+	live_positions[actor.id] = contact_pos
+	_add_event(
+		result, RallyEventModel.EventType.RECEPTION, actor.id, actor.display_name,
+		Vector2(free_flight.get("start_position", contact_pos)), contact_pos,
+		true, incoming_quality, "%s plays the overpass" % actor.display_name,
+		"Home first contact on a ball that crossed the net.",
+		_overpass_event_metadata(&"home", contact),
+	)
+	return _resolve_home_continuation(
+		result, players, lineup, actor, contact_pos, opponent_team,
+		defensive_plan, exchange_number + 1, incoming_quality, 0.0, 0.0, generated,
+	)
+
+
+## Opponent receives an overpass (the ball crossed to the opponent court).
+## Symmetric to the home path.
+func _resolve_overpass_into_opponent(
+	result: Resource,
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	free_flight: Dictionary,
+	opponent_team: Resource,
+	defensive_plan: Resource,
+	exchange_number: int,
+	incoming_quality: float,
+	original_hitter: VolleyballPlayer,
+) -> Resource:
+	if exchange_number >= MAX_EXCHANGES or opponent_team == null:
+		return null
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	if opponent_lineup == null:
+		return null
+	var choice := _overpass_choice(
+		free_flight, opponent_team.on_court_players(), &"opponent",
+		opponent_lineup, opponent_principles
+	)
+	if not bool(choice.get("available", false)):
+		return null
+	var actor_id := int(choice.get("player_id", -1))
+	var actor: VolleyballPlayer = null
+	for entry in opponent_team.on_court_players():
+		var candidate := entry as VolleyballPlayer
+		if candidate != null and candidate.id == actor_id:
+			actor = candidate
+			break
+	if actor == null:
+		return null
+	if str(choice.get("action", "")) == "attack":
+		return _resolve_overpass_attack(
+			result, choice, free_flight, actor, &"opponent", players, lineup,
+			opponent_team, defensive_plan, exchange_number, incoming_quality,
+		)
+	var setter := _opponent_setter(opponent_team)
+	if setter == null:
+		return null
+	var seat := _opponent_setter_release_target(opponent_team)
+	var contact := _overpass_execute_control(
+		choice, setter, seat, Vector2(opponent_live_positions.get(setter.id, seat))
+	)
+	var generated: Dictionary = contact.get("outgoing_trajectory", {})
+	if contact.is_empty() or generated.is_empty():
+		return null
+	var contact_pos := Vector2(contact.get("contact_position", seat))
+	opponent_live_positions[actor.id] = contact_pos
+	_add_event(
+		result, RallyEventModel.EventType.RECEPTION, actor.id, actor.display_name,
+		Vector2(free_flight.get("start_position", contact_pos)), contact_pos,
+		true, incoming_quality, "%s plays the overpass" % actor.display_name,
+		"Opponent first contact on a ball that crossed the net.",
+		_overpass_event_metadata(&"opponent", contact),
+	)
+	return _resolve_opponent_transition(
+		result, players, lineup, original_hitter, contact_pos, opponent_team,
+		defensive_plan, exchange_number + 1, incoming_quality, false, actor.id,
+		NAN, 0.0, generated, 0.0,
+	)
+
+
+## The attack half of the overpass contest. The receiving side swings on the
+## first ball; the outgoing swing is an authoritative free flight, and the
+## DEFENDING side meets it through the same first-contact mechanism -- a dig or
+## an emergency play, or a kill when nobody can reach it. No pre-formed block is
+## modelled: a direct attack off a first contact gives the block no set to form
+## against, and forming one would require the `tempo`/`set_quality`/setter inputs
+## `_form_*_block` needs and an overpass has none of -- see
+## `OVERPASS_ACTION_HANDOFF.md`. `blockers = []` accordingly, and "opportunity is
+## not an automatic kill" holds because an in-play swing is routed to the defence.
+func _resolve_overpass_attack(
+	result: Resource,
+	choice: Dictionary,
+	free_flight: Dictionary,
+	attacker: VolleyballPlayer,
+	attacking_side: StringName,
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	opponent_team: Resource,
+	defensive_plan: Resource,
+	exchange_number: int,
+	incoming_quality: float,
+) -> Resource:
+	var defending_home := attacking_side == &"opponent"
+	var defence_map: Dictionary = live_positions if defending_home \
+		else opponent_live_positions
+	var defending_positions: Array = []
+	for value in defence_map.values():
+		defending_positions.append(Vector2(value))
+	## The attacker's own live position, read from the map for the side they are
+	## actually on -- `defence_map` above is the *defending* side's.
+	##
+	## The previous fallback was `attacker.position`, which could never return
+	## anything: a `VolleyballPlayer` is a Resource carrying attributes and has
+	## never had a `position`. Two failures, not one. `Dictionary.get` evaluates
+	## its default eagerly, so that access ran on *every* call and pushed an error
+	## even when `choice` carried a perfectly good contact position; and on the
+	## path it was written for it produced `Vector2(null)`, putting a first-ball
+	## overpass swing in the corner of the court instead of under the attacker.
+	## A fallback that cannot reach its own stated range, failing silently in the
+	## one case it exists for.
+	var attack_map: Dictionary = opponent_live_positions if defending_home \
+		else live_positions
+	var attacker_at := Vector2(0.5, 0.5) if attacker == null \
+		else Vector2(attack_map.get(attacker.id, Vector2(0.5, 0.5)))
+	var contact_pos := Vector2(choice.get("contact_position", attacker_at))
+	## The wall the defence can actually form against a *no-set* first-contact
+	## attack. Its geometry comes only from live inputs: the attack lane
+	## (`contact_pos.x`) and the closure window, which is the incoming overpass
+	## flight -- the time the front row had to close. `preset_window_seconds = 0.0`
+	## is a true statement (there was no set to pre-read), and `tempo`/`set_quality`
+	## are neutral read-cue defaults for a contact that had no set to grade. When
+	## no blocker can close in the window, `block_wall` returns an empty wall --
+	## no *viable* block, correctly, rather than a skipped one. See
+	## `OVERPASS_ACTION_HANDOFF.md`.
+	var window := maxf(
+		float(choice.get("contact_time", 0.0))
+			- float(free_flight.get("start_time", 0.0)),
+		0.05,
+	)
+	var formation: Dictionary
+	var wall: Array = []
+	if defending_home:
+		formation = _form_home_block(
+			players, lineup, defensive_plan, contact_pos.x, 1, 0.5,
+			contact_pos.x, window, 0.0, attacker, 0.0, {"overpass": true},
+		)
+		wall = GeometricAttackPromotionModel.block_wall(
+			formation, _home_block_fallbacks(players, lineup), live_positions,
+			"Balanced", 0.0,
+		)
+	else:
+		formation = _form_opponent_block(
+			opponent_team, contact_pos.x, 1, 0.5, contact_pos.x, window, 0.0,
+			attacker, 0.0,
+		)
+		wall = GeometricAttackPromotionModel.block_wall(
+			formation, _opponent_block_fallbacks(opponent_team),
+			opponent_live_positions, "Balanced", 0.0,
+		)
+	var attacking_principles: Resource = home_principles \
+		if attacking_side == &"home" else opponent_principles
+	var decisiveness := 0.5
+	if attacking_principles != null:
+		var raw: Variant = attacking_principles.get("decisiveness")
+		decisiveness = 0.5 if raw == null else clampf(float(raw), 0.0, 1.0)
+	var seed_value := rally_seed + 91_000 + int(choice.get("player_id", 0))
+	var execution := OverpassActionModel.execute_attack(
+		choice, wall, defending_positions, decisiveness, 0.0, seed_value
+	)
+	if not bool(execution.get("available", false)):
+		return null
+	var swing: Dictionary = execution.get("swing", {})
+	var outgoing: Dictionary = execution.get("outgoing_trajectory", {})
+	if outgoing.is_empty():
+		return null
+	var landing := Vector2(swing.get("landing", contact_pos))
+	var outcome := str(swing.get("outcome", "in"))
+	var errored := outcome in ["net", "out"]
+	_add_event(
+		result, RallyEventModel.EventType.ATTACK, attacker.id, attacker.display_name,
+		contact_pos, landing, not errored, float(choice.get("score", 0.5)),
+		"%s attacks the overpass" % attacker.display_name,
+		"First-contact attack on a ball that crossed the net.",
+		{
+			"side": str(attacking_side), "overpass": true,
+			"team_contact_number": 1, "outgoing_trajectory": outgoing,
+			"swing_outcome": outcome, "first_contact_action": "attack",
+			"block_wall_size": wall.size(),
+		},
+	)
+	## The block resolved the contest inside `resolve_swing` from the real wall.
+	## `net`/`out` is the attacker's error; a `stuff` is the defence's point; a
+	## `tool`/`high_hands`/`block_crush` beat the hands for the attacker's point.
+	if errored:
+		return _finish(
+			result, "attack_error" if attacking_side == &"home" \
+				else "opponent_attack_error",
+			attacking_side == &"opponent", attacker.id,
+			{"hitter": attacker.display_name},
+		)
+	if outcome in ["stuff", "monster_block"]:
+		if attacking_side == &"home":
+			return _finish(
+				result, "blocked", false, attacker.id,
+				{"hitter": attacker.display_name},
+			)
+		var blocker := formation.get("primary") as VolleyballPlayer
+		return _finish(
+			result, "counter_block", true,
+			blocker.id if blocker != null else attacker.id,
+			{"hitter": attacker.display_name},
+		)
+	if outcome in ["tool", "block_crush", "high_hands"]:
+		return _finish(
+			result, "kill" if attacking_side == &"home" else "opponent_kill",
+			attacking_side == &"home", attacker.id,
+			{"hitter": attacker.display_name},
+		)
+	## In play (clean cross or a soft touch/deflection): the defending side plays
+	## the crossed swing as its own first contact. A returned rally means they
+	## controlled it; `null` means nobody could -- the swing lands, the attacker's
+	## point. (A block deflection back to the attacking side -- a recycle -- is not
+	## modelled as attacker coverage here; that is coverage/M6 scope, and it falls
+	## to the same kill fallback, over-crediting the attacker on a rare sub-case.)
+	var defence: Resource = null
+	if attacking_side == &"home":
+		defence = _resolve_overpass_into_opponent(
+			result, players, lineup, outgoing, opponent_team, defensive_plan,
+			exchange_number + 1, 0.6, attacker,
+		)
+	else:
+		defence = _resolve_overpass_into_home(
+			result, outgoing, players, lineup, opponent_team, defensive_plan,
+			exchange_number + 1, 0.6,
+		)
+	if defence != null:
+		return defence
+	return _finish(
+		result, "kill" if attacking_side == &"home" else "opponent_kill",
+		attacking_side == &"home", attacker.id, {"hitter": attacker.display_name},
+	)
+
+
+## The first-contact event's metadata, in the shape a continuation and playback
+## already read. `team_contact_number = 1` because crossing the net is a change
+## of possession; `overpass = true` marks the contact for the census.
+func _overpass_event_metadata(side: StringName, contact: Dictionary) -> Dictionary:
+	return {
+		"side": str(side),
+		"overpass": true,
+		"team_contact_number": 1,
+		"outgoing_trajectory": contact.get("outgoing_trajectory", {}),
+		"realised_trajectory": contact.get("realised_trajectory", {}),
+		"platform_intent": contact.get("platform_intent", {}),
+		"platform_contact": contact.get("platform_contact", {}),
+		"first_contact_action": str(contact.get("action", "")),
+	}
+
+
+## Apply the existing second-contact responsibility policy to physically
+## discovered opportunities. Physics decides who can meet which point of the
+## flight; tactics and attributes decide which viable claimant takes it.
+func _physical_second_contact_choice(
+	free_flight: Dictionary,
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
+	defensive_plan: Resource,
+	designated_setter_id: int,
+	first_contact_player_id: int,
+	preferred_setter: VolleyballPlayer,
+	side: StringName,
+	expected_area: Vector2,
+	expected_height_meters: float,
+	head_start_seconds: float,
+) -> Dictionary:
+	var actors := _second_contact_actor_states(
+		candidates, starts, side, expected_area, head_start_seconds,
+		float(free_flight.get("start_time", rally_clock)),
+	)
+	var physical := FreeFlightInterceptionModel.opportunities(
+		free_flight, actors, &"set", true, [first_contact_player_id],
+		expected_area, expected_height_meters,
+	)
+	if not bool(physical.get("available", false)):
+		return physical
+	var available: Dictionary = physical.get("opportunities", {})
+	var best := {}
+	var best_score := -1000.0
+	var claimants: Array = []
+	for raw_id in available:
+		var opportunity: Dictionary = available[raw_id]
+		var candidate := opportunity.get("player") as VolleyballPlayer
+		if candidate == null:
+			continue
+		var score := _second_contact_claim_score(
+			candidate, float(opportunity.get("arrival_margin", 0.0)),
+			defensive_plan, designated_setter_id, preferred_setter,
+		)
+		claimants.append({"id": candidate.id, "score": score})
+		if score > best_score:
+			best_score = score
+			best = opportunity.duplicate(true)
+			best["score"] = score
+	claimants.sort_custom(func(a, b) -> bool: return float(a.score) > float(b.score))
+	best["claimant_count"] = claimants.size()
+	best["seam_conflict"] = false
+	if claimants.size() >= 2:
+		var gap := float(claimants[0].score) - float(claimants[1].score)
+		best["claim_margin"] = gap
+		best["seam_conflict"] = gap < _seam_margin(
+			_player_by_id(candidates, int(claimants[0].id)),
+			_player_by_id(candidates, int(claimants[1].id)),
+		)
+		best["contested_by"] = int(claimants[1].id)
+	best["terminal"] = physical.get("terminal", {})
+	best["authoritative_free_flight"] = free_flight
+	best["intended_setter_had_opportunity"] = available.has(
+		designated_setter_id
+	)
+	if not best.is_empty() and best.has("contact_time"):
+		best["realised_trajectory"] = FreeFlightInterceptionModel.realised_prefix(
+			free_flight, float(best.contact_time)
+		)
+	return best
+
+
+func _stamp_free_flight_resolution(
+	result: Resource,
+	choice: Dictionary,
+) -> void:
+	if result == null or result.events.is_empty() or choice.is_empty():
+		return
+	var feeding_event := result.events[-1] as RallyEvent
+	if feeding_event == null:
+		return
+	var free_flight: Dictionary = choice.get("authoritative_free_flight", {})
+	if free_flight.is_empty():
+		return
+	feeding_event.metadata["authoritative_free_flight"] = free_flight
+	feeding_event.metadata["free_flight_terminal"] = choice.get("terminal", {})
+	feeding_event.metadata["intended_setter_had_opportunity"] = bool(
+		choice.get("intended_setter_had_opportunity", false)
+	)
+	var realised: Dictionary = choice.get("realised_trajectory", {})
+	if not realised.is_empty():
+		feeding_event.metadata["outgoing_trajectory"] = realised
+		feeding_event.metadata["pass_duration_seconds"] = float(
+			realised.get("duration", 0.0)
+		)
+		feeding_event.metadata["set_contact_height_meters"] = float(
+			choice.get("contact_height_meters", NAN)
+		)
+		feeding_event.end_position = Vector2(choice.get(
+			"contact_position", feeding_event.end_position
+		))
+		## A contact that publishes where its ball was actually played to keeps that
+		## field in step with the endpoint above: under a physical launch the pass
+		## has no authored destination, so "where it went" is the interception, not
+		## the floor the untouched flight would have reached. Written only when the
+		## key already exists, so the families that never published one keep their
+		## metadata shape exactly.
+		if feeding_event.metadata.has("actual_pass_target"):
+			feeding_event.metadata["actual_pass_target"] = feeding_event.end_position
+		feeding_event.metadata["realised_interceptor_id"] = int(choice.get(
+			"player_id", -1
+		))
+		feeding_event.metadata["free_flight_resolution"] = "intercepted"
+		return
+	var terminal: Dictionary = choice.get("terminal", {})
+	var terminal_time := float(terminal.get(
+		"time", free_flight.get("end_time", free_flight.get("start_time", 0.0))
+	))
+	var terminal_segment := FreeFlightInterceptionModel.realised_prefix(
+		free_flight, terminal_time
+	)
+	if not terminal_segment.is_empty():
+		feeding_event.metadata["outgoing_trajectory"] = terminal_segment
+		feeding_event.end_position = Vector2(terminal.get(
+			"position", feeding_event.end_position
+		))
+		if feeding_event.metadata.has("actual_pass_target"):
+			feeding_event.metadata["actual_pass_target"] = feeding_event.end_position
+	feeding_event.metadata["free_flight_resolution"] = str(terminal.get(
+		"reason", "unresolved"
+	))
 
 
 func _spatial_setter_choice(
@@ -10693,25 +13250,40 @@ func _spatial_setter_choice(
 			"set_accuracy", start, 0.0,
 		)
 		var reach_margin := float(arrival.get("reach_margin_meters", 0.0))
-		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
-			if defensive_plan != null else null
-		var duty := str(assignment.second_contact_responsibility) \
-			if assignment != null else "No second-contact duty"
-		var duty_bonus := 0.0
-		match duty:
-			"Primary emergency setter": duty_bonus = 0.34
-			"Secondary emergency setter": duty_bonus = 0.18
-			"Stay available to attack": duty_bonus = -0.16
-			"No second-contact duty": duty_bonus = -0.24
-		if candidate.id == designated_setter_id:
-			duty_bonus += 0.46
-		elif candidate == preferred_setter:
-			duty_bonus += 0.20
-		var arrival_score := clampf((available_time - travel_time) / 1.2, -1.0, 1.0)
-		var score := arrival_score * 0.52 \
-			+ _rating(candidate, "set_accuracy") * 0.28 \
-			+ _rating(candidate, "decision_making") * 0.12 + duty_bonus \
-			+ _second_contact_temperament(candidate)
+		## **The active setter's responsibility replaces the plan's, it does not
+		## stack on it.** `Primary emergency setter` and `Secondary emergency
+		## setter` describe who covers *when the normal setter cannot take the
+		## second contact*. They are a fallback hierarchy, and reading them as an
+		## extra bonus for the normal setter is a category error: it made the
+		## setter's own authority depend on which slot the rotation had put them
+		## in, because the plan writes those duties per slot.
+		##
+		## `+=` totalled +0.80 in slot 2 (where the plan's own primary emergency
+		## duty lives), +0.64 in slot 1 and +0.22 in the other four -- a swing of
+		## 0.58 that no design document asks for. And the top of that range was
+		## exactly pathological: +0.80 against a no-duty -0.24 is a gap of 1.04,
+		## while `arrival_score` below is clamped to [-1, 1] and weighted 0.52, so
+		## the whole authority the legs have is **also 1.04**. Two spans of
+		## identical width, so in that one rotation the legs could tie
+		## responsibility and never beat it. Measured: a stranded setter kept a
+		## ball a team-mate was standing on in rotation 2 and lost it in all five
+		## others, on identical geometry.
+		##
+		## `=` gives the setter a flat +0.46 in every rotation. That is still
+		## above the plan's primary emergency duty (+0.34), so responsibility
+		## stays strongly first -- and 0.46 against -0.24 is 0.70, inside the
+		## legs' 1.04, so an impossible claim can now yield. The policy this
+		## implements: **strong first responsibility, not absolute.**
+		##
+		## Note this branch is unreachable for a setter who played the first
+		## contact -- they are excluded from `candidates` above -- so the fallback
+		## hierarchy among the remaining five is untouched by the change.
+		## `docs/review/SECOND_CONTACT_TRANSFER.md`;
+		## `tools/run_second_contact_probe.gd` gates 1-6.
+		var score := _second_contact_claim_score(
+			candidate, available_time - travel_time, defensive_plan,
+			designated_setter_id, preferred_setter,
+		)
 		if score > best_score:
 			best_score = score
 			best = {
@@ -10821,6 +13393,22 @@ func _seam_margin(first: VolleyballPlayer, second: VolleyballPlayer) -> float:
 
 ## The designated setter, unless they took the first contact -- then whoever the
 ## plan nominated to cover for them.
+##
+## **This does not decide who sets.** Every caller hands the answer straight to
+## `_spatial_setter_choice` as `preferred_setter`, where it is worth +0.20 in a
+## re-score that reads live positions, the realized pass's own duration, the
+## head start and recovery debt. So this function contributes a *preference* and
+## a null-fallback, and nothing else -- which is the right shape, because it
+## takes no position and no clock and could not honestly decide reachability.
+##
+## Worth knowing before reading the numbers below: they are **not** the duty
+## weights `_spatial_setter_choice` uses. The same four duty strings are scored
+## +0.42 / +0.24 / -0.10 / -0.22 here and +0.34 / +0.18 / -0.16 / -0.24 there,
+## and `ShadowSetterResponseSystem._duty_priority` uses a third table that ranks
+## "Stay available to attack" *below* "No second-contact duty" -- the opposite
+## order to both of these. Three tables for one concept, in one leg. Recorded in
+## `docs/review/SECOND_CONTACT_AUDIT.md` §4 rather than unified here, because
+## picking which table is canonical is a tactical decision, not a tidy-up.
 func _second_contact_setter(
 	candidates: Array[VolleyballPlayer],
 	defensive_plan: Resource,
@@ -10984,6 +13572,35 @@ func _resolve_attack_coverage(
 	return {"player": best, "quality": quality, "success": quality >= 0.32}
 
 
+## M4 slice 4: state the body/contact facts an attack-coverage touch already
+## implies. This does not select its outgoing ball and does not alter the legacy
+## success contest. Arrival comes from the shared movement/reach evaluator;
+## posture is classified on the same continuous facts used by a floor dig.
+func _attack_coverage_contact_state(
+	coverer: VolleyballPlayer,
+	start: Vector2,
+	contact: Vector2,
+	ball_time_seconds: float,
+) -> Dictionary:
+	if coverer == null:
+		return {"arrival": {}, "posture": "missing", "contact_height": 0.0}
+	var arrival := CoverageModel.evaluate_arrival(
+		coverer, null, contact, ball_time_seconds, "reception",
+		start, 0.0,
+	)
+	var posture := "planted"
+	if float(arrival.get("reach_margin_meters", 0.0)) < 0.0:
+		posture = "reaching"
+	elif float(arrival.get("distance_meters", 0.0)) > POSTURE_DIG_MOVING_METERS:
+		posture = "moving"
+	return {
+		"arrival": arrival,
+		"posture": posture,
+		"contact_height": GeometricAttackPromotionModel \
+			.pass_contact_height_meters(coverer),
+	}
+
+
 func _finish_serve_error(result: Resource, server_name: String) -> Resource:
 	## Their error, our point -- the mirror of the home `serve_error` path.
 	return _finish(
@@ -11010,6 +13627,21 @@ static func _kill_key(active_play: OffensivePlay, result: Resource) -> String:
 ## simulator to ask.
 func _factor(key: String) -> String:
 	return ExplanationText.factor(key, narration)
+
+
+## A physical dig can put a real ball up that nobody reaches. The point is still
+## credited to the attack that forced that unplayable contact, never to the
+## defender whose platform launched it. Read the event lineage rather than
+## threading another identity through every continuation call.
+func _latest_attack_credit(result: Resource, side: String) -> Dictionary:
+	if result != null:
+		for index in range(result.events.size() - 1, -1, -1):
+			var event := result.events[index] as RallyEvent
+			if event != null \
+					and event.event_type == RallyEventModel.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == side:
+				return {"id": event.actor_id, "name": event.actor_name}
+	return {"id": -1, "name": "the attacker"}
 
 
 func _finish(
@@ -11226,7 +13858,11 @@ func _finalize_rally_timeline(result: Resource) -> void:
 		var trajectory_duration := float(trajectory_data.get("duration", 0.0))
 		var default_duration := 0.12
 		match int(event.event_type):
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			## Both defensive contacts, because this is about how long a body
+			## takes over a ball it is digging up off the floor, and coverage is
+			## that too -- just at a metre rather than at six.
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, \
+			RallyEventModel.EventType.ATTACK_COVERAGE:
 				default_duration = 0.34
 			RallyEventModel.EventType.SET:
 				default_duration = 0.28
@@ -11280,11 +13916,26 @@ func _ensure_event_trajectories(result: Resource) -> void:
 				RallyEventModel.EventType.SET: flight_time = 0.72
 				RallyEventModel.EventType.ATTACK: flight_time = 0.42
 				RallyEventModel.EventType.BLOCK: flight_time = 0.24
-				RallyEventModel.EventType.DEFENSE: flight_time = 0.58
+				## **A successful floor dig no longer arrives here.** It publishes
+				## its own `outgoing_trajectory` at the contact, so the `continue`
+				## at the top of this loop already skipped it. What reaches this
+				## arm is a *failed* dig -- a ball nobody controlled -- and the
+				## flight drawn for it is display only, which is correct: there is
+				## no physical pass to model because no pass happened.
+				##
+				## **Coverage has to be listed or it silently loses its ball.**
+				## The default arm below is `continue`, not a fallback -- an
+				## unlisted type gets no `outgoing_trajectory` at all and the ball
+				## teleports out of the contact. Splitting the enum without this
+				## line would have deleted the flight from every one of the 38
+				## coverage contacts in 700 rallies.
+				RallyEventModel.EventType.DIG, \
+				RallyEventModel.EventType.ATTACK_COVERAGE: flight_time = 0.58
 				_: continue
 		var apex := 0.5
 		match int(event.event_type):
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, \
+			RallyEventModel.EventType.ATTACK_COVERAGE:
 				apex = 1.8
 			RallyEventModel.EventType.SET:
 				apex = 2.4
@@ -11396,6 +14047,64 @@ func _add_event(
 	event.headline = headline
 	event.detail = detail
 	event.metadata = metadata.duplicate(true)
+	## **What every body on court still owes, on the contact that samples it.**
+	##
+	## M7 / C1, and D2's "expose enough authoritative state for playback and
+	## history to draw it". `player_recovery` has carried contact consequences
+	## across phase boundaries since `ACTOR_CONTINUITY.md` certified the plumbing,
+	## and `_recovery_time_penalties` hands it to the second-contact and defensive
+	## claim clocks -- so it is already gameplay authority. It was simply never
+	## *published*. Nothing outside this file could see that the voli who just dug
+	## the ball is still getting up, which meant a probe asking C1's question --
+	## does a contact leave debt the next leg still owes -- had no channel to read
+	## and returned zero for the whole engine.
+	##
+	## Published from `_add_event` for the same reason the jump is charged here:
+	## one place sees every contact, and a per-site publication is a list with one
+	## site missing from it.
+	##
+	## Written onto the event's own copy rather than into `metadata`, which is the
+	## caller's dictionary and in several places is reused for the next event.
+	var recovery_owed := _recovery_time_penalties(rally_clock)
+	if not recovery_owed.is_empty():
+		event.metadata["recovery_debt"] = recovery_owed
+	## **Where the body that made this contact was standing.**
+	##
+	## M8 asks every boundary for `actor_start -> traversal -> contact(position,
+	## time)`, and the contact position was published by two families of seven:
+	## SET and ATTACK, on both sides. Serve, reception, block, dig and coverage
+	## published only where the *ball* was -- a reception event's
+	## `start_position` is the serve's landing point, which is a fact about the
+	## ball and says nothing about the passer.
+	##
+	## Nothing is derived here. At the moment a contact event is appended the
+	## actor's live position *is* their contact position: every family writes it
+	## before appending -- `live_positions[receiver.id] = receiver_reach`,
+	## the hitter's from the attack integration, the setter's from theirs. This
+	## publishes the state that already exists rather than reconstructing it, and
+	## it defers to a family that stated a more precise one of its own.
+	if not event.metadata.has("body_contact_position"):
+		if live_positions.has(actor_id):
+			event.metadata["body_contact_position"] = Vector2(live_positions[actor_id])
+		elif opponent_live_positions.has(actor_id):
+			event.metadata["body_contact_position"] = Vector2(
+				opponent_live_positions[actor_id]
+			)
+	## And where that body started the leg it just finished -- see
+	## `_positions_at_last_contact`. On a rally's first contact there is no
+	## previous one, so the field is honestly absent rather than filled with the
+	## contact position, which would report every server as having travelled
+	## nowhere and be indistinguishable from a server who really had.
+	if _positions_at_last_contact.has(actor_id):
+		event.metadata["actor_leg_start"] = Vector2(
+			_positions_at_last_contact[actor_id]
+		)
+	for player_id in live_positions:
+		_positions_at_last_contact[int(player_id)] = Vector2(live_positions[player_id])
+	for player_id in opponent_live_positions:
+		_positions_at_last_contact[int(player_id)] = Vector2(
+			opponent_live_positions[player_id]
+		)
 	result.events.append(event)
 
 
@@ -12086,6 +14795,23 @@ func _fallback_hitter(
 ## than crowning one player. Removed rather than kept as a second, cruder
 ## answer to a question the block system now owns.
 
+## What the clipboard told this blocker to do with their hands, or "".
+##
+## Returns empty for every reason it can: no sheet handed in, no lineup, a voli
+## not in the rotation, or a slot the manager left blank. An absent instruction
+## is a real state and must read as one -- it is what every block in the game had
+## until now.
+func _hands_instruction_for(
+	blocker: VolleyballPlayer, lineup: RotationLineup
+) -> String:
+	if tactic_sheet == null or blocker == null or lineup == null:
+		return ""
+	var slot := lineup.slot_for_player(blocker.id)
+	if slot <= 0:
+		return ""
+	return str(tactic_sheet.behaviour_of(slot, "Block"))
+
+
 
 ## `set_flight_time` is the opponent set's own flight, for the same reason the
 ## opponent block uses it: it is how long home blockers actually have.
@@ -12107,15 +14833,34 @@ func _form_home_block(
 	preset_window_seconds: float = 0.0,
 	opponent_hitter: VolleyballPlayer = null,
 	set_height_extra_meters: float = 0.0,
+	## **The drift this wall has already been given, if any.**
+	##
+	## This former runs *twice* per opponent transition -- once before the set is
+	## released and once re-formed with the achieved tempo -- and it used to
+	## write the setter pull into `live_positions` on both. The second call then
+	## read the already-pulled position as its start and pulled again from it, so
+	## one misread moved the same body twice. Measured over the matched block-band
+	## population that was 92 of the 134 swings the home wall failed to form on.
+	##
+	## Passing the first call's result in says "this drift already happened".
+	## The body keeps whatever live displacement it genuinely has, the reported
+	## magnitude stays the one that was actually applied, and nothing here decides
+	## whether the pull *should* mutate a body at all -- that is the block-symmetry
+	## question task #63 owns, and it stays open. See
+	## `docs/review/HOME_WALL_FORMATION.md`.
+	applied_setter_pull: Dictionary = {},
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
-	var setter_pull := {}
+	var re_forming := not applied_setter_pull.is_empty()
+	var setter_pull := applied_setter_pull.duplicate() if re_forming else {}
 	for player_id in lineup.front_row_player_ids():
 		var player := _player_by_id(players, player_id)
 		var assignment: Resource = defensive_plan.assignment_for(player_id) \
 			if defensive_plan != null else null
 		if player != null and (assignment == null or bool(assignment.block_participation)):
 			front_blockers.append(player)
+			if re_forming:
+				continue
 			var slot_number := lineup.slot_for_player(player.id)
 			var start: Vector2 = live_positions.get(
 				player.id, CourtConstants.slot_position(slot_number)
@@ -12266,6 +15011,16 @@ func _form_home_block(
 		"assist_attempt": assist_attempt,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		## **The manager's call, finally reaching the court.** `TacticSheet` has
+		## stored a per-slot block behaviour since it was written, and
+		## `_block_hands_intent` has had a branch for it since it was written, and
+		## nothing has ever carried a value between them. Keyed by slot because
+		## that is how the sheet is keyed -- a plan is a shape the club plays, and
+		## it outlives whoever stands in position four.
+		##
+		## Home only. The sheet belongs to the manager's own club, so an opponent
+		## hands-call would have to be invented, and this pass does not invent one.
+		"hands_instruction": _hands_instruction_for(primary, lineup),
 		## The reached positions, so the geometric wall stands where the blockers
 		## closed to rather than where they began.
 		"primary_net_x": float(primary_terms.get("closed_net_x", 0.5)),
@@ -12292,6 +15047,11 @@ func _form_home_block(
 		),
 		"setter_pull": setter_pull,
 		"read_quality": read_quality,
+		## How many front-row bodies the plan actually offered this wall. Zero and
+		## "nobody arrived" are different defects with opposite fixes, and until this
+		## was forwarded the rally record could not tell them apart -- see the
+		## `home_block_terms` publication on the opponent ATTACK event.
+		"front_blocker_count": front_blockers.size(),
 	}
 
 
@@ -12420,9 +15180,15 @@ func _blocker_close_terms(
 	## Blocking closes through the shared locomotion model like every other
 	## movement in the engine. It used to carry its own `lerpf(1.25, 4.40,
 	## lateral_speed)` -- a fourth private copy of the speed curve -- so none of
-	## the stride, cadence or limb-turnover work reached blocking at all. Side is
-	## irrelevant here: `movement_profile()` reads the player, facing and
-	## velocity, never which half of the court they stand on.
+	## the stride, cadence or limb-turnover work reached blocking at all.
+	##
+	## `&"home"` for an opponent blocker too, and that is now a claim rather than
+	## an oversight: `create()` derives the ready facing from the side, so the two
+	## sides are set at `(0, -1)` and `(0, +1)`. A close runs *along* the net, so
+	## the route is +/-x and the dot product with either facing is zero --
+	## `facing_fit` is 0.5 for both sides and the turn cost is identical. It stops
+	## being irrelevant the moment a close is given any component toward the net,
+	## which is why it is written down here instead of left to be rediscovered.
 	var closing_actor := RallyPlayerState.create(
 		blocker, &"home", slot_number, start_position
 	)
@@ -12482,6 +15248,14 @@ func _blocker_close_terms(
 		"footwork_meters": absf(footwork_x - start_x) * CourtConstants.COURT_WIDTH_METERS,
 		"reaction_delay": reaction_delay,
 		"available_time": available_time,
+		## **Where this blocker was standing, against where their rotation puts
+		## them.** The two walls are built from different starting geometry -- the
+		## home former reads `live_positions` and the opponent former reads the
+		## rotation slot -- and no published term said so, which made a close
+		## deficit impossible to attribute to displacement rather than to time.
+		## See `docs/review/HOME_WALL_FORMATION.md`.
+		"start_x": start_x,
+		"slot_x": CourtConstants.slot_position(slot_number).x,
 	}
 
 
@@ -12643,45 +15417,101 @@ func _geometric_swing(
 	return swing
 
 
-## Gate E. The geometric serve, alongside the legacy one.
+## **The serve. One of them, forward.**
 ##
-## Same private stream as the swing, for the same reason, and the record goes
-## straight onto `result.analysis` because a serve happens before the shadow
-## trace this rally will carry exists.
-func _geometric_serve_record(
+## This used to be `_geometric_serve_record`, a shadow: it resolved the serve
+## properly, wrote what it found onto `result.analysis`, and was then ignored
+## while the official ball was fitted backwards to a landing point a coin flip
+## had already chosen. The audit in `docs/design/CONTACT_AND_BALL_FLIGHT.md`
+## found the two disagreed by 2.89x on horizontal pace and concluded that
+## neither was the authority: production asked *"what launch puts the ball where
+## I already decided it lands?"* and the shadow asked *"what does this server's
+## ball do?"* -- two different questions, so the gap was never arithmetic.
+##
+## The order here is the one the audit asked for and it is the whole of the
+## change:
+##
+##     aim -> launch search -> execution error -> flight -> landing -> verdict
+##
+## `_errant_serve_landing` is gone with the rest of the inverse path. A serve
+## misses now because the ball it was hit as missed, and which way it missed --
+## into the tape, long, wide, outside the antenna -- is read off the same flight
+## that decides everything else about it.
+func _canonical_serve(
 	key: String,
 	server: VolleyballPlayer,
 	contact: Vector2,
-	target: Vector2,
+	## Where the server is *trying* to put it. Intent, not a guaranteed landing:
+	## nothing below is permitted to move this point to make a verdict true.
+	aim: Vector2,
 	attacking_negative_y: bool,
 	tactical_risk: float,
-) -> void:
+) -> Dictionary:
 	if server == null:
-		return
+		return {}
 	geometric_rng.seed = hash("%d|serve|%s|%d" % [rally_seed, key, server.id])
-	var serve: Dictionary = GeometricAttackResolverModel.resolve_serve(
-		server, contact,
-		GeometricAttackPromotionModel.serve_contact_height_meters(
-			server,
-			GeometricAttackPromotionModel.serve_effort_for_style(
-				str(server.primary_serve_style)
-			),
+	var contact_height := GeometricAttackPromotionModel.serve_contact_height_meters(
+		server,
+		GeometricAttackPromotionModel.serve_effort_for_style(
+			str(server.primary_serve_style)
 		),
-		target, attacking_negative_y, tactical_risk,
+	)
+	var serve: Dictionary = GeometricAttackResolverModel.resolve_serve(
+		server, contact, contact_height,
+		aim, attacking_negative_y, tactical_risk,
 		GeometricAttackPromotionModel.serve_draws(geometric_rng),
 		_serve_spin(server),
 	)
 	if not bool(serve.get("available", false)):
-		return
+		return {}
 	var resolution: Dictionary = serve.get("resolution", {})
+	var launch: Dictionary = serve.get("launch", {})
+	var landing := Vector2(serve.landing)
+	var horizontal := maxf(
+		float(launch.get("horizontal_speed_mps", 0.0)),
+		BallFlightModel.MIN_SPEED_MPS,
+	)
+	## **The drawn segment ends where the ball ended, and the launch does not
+	## care.** A serve into the tape stops at the tape; a serve that lands flies
+	## its whole range. Both take their duration from the same horizontal speed,
+	## so truncating one cannot change the pace it left the hand at -- which is
+	## exactly what reconstructing speed from two endpoints and a duration had
+	## been doing.
+	var duration := maxf(
+		RallyKinematics.court_distance_meters(contact, landing) / horizontal,
+		RallyKinematics.MIN_FLIGHT_DURATION,
+	)
+	var flight: Dictionary = serve.get("flight", {})
+	## Relative rise above the contact, which is the published contract for every
+	## trajectory in the engine. `solve_flight` reports the apex absolutely.
+	var apex_rise := maxf(
+		float(flight.get("apex_height_meters", contact_height)) - contact_height,
+		0.0,
+	)
 	geometric_serves[key] = {
 		"outcome": str(serve.outcome),
-		"out_reason": str(resolution.get("out_reason", "")),
+		"out_reason": str(serve.get("out_reason", "")),
 		"speed_mps": float(serve.speed_mps),
 		"bearing_degrees": float(serve.bearing_degrees),
 		"launch_mode": str(serve.launch_mode),
-		"landing": Vector2(serve.landing),
+		"landing": landing,
 		"net_clearance_meters": float(resolution.get("net_clearance_meters", 0.0)),
+		## Marked so a reader of `result.analysis` can tell this is the ball that
+		## was played, not the ball that would have been. It was a shadow for
+		## eleven gates and the key names have not changed.
+		"authority": "canonical",
+	}
+	return {
+		"landing": landing,
+		"outcome": str(serve.outcome),
+		"out_reason": str(serve.get("out_reason", "")),
+		"error": str(serve.outcome) != "in",
+		"duration_seconds": duration,
+		"apex_rise_meters": apex_rise,
+		"contact_height_meters": contact_height,
+		"net_clearance_meters": float(resolution.get("net_clearance_meters", 0.0)),
+		"launch": launch,
+		"spin": Dictionary(serve.get("spin", {})),
 	}
 
 
@@ -13453,7 +16283,24 @@ func _read_error_meters(
 		return 0.0
 	var signature := BallContactSignature.create(
 		&"flight",
-		BallPresentation.launch_speed_mps(trajectory),
+		## **The pace the ball actually left the contact at, when the record
+		## knows it.**
+		##
+		## `BallPresentation.launch_speed_mps` derives speed from the start
+		## height, the *chosen endpoint* height and the duration, so a flight cut
+		## short somewhere else comes back slower -- presentation deciding a
+		## gameplay physical value, which §7 of the spec forbids and which this is
+		## the one live instance of. Worse, every published trajectory carried
+		## 1.0 m at both ends, so its vertical term was exactly zero for every
+		## ball in the game and the "speed" a defender read was pure horizontal.
+		##
+		## The serve now publishes its own launch state and this reads it. The
+		## other families still reconstruct, and will until each owns its launch
+		## in turn; the fallback is what makes that a migration rather than a
+		## rewrite.
+		float(trajectory.get(
+			"launch_speed_mps", BallPresentation.launch_speed_mps(trajectory)
+		)),
 		0.0,
 		0.0,
 		float(spin_state.get("topspin_rps", 0.0)),
@@ -14288,25 +17135,6 @@ func _serve_confidence(
 	)
 
 
-## The serve arc, at the pace the server can actually generate.
-##
-## **`solve_struck_arc` asks the least force that reaches, so every serve in the
-## game was hit at exactly the speed needed to land where it landed.** Measured
-## over 400 serves, launch speed ran 14.2 to 15.4 m/s between the tenth and
-## ninetieth percentile -- a band 1.2 m/s wide across every server on both
-## rosters, because the number was a property of the *distance* and nothing
-## else. `serve_power` and `serve_technique` did not reach the ball at all, and
-## raising the whole pace ceiling moved this table by zero.
-##
-## The speed the server has was already being computed: `_geometric_serve_record`
-## resolves the same serve through the shared ballistics and stores it, and it
-## was read for nothing but a shadow comparison. Failure mode #1 -- the third
-## instance of it found on this branch.
-##
-## Speed is carried and the angle is re-solved, which is the doctrine `_swing_arc`
-## states for the same reason: a serve's speed belongs to the server and travels,
-## while its angle belongs to the server *and their target*, and the official
-## landing point is not always the geometric one.
 ## What this hitter puts on this ball.
 ##
 ## `hand_control` rather than `attack_accuracy` is the technique term, because
@@ -14339,145 +17167,6 @@ func _serve_spin(server: VolleyballPlayer) -> Dictionary:
 		_rating(server, "serve_technique"),
 		str(server.dominant_hand) != "Left",
 	)
-
-
-## How much ground a flight covers before it reaches the tape.
-##
-## Read off the line the ball was struck on rather than as the straight
-## perpendicular distance to the net, because a serve angled across the court
-## crosses more ground getting there and it is that longer path the ball has to
-## stay above the tape over.
-func _ground_to_net_meters(
-	from_position: Vector2, to_position: Vector2, distance_meters: float
-) -> float:
-	var span := to_position.y - from_position.y
-	if absf(span) < 0.0001:
-		return 0.0
-	return distance_meters * clampf(
-		(CourtConstants.NET_Y - from_position.y) / span, 0.0, 1.0
-	)
-
-
-## How far a server may come off full pace to get the ball over the tape, and in
-## how many steps. The same shape as `GeometricAttackResolver`'s relief sweep and
-## for the same reason: a server who cannot clear the net at full pace does not
-## serve through it, they take something off.
-const SERVE_PACE_RELIEF_STEPS: int = 8
-const SERVE_PACE_RELIEF_FLOOR: float = 0.55
-## The margin a serve is aimed to clear the tape by. A serve is struck nine
-## metres back, so a small bearing error is a large change in the ground it has
-## to cover before it gets there; this is the same clearance the swing's own
-## search insists on.
-const SERVE_NET_CLEARANCE_METERS: float = 0.12
-## How many spin settings a server is allowed to consider between none and all
-## of theirs. Three is enough to find the trade -- flat, half-brushed, fully
-## brushed -- and a finer sweep buys resolution the shot does not have.
-const SERVE_SPIN_LEVELS: int = 3
-
-
-func _serve_arc(
-	key: String,
-	distance_meters: float,
-	fallback_angle_degrees: float,
-	contact_height_meters: float,
-	## Ground covered before the ball reaches the tape, along the line it was
-	## struck on.
-	net_distance_meters: float,
-	## **The reason a real serve can be hit hard at all.** A flat ball struck at
-	## 25 m/s from nine metres back is either under the tape when it gets there or
-	## past the endline when it comes down; there is no angle that does both. A
-	## topspin serve solves it by falling harder than gravity, so it can be
-	## launched *upward* -- well clear of the net -- and still drop inside the
-	## court. Without this the relief loop below had to keep taking pace off until
-	## the ball was slow enough to be a lob, which is what it did: measured, every
-	## serve came back at the minimum-force solve it was supposed to replace.
-	spin_state: Dictionary = {},
-) -> Dictionary:
-	var speed := float(Dictionary(geometric_serves.get(key, {})).get(
-		"speed_mps", 0.0
-	))
-	if speed <= 0.0:
-		return RallyKinematics.solve_struck_arc(
-			distance_meters, fallback_angle_degrees, contact_height_meters
-		)
-	## **The tape, which the first version of this forgot.** Handing the serve
-	## the server's real pace and then re-solving the angle for the official
-	## landing put 215 of 218 serves *through the net*: at 25 m/s a ball aimed
-	## 17 m away has to be struck slightly downward to land there at all, and
-	## from a 2.9 m contact that is under the tape by the time it arrives. The
-	## flight was right and the shot was impossible, which is the same class of
-	## mistake as solving a spike without knowing the net exists.
-	var needed := CourtConstants.NET_HEIGHT_METERS + SERVE_NET_CLEARANCE_METERS
-	var fallback := RallyKinematics.solve_struck_arc(
-		distance_meters, fallback_angle_degrees, contact_height_meters
-	)
-	## **The quickest ball that clears, not the first one found.** Trying the
-	## flatter root first and taking whatever cleared put every serve on the
-	## lofted root at full pace: measured, they crossed the tape at a mean of
-	## 31 metres and hung for 5.1 seconds. That is the identical mistake
-	## `_quickest_clearing_loft` was written to fix on the attack side, made
-	## again three hundred lines away, and the lesson is the same both times --
-	## what the receiver gets is *time*, so the thing to minimise is the flight.
-	##
-	## Horizontal speed is that directly, and comparing candidates on it prices
-	## the arc and the pace together instead of trading one against the other
-	## blind.
-	var best := {}
-	var best_ground_speed := 0.0
-	for step in range(SERVE_PACE_RELIEF_STEPS):
-		var trial := speed * lerpf(
-			1.0, SERVE_PACE_RELIEF_FLOOR,
-			float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
-		)
-		## **Spin is a dial, not a constant, and it trades range for clearance.**
-		##
-		## Topspin buys the dive that lets a hard serve drop inside the endline,
-		## and it buys it by shortening the flight. Applying a server's full spin
-		## to every serve therefore does the opposite of what it looks like: at 19
-		## m/s under a full topspin dive the ball cannot reach the far court *at
-		## all*, so no root solves, and every serve fell through to the
-		## minimum-force fallback. Measured, that pinned the whole population at
-		## 15.6 m/s no matter what was done to the spin model.
-		##
-		## A server does not have one setting. They choose how hard and how much
-		## to brush the ball, together, and the pair that works is the pair that
-		## gets over the tape and still lands in. Both are swept here for the same
-		## reason `_quickest_clearing_loft` sweeps pace: the answer is a
-		## combination, and picking either half first throws the other away.
-		for spin_step in range(SERVE_SPIN_LEVELS):
-			var used := BallSpin.spin(
-				float(spin_state.get("axis", 0.0)),
-				float(spin_state.get("rate_rps", 0.0))
-					* float(spin_step) / float(SERVE_SPIN_LEVELS - 1),
-			)
-			var gravity := BallSpin.gravity_for(used)
-			var solved := BallFlightModel.solve_angle_for_range(
-				trial, distance_meters, contact_height_meters, gravity
-			)
-			for branch in [&"driven", &"lofted"]:
-				if not bool(solved.get("%s_found" % branch, false)):
-					continue
-				var angle := float(solved.get("%s_angle_degrees" % branch, 0.0))
-				var ground_speed := trial * cos(deg_to_rad(angle))
-				if ground_speed <= best_ground_speed:
-					continue
-				if net_distance_meters > 0.0 and BallFlightModel.height_at_distance(
-					BallFlightModel.solve_flight(
-						trial, angle, contact_height_meters, gravity
-					),
-					net_distance_meters,
-				) < needed:
-					continue
-				best_ground_speed = ground_speed
-				best = RallyKinematics.struck_arc_from_speed(
-					distance_meters, trial, angle, contact_height_meters, gravity
-				)
-	if not best.is_empty():
-		return best
-	## Nothing this server has gets over from here. The old minimum-force solve
-	## is the least-bad ball, and the serve-error verdict was already taken
-	## upstream -- this only decides what the ball looks like on its way.
-	return fallback
 
 
 ## How far this server's ball travels before it lands, at the flat end of their
@@ -14547,6 +17236,24 @@ func _receive_formation_positions(
 ## watches most closely.
 ##
 ## Nothing here is invented. It is the same call, kept whole.
+## The six on court, where they actually are.
+##
+## Published on the reception event in place of a recomputed
+## `_receive_formation_map`. The shape is seeded into `live_positions` at rally
+## initialization now, so asking the formation builder again at reception time
+## would be computing a second copy of state that already exists -- and it would
+## be *wrong* for one voli, the receiver, who has since moved to the ball.
+func _lineup_live_shape(lineup: RotationLineup, live: Dictionary) -> Dictionary:
+	var shape := {}
+	if lineup == null:
+		return shape
+	for slot_number in range(1, 7):
+		var player_id := int(lineup.player_at_slot(slot_number))
+		if live.has(player_id):
+			shape[player_id] = Vector2(live[player_id])
+	return shape
+
+
 func _receive_formation_map(
 	lineup: RotationLineup,
 	players: Array,
@@ -14689,11 +17396,12 @@ func _transition_phase_map(
 				mode = "lateral"
 		var reached := _reached_point(player, here, intent, window_seconds, mode)
 		targets[player.id] = reached
-		out_intents[player.id] = {
-			"intent": &"receiving" if player.id == chase_id \
+		out_intents[player.id] = _travel_intent(
+			player,
+			&"receiving" if player.id == chase_id \
 				else (&"preparing_attack" if mode == "transition" else &"defending"),
-			"progress": _travel_fraction(here, intent, reached),
-		}
+			here, intent, reached, mode, window_seconds,
+		)
 		## The resolver has to believe what playback draws. Leaving these out of
 		## `live_positions` would put the drawn court and the simulated court in
 		## different places from the second contact onward, which is the defect
@@ -14755,10 +17463,13 @@ func _opponent_transition_phase_map(
 			"transition" if player.id == chase_id else "lateral",
 		)
 		targets[player.id] = reached
-		out_intents[player.id] = {
-			"intent": &"receiving" if player.id == chase_id else &"defending",
-			"progress": _travel_fraction(here, intent, reached),
-		}
+		out_intents[player.id] = _travel_intent(
+			player,
+			&"receiving" if player.id == chase_id else &"defending",
+			here, intent, reached,
+			"transition" if player.id == chase_id else "lateral",
+			window_seconds,
+		)
 		opponent_live_positions[player.id] = reached
 	return targets
 
@@ -14857,10 +17568,9 @@ func _cover_phase_map(
 				cue_intent = &"preparing_attack"
 			"Take second contact":
 				cue_intent = &"setting"
-		out_intents[player.id] = {
-			"intent": cue_intent,
-			"progress": _travel_fraction(here, intent, reached),
-		}
+		out_intents[player.id] = _travel_intent(
+			player, cue_intent, here, intent, reached, mode, window_seconds
+		)
 		if opponent_side:
 			opponent_live_positions[player.id] = reached
 		else:
@@ -14889,6 +17599,23 @@ func _cover_phase_map(
 ## Progress is deliberately absent: these are placements rather than journeys,
 ## and a progress bar on a voli who was simply put somewhere would be a number
 ## with nothing behind it.
+## A defensive shape's intents: the journeys that were taken, over a `defending`
+## stamp for anyone the shape placed without one.
+##
+## Two different facts wearing one name is what `_uniform_intents` was becoming
+## here. A voli walked into their zone has a traversal and an arrival; a voli the
+## wall staging put on the net does not, because a different path owns their
+## movement. Overlaying keeps both honest rather than averaging them into a
+## progress bar with nothing behind it.
+static func _defensive_intents(
+	targets: Dictionary, journeys: Dictionary
+) -> Dictionary:
+	var intents := _uniform_intents(targets, &"defending")
+	for raw_player_id in journeys:
+		intents[int(raw_player_id)] = journeys[raw_player_id]
+	return intents
+
+
 static func _uniform_intents(targets: Dictionary, intent: StringName) -> Dictionary:
 	var intents := {}
 	for player_id in targets:
@@ -14987,10 +17714,9 @@ func _tool_pursuit_map(
 	var here: Vector2 = live.get(chaser.id, landing)
 	var reached := _reached_point(chaser, here, landing, window_seconds, "transition")
 	targets[chaser.id] = reached
-	out_intents[chaser.id] = {
-		"intent": &"defending",
-		"progress": _travel_fraction(here, landing, reached),
-	}
+	out_intents[chaser.id] = _travel_intent(
+		chaser, &"defending", here, landing, reached, "transition", window_seconds
+	)
 	live[chaser.id] = reached
 	return targets
 
@@ -15019,10 +17745,9 @@ func _deflection_adjust_map(
 		var intended := here.lerp(dig_position, DEFLECTION_LEAN)
 		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
 		targets[player_id] = reached
-		out_intents[player_id] = {
-			"intent": &"defending",
-			"progress": _travel_fraction(here, intended, reached),
-		}
+		out_intents[player_id] = _travel_intent(
+			player, &"defending", here, intended, reached, "lateral", window_seconds
+		)
 		live[player_id] = reached
 	return targets
 
@@ -15054,10 +17779,9 @@ func _serve_transition_map(
 		## single rally -- which the fatigue model would then faithfully believe.
 		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
 		targets[player_id] = reached
-		out_intents[player_id] = {
-			"intent": &"defending",
-			"progress": _travel_fraction(here, intended, reached),
-		}
+		out_intents[player_id] = _travel_intent(
+			player, &"defending", here, intended, reached, "lateral", window_seconds
+		)
 		live[player_id] = reached
 	return targets
 
@@ -15069,6 +17793,58 @@ func _travel_fraction(from: Vector2, intended: Vector2, reached: Vector2) -> flo
 	return clampf(
 		RallyKinematics.court_distance_meters(from, reached) / asked, 0.0, 1.0
 	)
+
+
+## One off-ball journey, published with **when it ended** and not only where.
+##
+## M7 / C6. Every phase map in this file published a destination and a fraction
+## covered, and nothing at all about time. So a voli who crossed two metres in
+## 0.31 s of a 1.14 s window and then stood waiting was indistinguishable, in
+## everything downstream, from one who spent the whole window walking -- and
+## playback, given a start, an end and a window, draws the second. The C0 census
+## counted it: **0 of 8,125** placed volis carried a duration.
+##
+## The resolver has always known the answer. `_reached_point` computes
+## `_movement_time` to decide whether the target is reachable at all, then throws
+## the number away and returns a position. Asking the same authority for the time
+## to where the voli *actually got* costs one more call and invents nothing: no
+## new speed, no new relation, no window-filling.
+##
+## `traversal_seconds` is the journey. `window_seconds` is how long the ball gave
+## them. A voli with `traversal < window` arrived early and the remainder is
+## theirs to stand in, which is the physical fact C6 asks for -- stated here so
+## that anything drawing them has it, rather than left for presentation to
+## assume. `arrival_progress` is that ratio precomputed, because "did they arrive
+## early" is the question every consumer actually has and deriving it from two
+## fields is where an off-by-one lives.
+##
+## A journey that was cut short comes back with `traversal == window`, by
+## construction: `_reached_point` bisects to exactly the point the window buys,
+## so the time to that point is the window. That is correct and not a special
+## case -- a voli who ran out of time did not arrive early.
+func _travel_intent(
+	mover: VolleyballPlayer,
+	intent: StringName,
+	from: Vector2,
+	intended: Vector2,
+	reached: Vector2,
+	mode: String,
+	window_seconds: float,
+) -> Dictionary:
+	var traversal := 0.0
+	if mover != null:
+		traversal = minf(
+			_movement_time(mover, from, reached, mode), maxf(window_seconds, 0.0)
+		)
+	return {
+		"intent": intent,
+		"progress": _travel_fraction(from, intended, reached),
+		"traversal_seconds": traversal,
+		"window_seconds": maxf(window_seconds, 0.0),
+		"arrival_progress": clampf(
+			traversal / maxf(window_seconds, 0.0001), 0.0, 1.0
+		),
+	}
 
 
 func _weak_passer_target(
@@ -15279,9 +18055,15 @@ func _jump_set_decision(
 	travel_seconds: float = 0.0,
 ) -> Dictionary:
 	if setter == null:
-		return {"jumping": false, "reason": "no setter"}
+		return {"jumping": false, "reason": "no setter", "closing_speed_mps": 0.0}
 	## What they are still carrying when they get there. A body arriving at speed
 	## plants forward; a body that arrived and stopped plants under itself.
+	##
+	## **Returned, because `JUMP_SET_STABLE_APPROACH_MPS` calls itself unmeasured
+	## and nothing published the quantity it acts on.** A threshold whose
+	## distribution has never been seen is the failure `FAILURE_MODES.md` §0
+	## names; this is the half that makes it auditable from the rally record
+	## rather than only from a fixture.
 	var closing_speed := travel_meters / maxf(travel_seconds, 0.01) \
 		if travel_meters > 0.0 and travel_seconds > 0.0 else 0.0
 	var standing := GeometricAttackPromotionModel.set_contact_height_meters(setter)
@@ -15297,11 +18079,13 @@ func _jump_set_decision(
 		return {
 			"jumping": false, "reason": "under the hands",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	if arrival_margin < JUMP_SET_LOAD_SECONDS:
 		return {
 			"jumping": false, "reason": "no time to load",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	## Still moving when the ball arrives. The margin can be generous and the
 	## approach still be wrong: a setter who covered six metres and got there
@@ -15311,15 +18095,18 @@ func _jump_set_decision(
 		return {
 			"jumping": false, "reason": "arriving too fast to plant",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	if poise < JUMP_SET_COMPOSURE_FLOOR:
 		return {
 			"jumping": false, "reason": "cannot release off the floor",
 			"standing_height": standing, "airborne_height": airborne,
+			"closing_speed_mps": closing_speed,
 		}
 	return {
 		"jumping": true, "reason": "jump set",
 		"standing_height": standing, "airborne_height": airborne,
+		"closing_speed_mps": closing_speed,
 	}
 
 

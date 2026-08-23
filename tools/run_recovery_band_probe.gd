@@ -85,7 +85,7 @@ func _collect(
 		var event: Resource = raw_event
 		if int(event.event_type) not in [
 			RallyEventScript.EventType.RECEPTION,
-			RallyEventScript.EventType.DEFENSE,
+			RallyEventScript.EventType.DIG,
 		]:
 			continue
 		if not event.metadata.has("contact_recovery"):

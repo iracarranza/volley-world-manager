@@ -578,20 +578,32 @@ const INHABITED_REGIONS: Array[String] = [
 	"Kutré Lyn", "Zaitgaist",
 ]
 
-## How much harder than usual it is to absorb a region's tradition, as a
-## multiplier on `DOMINANCE_THRESHOLD`.
+## How much harder than usual it is for a neighbour to accent a region's
+## developmental output, as a multiplier on `DOMINANCE_THRESHOLD`.
+##
+## **This resists expression, not philosophy**, and the distinction is
+## load-bearing enough that the older wording here was wrong. What influence
+## drift can move is `region_overlay` -- specialty emphasis and body bias, added
+## on top of a region's own list and never replacing it. What it cannot reach is
+## `REGIONAL_PRINCIPLES`: no code path exists from the overlay to a region's
+## tactical identity, and none should be added. See
+## `docs/design/FIXED_REGIONAL_PHILOSOPHIES_AND_CLUB_TACTICAL_VARIANCE.md` §1.
 ##
 ## Minor regions are by design far weaker than any major neighbor, so without
-## this the strength gap would always clear the threshold: they would blend
-## every single season, never intensify, and lose the specialization that is
-## the entire reason the tier exists. Resistance makes absorption a slow risk
-## rather than a certainty -- a small tradition can still die, which is a
-## better story than one that cannot.
+## this the strength gap would always clear the threshold: every generation
+## would be accented, none would intensify, and the tier would lose the
+## specialization that is the entire reason it exists.
 ##
-## The spread is deliberate. Lo-ong Ralī is an isolated mountain tradition and
-## the hardest to reach; Kutré Lyn is well-connected inland and could plausibly
-## be swallowed outright; Zaitgaist has nothing to resist with, which is the
-## point of it. Regions absent here resist normally.
+## The spread is deliberate. Lo-ong Ralī is isolated and the hardest to reach;
+## Kutré Lyn is well-connected inland and its generations can end up strongly
+## Xérvyan in what they are good at; Zaitgaist has nothing to resist with, which
+## is the point of it. Regions absent here resist normally.
+##
+## **Low resistance is a heavy accent, not an extinction.** A region whose
+## generations read like its neighbour's still believes what it always believed,
+## still holds its own specialty list, and is still there. Cultural extinction is
+## not designed and is not implemented; a future pass that wants it has to say so
+## rather than inherit it from the word "absorb".
 const REGION_TRADITION_RESISTANCE := {
 	"Lo-ong Ralī": 1.4,
 	"Tãul ys Feynt": 1.0,

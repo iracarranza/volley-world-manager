@@ -484,7 +484,7 @@ func _collect_block_ownership(
 				touch_case["reason"] = "event endpoint differs from drawn trajectory"
 				routing_failures.append(touch_case)
 			elif next_contact == null \
-					or int(next_contact.event_type) != RallyEventScript.EventType.DEFENSE \
+					or int(next_contact.event_type) != RallyEventScript.EventType.DIG \
 					or str(next_contact.metadata.get("side", "")) != side:
 				touch_case["reason"] = "next defense belongs to the wrong side"
 				routing_failures.append(touch_case)
@@ -507,7 +507,8 @@ func _collect_block_ownership(
 				recycle_case["reason"] = "recycle landed behind the blocking wall"
 				routing_failures.append(recycle_case)
 			elif next_contact == null \
-					or int(next_contact.event_type) != RallyEventScript.EventType.DEFENSE \
+					or int(next_contact.event_type) \
+						!= RallyEventScript.EventType.ATTACK_COVERAGE \
 					or str(next_contact.metadata.get("side", "")) != expected_side \
 					or str(next_contact.metadata.get("coverage", "")) != "attack":
 				recycle_case["reason"] = "next attack coverage belongs to the wrong side"
@@ -621,7 +622,8 @@ func _collect_tempo_and_contact_rules(
 		var first: Resource = contacts[index]
 		if not bool(first.success) or int(first.event_type) not in [
 			RallyEventScript.EventType.RECEPTION,
-			RallyEventScript.EventType.DEFENSE,
+			RallyEventScript.EventType.DIG,
+			RallyEventScript.EventType.ATTACK_COVERAGE,
 		]:
 			continue
 		var side := str(first.metadata.get("side", ""))
@@ -666,7 +668,7 @@ func _collect_deflection_motion(
 		var defense: Resource = contacts[index + 1]
 		if int(block.event_type) != RallyEventScript.EventType.BLOCK \
 				or not bool(block.success) \
-				or int(defense.event_type) != RallyEventScript.EventType.DEFENSE:
+				or int(defense.event_type) != RallyEventScript.EventType.DIG:
 			continue
 		var trajectory: Dictionary = block.metadata.get("outgoing_trajectory", {})
 		if trajectory.is_empty():

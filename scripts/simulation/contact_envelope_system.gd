@@ -88,9 +88,17 @@ static func evaluate(
 		player, action_type, actor.body_state, actor.balance
 	)
 	var explosiveness := float(player.explosiveness) / 100.0
-	var readiness_factor := clampf(actor.readiness, 0.0, 1.0)
-	var takeoff_time := lerpf(0.34, 0.13, explosiveness) \
-		* lerpf(1.18, 0.92, readiness_factor)
+	## **The bounds carry a folded constant, and it is not a taste decision.**
+	##
+	## This was `lerpf(0.34, 0.13, explosiveness) * lerpf(1.18, 0.92, readiness)`.
+	## `RallyPlayerState.readiness` was never written anywhere in production -- it
+	## held its declared 1.0 for every voli in every rally -- so the second factor
+	## was the constant 0.92 on every takeoff the engine has ever resolved.
+	##
+	## 0.34 x 0.92 = 0.3128 and 0.13 x 0.92 = 0.1196. Deleting the readiness
+	## factor without folding it would have made every takeoff 8.7% slower and
+	## called it a cleanup. See `docs/review/READINESS_REMOVAL.md`.
+	var takeoff_time := lerpf(0.3128, 0.1196, explosiveness)
 	if action_type == &"attack" and not approach_profile.is_empty():
 		## An approach already contains the loading steps for takeoff. A clean
 		## run-up therefore reserves less additional stationary preparation time.
@@ -98,10 +106,22 @@ static func evaluate(
 			1.0, 0.38,
 			clampf(float(approach_profile.get("runup_quality", 0.0)), 0.0, 1.0)
 		)
+	## **AIRBORNE belongs in this list**, and its absence was the one real
+	## physical gap the readiness scalar was standing in front of. A body already
+	## off the floor cannot take off again -- there is nothing to push against --
+	## and this same file says so ten lines down, where `_horizontal_reach` gives
+	## AIRBORNE a posture factor of 0.82 against a balanced 1.0. The model already
+	## believed the body was compromised and then let it leave the floor a second
+	## time.
+	##
+	## Stated as a body-state gate rather than as a penalty, because that is what
+	## it physically is, and because DIVING and RECOVERING are already expressed
+	## exactly this way. No coefficient is introduced.
 	var can_take_off := allow_jump \
 		and actor.body_state not in [
 			RallyPlayerState.BodyState.DIVING,
 			RallyPlayerState.BodyState.RECOVERING,
+			RallyPlayerState.BodyState.AIRBORNE,
 		] \
 		and available_time >= takeoff_time
 	var jump_multiplier := float(approach_profile.get("jump_multiplier", 1.0)) \
@@ -111,9 +131,14 @@ static func evaluate(
 	var approach_quality := clampf(
 		float(approach_profile.get("runup_quality", 1.0)), 0.0, 1.0
 	) if not approach_profile.is_empty() else 1.0
+	## The readiness multiplier that stood here was `x 1.0` on every jump ever
+	## taken, and the run-up already reaches this quantity twice over --
+	## `approach_quality` inside the nominal displacement, and `jump_multiplier`
+	## outside it. A third factor spending the same preparation was double
+	## counting waiting to happen.
 	var accessible_jump := nominal_jump_displacement_meters(
 		player, action_type, approach_quality
-	) * jump_multiplier * readiness_factor if can_take_off else 0.0
+	) * jump_multiplier if can_take_off else 0.0
 	var maximum_height := standing_reach + accessible_jump
 	var standing_possible := contact_height_meters <= standing_reach
 	var jump_action := action_type in [&"set", &"attack", &"block", &"assist_block"]
