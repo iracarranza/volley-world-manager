@@ -222,6 +222,9 @@ Recorded, not chosen.
 ## Certification
 
 - **Full suite — 2,141 pass, 0 fail**, the same count as `main`. No gate moved.
+- **M4–M7 re-run after both repairs, all PASS**: `run_reception_rollout_probe`,
+  `run_coverage_rollout_probe`, `run_overpass_action_probe`,
+  `run_continuous_action_probe`, `run_block_authority_probe`.
 - `run_canonical_sideout.gd` — **PASS, 7/7**, figures identical to before both
   repairs: 7 boundaries, 0 lineage breaks, 0 out of order, 5 actors travelling,
   0 facts reconstructed.
