@@ -1,0 +1,71 @@
+name: Visual Court Gallery CI
+
+on:
+  push:
+    branches:
+      - chatgpt/visual-courts-pass
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-courts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    name: Godot 4.7.2 / regional court gallery
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip \
+            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 \
+            /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            /usr/local/bin/godot
+          godot --version
+
+      - name: Parse and import project
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --editor --quit
+
+      - name: Install virtual display
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+
+      - name: Render gallery
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a godot --path . --rendering-method gl_compatibility \
+            res://tools/visual_court_gallery_cert.tscn
+
+      - name: Collect frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/visual-courts
+          find "$HOME/.local/share/godot" -type f -name 'venue_*.png' -print -exec cp {} artifacts/visual-courts/ \;
+          test "$(find artifacts/visual-courts -type f -name 'venue_*.png' | wc -l)" -ge 32
+
+      - name: Upload gallery
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-court-gallery
+          path: artifacts/visual-courts/*.png
+          if-no-files-found: error
+          retention-days: 14

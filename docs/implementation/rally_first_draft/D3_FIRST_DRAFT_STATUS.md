@@ -83,12 +83,16 @@ applies to this pass. All three arms PASS, unchanged:
   incoming segment is a prefix of the unchanged free flight", which are the two
   M5 invariants B6's identity work sits on top of.
 
-- **M8** — structural run complete, 7/7 on seed 76005 (row above). Its **visual
-  layer is not certified**: that needs the app running and a person watching, and
-  cannot be reached headless. Note that the trace's travel column reads
-  `body_contact_position`, which the endpoint repair changed, so the figures worth
-  quoting are the ones re-measured after `7d18190` rather than the ones taken at
-  `475a7cc`.
+- **M8** — structural run complete, 7/7 on seed 76005 (row above), and re-run
+  unchanged after the `body_contact_position` repair: 7 boundaries, 0 lineage
+  breaks, 0 contacts out of order, 5 actors travelling, 0 facts reconstructed.
+  The trace's travel column reads `body_contact_position`, so it *could* have
+  moved — it did not, because this fixture's dig belongs to the home side and the
+  stale writeback was on the opponent's. A fixture whose dig fell the other way
+  would have reported that digger travelling nowhere.
+
+  Its **visual layer is not certified**: that needs the app running and a person
+  watching, and cannot be reached headless.
 - **M9** — not run. It is the next stage, not part of construction.
 
 ## Is the first draft complete?

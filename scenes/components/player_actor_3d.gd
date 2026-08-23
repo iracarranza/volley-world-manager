@@ -20,7 +20,6 @@ const SetBiomechanicsScript := preload("res://scripts/data/set_biomechanics.gd")
 
 @onready var body_pivot: Node3D = $BodyPivot
 @onready var torso: MeshInstance3D = $BodyPivot/Torso
-@onready var shorts: MeshInstance3D = $BodyPivot/Shorts
 @onready var head: MeshInstance3D = $BodyPivot/Head
 @onready var left_arm: Node3D = $BodyPivot/LeftArm
 @onready var right_arm: Node3D = $BodyPivot/RightArm
@@ -39,6 +38,7 @@ var is_home_team: bool = true
 ## the repository -- they keep the `UIPalette` colours they were drawn against.
 ## Only a match knows this, because only a match has two clubs in it.
 var club_region: String = ""
+var champion_region: String = ""
 var tactical_position: Vector2 = Vector2.ZERO
 var dominant_hand: String = "Right"
 var height_cm: float = 188.0
@@ -265,11 +265,33 @@ const PLANT_JACOBIAN_SAMPLE_DEGREES: float = 1.0
 const _PLANT_LEFT: int = 0
 const _PLANT_RIGHT: int = 1
 
-## How much of the torso's height the shorts cover.
+## How wide a joint ball is against the segments it joins. See the call sites in
+## `_apply_physical_profile` for why these are under 1.0 and why they differ.
+const JOINT_ARM: float = 0.94
+const JOINT_LEG: float = 0.86
+
+## How much darker the shorts are than the shirt.
 ##
-## Less than half, deliberately: past that the kit colour becomes the body and the
-## skin becomes a collar, which inverts what a singlet is.
-const SHORTS_TORSO_SHARE: float = 0.34
+## Named and shared rather than repeated, because two places deriving the same
+## colour is two places that can drift -- and one of them did, the moment the
+## short legs were added against the wrong key.
+const SHORTS_DARKEN: float = 0.38
+
+
+static func shorts_colour(team_color: Color) -> Color:
+	return team_color.darkened(SHORTS_DARKEN)
+
+
+## The club's contrast colour, for anything that has to be *seen against* the
+## strip rather than be part of it -- construction marks, a collar, a sock top.
+##
+## Hoisted out of `_build_kit_marks`, which owned it privately, the moment a
+## second garment needed the same answer. The alternative was a collar deriving
+## its own contrast and drifting from the marks beside it.
+func trim_colour() -> Color:
+	return RegionalKitsScript.trim_colour(club_region) if is_home_team \
+		else RegionalKitsScript.away_kit().darkened(0.42)
+
 
 ## How far a leg can swing out from under the hip, in degrees.
 ##
@@ -415,6 +437,11 @@ func configure(
 	## exactly that. The alternative was a sixth positional argument on a call
 	## made from twenty places, nineteen of which have no region to pass.
 	club_region = str(physical_profile.get("club_region", ""))
+	## Who last won the Sixnet, for the one region whose strip is a pointer
+	## rather than a pattern. Rides the same dictionary as `club_region` and
+	## for the same reason: it is something the view needs in order to draw
+	## this voli that the id cannot tell it.
+	champion_region = str(physical_profile.get("champion_region", ""))
 	## Before the build, not after it. `_build_silhouette` draws the face, so
 	## setting the expression afterwards would build nine boxes twice on every
 	## voli on the court to change the second set.
@@ -449,7 +476,7 @@ func configure(
 ## two of those are not the body.
 func body_meshes() -> Array[MeshInstance3D]:
 	_ensure_node_bindings()
-	var out: Array[MeshInstance3D] = [torso, shorts, head]
+	var out: Array[MeshInstance3D] = [torso, head]
 	out.append_array(arm_meshes())
 	for leg in [left_leg, right_leg]:
 		for path in ["Mesh", "Joint", "Knee/Mesh", "Knee/Joint", "Knee/Shoe"]:
@@ -536,8 +563,10 @@ func apply_ui_palette(light_mode: bool) -> void:
 	var skin_color: Color = silhouette.get("skin", Color("d6a06c"))
 	var crown_color: Color = silhouette.get("crown", skin_color.lightened(0.3))
 	var wears_kit := str(silhouette.get("torso_material", "kit")) == "kit"
+	## Hoisted above both limb loops: the shoulder and the hip are dressed in
+	## separate scopes and one of them cannot see the other's locals.
+	var dressed := wears_kit and BodyTypeModelsScript.draw_garments
 	_apply_material_color(torso, team_color if wears_kit else skin_color)
-	_apply_material_color(shorts, team_color.darkened(0.38))
 	_build_kit_marks(wears_kit)
 	_apply_material_color(head, skin_color)
 	for arm in [left_arm, right_arm]:
@@ -547,13 +576,32 @@ func apply_ui_palette(light_mode: bool) -> void:
 		## The joints are skin too. Left out of this list they kept the default
 		## grey and turned every shoulder and elbow into a bead -- a worse read
 		## than the gap they were added to close.
-		_paint_joint(arm, skin_color)
+		## The shoulder is the **cap of the sleeve** and the hip is the **seat of
+		## the shorts**; neither is skin on a dressed voli.
+		##
+		## The sleeve is a cylinder ending on a flat plane and the shoulder ball
+		## is a sphere sitting proud of it -- measured, the ball's top reached
+		## 1.561 against a sleeve ending at 1.545, so 16 mm of bare skin capped
+		## every shoulder. The hip ball is the same problem at the other end: it
+		## sits at 0.636 to 0.902, in the gap between the shirt's hem and the leg
+		## opening, and left as skin it is the bare patch that read as the torso
+		## extruding out of the shorts from behind.
+		##
+		## Lengthening the sleeve past the ball would have hidden the skin and
+		## left a cut tube where a shoulder should be round. Colouring it gives a
+		## set-in sleeve with a domed cap, which is what the seam on a singlet
+		## does -- and it is decided here, with every other colour, rather than
+		## inside `_joint_ball`, which builds geometry and has no business
+		## knowing what a club wears.
+		_paint_joint(arm, team_color if dressed else skin_color)
 		_paint_joint(arm.get_node("Elbow"), skin_color)
 	for leg in [left_leg, right_leg]:
 		## Two bones and a shoe. The shoe hangs off the knee now, not the hip.
 		_apply_material_color(leg.get_node("Mesh"), skin_color)
 		_apply_material_color(leg.get_node("Knee/Mesh"), skin_color)
-		_paint_joint(leg, skin_color)
+		_paint_joint(
+			leg, shorts_colour(team_color) if dressed else skin_color
+		)
 		_paint_joint(leg.get_node("Knee"), skin_color)
 		_apply_material_color(leg.get_node("Knee/Shoe"), team_color.darkened(0.55))
 	## A face has to read on a pale turnip and on a near-black aubergine, so the
@@ -568,6 +616,18 @@ func apply_ui_palette(light_mode: bool) -> void:
 		match str(cosmetic.get_meta("color_key", "skin")):
 			"kit":
 				_apply_material_color(cosmetic, team_color, part_alpha)
+			## The shorts are a *darker* member of the club's strip, and anything
+			## that is part of them has to say so through the same expression the
+			## shorts themselves use. The short legs were built with the `kit` key
+			## and came out in the shirt's colour, which inverted the garment: the
+			## real shorts read as a dark panel on the torso and the leg openings
+			## read as the shorts. One key, one derivation, no second opinion.
+			"shorts":
+				_apply_material_color(
+					cosmetic, shorts_colour(team_color), part_alpha
+				)
+			"trim":
+				_apply_material_color(cosmetic, trim_colour(), part_alpha)
 			"crown":
 				_apply_material_color(cosmetic, crown_color, part_alpha)
 			"literal":
@@ -2809,29 +2869,251 @@ func _build_kit_marks(wears_kit: bool) -> void:
 		existing.queue_free()
 	if club_region.is_empty() or not wears_kit or torso == null:
 		return
-	var trim := RegionalKitsScript.trim_colour(club_region) if is_home_team \
-		else RegionalKitsScript.away_kit().darkened(0.42)
-	for mark in RegionalKitsScript.marks_for(club_region):
-		var mesh := BoxMesh.new()
-		mesh.size = mark[0]
-		var node := MeshInstance3D.new()
-		node.mesh = mesh
-		node.position = mark[1]
-		node.set_meta("kit_mark", true)
-		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		torso.add_child(node)
-		_apply_material_color(node, trim)
+	var trim := trim_colour()
+	## Where a mark actually sits on the shirt.
+	##
+	## `RegionalKits.MARKS` places every mark at torso-local z ±0.112, and its own
+	## comment calls that "just clear of the torso's own surface". It never was.
+	## A kit mark is a child of the torso *mesh*, so that number has to clear the
+	## torso's **radius** -- and the narrowest kit-wearing body in the roster is
+	## 0.235 while the widest is 0.347. `probe_kit_mark_depth.gd` reports **15 of
+	## 15** bodies burying their construction between 0.12 and 0.24 m inside the
+	## shirt: every region, every build, since the table was written.
+	##
+	## So the whole "construction, not colour" system -- the one that exists so a
+	## side stays nameable in a grayscale frame and at the distance a match is
+	## watched from -- has been rendering nothing, and every kit has been reading
+	## as a single flat colour, which is the exact thing it was built to stop.
+	##
+	## It was reviewed in a probe that drew the patterns flat and never put one on
+	## a torso. That is how a table can be correct and invisible at once, and it
+	## is the same shape of mistake as a threshold measured against the wrong
+	## distribution.
+	##
+	## The authored z is therefore kept only for its **sign** -- front face or
+	## back, which is what `marks_for` mirrors -- and the distance comes from the
+	## body being dressed, plus half the mark's own depth so the slab sits proud
+	## of the surface instead of half-sunk in it.
+	var torso_spec: Dictionary = silhouette.get("torso", {})
+	var torso_radius := float(torso_spec.get("radius", 0.28))
+	## A mark can live on the shirt, on a sleeve or on a shorts leg.
+	##
+	## `MARKS` used to be torso-only, which quietly bounded what a kit could say:
+	## Spëddigh's ticks belong on the sleeve and the hem, Pāwa Hitō's panel has to
+	## reach the thigh to read as one sweep, and Lo-ong Ralī's whole idea is a
+	## line that crosses the waist and keeps going. All three were being drawn as
+	## torso decals of themselves.
+	##
+	## Placed on the **bone** rather than on the garment mesh, the same way
+	## `_add_garments` hangs the sleeve and the cuff, so a mark travels with the
+	## pose and needs no knowledge of where the garment was built.
+	var arm_spec: Dictionary = silhouette.get("arm", {})
+	var leg_spec: Dictionary = silhouette.get("leg", {})
+	var places := {
+		"torso": [[torso, torso_radius]],
+		"sleeves": [
+			[left_arm, float(arm_spec.get("top_radius", 0.07))],
+			[right_arm, float(arm_spec.get("top_radius", 0.07))],
+		],
+		"legs": [
+			[left_leg, float(leg_spec.get("top_radius", 0.11))],
+			[right_leg, float(leg_spec.get("top_radius", 0.11))],
+		],
+	}
+	## A darker relative of the trim, for a rule that has to read *against* the
+	## trim rather than against the shirt -- the edging on a heritage band.
+	var shade := trim.darkened(0.42)
+	var lane := 0
+	for mark in RegionalKitsScript.marks_for(club_region, champion_region):
+		lane += 1
+		var at: Vector3 = mark[1]
+		var roll := float(mark[2]) if mark.size() > 2 else 0.0
+		var place := str(mark[3]) if mark.size() > 3 else "torso"
+		var profile: Dictionary = mark[4] if mark.size() > 4 else {}
+		var ink := shade if str(profile.get("ink", "trim")) == "shade" else trim
+		## A band rings the whole body, so it is built once rather than per face.
+		if place == "band":
+			if at.z < 0.0:
+				continue
+			var ring := MeshInstance3D.new()
+			## Tapered to the body at both edges for the same reason: a band tall
+			## enough to matter reaches into the caps, and a straight-sided ring
+			## there stands off the shirt at its lower edge.
+			var band_semi := float(torso_spec.get("height", 0.9)) * 0.5
+			var half := float(mark[0].y) * 0.5
+			ring.mesh = BodyTypeModelsScript.build_mesh({
+				"shape": "cylinder",
+				"top_radius": float(mark[0].z) + BodyTypeModelsScript._torso_radius_at(
+					torso_spec, (at.y + half) / maxf(band_semi, 0.001)
+				),
+				"bottom_radius": float(mark[0].z) + BodyTypeModelsScript._torso_radius_at(
+					torso_spec, (at.y - half) / maxf(band_semi, 0.001)
+				),
+				"height": float(mark[0].y),
+			})
+			ring.position = Vector3(0.0, at.y, 0.0)
+			ring.set_meta("kit_mark", true)
+			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			torso.add_child(ring)
+			_apply_material_color(ring, ink)
+			continue
+		## **A mark is a shape down its own length, not one rectangle.**
+		##
+		## A box is one width for its whole length, which rules out three things
+		## the design sheets ask for by name: a panel that is widest at the chest
+		## and narrows at the waist, a stroke whose ends taper rather than cut
+		## square, and a panel that bows inward as it descends to follow the
+		## ribcage. Those were listed as "not expressible" and they are, as soon
+		## as one authored mark is allowed to vary its width and its offset along
+		## itself.
+		##
+		## `waist` is the width multiplier at the bottom, `taper` the multiplier
+		## at *both* ends, and `bow` the lateral drift from top to bottom. With no
+		## profile a mark is a plain rectangle, so nothing authored before this
+		## changes shape.
+		##
+		## `segments` is now only a **minimum row count** rather than a number of
+		## separate meshes: the patch subdivides to `PATCH_STEP` on its own, so a
+		## short tick gets two rows whatever the profile says and a long panel
+		## gets enough to be smooth whether or not anyone remembered to ask.
+		var segments := maxi(int(profile.get("segments", 1)), 1)
+		var waist := float(profile.get("waist", 1.0))
+		var taper := float(profile.get("taper", 1.0))
+		var bow := float(profile.get("bow", 0.0))
+		for host in Array(places.get(place, places["torso"])):
+			var parent := host[0] as Node3D
+			if parent == null:
+				continue
+			var face := 1.0 if at.z >= 0.0 else -1.0
+			## How far the mark stands off the shirt.
+			##
+			## Three earlier readings of this number all assumed the speckling
+			## along a long panel was a *seating* fault -- half the depth left
+			## inside the body, a coplanar overlap, a segment swallowed by the
+			## curve. None of them was it, and `build_surface_patch` records what
+			## was: a stack of flat boxes stepping down a curved body shows the
+			## top face of every step. The depth is just a depth again.
+			var proud := float(mark[0].z)
+			var on_torso := place == "torso"
+			var torso_semi := float(torso_spec.get("height", 0.9)) * 0.5
+			## **The angle is fixed once, at the mark's own middle.**
+			##
+			## Holding the *cartesian* x while the radius shrinks toward the caps
+			## drives every segment further around the body: Blôc's outermost
+			## stripe sat at 50 degrees through its middle and 60 at its ends, so
+			## it splayed onto the flank top and bottom instead of running
+			## vertically -- which is what put marks up on the shoulder ball.
+			##
+			## A vertical line on a body is a line of constant *longitude*, so the
+			## angle is computed once against the radius at the mark's centre and
+			## every segment keeps it. The per-segment radius is then only used to
+			## place the mark on the surface, never to re-derive where it is.
+			var reference_radius := (
+				BodyTypeModelsScript._torso_radius_at(
+					torso_spec, at.y / maxf(torso_semi, 0.001)
+				) if on_torso else float(host[1])
+			) + proud
+			## **On the body, not on a plane in front of it.**
+			##
+			## Every mark used to take the same z whatever its x, which is only
+			## correct on the centre line: with a torso radius of 0.308 the body's
+			## surface has fallen to 0.104 by x = 0.29, so a mark placed on the
+			## tangent plane floats two hundred millimetres off the shirt at the
+			## edge. That is why the whole table was authored small and central --
+			## the geometry could not support anything wider, and the constraint was
+			## mistaken for a style.
+			##
+			## A mark offset `x` sits at angle `asin(x / r)` around the body, and
+			## every vertex of it is evaluated on that circle. The authored width is
+			## then spent as **arc**, which is what a garment spec means by a width:
+			## how much shirt the panel covers, not how wide its shadow would fall
+			## on a wall behind it.
+			var roll_radians := deg_to_rad(clampf(roll, -70.0, 70.0))
+			var roll_lean := tan(roll_radians)
+			var roll_widen := 1.0 / maxf(cos(roll_radians), 0.34)
+			## Enough rows that no quad is longer than `PATCH_STEP`, and never fewer
+			## than the profile asked for.
+			var rows := clampi(
+				maxi(segments, int(ceil(float(mark[0].y) / 0.028))), 2, 28
+			)
+			var patch: Array = []
+			for row in range(rows + 1):
+				## 0 at the top of the mark, 1 at the bottom. Rows are the **edges**
+				## of the shape rather than the centres of slabs, so a taper actually
+				## reaches its stated end width instead of stopping a half-step short
+				## of it.
+				##
+				## The slab version read `segment / (segments - 1)`, which is 0.0 for
+				## an unsegmented mark -- so every mark without a profile was placed
+				## half its own height too high. Blôc's stripes are 0.54 long, so they
+				## sat 0.27 above where they were authored: measured top 1.617 against
+				## a torso ending at 1.510, which is a pinstripe floating above the
+				## shirt and under the chin. Rhėn's fan and Tãul's seams rode onto the
+				## shoulder for the same reason.
+				var along := float(row) / float(rows)
+				## Symmetric about the middle, for the taper.
+				var from_end := 1.0 - absf(along - 0.5) * 2.0
+				var width := float(mark[0].x) \
+					* lerpf(1.0, waist, along) \
+					* lerpf(taper, 1.0, from_end)
+				var row_y := at.y + float(mark[0].y) * (0.5 - along)
+				## The radius is read at the row's own height, because the body has
+				## narrowed by the time a long mark reaches its ends and a mark held
+				## at the middle radius would hang off it.
+				var row_radius := (
+					BodyTypeModelsScript._torso_radius_at(
+						torso_spec, row_y / maxf(torso_semi, 0.001)
+					) if on_torso else float(host[1])
+				)
+				var theta := asin(clampf(
+					(at.x + bow * along) / maxf(reference_radius, 0.001), -1.0, 1.0
+				))
+				## A roll is a **shear along the surface**, not a slab tipped in
+				## front of it. Rotating the mesh tilted its whole plane off the
+				## curve, so a fan of steep strokes lifted its outer ends clear of the
+				## shirt; shearing the arc-centre with height keeps every vertex on
+				## the body and only the drawing leans. The ends come out level rather
+				## than cut square to the stroke, which is what a seam sewn onto a
+				## curved panel does anyway.
+				patch.append({
+					"y": row_y,
+					"radius": row_radius,
+					"u": theta * reference_radius - roll_lean * (row_y - at.y),
+					"half": width * 0.5 * roll_widen,
+				})
+			var node := MeshInstance3D.new()
+			node.mesh = BodyTypeModelsScript.build_surface_patch(
+				patch, face, reference_radius, proud
+			)
+			node.set_meta("kit_mark", true)
+			## Which authored mark this patch came from. Godot names every generated
+			## mesh alike, so without this a diagnostic cannot tell "one stripe bent"
+			## from "nine stripes at nine different longitudes", and the second is
+			## the design.
+			node.set_meta("kit_mark_lane", lane)
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			parent.add_child(node)
+			_apply_material_color(node, ink)
 
 
+## Every kit mark, wherever it hangs.
+##
+## Walked rather than read off the torso's children, because a mark can now sit
+## on a sleeve or a shorts leg. The old version cleared only the torso's, so a
+## region change would have left the previous kit's sleeve marks in place -- one
+## shirt wearing two clubs.
 func _kit_marks() -> Array[MeshInstance3D]:
 	var found: Array[MeshInstance3D] = []
-	if torso == null:
-		return found
-	for child in torso.get_children():
+	_collect_kit_marks(self, found)
+	return found
+
+
+func _collect_kit_marks(node: Node, found: Array[MeshInstance3D]) -> void:
+	for child in node.get_children():
 		var mesh_node := child as MeshInstance3D
 		if mesh_node != null and mesh_node.has_meta("kit_mark"):
 			found.append(mesh_node)
-	return found
+		_collect_kit_marks(child, found)
 
 
 func _apply_material_color(
@@ -2906,7 +3188,7 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	var crown := float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M))
 	var upper_span := maxf(crown - hip_offset.y, 0.1)
 	var squeeze := clampf((upper_span - leg_gain) / upper_span, 0.55, 1.45)
-	for part in [torso, shorts, head]:
+	for part in [torso, head]:
 		part.position.y = hip_y + (part.position.y - hip_offset.y) * squeeze
 	torso.scale.y = squeeze
 	for arm in [left_arm, right_arm]:
@@ -2938,23 +3220,20 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	## bottom of a garment rather than as a second body. `_torso_radius_at` is the
 	## same function the collar uses, for the same reason -- a band sized from the
 	## widest point of a round body is a hoop somebody has been posted through.
-	var torso_spec: Dictionary = silhouette.get("torso", {})
-	var torso_height := float(torso_spec.get("height", 0.9)) * squeeze
-	var shorts_height := torso_height * SHORTS_TORSO_SHARE
-	var shorts_spec := {
-		"shape": "cylinder",
-		"top_radius": BodyTypeModelsScript._torso_radius_at(
-			torso_spec, 0.5 - SHORTS_TORSO_SHARE
-		) * 1.03,
-		"bottom_radius": BodyTypeModelsScript._torso_radius_at(
-			torso_spec, 0.5 - SHORTS_TORSO_SHARE * 1.9
-		) * 1.03,
-		"height": shorts_height,
-	}
-	shorts.mesh = BodyTypeModelsScript.build_mesh(shorts_spec)
-	## Hung from the bottom of the torso rather than from the hip joint, because
-	## it is now part of the torso and has to end where the torso does.
-	shorts.position.y = torso.position.y - torso_height * 0.5 + shorts_height * 0.5
+	## **The shorts shell is gone.**
+	##
+	## It was a straight-sided section of the torso's own profile -- an unbroken
+	## ring of dark right round the body, which is a skirt by construction and was
+	## never shorts-shaped. Every problem attributed to it was really it: the
+	## "torso extruding from the shorts" was its bottom face meeting the capsule's
+	## cap in the same plane, and the overhang added to fix that governed a mesh
+	## that should not have been drawn at all.
+	##
+	## What dresses the hips now is what a garment actually is: the hip joint
+	## takes the shorts' colour, and `_add_garments` hangs a real leg opening on
+	## each thigh. The node, its mesh resource, its share constant and its place
+	## in the ink and mask lists are all removed rather than left hidden -- a mesh
+	## kept alive at `visible = false` is the next person's mystery.
 
 	## Scales the *whole two-bone chain*, elbow included.
 	##
@@ -2989,7 +3268,6 @@ func _ensure_node_bindings() -> void:
 		return
 	body_pivot = get_node("BodyPivot")
 	torso = get_node("BodyPivot/Torso")
-	shorts = get_node("BodyPivot/Shorts")
 	head = get_node("BodyPivot/Head")
 	left_arm = get_node("BodyPivot/LeftArm")
 	right_arm = get_node("BodyPivot/RightArm")
@@ -3016,8 +3294,6 @@ func _build_silhouette() -> void:
 
 	torso.mesh = BodyTypeModelsScript.build_mesh(silhouette.get("torso", {}))
 	torso.position = Vector3(0.0, float(silhouette.get("torso_y", 1.13)), 0.0)
-	shorts.mesh = BodyTypeModelsScript.build_mesh(silhouette.get("shorts", {}))
-	shorts.position = Vector3(0.0, float(silhouette.get("shorts_y", 0.60)), 0.0)
 	head.mesh = BodyTypeModelsScript.build_mesh(silhouette.get("head", {}))
 	head.position = Vector3(0.0, float(silhouette.get("head_y", 1.82)), 0.0)
 
@@ -3067,8 +3343,23 @@ func _build_silhouette() -> void:
 		## the other half of the problem standing: a bent elbow opens a wedge on
 		## the outside of the bend, and a shoulder that only touches the torso
 		## reads as an arm resting against a body rather than growing out of one.
-		_joint_ball(arm, float(arm_spec.get("top_radius", 0.09)) * 1.08, 0.0)
-		_joint_ball(elbow, float(arm_spec.get("bottom_radius", 0.08)) * 1.06, 0.0)
+		## **Under 1.0, and not the same figure for the arm and the leg.**
+		##
+		## These were 1.08 and 1.06 -- a ball *wider* than the segments it joins,
+		## which makes the limb sections read as stubs plugged into a bead rather
+		## than as a limb that bends. Under 1.0 the ball sits inside both radii
+		## and does its one job, filling the crease where two capsule caps meet,
+		## while the limb stays the widest thing on the arm.
+		##
+		## The arm and the leg differ because an elbow joins two slim segments and
+		## can afford to be nearly as wide as they are, while a knee joins the
+		## thickest bones on the body and the same *ratio* there produces a far
+		## larger ball in absolute terms. Judged square-on, front and back, where
+		## a joint's crease sits on the silhouette edge -- a three-quarter view
+		## hides half of it behind the limb's own curve, which is why the elbows
+		## looked settled long before the knees did.
+		_joint_ball(arm, float(arm_spec.get("top_radius", 0.09)) * JOINT_ARM, 0.0)
+		_joint_ball(elbow, float(arm_spec.get("bottom_radius", 0.08)) * JOINT_ARM, 0.0)
 
 	## Legs are placed so the foot lands just above the floor whatever the hip
 	## height and shank length are, rather than by the pair of literals that
@@ -3111,8 +3402,8 @@ func _build_silhouette() -> void:
 		var shank_mesh := knee.get_node("Mesh") as MeshInstance3D
 		shank_mesh.mesh = BodyTypeModelsScript.build_mesh(shank_spec)
 		shank_mesh.position = Vector3(0.0, -shank_length * 0.5, 0.0)
-		_joint_ball(leg, float(leg_spec.get("top_radius", 0.11)) * 1.06, 0.0)
-		_joint_ball(knee, float(leg_spec.get("bottom_radius", 0.09)) * 1.08, 0.0)
+		_joint_ball(leg, float(leg_spec.get("top_radius", 0.11)) * JOINT_LEG, 0.0)
+		_joint_ball(knee, float(leg_spec.get("bottom_radius", 0.09)) * JOINT_LEG, 0.0)
 		var shoe := knee.get_node("Shoe") as MeshInstance3D
 		shoe.mesh = BodyTypeModelsScript.build_mesh(shoe_spec)
 		shoe.position = Vector3(0.0, -shank_length, -SHOE_FORWARD_OFFSET)
@@ -3159,7 +3450,7 @@ const INK_COLOR := Color(0.06, 0.07, 0.10)
 ## cosmetics are not -- a new ear or tail should get the crown weight without
 ## anybody remembering to add it here.
 const INK_BODY_PARTS: Array[String] = [
-	"Torso", "Shorts", "Head", "Mesh", "Joint", "Shoe", "Kit",
+	"Torso", "Head", "Mesh", "Joint", "Shoe", "Kit",
 ]
 
 

@@ -1,6 +1,6 @@
 [gd_scene load_steps=6 format=3]
 
-[ext_resource type="Script" path="res://scenes/components/signature_surge_3d.gd" id="1_surge"]
+[ext_resource type="Script" uid="uid://bcv2yprpbxlx7" path="res://scenes/components/signature_surge_3d.gd" id="1_surge"]
 
 [sub_resource type="StandardMaterial3D" id="SurgeMaterial"]
 transparency = 1
@@ -13,7 +13,7 @@ emission_energy_multiplier = 2.0
 [sub_resource type="TorusMesh" id="RingMesh"]
 material = SubResource("SurgeMaterial")
 inner_radius = 0.34
-outer_radius = 0.39
+outer_radius = 0.372
 rings = 24
 ring_segments = 8
 
@@ -26,8 +26,8 @@ rings = 8
 
 [sub_resource type="CylinderMesh" id="StreamMesh"]
 material = SubResource("SurgeMaterial")
-top_radius = 0.018
-bottom_radius = 0.032
+top_radius = 0.012
+bottom_radius = 0.021
 height = 0.82
 radial_segments = 6
 
@@ -44,6 +44,7 @@ mesh = SubResource("CoreMesh")
 [node name="Ring0" type="MeshInstance3D" parent="Rings"]
 cast_shadow = 0
 mesh = SubResource("RingMesh")
+
 [node name="Ring1" type="MeshInstance3D" parent="Rings"]
 cast_shadow = 0
 mesh = SubResource("RingMesh")
