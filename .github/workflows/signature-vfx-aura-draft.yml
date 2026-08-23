@@ -1,0 +1,64 @@
+name: Signature VFX Aura Draft
+
+on:
+  push:
+    branches:
+      - chatgpt/signature-vfx-aura-draft
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signature-vfx-aura-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    name: Godot 4.7.2 / signature aura draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip \
+            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 \
+            /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            /usr/local/bin/godot
+          godot --version
+
+      - name: Parse and import project
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --editor --quit
+
+      - name: Install virtual display
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+
+      - name: Render signature VFX draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a godot --path . --rendering-method gl_compatibility \
+            res://tools/signature_vfx_gallery.tscn
+          test "$(find artifacts/signature-vfx -type f -name '*.png' | wc -l)" -ge 17
+
+      - name: Upload signature VFX draft
+        uses: actions/upload-artifact@v4
+        with:
+          name: signature-vfx-aura-draft
+          path: artifacts/signature-vfx/*.png
+          if-no-files-found: error
+          retention-days: 14
