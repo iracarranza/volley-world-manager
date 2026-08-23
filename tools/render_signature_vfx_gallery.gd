@@ -67,7 +67,7 @@ func _render_case(case_data: Dictionary) -> void:
 		surge.set_cue(move, 1.0, true, phase)
 		await get_tree().process_frame
 		await get_tree().process_frame
-		await _save_frame("%s_%s" % [move, str(phase_data.id)])
+		_save_frame("%s_%s" % [move, str(phase_data.id)])
 
 	## The defensive signatures have unusually meaningful failure reads.
 	## Foresight can fully form but commit to the wrong future; Heroics can start
@@ -76,12 +76,12 @@ func _render_case(case_data: Dictionary) -> void:
 		surge.set_cue(move, 1.0, false, 0.12)
 		await get_tree().process_frame
 		await get_tree().process_frame
-		await _save_frame("foresight_misread")
+		_save_frame("foresight_misread")
 	elif move == "heroics":
 		surge.set_cue(move, 1.0, false, -0.04)
 		await get_tree().process_frame
 		await get_tree().process_frame
-		await _save_frame("heroics_denied")
+		_save_frame("heroics_denied")
 
 	surge.clear()
 
