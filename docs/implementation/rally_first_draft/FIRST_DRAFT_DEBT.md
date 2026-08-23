@@ -227,11 +227,60 @@ the contact publish a ball.
 
 ---
 
+## FD-008 — the serve-receive leg is the one leg that never got off-ball movement
+
+Class: F4
+Subsystem: `_receive_formation_map`, and the five volis it publishes as stationary
+Reproduction: `godot --headless --path . --script res://tools/probe_serve_receive_offball.gd`
+Disposition: **open, non-blocking**
+
+On the receiving side of a serve, the receiver travels and nobody else does at
+all. 113 receptions, both serving sides:
+
+```
+role          legs    moved   moved %     mean m  worst m
+receiver       113      112     99.1%      1.524    4.072
+setter          56        0      0.0%      0.000    0.000
+other          509        0      0.0%      0.000    0.000
+serving side   678      452     66.7%      0.862    3.944
+```
+
+**This is not FD-003 and not a missing capability.** FD-003 is presentation
+inventing movement the resolver was silent about; here the resolver is not
+silent — it publishes all six receiving volis on the reception event, and
+publishes five of them as "where you already are". Nor is the machinery absent:
+C2 gives the setter a transition head start after a dig, C3 walks the hitter
+into an approach during the set, C4 closes the blocker during the set flight,
+C5 establishes the floor shape via `_establish_shape`, and
+`setter_release_target` exists and is used. The serve leg calls none of it.
+FD-004 seeds the formation at rally start, the claimant travels, and the other
+five are copied out of `live_positions` unchanged.
+
+The serving-side row is the control that makes it read as a defect rather than
+a property of first contact: on the *same* leg, over the *same* interval, the
+serving side moves 4 of 6 — because those volis are being walked into a block
+and defence shape by the code above. Both sides had the same information and
+the same window.
+
+What volleyball does over that window and the resolver does not: the setter
+releases toward the net before the ball is struck, one or two volis close on
+the passer to support, and the front-row hitters open toward their runways.
+
+Blocks later construction: no. Next repair: give the reception event's
+receiving-side map the same treatment the other four legs have — the setter via
+`setter_release_target`, the non-claiming defenders via `_establish_shape`, the
+front row via the C3 approach opening — and measure the five together rather
+than one at a time, since they all call `_reached_point` and move volis.
+
+---
+
 ## Post-draft clustering
 
 1. ball/contact authority — *empty; B0/B6 closed every edge by launch identity*
 2. causality/timing — *empty; the B4 repair closed the one violation found*
-3. movement/actor continuity — *empty; FD-004 closed, FD-001 withdrawn*
+3. movement/actor continuity — FD-008, the serve-receive leg publishing five of
+   six receiving volis as stationary. Distinct from FD-002/003 in cluster 8:
+   those are silence, this is a published fact that says "nobody moved"
 4. responsibility/selection — *empty*
 5. attack/block interaction — *empty*
 6. home/opponent asymmetry — *empty; three drifts found and all three repaired — the block's stale swing, the receive zone's `enabled` check, and the opponent dig writing its reach after the event that reads it (`docs/review/BODY_CONTACT_ENDPOINT.md`)*
