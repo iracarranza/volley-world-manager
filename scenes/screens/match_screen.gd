@@ -468,11 +468,12 @@ func _play_flight(
 		if not inspection_frame_sent and progress >= 0.58:
 			inspection_frame_sent = true
 			playback_frame_available.emit(int(event.event_type), event_index, progress)
-		## The incoming actor is already posed from this same resolved contact at
-		## the end of the flight. Label that arrival too so visual probes can
-		## inspect blocks/digs whose own event owns no subsequent ball flight.
+		## The incoming wall is already posed from this same resolved block at the
+		## end of the attack flight. Label that arrival too so visual probes can
+		## inspect blocks whose own event owns no subsequent ball flight.
 		if not incoming_inspection_frame_sent and progress >= 0.82 \
-				and next_contact != null:
+				and next_contact != null \
+				and next_contact.event_type == RallyEventModel.EventType.BLOCK:
 			incoming_inspection_frame_sent = true
 			playback_frame_available.emit(
 				int(next_contact.event_type), event_index + 1, progress,
