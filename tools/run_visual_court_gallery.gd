@@ -13,7 +13,11 @@ var _cinematic_ball: MeshInstance3D
 
 
 func _shoot(venue: Dictionary) -> void:
-	_court = COURT.instantiate()
+	## Runtime-loaded for the same reason as the production builder: MatchCourt3D
+	## owns RegionalVenue3D, so preloading the court back through this inherited
+	## gallery seam would make a circular resource dependency.
+	var court_scene := load("res://scenes/components/match_court_3d.tscn") as PackedScene
+	_court = court_scene.instantiate()
 	add_child(_court)
 	await get_tree().process_frame
 	_key = _court.get_node("KeyLight") as DirectionalLight3D
