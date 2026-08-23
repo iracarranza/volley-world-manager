@@ -9,19 +9,17 @@ const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 
 const CASES := [
-	{"id": "block_crush", "move": "block_crush", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28, "succeeded": true},
-	{"id": "high_hands", "move": "high_hands", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28, "succeeded": true},
-	{"id": "foresight_read", "move": "foresight", "event": RallyEventModel.EventType.DIG, "pose": 0.54, "anchor": 1.42, "succeeded": true},
-	## A misread is the same pre-contact field: presentation must not reveal the
-	## answer early. Only later authoritative body/ball playback distinguishes it.
-	{"id": "foresight_misread", "move": "foresight", "event": RallyEventModel.EventType.DIG, "pose": 0.54, "anchor": 1.42, "succeeded": false},
-	{"id": "heroics_committed", "move": "heroics", "event": RallyEventModel.EventType.DIG, "pose": 0.76, "anchor": 1.15, "succeeded": true},
-	{"id": "heroics_denied", "move": "heroics", "event": RallyEventModel.EventType.DIG, "pose": 0.34, "anchor": 1.15, "succeeded": false},
-	{"id": "monster_block", "move": "monster_block", "event": RallyEventModel.EventType.BLOCK, "pose": 0.84, "anchor": 2.34, "succeeded": true},
+	{"move": "block_crush", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28},
+	{"move": "high_hands", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28},
+	## Foresight is a dig signature even though its advantage is earned before
+	## the attack/serve contact. Review it on the defensive body, not a SET pose.
+	{"move": "foresight", "event": RallyEventModel.EventType.DIG, "pose": 0.54, "anchor": 1.15},
+	{"move": "heroics", "event": RallyEventModel.EventType.DIG, "pose": 0.76, "anchor": 1.15},
+	{"move": "monster_block", "event": RallyEventModel.EventType.BLOCK, "pose": 0.84, "anchor": 2.34},
 ]
 const PHASES := [
-	{"id": "gather", "phase": -0.20},
-	{"id": "contact", "phase": 0.14},
+	{"id": "gather", "phase": -0.28},
+	{"id": "release", "phase": 0.12},
 	{"id": "tail", "phase": 0.46},
 ]
 
@@ -36,10 +34,6 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_actor = ACTOR.instantiate() as PlayerActor3D
 	_court.add_child(_actor)
-	## `club_region` is the production kit input: PlayerActor3D.configure reads
-	## it from the same profile channel MatchCourt3D supplies, then
-	## `apply_ui_palette` resolves RegionalKits. Keep the review on that path
-	## instead of teaching the renderer a second way to dress an actor.
 	_actor.configure(77, true, "Signature review", "Right", {
 		"body_type": "Feli",
 		"body_marking": "blaze",
@@ -61,7 +55,6 @@ func _ready() -> void:
 
 func _render_case(case_data: Dictionary) -> void:
 	var move := str(case_data.move)
-	var case_id := str(case_data.id)
 	var event_type := int(case_data.event)
 	var pose_phase := float(case_data.pose)
 	var anchor := float(case_data.anchor)
@@ -71,14 +64,34 @@ func _render_case(case_data: Dictionary) -> void:
 	surge.contact_anchor_meters = anchor
 	for phase_data in PHASES:
 		var phase := float(phase_data.phase)
-		surge.set_cue(move, 1.0, bool(case_data.succeeded), phase)
+		surge.set_cue(move, 1.0, true, phase)
 		await get_tree().process_frame
 		await get_tree().process_frame
-		var path := "res://artifacts/signature-vfx/%s_%s.png" % [case_id, str(phase_data.id)]
-		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://artifacts/signature-vfx"))
-		get_tree().root.get_texture().get_image().save_png(path)
-		print("saved %s" % ProjectSettings.globalize_path(path))
+		await _save_frame("%s_%s" % [move, str(phase_data.id)])
+
+	## The defensive signatures have unusually meaningful failure reads.
+	## Foresight can fully form but commit to the wrong future; Heroics can start
+	## to ignite and then lose its tiny action window before the rescue exists.
+	if move == "foresight":
+		surge.set_cue(move, 1.0, false, 0.12)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await _save_frame("foresight_misread")
+	elif move == "heroics":
+		surge.set_cue(move, 1.0, false, -0.04)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await _save_frame("heroics_denied")
+
 	surge.clear()
+
+
+func _save_frame(stem: String) -> void:
+	var directory := "res://artifacts/signature-vfx"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(directory))
+	var path := "%s/%s.png" % [directory, stem]
+	get_tree().root.get_texture().get_image().save_png(path)
+	print("saved %s" % ProjectSettings.globalize_path(path))
 
 
 func _hide_readouts() -> void:
