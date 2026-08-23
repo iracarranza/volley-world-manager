@@ -442,6 +442,7 @@ func _play_flight(
 	)
 	var elapsed := 0.0
 	var inspection_frame_sent := false
+	var incoming_inspection_frame_sent := false
 	match_court_3d.ball_actor.reset_flight()
 	match_court_3d.begin_ball_flight(display_trajectory, float(event.quality))
 	while elapsed < duration:
@@ -467,6 +468,15 @@ func _play_flight(
 		if not inspection_frame_sent and progress >= 0.58:
 			inspection_frame_sent = true
 			playback_frame_available.emit(int(event.event_type), event_index, progress)
+		## The incoming actor is already posed from this same resolved contact at
+		## the end of the flight. Label that arrival too so visual probes can
+		## inspect blocks/digs whose own event owns no subsequent ball flight.
+		if not incoming_inspection_frame_sent and progress >= 0.82 \
+				and next_contact != null:
+			incoming_inspection_frame_sent = true
+			playback_frame_available.emit(
+				int(next_contact.event_type), event_index + 1, progress,
+			)
 	match_court_3d.finish_movement_plan(movement_plan, duration)
 	match_court_3d.reset_player_poses()
 	## Returned so the caller knows how much of the rally's clock this leg

@@ -72,7 +72,10 @@ func _rally_with_action_chain(seed_start: int) -> RallyResult:
 		for event_resource in result.events:
 			var event := event_resource as RallyEvent
 			if event != null:
-				present[int(event.event_type)] = true
+				var outgoing := Dictionary(event.metadata.get("outgoing_trajectory", {}))
+				if event.event_type == RallyEventModel.EventType.BLOCK \
+						or not outgoing.is_empty():
+					present[int(event.event_type)] = true
 		if present.has(RallyEventModel.EventType.ATTACK) \
 				and present.has(RallyEventModel.EventType.BLOCK) \
 				and present.has(RallyEventModel.EventType.DIG):
