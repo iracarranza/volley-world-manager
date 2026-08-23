@@ -1,16 +1,12 @@
 class_name SignatureSurge3D
 extends Node3D
 
-## Code-native signature-move VFX.
+## Presentation-only signature VFX.
 ##
-## Simulation supplies move/charge/result/phase. This node only visualises those
-## facts. The common gather says "signature action is charging"; release geometry
-## then says *which action* without relying on colour alone:
-## - block_crush: downward compression/claw;
-## - high_hands: upward deflection fan;
-## - foresight: compact focus reticle;
-## - heroics: low rescue/sweep ripple;
-## - monster_block: broad vertical wall.
+## Draft direction: signatures should read as a change in the air around the
+## voli -- radiance, pressure and short-lived energy flow -- rather than as
+## rings, cages, wires or other tangible props. Simulation still owns move,
+## charge, success and phase. This node never changes rally state.
 
 const MOVE_COLOURS := {
 	"block_crush": Color(1.00, 0.20, 0.045, 1.0),
@@ -22,10 +18,10 @@ const MOVE_COLOURS := {
 
 @onready var core: MeshInstance3D = $Core
 @onready var burst: MeshInstance3D = $Burst
-@onready var rings: Array[MeshInstance3D] = [
+@onready var shells: Array[MeshInstance3D] = [
 	$Rings/Ring0, $Rings/Ring1, $Rings/Ring2,
 ]
-@onready var streams: Array[MeshInstance3D] = [
+@onready var tendrils: Array[MeshInstance3D] = [
 	$Streams/Stream0, $Streams/Stream1, $Streams/Stream2,
 	$Streams/Stream3, $Streams/Stream4, $Streams/Stream5,
 ]
@@ -33,29 +29,17 @@ const MOVE_COLOURS := {
 var _move: String = ""
 var _charge: float = 0.0
 var _succeeded: bool = false
-var _materials: Array[StandardMaterial3D] = []
-var _stream_base: Array[Vector3] = []
-var _contact_rings: Array[MeshInstance3D] = []
 
-## Presentation anchor in metres above the voli's feet. PlayerActor3D may update
-## this from realised pose/contact geometry. No gameplay state reads it.
+## Presentation anchor in metres above the voli's feet. PlayerActor3D updates
+## this from realised pose/contact geometry. It is not gameplay authority.
 var contact_anchor_meters: float = 1.2
 
 
 func _ready() -> void:
-	for visual in [core, burst] + rings + streams:
+	for visual in [core, burst] + shells + tendrils:
 		var material := visual.get_active_material(0) as StandardMaterial3D
 		if material != null:
-			material = material.duplicate() as StandardMaterial3D
-			visual.material_override = material
-			_materials.append(material)
-	for stream in streams:
-		_stream_base.append(stream.position)
-	_contact_rings = [
-		_make_contact_ring("ContactRingA"),
-		_make_contact_ring("ContactRingB"),
-		_make_contact_ring("ContactRingC"),
-	]
+			visual.material_override = material.duplicate() as StandardMaterial3D
 	visible = false
 
 
@@ -64,14 +48,30 @@ static func profile_for(move: String) -> Dictionary:
 	return {
 		"move": key,
 		"colour": Color(MOVE_COLOURS.get(key, Color(1.0, 0.84, 0.20, 1.0))),
+		## Kept for compatibility with existing callers/tests. Composition below
+		## deliberately does not collapse signatures into these old two buckets.
 		"precision": key in ["high_hands", "foresight"],
 		"impact": key in ["block_crush", "heroics", "monster_block"],
+		"action_family": {
+			"block_crush": "attack",
+			"high_hands": "attack",
+			"foresight": "dig",
+			"heroics": "dig",
+			"monster_block": "block",
+		}.get(key, "generic"),
+		"gesture": {
+			"block_crush": "compress_rupture",
+			"high_hands": "shear_peel",
+			"foresight": "anticipate_commit",
+			"heroics": "ignite_rescue",
+			"monster_block": "converge_deny",
+		}.get(key, "pulse"),
 		"shape": {
-			"block_crush": "compression",
-			"high_hands": "deflection",
-			"foresight": "focus",
-			"heroics": "sweep",
-			"monster_block": "wall",
+			"block_crush": "rupture",
+			"high_hands": "peel",
+			"foresight": "anticipation",
+			"heroics": "rescue",
+			"monster_block": "pressure",
 		}.get(key, "pulse"),
 	}
 
@@ -81,256 +81,290 @@ func set_cue(move: String, charge: float, succeeded: bool, phase: float) -> void
 	_charge = clampf(charge, 0.0, 1.0)
 	_succeeded = succeeded
 	if _move.is_empty() or _charge <= 0.001:
-		visible = false
+		clear()
 		return
-	visible = phase >= -0.92 and phase <= 1.0
+
+	visible = phase >= -0.94 and phase <= 1.0
 	if not visible:
 		return
 
 	var profile := profile_for(_move)
 	var colour := Color(profile.colour)
-	var precision := bool(profile.precision)
-	var gather := smoothstep(-0.88, -0.08, phase)
-	var release := smoothstep(-0.04, 0.18, phase)
-	var release_peak := release * (1.0 - smoothstep(0.34, 0.82, phase))
-	var fade := 1.0 - smoothstep(0.30, 1.0, phase)
-	var strength := lerpf(0.38, 1.0, _charge)
-	var accent := colour.lerp(Color.WHITE, 0.42 if precision else 0.20)
+	var accent := colour.lerp(Color.WHITE, 0.30)
+	var gather := smoothstep(-0.90, -0.18, phase)
+	var release := smoothstep(-0.16, 0.16, phase)
+	var release_peak := release * (1.0 - smoothstep(0.34, 0.78, phase))
+	var fade := 1.0 - smoothstep(0.38, 1.0, phase)
+	var strength := lerpf(0.42, 1.0, _charge)
 
-	_draw_gather_rings(gather, fade, strength, colour, precision, phase)
-	_draw_core(gather, fade, strength, colour, precision, phase)
-	_draw_streams(gather, release_peak, fade, strength, colour, accent, phase)
-	_draw_burst(release, release_peak, fade, strength, colour, accent)
-	_draw_contact_shape(release, release_peak, fade, strength, colour, accent)
+	## Heroics can visibly begin to form and then be denied before the emergency
+	## action exists. Do not let a failed cue play a fake rescue burst.
+	var denial := 1.0
+	if _move == "heroics" and not _succeeded:
+		denial = 1.0 - smoothstep(-0.18, 0.06, phase)
+
+	_draw_shells(gather, release_peak, fade * denial, strength, colour, phase)
+	_draw_core(gather, release_peak, fade * denial, strength, colour, phase)
+	_draw_tendrils(gather, release_peak, fade * denial, strength, colour, accent, phase)
+	_draw_release(release, release_peak, fade * denial, strength, colour, accent, phase)
 
 
-func _draw_gather_rings(
-	gather: float, fade: float, strength: float, colour: Color,
-	precision: bool, phase: float,
+func _draw_shells(
+	gather: float, release_peak: float, fade: float, strength: float,
+	colour: Color, phase: float,
 ) -> void:
-	for index in rings.size():
-		var ring := rings[index]
-		var travel := fposmod((phase + 0.90) * 1.42 + float(index) / 3.0, 1.0)
-		ring.position = Vector3(0.0, lerpf(0.12, contact_anchor_meters, travel), 0.0)
-		ring.rotation = Vector3.ZERO
-		var start_radius := 0.66 if precision else 0.73
-		var end_radius := 0.29 if precision else 0.43
-		var ring_scale := lerpf(start_radius, end_radius, travel) * lerpf(0.82, 1.04, strength)
-		ring.scale = Vector3.ONE * ring_scale
-		_set_alpha(ring, colour, gather * fade * (1.0 - travel * 0.62) * 0.52)
+	for index in shells.size():
+		var shell := shells[index]
+		var spec := _shell_spec(index, release_peak, strength)
+		var breathe := 0.86 + 0.14 * sin((phase + 1.0) * TAU * 2.1 + float(index) * 0.8)
+		shell.position = Vector3(spec.position)
+		shell.rotation = Vector3.ZERO
+		var size := Vector2(spec.size) * breathe
+		shell.scale = Vector3(size.x, size.y, 1.0)
+		var stagger := 0.82 + float(index) * 0.08
+		var alpha := gather * fade * strength * stagger * float(spec.alpha)
+		_set_glow(shell, colour, alpha)
 
 
 func _draw_core(
-	gather: float, fade: float, strength: float, colour: Color,
-	precision: bool, phase: float,
+	gather: float, release_peak: float, fade: float, strength: float,
+	colour: Color, phase: float,
 ) -> void:
-	var pulse := (0.72 + 0.28 * sin((phase + 1.0) * TAU * 3.0)) * gather
-	core.position.y = contact_anchor_meters * 0.46
-	var width := lerpf(0.25, 0.39, pulse * strength)
-	var height := lerpf(0.31, 0.53, pulse * strength)
-	core.scale = Vector3(width, height, width)
-	_set_alpha(core, colour, pulse * fade * (0.20 if precision else 0.27))
+	var pulse := 0.78 + 0.22 * sin((phase + 1.0) * TAU * 2.8)
+	var center := _body_center()
+	core.position = center
+	core.rotation = Vector3.ZERO
+	var scale_2d := Vector2(0.74, 1.02)
+	match _move:
+		"block_crush":
+			scale_2d = Vector2(0.86, 1.18 - release_peak * 0.20)
+		"high_hands":
+			scale_2d = Vector2(0.62, 0.92)
+		"foresight":
+			scale_2d = Vector2(0.82, 0.70)
+		"heroics":
+			scale_2d = Vector2(1.02 + release_peak * 0.32, 0.68)
+		"monster_block":
+			scale_2d = Vector2(1.08, 1.30)
+	core.scale = Vector3(scale_2d.x, scale_2d.y, 1.0) * pulse * strength
+	_set_glow(core, colour, gather * fade * strength * 0.30)
 
 
-func _draw_streams(
+func _draw_tendrils(
 	gather: float, release_peak: float, fade: float, strength: float,
 	colour: Color, accent: Color, phase: float,
 ) -> void:
-	for index in streams.size():
-		var stream := streams[index]
-		var flicker := 0.76 + 0.24 * sin((phase + 1.0) * 19.0 + float(index) * 1.7)
-		var travel := fposmod(
-			(phase + 0.90) * 1.72 + float(index) / float(streams.size()), 1.0
-		)
-		var base := _stream_base[index]
-		var gather_position := Vector3(
-			base.x,
-			lerpf(0.18, contact_anchor_meters * 0.98, travel),
-			base.z,
-		)
-		var spec := _release_spec(index, strength)
-		var target_position: Vector3 = spec.position
-		var direction: Vector3 = spec.direction
-		var target_length := float(spec.length)
-		var morph := release_peak
-		stream.position = gather_position.lerp(target_position, morph)
-		if morph > 0.04:
-			stream.rotation = Quaternion(Vector3.UP, direction).get_euler()
-		else:
-			stream.rotation = Vector3(0.0, float(index) / float(streams.size()) * TAU + phase * 0.22, 0.0)
-		stream.scale = Vector3(
-			lerpf(1.0, float(spec.width), morph),
-			lerpf(lerpf(0.20, 0.42, strength) * flicker, target_length, morph),
-			lerpf(1.0, float(spec.width), morph),
-		)
-		var gather_alpha := gather * fade * flicker * (1.0 - travel * 0.56) * 0.50
-		var release_alpha := release_peak * fade * strength * (0.90 if _succeeded else 0.68)
-		_set_alpha(
-			stream,
-			accent if morph > 0.32 else colour,
-			maxf(gather_alpha * (1.0 - morph), release_alpha),
-		)
+	for index in tendrils.size():
+		var tendril := tendrils[index]
+		var spec := _tendril_spec(index, release_peak, strength)
+		var flicker := 0.72 + 0.28 * sin((phase + 1.0) * 14.0 + float(index) * 1.31)
+		var size := Vector2(spec.size)
+		tendril.position = Vector3(spec.position)
+		tendril.rotation = Vector3(0.0, 0.0, float(spec.rotation))
+		tendril.scale = Vector3(size.x, size.y, 1.0)
+		var release_gain := 1.0 if _succeeded else 0.46
+		if _move == "foresight" and not _succeeded:
+			## A wrong read still fully existed before contact; its cost is that
+			## the defender committed to the wrong future, not that the cue failed
+			## to charge. Preserve the early field and only weaken confirmation.
+			release_gain = 0.64
+		if _move == "heroics" and not _succeeded:
+			release_gain = 0.08
+		var ambient := gather * (1.0 - release_peak * 0.55) * 0.16
+		var released := release_peak * release_gain * 0.34
+		var alpha := maxf(ambient, released) * fade * strength * flicker
+		_set_glow(tendril, accent if release_peak > 0.22 else colour, alpha)
 
 
-func _release_spec(index: int, strength: float) -> Dictionary:
-	var lane := float(index) - 2.5
-	var angle := TAU * float(index) / float(streams.size())
-	var anchor := Vector3(0.0, contact_anchor_meters, 0.0)
+func _draw_release(
+	release: float, release_peak: float, fade: float, strength: float,
+	colour: Color, accent: Color, phase: float,
+) -> void:
+	burst.rotation = Vector3.ZERO
+	var alpha := release_peak * fade * strength
+	var size := Vector2(0.35, 0.35)
+	var position := Vector3(0.0, contact_anchor_meters, 0.12)
+
 	match _move:
 		"block_crush":
-			var direction := Vector3(lane * 0.18, -0.92 + absf(lane) * 0.035, -0.10).normalized()
+			## Power route: aura compresses at hand/block height, then tears
+			## downward. The soft ellipse is pressure, not a physical claw.
+			position = Vector3(0.20, contact_anchor_meters - 0.08 - release * 0.18, 0.12)
+			size = Vector2(0.94 + release * 0.18, 0.62 + release * 0.58)
+			alpha *= 0.72 if _succeeded else 0.32
+		"high_hands":
+			## Accuracy route: a smaller flare peels upward/outward rather than
+			## detonating through the wall.
+			position = Vector3(0.28 + release * 0.18, contact_anchor_meters + 0.10 + release * 0.16, 0.12)
+			burst.rotation.z = -0.58
+			size = Vector2(0.48, 1.00 + release * 0.22)
+			alpha *= 0.62 if _succeeded else 0.28
+		"foresight":
+			## Foresight's spectacle is early commitment, not a contact buff. The
+			## release therefore stays body-local and comparatively quiet.
+			var read_side := 1.0 if _succeeded else -1.0
+			position = Vector3(read_side * (0.12 + release * 0.18), 0.92, 0.14)
+			size = Vector2(0.82 + release * 0.14, 0.52)
+			alpha *= 0.36
+		"heroics":
+			## Heroics is an emergency physical action: broad, low and turbulent.
+			## A denied attempt extinguishes before this can become a rescue.
+			position = Vector3(-0.12 - release * 0.22, maxf(0.42, contact_anchor_meters * 0.48), 0.14)
+			burst.rotation.z = 0.72
+			size = Vector2(1.46 + release * 0.36, 0.52)
+			alpha *= 0.82 if _succeeded else 0.04
+		"monster_block":
+			## Timing/denial: a broad, soft pressure bloom at apex. It should read
+			## as the air hardening for an instant, never as cage bars.
+			position = Vector3(0.0, contact_anchor_meters - 0.05, 0.12)
+			size = Vector2(1.62 + release * 0.18, 0.64)
+			alpha *= 0.76 if _succeeded else 0.30
+		_:
+			size = Vector2.ONE * (0.56 + release * 0.30)
+
+	burst.position = position
+	burst.scale = Vector3(size.x, size.y, 1.0)
+	var pulse := 0.86 + 0.14 * sin((phase + 1.0) * TAU * 3.2)
+	_set_glow(burst, accent.lerp(colour, 0.18), alpha * pulse)
+
+
+func _shell_spec(index: int, release_peak: float, strength: float) -> Dictionary:
+	var anchor := contact_anchor_meters
+	match _move:
+		"block_crush":
+			var positions := [
+				Vector3(-0.06, anchor * 0.48, 0.10),
+				Vector3(0.13, anchor * 0.67, 0.11),
+				Vector3(0.24, anchor * 0.86, 0.12),
+			]
+			var sizes := [
+				Vector2(1.10, 1.40),
+				Vector2(0.90, 1.12),
+				Vector2(0.68, 0.80 - release_peak * 0.12),
+			]
+			return {"position": positions[index], "size": sizes[index] * strength, "alpha": 0.23}
+		"high_hands":
+			var positions := [
+				Vector3(0.00, anchor * 0.50, 0.10),
+				Vector3(0.16, anchor * 0.70, 0.11),
+				Vector3(0.28, anchor * 0.91, 0.12),
+			]
+			var sizes := [Vector2(0.82, 1.08), Vector2(0.68, 0.92), Vector2(0.48, 0.62)]
+			return {"position": positions[index], "size": sizes[index] * strength, "alpha": 0.20}
+		"foresight":
+			var side := 1.0 if _succeeded else -1.0
+			var shift := side * release_peak * 0.22
+			var positions := [
+				Vector3(shift * 0.45, 0.68, 0.11),
+				Vector3(shift * 0.72, 0.94, 0.12),
+				Vector3(shift, 1.18, 0.13),
+			]
+			var sizes := [Vector2(1.06, 0.56), Vector2(0.90, 0.62), Vector2(0.68, 0.54)]
+			return {"position": positions[index], "size": sizes[index] * strength, "alpha": 0.18}
+		"heroics":
+			var positions := [
+				Vector3(-0.10, 0.48, 0.12),
+				Vector3(-0.02, 0.72, 0.13),
+				Vector3(0.08, 0.98, 0.12),
+			]
+			var sizes := [
+				Vector2(1.30 + release_peak * 0.36, 0.48),
+				Vector2(1.05 + release_peak * 0.28, 0.58),
+				Vector2(0.80, 0.66),
+			]
+			return {"position": positions[index], "size": sizes[index] * strength, "alpha": 0.23}
+		"monster_block":
+			var positions := [
+				Vector3(0.0, anchor * 0.53, 0.10),
+				Vector3(0.0, anchor * 0.72, 0.11),
+				Vector3(0.0, anchor * 0.90, 0.12),
+			]
+			var sizes := [Vector2(1.18, 1.24), Vector2(1.30, 1.00), Vector2(1.48, 0.72)]
+			return {"position": positions[index], "size": sizes[index] * strength, "alpha": 0.22}
+		_:
 			return {
-				"position": anchor + direction * 0.43 + Vector3(0.0, 0.10, 0.0),
-				"direction": direction,
-				"length": lerpf(0.64, 0.96, strength),
-				"width": 1.10,
+				"position": Vector3(0.0, anchor * (0.45 + float(index) * 0.18), 0.10),
+				"size": Vector2.ONE * (0.80 - float(index) * 0.10) * strength,
+				"alpha": 0.20,
+			}
+
+
+func _tendril_spec(index: int, release_peak: float, strength: float) -> Dictionary:
+	var lane := float(index) - 2.5
+	var spread := lane / 2.5
+	var anchor := contact_anchor_meters
+	match _move:
+		"block_crush":
+			var y := lerpf(anchor * 0.54, anchor * 0.90, float(index) / 5.0)
+			var pull := Vector3(0.10 + spread * 0.18, y, 0.15)
+			if release_peak > 0.10:
+				pull = Vector3(0.18 + spread * 0.16, anchor - 0.12 - float(index % 3) * 0.20, 0.15)
+			return {
+				"position": pull,
+				"size": Vector2(0.18 + absf(spread) * 0.03, lerpf(0.48, 0.94, strength)),
+				"rotation": spread * 0.30,
 			}
 		"high_hands":
-			var direction := Vector3(lane * 0.20, 0.78 - absf(lane) * 0.035, -0.12).normalized()
 			return {
-				"position": anchor + direction * 0.36,
-				"direction": direction,
-				"length": lerpf(0.46, 0.72, strength),
-				"width": 0.82,
+				"position": Vector3(0.24 + spread * 0.34, anchor - 0.02 + float(index % 3) * 0.16, 0.15),
+				"size": Vector2(0.12, lerpf(0.44, 0.78, strength)),
+				"rotation": -0.46 + spread * 0.34,
 			}
 		"foresight":
-			## Pushed camera-side and widened. The first version sat on the
-			## anchor and was mostly hidden behind the actor's own torso, so the
-			## reticle read as two bars rather than a focus.
-			var direction := Vector3(cos(angle), 0.10, sin(angle) * 0.34).normalized()
+			var side := 1.0 if _succeeded else (-1.0 if index < 3 else 1.0)
 			return {
-				"position": Vector3(0.0, contact_anchor_meters, 0.22) + direction * 0.30,
-				"direction": direction,
-				"length": lerpf(0.30, 0.46, strength),
-				"width": 0.72,
+				"position": Vector3(side * (0.26 + float(index % 3) * 0.20), 0.62 + float(index % 2) * 0.24, 0.15),
+				"size": Vector2(0.13, lerpf(0.40, 0.70, strength)),
+				"rotation": side * (PI * 0.5 - 0.22 + float(index % 3) * 0.08),
 			}
 		"heroics":
 			var side := -1.0 if index % 2 == 0 else 1.0
-			var direction := Vector3(-0.82 + float(index / 2) * 0.13, 0.02, side * 0.34).normalized()
 			return {
-				"position": Vector3(0.0, maxf(0.24, contact_anchor_meters * 0.50), 0.0) + direction * 0.42,
-				"direction": direction,
-				"length": lerpf(0.46, 0.76, strength),
-				"width": 0.82,
+				"position": Vector3(-0.26 + spread * 0.44, 0.44 + float(index % 3) * 0.18, 0.15),
+				"size": Vector2(0.16 + float(index % 2) * 0.04, lerpf(0.54, 1.02, strength)),
+				"rotation": side * (0.88 + float(index % 3) * 0.12),
 			}
 		"monster_block":
-			## Also moved camera-side, for the same reason and with the same
-			## correction: a wall the camera is behind is not a wall.
 			return {
-				"position": Vector3(
-					lane * 0.22,
-					contact_anchor_meters - 0.15 + float(index % 2) * 0.20,
-					0.24,
-				),
-				"direction": Vector3.UP,
-				"length": lerpf(0.58, 0.92, strength),
-				"width": 0.72,
+				"position": Vector3(spread * 0.54, anchor - 0.20 + float(index % 2) * 0.18, 0.15),
+				"size": Vector2(0.15, lerpf(0.52, 0.90, strength)),
+				"rotation": spread * 0.18,
 			}
 		_:
-			var direction := Vector3(cos(angle), 0.14, sin(angle)).normalized()
 			return {
-				"position": anchor + direction * 0.35,
-				"direction": direction,
-				"length": 0.60,
-				"width": 1.0,
+				"position": Vector3(spread * 0.30, anchor * 0.65, 0.15),
+				"size": Vector2(0.15, 0.62),
+				"rotation": spread * 0.20,
 			}
 
 
-func _draw_burst(
-	release: float, release_peak: float, fade: float, strength: float,
-	colour: Color, accent: Color,
-) -> void:
-	var weight := release_peak
-	if _succeeded:
-		weight = maxf(weight, release * fade * 0.68)
-	burst.position = Vector3(0.0, contact_anchor_meters, 0.0)
-	burst.rotation = Vector3.ZERO
-	burst.scale = Vector3.ONE
+func _body_center() -> Vector3:
 	match _move:
 		"block_crush":
-			burst.position.y -= 0.04
-			burst.scale = Vector3(lerpf(0.26, 1.06, release), 0.72, lerpf(0.26, 0.78, release))
+			return Vector3(0.04, contact_anchor_meters * 0.56, 0.10)
 		"high_hands":
-			burst.rotation = Vector3(PI * 0.5, 0.0, PI * 0.22)
-			burst.scale = Vector3.ONE * lerpf(0.24, 0.78, release)
+			return Vector3(0.06, contact_anchor_meters * 0.58, 0.10)
 		"foresight":
-			burst.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-			burst.scale = Vector3.ONE * lerpf(0.18, 0.56, release)
+			return Vector3(0.0, 0.86, 0.11)
 		"heroics":
-			burst.position.y = maxf(0.22, contact_anchor_meters * 0.34)
-			burst.scale = Vector3(lerpf(0.32, 1.18, release), 0.58, lerpf(0.22, 0.62, release))
+			return Vector3(-0.04, 0.67, 0.11)
 		"monster_block":
-			burst.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-			burst.scale = Vector3(lerpf(0.28, 1.30, release), lerpf(0.28, 0.92, release), 0.72)
+			return Vector3(0.0, contact_anchor_meters * 0.62, 0.10)
 		_:
-			burst.scale = Vector3.ONE * lerpf(0.26, 0.92, release)
-	_set_alpha(burst, accent, weight * strength * 0.82)
+			return Vector3(0.0, contact_anchor_meters * 0.55, 0.10)
 
 
-func _draw_contact_shape(
-	release: float, release_peak: float, fade: float, strength: float,
-	colour: Color, accent: Color,
-) -> void:
-	for index in _contact_rings.size():
-		var ring := _contact_rings[index]
-		ring.position = Vector3(0.0, contact_anchor_meters, 0.0)
-		ring.rotation = Vector3.ZERO
-		ring.scale = Vector3.ONE
-		var alpha := release_peak * fade * strength * (0.82 - float(index) * 0.15)
-		## Middle ring takes the move colour, the outer two the accent. Two moves
-		## below override this; the variable exists so they can.
-		var ring_colour := accent if index != 1 else colour
-		match _move:
-			"block_crush":
-				## Three horizontal fronts collapse toward the strike point.
-				ring.position.y += 0.20 - float(index) * 0.20
-				var s := lerpf(0.28 + float(index) * 0.08, 1.18 - float(index) * 0.18, release)
-				ring.scale = Vector3(s, 0.72, s * 0.72)
-			"high_hands":
-				## Crossed vertical rings and an upper cap read as controlled deflection.
-				ring.rotation = Vector3(
-					PI * 0.5,
-					PI * (0.18 if index == 0 else (-0.18 if index == 1 else 0.0)),
-					PI * (0.16 if index == 0 else (-0.16 if index == 1 else 0.0)),
-				)
-				ring.position.y += 0.05 + float(index) * 0.07
-				ring.scale = Vector3.ONE * lerpf(0.20 + float(index) * 0.04, 0.66 + float(index) * 0.09, release)
-			"foresight":
-				## Three concentric reticle rings sit just camera-side of the
-				## setting hands. They used to sit behind the torso, where the
-				## actor occluded all but two bars of them.
-				ring.position = Vector3(
-					0.0, contact_anchor_meters + 0.03, 0.24 + float(index) * 0.035
-				)
-				ring.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-				var s := lerpf(0.20 + float(index) * 0.06, 0.48 + float(index) * 0.14, release)
-				ring.scale = Vector3.ONE * s
-				alpha = release_peak * fade * strength * (0.92 - float(index) * 0.14)
-			"heroics":
-				## Rescue energy travels along the floor rather than exploding around
-				## the torso: three staggered, flattened ripples behind the dig.
-				ring.position = Vector3(-0.18 - float(index) * 0.28, 0.10 + float(index) * 0.025, 0.0)
-				var sx := lerpf(0.30, 1.05 + float(index) * 0.22, release)
-				var sz := lerpf(0.20, 0.48 + float(index) * 0.10, release)
-				ring.scale = Vector3(sx, 0.42, sz)
-				alpha *= 0.72
-			"monster_block":
-				## One broad vertical hoop, plus the six upright release strokes,
-				## makes a wall. Three overlapping hoops around the head made a
-				## cage instead, so the other two are suppressed rather than
-				## repositioned -- the strokes already carry the width.
-				if index > 0:
-					_set_alpha(ring, colour, 0.0)
-					continue
-				ring.position = Vector3(0.0, contact_anchor_meters - 0.02, 0.25)
-				ring.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-				var s := lerpf(0.28, 0.86, release)
-				ring.scale = Vector3(s * 1.65, s * 0.72, 0.62)
-				ring_colour = accent
-				alpha = release_peak * fade * strength * 0.78
-			_:
-				ring.scale = Vector3.ONE * lerpf(0.22, 0.72, release)
-		_set_alpha(ring, ring_colour, alpha)
+func _set_glow(visual: MeshInstance3D, colour: Color, alpha: float) -> void:
+	var material := visual.material_override as StandardMaterial3D
+	if material == null:
+		return
+	alpha = clampf(alpha, 0.0, 0.72)
+	visual.visible = alpha > 0.003
+	material.albedo_color = Color(colour.r, colour.g, colour.b, alpha)
+	material.emission = Color(colour.r, colour.g, colour.b, 1.0)
+	## Let opacity carry most of the energy. Keeping the multiplier moderate is
+	## what stops the soft sprites from turning back into hard white objects.
+	material.emission_energy_multiplier = lerpf(0.45, 2.15, alpha / 0.72)
 
 
 func clear() -> void:
@@ -338,37 +372,3 @@ func clear() -> void:
 	_charge = 0.0
 	_succeeded = false
 	visible = false
-
-
-func _make_contact_ring(name_: String) -> MeshInstance3D:
-	var ring := MeshInstance3D.new()
-	ring.name = name_
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mesh := TorusMesh.new()
-	mesh.inner_radius = 0.22
-	mesh.outer_radius = 0.242
-	mesh.rings = 24
-	mesh.ring_segments = 7
-	ring.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.emission_enabled = true
-	material.albedo_color = Color(1.0, 0.84, 0.20, 0.0)
-	material.emission = Color(1.0, 0.84, 0.20, 1.0)
-	material.emission_energy_multiplier = 2.0
-	ring.material_override = material
-	_materials.append(material)
-	add_child(ring)
-	return ring
-
-
-func _set_alpha(visual: MeshInstance3D, colour: Color, alpha: float) -> void:
-	var material := visual.material_override as StandardMaterial3D
-	if material == null:
-		return
-	var shown := colour
-	shown.a = clampf(alpha, 0.0, 1.0)
-	material.albedo_color = shown
-	material.emission = Color(colour.r, colour.g, colour.b, 1.0)
-	material.emission_energy_multiplier = lerpf(0.70, 2.45, clampf(alpha, 0.0, 1.0))
