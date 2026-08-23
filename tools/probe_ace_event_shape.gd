@@ -22,7 +22,7 @@ func _initialize() -> void:
 			var result: Resource = manager.resolve_active_rally(300000 + index)
 			if result == null:
 				continue
-			var outcome := str(result.outcome)
+			var outcome := str(result.terminal_outcome)
 			var is_ace := outcome.contains("ace")
 			if not is_ace:
 				continue

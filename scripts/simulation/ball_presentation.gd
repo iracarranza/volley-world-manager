@@ -68,9 +68,16 @@ static func display_trajectory(
 	## or a dig, none of which are struck, the two contact heights remain the
 	## better answer.
 	if display.has("launch_vertical_mps"):
+		## Across the flight's own duration, not the drawn one. See
+		## `terminate_trajectory`: a segment shorter than 0.08 s is stretched so it
+		## can be seen, and integrating the launch across the stretched time moves
+		## the ball to a height it never reached.
+		var flown := maxf(float(display.get(
+			"physical_duration_seconds", duration
+		)), 0.001)
 		end_height = maxf(
-			start_height + float(display.launch_vertical_mps) * duration
-				- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * duration * duration,
+			start_height + float(display.launch_vertical_mps) * flown
+				- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * flown * flown,
 			FLOOR_CONTACT_HEIGHT_METERS,
 		)
 	display["start_height_meters"] = start_height
@@ -226,7 +233,18 @@ static func terminate_trajectory(display: Dictionary, touched: Vector2) -> void:
 	## hitter to the block over most of a second and then sat there. The ball is
 	## the same ball travelling at the same speed; it simply stops sooner.
 	if display.has("duration"):
-		display["duration"] = maxf(float(display["duration"]) * share, 0.08)
+		var cut := float(display["duration"]) * share
+		display["duration"] = maxf(cut, 0.08)
+		## The same cut, without the drawing floor above.
+		##
+		## 0.08 s is the shortest segment a viewer can follow, so a shorter one is
+		## stretched to it -- but a stretch is a concession about *time*, and the
+		## ball must not move because of it. A struck ball's far end is derived
+		## from its launch across a duration, and derived across the stretched one
+		## it lands somewhere the ball never was: measured at attack-to-block, a
+		## 20 ms spike drawn over 80 ms fell 1.25 m instead of 0.32 m, and arrived
+		## a metre and a quarter below the hands that were about to touch it.
+		display["physical_duration_seconds"] = maxf(cut, 0.001)
 
 
 ## How fast the ball actually left the contact, in metres per second.
