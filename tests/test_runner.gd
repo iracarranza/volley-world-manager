@@ -14780,7 +14780,8 @@ func _test_an_opponent_has_a_region() -> void:
 		) and club.identity_label() == "Xérvu",
 		"a region outranks the preset, and is what a player is told they are facing",
 	)
-	var live_manager := get_root().get_node("GameManager")
+	var live_manager := GAME_MANAGER_SCRIPT.new()
+	live_manager.seed_vertical_slice_data()
 	live_manager.set_opponent_region("Xérvu", 0)
 	var live_result := live_manager.resolve_active_rally(14721) as RallyResult
 	var opponent_profiles_are_xervyan := true
@@ -14794,7 +14795,7 @@ func _test_an_opponent_has_a_region() -> void:
 		opponent_profiles_are_xervyan,
 		"the authoritative opponent region reaches every away actor's kit construction",
 	)
-	live_manager.set_opponent_region("Landavol", 0)
+	live_manager.free()
 
 
 ## Who a block actually hides the ball from.
