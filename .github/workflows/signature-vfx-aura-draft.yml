@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           xvfb-run -a godot --path . --rendering-method gl_compatibility \
             res://tools/signature_vfx_gallery.tscn
-          test "$(find artifacts/signature-vfx -type f -name '*.png' | wc -l)" -ge 17
+          test "$(find artifacts/signature-vfx -type f -name '*.png' | wc -l)" -eq 21
 
       - name: Upload signature VFX draft
         uses: actions/upload-artifact@v4
