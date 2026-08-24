@@ -135,21 +135,83 @@ launch was solved *from* the start height it shipped with, so overwriting only
 the height leaves a flight disagreeing with its own length. An honest gap beats a
 worse record.
 
+## The third repair: the platform resolver reads the ball
+
+The set seam above was not irreducible, and treating it as such was the wrong
+call — corrected here rather than left standing.
+
+`_platform_contact_result` is the shared resolver for every platform family
+(reception, dig, coverage), and it took its contact height from
+`pass_contact_height_meters(digger)` — the passer's own body. The reception site
+says why in its own words: the trajectory's endpoint height was "ambiguous", so
+the body's number was used rather than make either meaning of
+`end_height_meters` authoritative by accident.
+
+**That deferral had expired.** The ambiguity is what this pass resolved: the
+serve's flight terminates at the pass, and a flight that resolves its start and
+publishes its launch states its far end. So the resolver reads the ball
+directly, with the body kept as the fallback for a flight that resolves neither
+end and for a derivation that lands at or below the floor.
+
+One function, `realised_flight_end_height`, shared between the resolver and the
+forward pass — so the height a contact is *resolved* at and the height it is
+*drawn* at are one derivation rather than two that agree by inspection.
+
+| | before | after |
+|---|---|---|
+| SET/home drawn seams | 59 | **0** |
+| SET/opponent drawn seams | 65 | 47 |
+| total drawn seams | 184 | **102** |
+
+**This one moves rally outcomes, which is why it was measured rather than
+assumed.** Feeding a solver its correct input changes what the solver returns;
+that is an ordinary migration consequence, not a new magnitude, and the test is
+whether a governed bound breaks. None did:
+
+| | before | after | band |
+|---|---|---|---|
+| dig rate | 0.412 | 0.416 | **0.35–0.55 gate** |
+| stuff rate | 0.108 | 0.106 | **0.08–0.14 gate** |
+| serve error | 0.181 | 0.181 | **0.12–0.20 gate** |
+| kill rate | 0.610 | 0.630 | advisory |
+| contacts per rally | 4.807 | 4.814 | advisory |
+| block touch | 0.818 | 0.830 | advisory |
+| swing balance | 0.932 | **0.888** | advisory, near 1.00 |
+
+The swing-balance move is the one worth watching and is recorded as an
+observation rather than acted on: it is a home/opponent symmetry indicator and
+it moved *away* from 1.00.
+
+## Two instrument defects found in the census itself
+
+Both are the same fault this repository logs most — measuring against the wrong
+quantity — and both were in the tool I built for this pass:
+
+- It compared the proxy against the raw `end_height_meters` **field**, which for
+  a `start_resolved` flight is the 1.0 m placeholder rather than the answer. That
+  reported a serve-to-reception defect the drawn path does not have. It now calls
+  the same `realised_flight_end_height` the resolver does.
+- It scored the **block** against the incoming flight's far end, which was never
+  the block's authority — a swing that beat the wall ends somewhere the contact
+  never was. The block answers to its own proved intersection, and the row now
+  says `authoritative by own proof`.
+
 ## The residual, exactly
 
-**The pass's own arc, 124 legs, 0.29–0.42 m, appearing as a set seam.** It is one
-thing and it is stated above: the reception's outgoing flight is solved from the
-platform's height, and the contact now says the ball's. Closing it means
-re-solving the pass from the ball's height rather than the body's.
+**One thing, and it is an asymmetry rather than a missing owner.** `SET/opponent`
+reads 73 of 139 legs breaking at a 0.161 m mean, worst 1.014, against
+`SET/home` at 7 of 139 and 0.005 m. The ball's height at the set has an owner on
+both sides now; one side's two answers disagree. Filed as **FD-009** rather than
+kept inside FD-006, because "no owner" and "two owners that differ" are different
+defects and this repository has repaired three of the second kind in this packet
+alone.
 
-That is not a seam repair and it is not free. `pass_apex_meters` feeds the set's
-release clamp (`minf(set_release_height, pass_apex_meters)`), so moving the pass's
-launch moves what the setter is allowed to do with it, which moves rally
-outcomes. It is simulation work with a measurable cost, and it wants its own pass
-with its own before-and-after — exactly the shape this one refused to do by
-guessing.
+**Where it is not**, checked rather than assumed: both sides call the same
+`_reception_pass_result` with symmetric arguments in the same order, so the pass
+is not forked. The opponent path carries a `SET_DECISION` event the home path
+does not — 114 per 300 rallies, publishing no outgoing flight — which is the
+most visible structural difference and the first place to look.
 
-Also open, and smaller: the `SET_DECISION` path's 114 legs publish no outgoing
-flight at all, so nothing downstream of them can resolve. And 60 block legs still
-score a "seam" that is not one — the ball went past the wall, so the leg into the
-event does not end at the event.
+The 55 block legs that still score a "seam" are not one: the ball went past the
+wall, so the leg into the event does not end at the event. The probe reports that
+split explicitly rather than burying it in the total.

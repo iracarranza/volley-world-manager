@@ -170,12 +170,12 @@ Next diagnostic: task #140, "Is 12% the right price for a shanked serve-receive?
 
 ---
 
-## FD-006 — the ball's height at the moment it is touched has no owner
+## FD-006 — CLOSED. The ball's height at the moment it is touched has an owner in every family
 
 Class: F4 — presentation drawing a quantity nobody has assigned
 Subsystem: `BallPresentation.display_trajectory`, and `CONTACT_AND_BALL_FLIGHT.md` §5
 Reproduction: `godot --headless --path . --script res://tools/run_playback_continuity_probe.gd`
-Disposition: **open, non-blocking; not F1**
+Disposition: **closed; the residual is a different defect and is FD-009**
 
 A drawn leg arrives at one height and the next departs from another, so the ball
 jumps at the contact: 378 of 835 legs over 180 rallies, worst 3.227 m at
@@ -252,9 +252,59 @@ the ball went past the wall, so the leg into the event does not end at it.
 
 Blocks later construction: no.
 
+### Closed
+
+Every contact family now answers to a published ball state rather than a body
+measurement, and the census says so per family
+(`tools/run_contact_authority_census.gd`, both serving sides):
+
+```
+ATTACK      both sides   authoritative              0 breaks
+RECEPTION   home         authoritative              0 breaks
+            opponent     0.002 m mean               2 of 125
+BLOCK       both sides   authoritative by own proof 0 breaks
+SET         home         0.005 m mean               7 of 139
+```
+
+Three repairs, no authored magnitude in any of them: `_set_arc` returns the two
+heights it solves a flight between; a forward pass carries each resolved far end
+onto the next contact; and the shared platform resolver reads the incoming
+flight's height instead of the passer's own platform. Drawn seams **378 to 102**.
+
+The last of those does move rally outcomes, which is why it was measured rather
+than assumed. Every **gated** band holds -- dig 0.416 (0.35--0.55), stuff 0.106
+(0.08--0.14), serve error 0.181 (0.12--0.20). Advisory figures moved and are
+recorded as observations: kill 0.610 to 0.630, contacts per rally 4.807 to 4.814,
+block touch 0.818 to 0.830, and **swing balance 0.932 to 0.888**, which is the
+one worth watching -- it is a home/opponent symmetry indicator and it moved away
+from 1.00. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+
 ---
 
-## FD-007 — playback draws a contact for a contact that never happened
+## FD-009 — the opponent's set disagrees with the pass that fed it, and the home side does not
+
+Class: F6 (home/opponent asymmetry)
+Subsystem: the opponent second-contact path
+Reproduction: `godot --headless --path . --script res://tools/run_contact_authority_census.gd` -- `SET/opponent` reads 73 of 139 legs breaking at a 0.161 m mean, worst 1.014, against `SET/home` at 7 of 139 and a 0.005 m mean
+Disposition: **open, non-blocking**
+
+Split out of FD-006 rather than keeping that entry alive, because it is a
+different defect: the ball's height at the set *has* an owner on both sides now,
+and one side's two answers disagree. That is an asymmetry, and this repository
+has found and repaired three of them in this packet alone.
+
+**Where it is not**: both sides call the same `_reception_pass_result` with
+symmetric arguments in the same order -- checked, not assumed -- so the pass
+itself is not forked. The opponent path carries a `SET_DECISION` event the home
+path does not (114 of them per 300 rallies, publishing no outgoing flight),
+which is the most visible structural difference between the two and the first
+place to look.
+
+Blocks later construction: no.
+
+---
+
+## FD-007 — CLOSED. A pose asserts contact only when the ball was touched
 
 Class: F4
 Subsystem: `match_screen._apply_contact_poses`
@@ -295,11 +345,33 @@ that function at all; it poses through `_pose_block_wall`, which draws the jump
 the blocker actually made, so a beaten wall already reaches and misses without
 the ball snapping to its hands.
 
-What is left is the finer distinction the paragraph above names: a reach that
-misses and a reach that digs still share the `reaching` pose, so the ball's
-absence is visible in the ball and not yet in the body. That is animation
-authoring rather than authority work. The dig half is otherwise closed by the
-same predicate.
+### Closed, and the scope stated exactly
+
+The entry asked for three things and all three now hold, certified by
+`_test_a_miss_pose_means_the_ball_was_not_touched` and
+`_test_a_beaten_block_reaches_without_the_ball_arriving`:
+
+- **A contact pose iff a contact happened.** The predicate is B0's -- did this
+  contact publish a ball -- so a shank and a service error keep their contact
+  pose (they struck it) and a dig that never arrived takes the miss pose.
+- **A beaten block visibly reaches.** It poses through `_pose_block_wall` from
+  `block_jump_timing`, an entry per body that actually left the floor. Not
+  suppressed: the blocker did go up, and hiding that would replace one false
+  statement with another.
+- **The ball never snaps to the hands.** `contact_height` returned the blocker's
+  jumping reach for every block, so a swing that cleared a wall was drawn
+  arriving in the hands it had just beaten. It reads the published ball height
+  now, and the gate asserts the sample contains balls provably above every hand
+  in the wall -- so the check is not vacuous on a population where the ball
+  happened to sit at hand height anyway.
+
+**One thing is deliberately *not* counted as residual here.** A reach that
+misses and a reach that digs still share the `reaching` posture geometry, so the
+ball's absence reads in the ball rather than in the body. That is the note
+`_contact_posture` has carried since before this entry existed -- "not the whole
+of 13a ... Logged" -- and it is animation authoring, not contact authority. It
+belongs to the backlog it was already in, not to this entry, and folding it in
+here would keep an authority defect open for a drawing refinement.
 
 ---
 
@@ -359,11 +431,14 @@ than one at a time, since they all call `_reached_point` and move volis.
    those are silence, this is a published fact that says "nobody moved"
 4. responsibility/selection — *empty*
 5. attack/block interaction — *empty*
-6. home/opponent asymmetry — *empty; three drifts found and all three repaired — the block's stale swing, the receive zone's `enabled` check, and the opponent dig writing its reach after the event that reads it (`docs/review/BODY_CONTACT_ENDPOINT.md`)*
+6. home/opponent asymmetry — FD-009, the opponent's set disagreeing with the pass
+   that fed it (73 of 139 legs against the home side's 7). *Previously empty;
+   three drifts found and all three repaired — the block's stale swing, the receive zone's `enabled` check, and the opponent dig writing its reach after the event that reads it (`docs/review/BODY_CONTACT_ENDPOINT.md`)*
 7. tactical wiring — *not yet audited (M9)*
-8. presentation/reporting — FD-002, FD-003 (one family); FD-006 and FD-007, which
-   are the M8 visual pass's own findings and are separate from FD-002/003: those
-   two are the resolver being *silent* about off-ball movement, while these two
-   are playback drawing a ball height and a contact that no published fact
-   supports
+8. presentation/reporting — FD-002, FD-003 (one family). **FD-006 and FD-007 are
+   closed**: the ball's height at a contact has an owner in every family and a
+   pose asserts contact only when the ball was touched. What is left in this
+   cluster is the original pair — the resolver being *silent* about off-ball
+   movement — which is a different thing from playback drawing a fact nobody
+   published
 9. calibration/balance — FD-005

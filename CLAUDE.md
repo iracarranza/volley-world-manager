@@ -12,12 +12,26 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-24 on the §5 contact-height chain pass
-at `b28c099`: **2,163 checks pass, 0 fail**. Treat any test failure as a
-regression.
+Current branch baseline, verified 2026-08-24 on the §5 platform-height closure:
+**2,170 checks pass, 0 fail**, measured on a run that authored none of them.
+Treat any test failure as a regression.
 
-**Seven checks were written and the count moved by seven, and this time that
-means something, because the predecessor was written down.** 2,156 was measured
+**The interesting number is the first one: seven more checks from writing none.**
+2,163 was the predecessor and the run that measured 2,170 loaded `test_runner.gd`
+before the gate was appended, so nothing was authored into it -- the whole delta
+is sampling gates drawing more, which is what a real behaviour change looks like.
+The platform resolver now reads the ball's height instead of the passer's body,
+and rallies resolve differently as a result. The balance probe says how much and
+which way: every **gated** band holds (dig 0.416, stuff 0.106, serve error
+0.181), and the advisory figures moved -- kill 0.610 to 0.630, block touch 0.818
+to 0.830, and **swing balance 0.932 to 0.888**, which is a home/opponent symmetry
+indicator moving away from 1.00 and is recorded as an observation to watch rather
+than acted on. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+
+Before it, 2,163 at `b28c099`, on the §5 contact-height chain pass.
+
+**Seven checks were written and the count moved by seven, and that meant
+something, because the predecessor was written down.** 2,156 was measured
 at `0ea8402` and recorded here on the same pass, so the delta is attributable:
 the count moved by exactly what was authored and no sampling population changed
 size. The balance probe agrees independently -- contacts per rally, kill, dig,

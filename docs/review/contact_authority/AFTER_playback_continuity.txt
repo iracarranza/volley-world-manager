@@ -1,26 +1,26 @@
 
 family/serving side          legs  untch   seam brk  mean seam  floor brk
-ATTACK/home                    73     36          0      0.000          0
-ATTACK/opponent                78     24          0      0.000          0
-ATTACK_COVERAGE/home            2      0          0      0.000          0
-ATTACK_COVERAGE/opponent        3      0          0      0.000          0
-BLOCK/home                     64     26         36      1.567         26
-BLOCK/opponent                 68     22         24      1.028         22
-DIG/home                       36      3          0      0.000          2
-DIG/opponent                   36      0          0      0.000          0
-RECEPTION/home                 72      0         72      0.344          0
-RECEPTION/opponent             73      0         72      0.388          0
+ATTACK/home                    71     30          0      0.000          0
+ATTACK/opponent                77     25          0      0.000          0
+ATTACK_COVERAGE/home            3      2          0      0.000          2
+ATTACK_COVERAGE/opponent        4      0          0      0.000          0
+BLOCK/home                     62     20         30      1.328         20
+BLOCK/opponent                 67     22         25      1.082         22
+DIG/home                       31      1          0      0.000          1
+DIG/opponent                   37      0          0      0.000          0
+RECEPTION/home                 72      0          0      0.000          0
+RECEPTION/opponent             73      0          0      0.000          0
 SERVE/home                     90      1          0      0.000          1
 SERVE/opponent                 90      3          0      0.000          3
-SET/home                       73      9          0      0.000          9
-SET/opponent                   78      5         42      0.135          5
+SET/home                       71     10          0      0.000         10
+SET/opponent                   77      5         47      0.156          5
 
-legs drawn                         836
-seam height jumps > 0.05 m         246
-  worst 3.612 m at ATTACK -> BLOCK
-untouched balls not drawn to floor 68
+legs drawn                         825
+seam height jumps > 0.05 m         102
+  worst 3.440 m at ATTACK -> BLOCK
+untouched balls not drawn to floor 64
   worst 3.159 m above floor at SET -> missed ATTACK
 
 block seams, split by whether a hand met the ball
-  the ball was met         72 legs, 0 break
-  the ball went past       60 legs, 60 break
+  the ball was met         74 legs, 0 break
+  the ball went past       55 legs, 55 break

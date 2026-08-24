@@ -273,6 +273,7 @@ func _initialize() -> void:
 	_test_block_event_publishes_the_contact_it_proved()
 	_test_the_set_publishes_the_heights_it_was_solved_between()
 	_test_a_miss_pose_means_the_ball_was_not_touched()
+	_test_a_beaten_block_reaches_without_the_ball_arriving()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -23078,4 +23079,88 @@ func _test_a_miss_pose_means_the_ball_was_not_touched() -> void:
 	_check(
 		struck_nothing_reaching == struck_nothing,
 		"a contact that launched no ball is drawn reaching, every time",
+	)
+
+
+## A beaten block reaches and misses, and the ball does not go to its hands.
+##
+## FD-007 names two properties for the block specifically, and both are now
+## answerable from published data rather than by reading the pose code.
+##
+## **It reaches.** A wall the ball flew past still jumped, and `block_jump_timing`
+## carries an entry per body that left the floor -- so the beaten block is posed
+## through `_pose_block_wall` from a real jump, not suppressed. Suppressing it
+## would replace one false statement with another: the blocker did go up.
+##
+## **The ball does not snap to the hands.** `BallPresentation.contact_height`
+## returned `block_contact_from_reach(jumping_reach)` for every block, touched or
+## not, so a swing that cleared a wall by half a metre was drawn arriving in the
+## hands it had just beaten. It reads the published ball height now, and for a
+## beaten block that is `ball_height_at_net_meters` -- where the ball was at the
+## tape, which is the honest number when no hand met it.
+func _test_a_beaten_block_reaches_without_the_ball_arriving() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var beaten := 0
+	var beaten_with_a_jump := 0
+	var beaten_stating_ball_height := 0
+	var drawn_at_reach := 0
+	var over_the_top := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(954000, 954070):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+					continue
+				if not str(
+					event.metadata.get("block_contact_kind", "")
+				).is_empty():
+					continue
+				beaten += 1
+				if not Dictionary(
+					event.metadata.get("block_jump_timing", {})
+				).is_empty():
+					beaten_with_a_jump += 1
+				var stated: Variant = event.metadata.get(
+					"ball_height_at_net_meters", null
+				)
+				if stated == null:
+					continue
+				beaten_stating_ball_height += 1
+				var drawn := BallPresentation.contact_height(
+					event as RallyEvent, result.player_physical_profiles
+				)
+				if not is_equal_approx(drawn, maxf(
+					float(stated),
+					BallPresentation.FLOOR_CONTACT_HEIGHT_METERS,
+				)):
+					drawn_at_reach += 1
+				## The wall was beaten *over the top* on some of these, and there
+				## the ball is provably above every hand. Counted so the check
+				## below is not vacuously true on a population where the ball
+				## happened to sit at hand height anyway.
+				var reaches: Array = event.metadata.get("wall_reach_heights", [])
+				for raw_reach in reaches:
+					if float(stated) > float(raw_reach):
+						over_the_top += 1
+						break
+	_check(
+		beaten > 0 and beaten_stating_ball_height == beaten,
+		"every beaten block states where the ball was at the tape",
+	)
+	_check(
+		beaten_with_a_jump == beaten,
+		"a beaten block still records the jump its blockers made",
+	)
+	_check(
+		drawn_at_reach == 0,
+		"a beaten block draws the ball where the ball was, not at the hands",
+	)
+	_check(
+		over_the_top > 0,
+		"and the sample contains balls provably above every hand in the wall",
 	)

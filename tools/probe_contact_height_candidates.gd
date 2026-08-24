@@ -43,7 +43,16 @@ func _initialize() -> void:
 				var event := raw_event as RallyEvent
 				if event == null:
 					continue
-				if int(event.event_type) == RallyEvent.EventType.POINT:
+				## The same two `MatchScreen._next_contact_event` skips. A
+				## SET_DECISION is an action event and not a ball contact -- it
+				## publishes no outgoing flight, because nothing was struck --
+				## and scoring a leg into it counts a seam the game never draws.
+				## Mirroring playback rather than reimplementing it is the whole
+				## point of an audit tool.
+				if int(event.event_type) in [
+					RallyEvent.EventType.POINT,
+					RallyEvent.EventType.SET_DECISION,
+				]:
 					continue
 				contacts.append(event)
 			for position in range(1, contacts.size()):

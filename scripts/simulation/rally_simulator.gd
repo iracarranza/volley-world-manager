@@ -11197,8 +11197,26 @@ func _physical_platform_dig_result(
 ) -> Dictionary:
 	if digger == null:
 		return {}
+	## **The ball's height, where the incoming flight can state it.**
+	##
+	## This was the passer's own platform height for every platform family, and
+	## the reception's site says why in its own words: the trajectory's endpoint
+	## height was "ambiguous", so the body's number was used rather than make
+	## either meaning of `end_height_meters` authoritative by accident. That
+	## ambiguity is resolved -- the serve's published flight terminates at the
+	## pass, and a flight that resolves its start and publishes its launch states
+	## its far end -- so the deferral has expired and the ball can be read
+	## directly.
+	##
+	## The body stays as the fallback for a flight that resolves neither end, and
+	## for the degenerate case where the derivation lands at or below the floor:
+	## `PlatformContactModel` refuses a contact at zero height, and a ball that
+	## reached the floor is a ball nobody passed.
 	var contact_height := GeometricAttackPromotionModel \
 		.pass_contact_height_meters(digger)
+	var ball_height := realised_flight_end_height(incoming_trajectory)
+	if not is_nan(ball_height) and ball_height > 0.0:
+		contact_height = ball_height
 	var incoming := PlatformContactModel.incoming_velocity_at_contact(
 		incoming_trajectory, contact_height
 	)
@@ -14045,6 +14063,31 @@ func _net_crossing_time(attack_trajectory: Dictionary) -> float:
 ## intersection test rather than inherited from the incoming flight -- and on a
 ## beaten block there is no contact for this to be the height of. See
 ## `docs/review/BLOCK_REALISED_CONTACT.md`.
+## Where a published flight ends, in absolute metres, from the flight itself.
+##
+## Two ways a flight can say, and no third. A writer that resolved both ends
+## states it (`height_source == "resolved"`). A writer that resolved its start
+## and published its launch has said it implicitly, and integrating that launch
+## across the flight's own duration reads it out -- that is evaluating the
+## flight, not extrapolating past it, because the duration is the flight's.
+##
+## `NAN` for a flight that resolved neither, which is honest: the 1.0 m default
+## `BallTrajectory.create` falls back to is not a height anybody measured.
+static func realised_flight_end_height(trajectory: Dictionary) -> float:
+	var source := str(trajectory.get("height_source", "default"))
+	if source == "resolved":
+		return float(trajectory.get("end_height_meters", NAN))
+	if source == "start_resolved" and trajectory.has("launch_vertical_mps"):
+		var flown := maxf(float(trajectory.get(
+			"physical_duration_seconds",
+			float(trajectory.get("duration", 0.0)),
+		)), 0.0)
+		return float(trajectory.get("start_height_meters", 1.0)) \
+			+ float(trajectory["launch_vertical_mps"]) * flown \
+			- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * flown * flown
+	return NAN
+
+
 func _stamp_realised_contact_heights(result: Resource) -> void:
 	if result == null:
 		return
@@ -14085,6 +14128,9 @@ func _stamp_realised_contact_heights(result: Resource) -> void:
 					"incoming_realised_segment"
 			elif source == "start_resolved" \
 					and incoming.has("launch_vertical_mps"):
+				## Same derivation the platform resolver now uses, so the height
+				## a contact is *resolved* at and the height it is *drawn* at are
+				## one function rather than two that agree by inspection.
 				## **A flight that knows where it started and how it left can say
 				## where it finished.**
 				##
@@ -14101,16 +14147,8 @@ func _stamp_realised_contact_heights(result: Resource) -> void:
 				## Not a second physics. This is the same integration
 				## `BallPresentation` performs to draw the leg, moved to the side
 				## of the boundary that owns the fact -- which is the whole of §5.
-				var flown := maxf(float(incoming.get(
-					"physical_duration_seconds",
-					float(incoming.get("duration", 0.0)),
-				)), 0.0)
 				event.metadata["ball_contact_height_meters"] = maxf(
-					float(incoming.get("start_height_meters", 1.0))
-						+ float(incoming["launch_vertical_mps"]) * flown
-						- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2
-							* flown * flown,
-					0.0,
+					realised_flight_end_height(incoming), 0.0
 				)
 				event.metadata["ball_contact_height_source"] = \
 					"incoming_launch_integrated"

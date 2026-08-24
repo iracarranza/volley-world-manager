@@ -30,6 +30,9 @@ const MANAGER := preload("res://scripts/managers/game_manager.gd")
 const BallPresentationScript := preload(
 	"res://scripts/simulation/ball_presentation.gd"
 )
+const RallySimulatorScript := preload(
+	"res://scripts/simulation/rally_simulator.gd"
+)
 
 const RALLIES: int = 300
 ## Two heights this far apart are a visible jump rather than rounding. Same
@@ -53,7 +56,16 @@ func _initialize() -> void:
 				var event := raw_event as RallyEvent
 				if event == null:
 					continue
-				if int(event.event_type) == RallyEvent.EventType.POINT:
+				## The same two `MatchScreen._next_contact_event` skips. A
+				## SET_DECISION is an action event and not a ball contact -- it
+				## publishes no outgoing flight, because nothing was struck --
+				## and scoring a leg into it counts a seam the game never draws.
+				## Mirroring playback rather than reimplementing it is the whole
+				## point of an audit tool.
+				if int(event.event_type) in [
+					RallyEvent.EventType.POINT,
+					RallyEvent.EventType.SET_DECISION,
+				]:
 					continue
 				contacts.append(event)
 			for position in range(1, contacts.size()):
@@ -114,7 +126,28 @@ func _initialize() -> void:
 					), 0)) + 1
 					if outgoing.has("launch_vertical_mps"):
 						row["out_launch"] = int(row.get("out_launch", 0)) + 1
-				var published := float(incoming.get("end_height_meters", 1.0))
+				## **The flight's far end as the flight states it**, which for a
+				## `start_resolved` writer is the launch integrated across its own
+				## duration rather than the `end_height_meters` field it left at
+				## the 1.0 m default. Comparing against the raw field reported a
+				## serve-to-reception defect the drawn path does not have -- the
+				## instrument measuring a placeholder instead of the answer.
+				## `RallySimulator.realised_flight_end_height` is the one
+				## derivation, shared with the resolver rather than copied.
+				var published := RallySimulatorScript.realised_flight_end_height(
+					incoming
+				)
+				if is_nan(published):
+					published = float(incoming.get("end_height_meters", 1.0))
+				## The block answers to its own proved intersection, not to the
+				## incoming flight's far end -- a swing that beat the wall ends
+				## somewhere the contact never was. Counted apart so this row
+				## stops reporting a disagreement with a quantity that was never
+				## its authority. See `docs/review/BLOCK_REALISED_CONTACT.md`.
+				if event.metadata.get("block_contact_height_meters", null) != null \
+						or int(event.event_type) == RallyEvent.EventType.BLOCK:
+					row["own_authority"] = int(row.get("own_authority", 0)) + 1
+					continue
 				var proxy := BallPresentationScript.contact_height(event, profiles)
 				var gap := absf(published - proxy)
 				row["gap_total"] = float(row["gap_total"]) + gap
@@ -156,6 +189,8 @@ func _report(rows: Dictionary) -> void:
 		var derivable := int(row.get("derivable", 0))
 		if derivable > 0 and verdict == "body-proxy":
 			verdict = "derivable, not derived"
+		if int(row.get("own_authority", 0)) > 0:
+			verdict = "authoritative by own proof"
 		print("%-26s %6d %7d %7d %9.3f %9.3f  %-20s launch %d, derivable %d, %s" % [
 			str(key), int(row["legs"]), known, breaks,
 			float(row["gap_total"]) / float(legs), float(row["gap_worst"]),
