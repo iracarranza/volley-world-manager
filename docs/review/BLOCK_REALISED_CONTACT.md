@@ -209,6 +209,20 @@ outcome verdict (`_test_block_verdict_separates_intent_from_outcome`), lineage
 and one-ball-per-contact (the B6 chain and `run_canonical_sideout.gd`), and the
 block rollout boundary (Gates 44–49).
 
+## The suite
+
+**2,156 checks pass, 0 fail** at the committed state. Seventeen checks were
+written this pass and the delta cannot be attributed: `CLAUDE.md` recorded 2,139
+at `413eee5` and the M8 pass that followed never updated it, so the predecessor
+is either 2,139 (seventeen written, seventeen gained, no sampling population
+moved) or the 2,141 that pass measured and left only in a transcript (two gates
+drew fewer, the population moved). Those readings say opposite things and neither
+can be chosen now. The population question was settled by the balance probe
+instead, which is what it is for.
+
+One check failed on the way and the failure was the fixture's, not the engine's
+-- see *The gates* above.
+
 ## What this leaves
 
 **FD-006 is narrowed, not closed, and the remaining scope is exact.** The ball's

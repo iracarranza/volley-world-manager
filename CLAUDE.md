@@ -12,8 +12,31 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-23 on the M6/M7 first-draft pass at
-`413eee5`: **2,139 checks pass, 0 fail**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-24 on the block realised-contact pass
+at `0ea8402`: **2,156 checks pass, 0 fail**. Treat any test failure as a
+regression.
+
+**Seventeen checks were written and the delta cannot be computed, because the
+pass in between never wrote its number down.** This line said 2,139 at `413eee5`
+and the M8 side-out certification came after it without updating it, so the true
+predecessor is either 2,139 -- in which case seventeen written and seventeen
+gained means no sampling population moved -- or the 2,141 that pass measured and
+left in a transcript, in which case two gates drew fewer and the population
+moved. Those two readings say opposite things and there is no way to choose
+between them now. **Which is the whole failure this section keeps warning about,
+committed again, one pass later, by the pass that wrote the warning.** The number
+is only worth the commit it was measured on, and a commit nobody recorded is not
+one.
+
+What is not ambiguous: the FAIL line is zero, and the population question the
+count could not answer was measured directly. Contacts per rally 4.827 to 4.807,
+dig 0.407 to 0.412, block touch 0.822 to 0.818, stuff and serve error unchanged,
+every governed band holding -- so rallies *do* resolve differently, and the
+probes say so whatever the count does. See
+`docs/review/BLOCK_REALISED_CONTACT.md`.
+
+The entry below is the older baseline and its own warning, kept because the
+warning is the durable part.
 
 **And that number cannot be attributed, which is the point of saying so.** Two
 checks were written this pass (`_test_one_ball_chain_by_launch_identity`), and
