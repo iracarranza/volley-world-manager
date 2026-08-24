@@ -12,11 +12,18 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-24 on the §5 platform-height closure
-at `10bfbdd`: **2,174 checks pass, 0 fail**. Treat any test failure as a
-regression.
+Current branch baseline, verified 2026-08-24 on the FD-009/FD-007 closure at
+`8f96dc6`: **2,178 checks pass, 0 fail**. Treat any test failure as a regression.
 
-**Two readings, and they say different things.** 2,163 to 2,170 came from a run
+**Four checks written, four gained, and the predecessor was recorded** -- so the
+delta is attributable and says no sampling population moved. That is the right
+answer for this pass twice over: FD-009 changed only which event the stamping
+loop treats as a contact, and FD-007 changed only which half of an existing
+animation plays. The balance probe agrees, byte-identical on all nine figures.
+
+Before it, 2,174 at `10bfbdd`, on the §5 platform-height closure.
+
+**Two readings there, and they said different things.** 2,163 to 2,170 came from a run
 that authored *no* checks -- the gate was appended after `test_runner.gd` was
 loaded -- so the whole of that seven is sampling gates drawing more, which is
 what a real behaviour change looks like. 2,170 to 2,174 is then exactly the four
