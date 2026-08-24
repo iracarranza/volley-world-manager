@@ -3496,6 +3496,13 @@ func resolve(
 			"ball_height_at_net_meters": geometric.get(
 				"ball_height_at_net_meters", null
 			),
+			## The wall's reaches, beside the ball's height at the same moment.
+			## Without both on one event "the ball cleared the hands" is not a
+			## statement anything can check -- the reaches were on the ATTACK
+			## event and the ball's height here, so a gate asserting the first
+			## was reading an absent key and passing vacuously. Found by that
+			## gate failing its own guard.
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
 			## The wall's primary and assist, which is what the event used to
 			## credit. Published beside the contact so "the ball met a hand other
 			## than the one that closed furthest" is a statement a reader can
@@ -6037,6 +6044,13 @@ func _resolve_opponent_transition(
 			"ball_height_at_net_meters": geometric.get(
 				"ball_height_at_net_meters", null
 			),
+			## The wall's reaches, beside the ball's height at the same moment.
+			## Without both on one event "the ball cleared the hands" is not a
+			## statement anything can check -- the reaches were on the ATTACK
+			## event and the ball's height here, so a gate asserting the first
+			## was reading an absent key and passing vacuously. Found by that
+			## gate failing its own guard.
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
 			## The wall's own two, beside the hand that met the ball -- see the
 			## note at the first-ball block site.
 			"block_wall_primary_id": blocker_id,
@@ -7657,6 +7671,13 @@ func _resolve_home_continuation(
 			"ball_height_at_net_meters": geometric.get(
 				"ball_height_at_net_meters", null
 			),
+			## The wall's reaches, beside the ball's height at the same moment.
+			## Without both on one event "the ball cleared the hands" is not a
+			## statement anything can check -- the reaches were on the ATTACK
+			## event and the ball's height here, so a gate asserting the first
+			## was reading an absent key and passing vacuously. Found by that
+			## gate failing its own guard.
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
 			"block_wall_primary_id": int(
 				opponent_blocker.id if opponent_blocker != null else -1
 			),
