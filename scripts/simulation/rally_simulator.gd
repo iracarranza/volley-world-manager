@@ -2340,7 +2340,9 @@ func resolve(
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
 		float(set_arc.apex_height_meters),
-		set_contact_time
+		set_contact_time, NAN, NAN,
+		float(set_arc.get("release_height_meters", NAN)),
+		float(set_arc.get("arrival_height_meters", NAN)),
 	)
 	if using_live_attack:
 		set_trajectory = Dictionary(selected_live_attack.get(
@@ -2671,6 +2673,8 @@ func resolve(
 		set_event, set_target, "set", float(set_flight_time),
 		float(set_arc.apex_height_meters),
 		set_contact_time,
+		float(set_arc.get("release_height_meters", NAN)),
+		float(set_arc.get("arrival_height_meters", NAN)),
 	)
 	if set_event != null:
 		set_trajectory = Dictionary(
@@ -4993,7 +4997,9 @@ func _resolve_opponent_transition(
 			"outgoing_trajectory": _ball_trajectory(
 				"opponent_set", opponent_setter_position, opponent_contact,
 				set_flight_time, float(set_arc.apex_height_meters),
-				opponent_set_contact_time
+				opponent_set_contact_time, NAN, NAN,
+				float(set_arc.get("release_height_meters", NAN)),
+				float(set_arc.get("arrival_height_meters", NAN)),
 			)})
 	var opponent_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(opponent_set_event, opponent_setter_choice)
@@ -5359,6 +5365,8 @@ func _resolve_opponent_transition(
 	_retarget_set_event(
 		opponent_set_event, opponent_contact, "opponent_set", set_flight_time,
 		float(set_arc.apex_height_meters), opponent_set_contact_time,
+		float(set_arc.get("release_height_meters", NAN)),
+		float(set_arc.get("arrival_height_meters", NAN)),
 	)
 	if opponent_set_event != null:
 		opponent_set_event.metadata["set_flight_time"] = set_flight_time
@@ -6908,7 +6916,10 @@ func _resolve_home_continuation(
 			"event_time": cont_set_contact_time,
 			"outgoing_trajectory": _ball_trajectory(
 				"set", set_contact, set_target, continuation_flight_time,
-				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
+				float(continuation_set_arc.apex_height_meters),
+				cont_set_contact_time, NAN, NAN,
+				float(continuation_set_arc.get("release_height_meters", NAN)),
+				float(continuation_set_arc.get("arrival_height_meters", NAN)),
 			)})
 	## Lineage, as on the opponent side: the flight this set was resolved
 	## against, so a probe can prove the chain instead of comparing endpoints.
@@ -7101,6 +7112,8 @@ func _resolve_home_continuation(
 	_retarget_set_event(
 		set_event_for_staging, set_target, "set", continuation_flight_time,
 		float(continuation_set_arc.apex_height_meters), cont_set_contact_time,
+		float(continuation_set_arc.get("release_height_meters", NAN)),
+		float(continuation_set_arc.get("arrival_height_meters", NAN)),
 	)
 	if prepared_hitter != null:
 		continuation_approach = ApproachMechanicsModel.evaluate_takeoff(
@@ -10519,13 +10532,18 @@ func _retarget_set_event(
 	flight_time: float,
 	apex_height: float,
 	release_time: float,
+	## The heights `_set_arc` solved this flight between. NAN keeps the old
+	## 1.0 m default, which is what every caller used to get; every caller now
+	## has the arc in scope and passes them.
+	release_height: float = NAN,
+	arrival_height: float = NAN,
 ) -> void:
 	if set_event == null:
 		return
 	set_event.end_position = contact
 	set_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 		kind, set_event.start_position, contact, flight_time, apex_height,
-		release_time,
+		release_time, NAN, NAN, release_height, arrival_height,
 	)
 
 
@@ -14009,8 +14027,118 @@ func _net_crossing_time(attack_trajectory: Dictionary) -> float:
 	return float(attack_trajectory["start_time"]) 		+ float(attack_trajectory.get("duration", 0.0)) * fraction
 
 
+## **Where the ball was when each contact was made, carried forward once.**
+##
+## `CONTACT_AND_BALL_FLIGHT.md` §5: a realised contact is one point, so the
+## incoming segment's far end *is* the contact's height. Every family that
+## publishes a resolved flight already states that far end; nothing read it, and
+## presentation fell back to a body measurement -- a reach, a platform, a hip --
+## which is a fact about the player standing in for a fact about the ball.
+##
+## This is a copy, not a computation. It reads the incoming leg's own
+## `end_height_meters` and only when that leg says it knows
+## (`height_source == "resolved"`), so a family whose writer never resolved its
+## heights is left alone rather than given a number invented here. That is the
+## difference between propagating authority and minting a second one.
+##
+## The block is skipped because it already publishes its own, proved by the
+## intersection test rather than inherited from the incoming flight -- and on a
+## beaten block there is no contact for this to be the height of. See
+## `docs/review/BLOCK_REALISED_CONTACT.md`.
+func _stamp_realised_contact_heights(result: Resource) -> void:
+	if result == null:
+		return
+	var previous: RallyEvent = null
+	for raw_event in result.events:
+		var event := raw_event as RallyEvent
+		if event == null \
+				or int(event.event_type) == RallyEventModel.EventType.POINT:
+			continue
+		if previous != null \
+				and int(event.event_type) != RallyEventModel.EventType.BLOCK:
+			## **Only when the incoming flight actually ends at this contact.**
+			##
+			## `height_source == "resolved"` is that test, and it is a narrower
+			## one than it looks. A set is solved *between* two heights, so its
+			## far end is the contact that receives it and the two are one point.
+			## A serve is not: it publishes the whole flight to where the ball
+			## would land, and the reception happens partway along it, so the
+			## serve leaves `end_height_meters` unresolved and this correctly
+			## declines to speak for the pass.
+			##
+			## The contact's own outgoing launch height was tried as a second
+			## source and rejected on measurement: on the reception it equals the
+			## body proxy to three decimals (`|launch - body| = 0.000` over 162
+			## legs), so it is the platform wearing a flight's clothes rather
+			## than an independent statement about the ball. Preferring it moved
+			## no reception seam and widened the opponent set's from 42 breaks to
+			## 63. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+			var incoming: Dictionary = previous.metadata.get(
+				"outgoing_trajectory", {}
+			)
+			var source := str(incoming.get("height_source", "default"))
+			if source == "resolved":
+				event.metadata["ball_contact_height_meters"] = float(
+					incoming.get("end_height_meters", 1.0)
+				)
+				event.metadata["ball_contact_height_source"] = \
+					"incoming_realised_segment"
+			elif source == "start_resolved" \
+					and incoming.has("launch_vertical_mps"):
+				## **A flight that knows where it started and how it left can say
+				## where it finished.**
+				##
+				## The serve is the family this exists for. It resolves its own
+				## contact height and its launch and leaves its far end unstated,
+				## which read as "the serve cannot say where the pass was" -- and
+				## the measurement says otherwise: the serve flight's published
+				## end time and the reception's own stamp agree, so the flight is
+				## already terminated at the pass rather than running on to the
+				## floor. Integrating its launch across its own duration is
+				## therefore evaluating the flight *at the contact*, not
+				## extrapolating past one.
+				##
+				## Not a second physics. This is the same integration
+				## `BallPresentation` performs to draw the leg, moved to the side
+				## of the boundary that owns the fact -- which is the whole of §5.
+				var flown := maxf(float(incoming.get(
+					"physical_duration_seconds",
+					float(incoming.get("duration", 0.0)),
+				)), 0.0)
+				event.metadata["ball_contact_height_meters"] = maxf(
+					float(incoming.get("start_height_meters", 1.0))
+						+ float(incoming["launch_vertical_mps"]) * flown
+						- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2
+							* flown * flown,
+					0.0,
+				)
+				event.metadata["ball_contact_height_source"] = \
+					"incoming_launch_integrated"
+		## **`outgoing.start == C` is the third term and it is not closed here.**
+		##
+		## Writing the contact height back onto this event's own flight was tried
+		## and does nothing: every family that reaches this point publishes a
+		## launch, and a launch was solved *from* the start height it shipped
+		## with. Overwriting only the height would leave a flight disagreeing with
+		## its own length, which is a worse record than an honest gap.
+		##
+		## What the gap is, exactly: the reception's arc is solved from the
+		## platform's height, so once its contact says the ball's height instead,
+		## the arc departs from somewhere the contact no longer claims -- 0.29 to
+		## 0.42 m, and it appears as a set seam. That disagreement is not created
+		## here. It was always in the record and the platform proxy was hiding it
+		## on both ends at once. Closing it means re-solving the pass from the
+		## ball's height, which moves `pass_apex_meters` and therefore the set
+		## clamp, and is simulation work rather than a seam repair. See
+		## `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+		previous = event
+
+
 func _finalize_rally_timeline(result: Resource) -> void:
 	_ensure_event_trajectories(result)
+	## After the trajectories exist and before the timeline is finalised: this
+	## reads flights and writes only heights, so it cannot move a contact in time.
+	_stamp_realised_contact_heights(result)
 	result.analysis["physical_time_corrections"] = _stamp_physical_times(result)
 	var timeline := 0.0
 	for event_resource in result.events:
@@ -18348,6 +18476,12 @@ func _set_arc(
 		var level := RallyKinematics.solve_launch_arc(distance_meters, angle)
 		level["apex_absolute_meters"] = release_height_meters \
 			+ float(level.apex_height_meters)
+		## The two heights this arc was solved between, returned rather than
+		## consumed. See the note on the timed branch below; the same reasoning
+		## applies here, where `solve_launch_arc` is a ground-to-ground solver and
+		## the release height is the only absolute either end has.
+		level["release_height_meters"] = release_height_meters
+		level["arrival_height_meters"] = hitter_contact_height_meters
 		return level
 	var apex := _set_apex_meters(
 		setter, tempo, set_quality, hitter_contact_height_meters,
@@ -18360,6 +18494,23 @@ func _set_arc(
 		"apex_height_meters": maxf(apex - release_height_meters, 0.0),
 		"apex_absolute_meters": apex,
 		"launch_angle_degrees": angle,
+		## **Where this ball starts and where it arrives, in absolute metres.**
+		##
+		## `duration_for_apex` is solved *between* these two and then neither left
+		## the function, so every set published a trajectory carrying
+		## `BallTrajectory`'s 1.0 m default at both ends -- measured at 159 of 159
+		## set flights, `height_source == "default"`. The set is the seam where
+		## the chain breaks: it consumes a reception flight whose heights are
+		## resolved and hands the attack one that has forgotten them, so every
+		## family downstream reads a body proxy for want of a number that was in
+		## scope here all along. See
+		## `docs/review/contact_authority/BEFORE_contact_authority_census.txt`.
+		##
+		## Not a second opinion about where the ball goes: the duration above is
+		## the time to fall from `apex` to `arrival_height_meters`, so a flight
+		## drawn to any other far end disagrees with its own length.
+		"release_height_meters": release_height_meters,
+		"arrival_height_meters": hitter_contact_height_meters,
 	}
 
 

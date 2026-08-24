@@ -210,13 +210,47 @@ from 1.914 to 1.567 m (home) and 1.217 to 1.028 m (opponent); total seam jumps
 378 to 309, and the worst is no longer a block. See
 `docs/review/BLOCK_REALISED_CONTACT.md`.
 
-What remains is every family whose `contact_height` is still a **body**
-measurement standing in for a fact about the ball -- a reach, a platform, a hip.
-That is RECEPTION at 144 of 145 legs, 0.34--0.39 m, and SET at 105 of 151. The
-block was separable because its height is read off a flight; the others are not,
-and closing them is §5, *Realized segment*, which is simulation work.
+**Narrowed again: the set and the attack are out of it too, and the residual is
+now one family and one unwired function.** A census of every family
+(`tools/run_contact_authority_census.gd`) found the seam was a *chain* with one
+break: `_set_arc` is handed a release height and a hitter contact height, solves
+the flight's duration between them, and returned neither -- so every set
+published `BallTrajectory`'s 1.0 m default at both ends and every family
+downstream read a body proxy for want of a number that was in scope upstream.
+Returning them closed the attack outright, both sides: `body-proxy` with 273 of
+273 legs breaking at a mean 2.09 m, to **authoritative** with none at 0.02 m. A
+forward pass then copies each resolved far end onto the next contact, and SET/home
+went 53 breaks to 0. Total drawn seam jumps 378 to 246. Outcome mix unchanged to
+three decimals on every figure. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
 
-Blocks later construction: no. Next repair: §5 for the non-block families.
+**And the reception closed too**, once two readings were corrected. The serve's
+published flight is already terminated at the pass -- its end time and the
+reception's own stamp agree, so evaluating it at its far end *is* evaluating it
+at the contact -- and a flight that resolves its start and publishes its launch
+can state that far end by integrating across its own duration. RECEPTION went
+**144 breaks to 0** on both sides; total drawn seams 378 to **184**.
+
+**The residual is one thing and it is not a seam.** Closing the reception exposed
+a 0.29--0.42 m disagreement that appears as a set seam, 124 legs: the reception's
+outgoing arc is solved from the *platform's* height, so once its contact says the
+ball's height instead, the arc departs from somewhere the contact no longer
+claims. That was always in the record -- the platform proxy was wrong at both
+ends at once and the two errors cancelled in the drawing, so nothing could see
+either. Writing the contact height back onto the flight does not fix it: the
+launch was solved from the start height it shipped with, so overwriting only the
+height leaves a flight disagreeing with its own length.
+
+Closing it means re-solving the pass from the ball's height rather than the
+body's, and that is not free: `pass_apex_meters` feeds the set's release clamp,
+so moving the pass's launch moves what the setter may do with it and therefore
+moves rally outcomes. Simulation work with a measurable cost, wanting its own
+before-and-after rather than a guess folded into a seam pass.
+
+Two smaller items stay open: the `SET_DECISION` path's 114 legs publish no
+outgoing flight at all, and 60 block legs still score a "seam" that is not one --
+the ball went past the wall, so the leg into the event does not end at it.
+
+Blocks later construction: no.
 
 ---
 
@@ -252,10 +286,20 @@ the guard read an absent key, found the empty string, and suppressed the carry o
 *every* block including the 97 that touched the ball. Repaired by publishing the
 key where it is read; see `docs/review/BLOCK_REALISED_CONTACT.md`.
 
-What is left of this entry is the pose alone, and the paragraph above still
-governs it: a blocker who could not reach still jumps, so the honest repair is a
-distinct reaching-and-missing pose rather than a suppression. The dig half is
-untouched.
+**And the pose test was wrong in the other direction, which is now repaired.**
+`_contact_posture` reached for the miss pose on `not event.success` -- the
+contact's *outcome*, not whether the ball was met -- so every service error,
+shank and swing that went out was drawn reaching for a ball it had just struck.
+It now uses B0's test: did this contact publish a ball. The block never reaches
+that function at all; it poses through `_pose_block_wall`, which draws the jump
+the blocker actually made, so a beaten wall already reaches and misses without
+the ball snapping to its hands.
+
+What is left is the finer distinction the paragraph above names: a reach that
+misses and a reach that digs still share the `reaching` pose, so the ball's
+absence is visible in the ball and not yet in the body. That is animation
+authoring rather than authority work. The dig half is otherwise closed by the
+same predicate.
 
 ---
 

@@ -271,6 +271,8 @@ func _initialize() -> void:
 	_test_a_blocker_has_five_states()
 	_test_block_contact_is_an_intersection()
 	_test_block_event_publishes_the_contact_it_proved()
+	_test_the_set_publishes_the_heights_it_was_solved_between()
+	_test_a_miss_pose_means_the_ball_was_not_touched()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -22924,4 +22926,156 @@ func _test_block_event_publishes_the_contact_it_proved() -> void:
 	_check(
 		time_out_of_order == 0,
 		"a block contact is stamped after the swing it met",
+	)
+
+
+## The set stops throwing away the two heights it was solved between.
+##
+## `_set_arc` is handed a release height and a hitter contact height and solves
+## `duration_for_apex` *between* them -- then returned neither, so every set
+## published a flight carrying `BallTrajectory`'s 1.0 m default at both ends.
+## Measured at 159 of 159 set flights before the repair. The cost was not local:
+## the set is the seam where the chain breaks, and every family downstream read a
+## body proxy for want of a number that was in scope here all along. The attack
+## in particular went from `body-proxy` with 273 of 273 legs breaking at a mean
+## 2.09 m to `authoritative` with none, on this change alone. See
+## `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+func _test_the_set_publishes_the_heights_it_was_solved_between() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var sets := 0
+	var resolved := 0
+	var attacks := 0
+	var attack_agrees := 0
+	var attack_stamped := 0
+	var inverted := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(952000, 952060):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			var previous: Resource = null
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.POINT:
+					continue
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.SET:
+					sets += 1
+					var flight: Dictionary = event.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if str(flight.get("height_source", "default")) == "resolved":
+						resolved += 1
+						## A set is thrown up to be hit, so it arrives higher
+						## than it left. Stated as the direction rather than a
+						## magnitude: the heights are the setter's and the
+						## hitter's own bodies and no figure is authored here.
+						if float(flight.get("end_height_meters", 0.0)) \
+								< float(flight.get("start_height_meters", 0.0)):
+							inverted += 1
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+						and previous != null \
+						and int(previous.event_type) \
+							== RALLY_EVENT_SCRIPT.EventType.SET:
+					attacks += 1
+					var incoming: Dictionary = previous.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					var stamped: Variant = event.metadata.get(
+						"ball_contact_height_meters", null
+					)
+					if stamped != null:
+						attack_stamped += 1
+						## §5's identity, as a copy that can be checked: the
+						## incoming segment's far end *is* the contact.
+						if is_equal_approx(
+							float(stamped),
+							float(incoming.get("end_height_meters", -1.0)),
+						):
+							attack_agrees += 1
+				previous = event
+	_check(
+		sets > 0 and resolved == sets,
+		"every set publishes a flight that knows both its own heights",
+	)
+	_check(
+		inverted == 0,
+		"a set arrives higher than it was released, as the arc it was solved as",
+	)
+	_check(
+		attacks > 0 and attack_stamped == attacks,
+		"every attack off a set carries the height the ball was met at",
+	)
+	_check(
+		attack_agrees == attack_stamped,
+		"the attack's contact height is the set flight's own far end, copied",
+	)
+
+
+## A pose says the ball was touched only when it was.
+##
+## FD-007. `_contact_posture` reached for the miss pose on `not event.success`,
+## which is the contact's *outcome* and not whether the ball was met. Measured
+## over 180 rallies: all 35 failed serves, 4 failed receptions, 3 failed sets and
+## 14 failed attacks still publish an outgoing ball -- service errors, shanks and
+## swings that went out, every one of them struck -- so those were all drawn
+## reaching for a ball they had just hit. Only the block and the dig fail by not
+## touching, and the block never reaches this function at all: it poses through
+## `_pose_block_wall`, which draws the jump the blocker actually made.
+##
+## The test is B0's, the same one the one-ball chain was certified with: did this
+## contact publish a ball. Asserted here on the two populations that make the two
+## errors visible -- contacts that failed but struck, and contacts that struck
+## nothing.
+func _test_a_miss_pose_means_the_ball_was_not_touched() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var failed_but_struck := 0
+	var struck_nothing := 0
+	var struck_nothing_reaching := 0
+	var failed_but_struck_reaching := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(953000, 953060):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) in [
+					RALLY_EVENT_SCRIPT.EventType.POINT,
+					## Posed by `_pose_block_wall`, which never consults this.
+					RALLY_EVENT_SCRIPT.EventType.BLOCK,
+				]:
+					continue
+				if bool(event.success):
+					continue
+				var outgoing: Dictionary = event.metadata.get(
+					"outgoing_trajectory", {}
+				)
+				var touched: bool = not outgoing.is_empty() \
+					and float(outgoing.get("duration", 0.0)) > 0.0
+				var reaching := str(
+					MatchScreen._touched_the_ball(event as RallyEvent)
+				) == "false"
+				if touched:
+					failed_but_struck += 1
+					if reaching:
+						failed_but_struck_reaching += 1
+				else:
+					struck_nothing += 1
+					if reaching:
+						struck_nothing_reaching += 1
+	_check(
+		failed_but_struck > 0 and struck_nothing > 0,
+		"a rally sample contains both kinds of unsuccessful contact",
+	)
+	_check(
+		failed_but_struck_reaching == 0,
+		"a shank or a service error is not drawn reaching for a ball it struck",
+	)
+	_check(
+		struck_nothing_reaching == struck_nothing,
+		"a contact that launched no ball is drawn reaching, every time",
 	)

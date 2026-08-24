@@ -587,6 +587,20 @@ func _contact_recovery(event: RallyEvent) -> String:
 ## up more than a degree of platform was not square, whatever the alignment term
 ## said. The resolver stays the authority on the outcome; the drawing stops
 ## claiming a squared-up pass that never happened.
+## Did this contact touch the ball at all?
+##
+## Not `success`, which is the outcome. A contact that struck the ball and put it
+## out still launched it; a dig that never arrived and a block the ball flew past
+## launched nothing. The published ball is the difference, and it is the same
+## test B0 certified the one-ball chain with.
+static func _touched_the_ball(event: RallyEvent) -> bool:
+	if event == null:
+		return false
+	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+	return not outgoing.is_empty() \
+		and float(outgoing.get("duration", 0.0)) > 0.0
+
+
 func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
@@ -609,7 +623,19 @@ func _contact_posture(event: RallyEvent) -> String:
 	## Not the whole of 13a. A reach that misses and a reach that digs still
 	## share a pose, and telling them apart wants the ball's absence to be
 	## visible in the body rather than only in the ball. Logged.
-	if not event.success:
+	##
+	## **`success` was the wrong test and is replaced here.** It is the contact's
+	## *outcome*, not whether the ball was touched, and FD-007 measured the
+	## difference: all 35 failed serves, 4 failed receptions, 3 failed sets and
+	## 14 failed attacks in a 180-rally sample still publish an outgoing ball --
+	## service errors, shanks and swings that went out, every one of them struck.
+	## Only the block and the dig fail by not touching it at all. So this drew a
+	## shanked pass and a service error in the miss pose, which is the same defect
+	## the paragraph above describes, pointing the other way.
+	##
+	## The authoritative test is the one B0 counted contacts by: did this contact
+	## publish a ball. `tools/probe_failed_contact_semantics.gd`.
+	if not _touched_the_ball(event):
 		return "reaching"
 	## **A ball taken at the edge of the range is a reach.**
 	##

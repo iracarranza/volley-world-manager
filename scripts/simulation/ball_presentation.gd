@@ -167,6 +167,28 @@ static func _next_contact_states_ball_height(next_contact: RallyEvent) -> bool:
 static func contact_height(event: RallyEvent, profiles: Dictionary) -> float:
 	if event == null or event.actor_id < 0:
 		return FLOOR_CONTACT_HEIGHT_METERS
+	## **The ball's own height, when the rally said where the ball was.**
+	##
+	## Everything below this line is a *body* measurement -- a reach, a platform,
+	## a hip -- standing in for a fact about the ball, which is what §5 calls the
+	## realised segment and what FD-006 counted. `ball_contact_height_meters` is
+	## the incoming flight's far end, copied forward by
+	## `RallySimulator._stamp_realised_contact_heights` from flights that resolve
+	## their own heights, so where it is present the body has nothing to add.
+	##
+	## The block publishes its own instead, proved by intersection rather than
+	## inherited, and it is preferred for the same reason: it is the one this
+	## contact actually happened at.
+	var block_proven: Variant = event.metadata.get(
+		"block_contact_height_meters", null
+	)
+	if block_proven != null:
+		return maxf(float(block_proven), FLOOR_CONTACT_HEIGHT_METERS)
+	var realised: Variant = event.metadata.get(
+		"ball_contact_height_meters", null
+	)
+	if realised != null:
+		return maxf(float(realised), FLOOR_CONTACT_HEIGHT_METERS)
 	var profile: Dictionary = profiles.get(int(event.actor_id), {})
 	var height_meters := float(profile.get("height_cm", 188.0)) / 100.0
 	var wingspan_meters := float(profile.get("wingspan_cm", 191.0)) / 100.0
