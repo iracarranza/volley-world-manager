@@ -12,9 +12,21 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-24 on the block realised-contact pass
-at `0ea8402`: **2,156 checks pass, 0 fail**. Treat any test failure as a
+Current branch baseline, verified 2026-08-24 on the §5 contact-height chain pass
+at `b28c099`: **2,163 checks pass, 0 fail**. Treat any test failure as a
 regression.
+
+**Seven checks were written and the count moved by seven, and this time that
+means something, because the predecessor was written down.** 2,156 was measured
+at `0ea8402` and recorded here on the same pass, so the delta is attributable:
+the count moved by exactly what was authored and no sampling population changed
+size. The balance probe agrees independently -- contacts per rally, kill, dig,
+stuff, serve error, ace, reception quality and block touch all byte-identical --
+which is what a pass that moves the *record* rather than the rally has to look
+like. Read the entry below for what happens when the predecessor is not written
+down, one pass earlier.
+
+Before it, 2,156 at `0ea8402`, on the block realised-contact pass.
 
 **Seventeen checks were written and the delta cannot be computed, because the
 pass in between never wrote its number down.** This line said 2,139 at `413eee5`
