@@ -1,20 +1,35 @@
 
-family/serving side          legs   known  breaks  mean gap worst gap  classification
-ATTACK/home                   139     139       0     0.000     0.000  authoritative        launch 0, derivable 139, resolved=139
-ATTACK/opponent               139     139       0     0.000     0.000  authoritative        launch 0, derivable 139, resolved=139
-ATTACK_COVERAGE/home            2       0       0     0.022     0.038  body-proxy           launch 0, derivable 0, default=2
-ATTACK_COVERAGE/opponent       10       0       1     0.038     0.085  body-proxy           launch 0, derivable 0, default=10
-BLOCK/home                    108       0       0     0.000     0.000  authoritative by own proof launch 108, derivable 0, default=108
-BLOCK/opponent                123       0       0     0.000     0.000  authoritative by own proof launch 123, derivable 0, default=123
-DIG/home                       71       0       0     0.028     0.038  body-proxy           launch 0, derivable 0, default=3
-DIG/opponent                   79       0       0     0.020     0.038  body-proxy           launch 0, derivable 0, default=15
-RECEPTION/home                126       1       0     0.000     0.000  authoritative        launch 126, derivable 126, resolved=1, start_resolved=125
-RECEPTION/opponent            125       0       2     0.002     0.120  derivable, not derived launch 125, derivable 125, start_resolved=125
-SET/home                      139     139       7     0.005     0.120  computed+dropped     launch 139, derivable 139, resolved=139
-SET/opponent                  139     139      73     0.161     1.014  computed+dropped     launch 139, derivable 139, resolved=139
+family/contacting side       legs   known  breaks   floor  mean gap worst gap  classification
+ATTACK/home                   146     146       0       0     0.000     0.000  authoritative        launch 0, derivable 146, resolved=146
+                                  publishes: none=0, launch=146, default=146
+ATTACK/opponent               132     132       0       0     0.000     0.000  authoritative        launch 0, derivable 132, resolved=132
+                                  publishes: none=0, launch=132, default=132
+ATTACK_COVERAGE/home           10       0       1       0     0.038     0.085  body-proxy           launch 0, derivable 0, default=10
+                                  publishes: none=0, launch=10, resolved=10
+ATTACK_COVERAGE/opponent        2       0       0       0     0.022     0.038  body-proxy           launch 0, derivable 0, default=2
+                                  publishes: none=0, launch=2, resolved=2
+BLOCK/home                    112       0       0       0     0.000     0.000  authoritative by own proof launch 112, derivable 0, default=112
+                                  publishes: none=68, launch=40, default=44
+BLOCK/opponent                119       0       0       0     0.000     0.000  authoritative by own proof launch 119, derivable 0, default=119
+                                  publishes: none=64, launch=29, default=55
+DIG/home                       70       0       0       0     0.022     0.038  body-proxy           launch 0, derivable 0, default=2
+                                  publishes: none=1, launch=1, resolved=1
+DIG/opponent                   80       0       0       0     0.021     0.038  body-proxy           launch 0, derivable 0, default=16
+                                  publishes: none=7, launch=9, resolved=9
+RECEPTION/home                126       1       0       2     0.002     0.120  authoritative        launch 126, derivable 126, resolved=1, start_resolved=125
+                                  publishes: none=0, launch=126, resolved=126
+RECEPTION/opponent            125       0       0       0     0.000     0.000  derivable, not derived launch 125, derivable 125, start_resolved=125
+                                  publishes: none=0, launch=125, resolved=125
+SET/home                      146     146       0       2     0.002     0.120  authoritative        launch 146, derivable 146, resolved=146
+                                  publishes: none=0, launch=0, resolved=146
+SET/opponent                  132     132       0       9     0.007     0.120  authoritative        launch 132, derivable 132, resolved=132
+                                  publishes: none=0, launch=0, resolved=132
 
 known   = the incoming flight's writer knew its far-end height
           (`height_source == "resolved"`), rather than taking the
           1.0 m default `BallTrajectory.create` falls back to
+floor   = legs whose published far end is below the floor, where the
+          drawing clamps and is right to -- a proven exception, not
+          a disagreement
 breaks  = legs where the published far end and the drawn contact
           height differ by more than 0.05 m

@@ -14115,8 +14115,25 @@ func _stamp_realised_contact_heights(result: Resource) -> void:
 	var previous: RallyEvent = null
 	for raw_event in result.events:
 		var event := raw_event as RallyEvent
-		if event == null \
-				or int(event.event_type) == RallyEventModel.EventType.POINT:
+		## **An action event is not a ball contact, and must not become one by
+		## standing between two.**
+		##
+		## This skipped only `POINT`, so a `SET_DECISION` -- which publishes no
+		## outgoing flight, because nothing was struck -- became the `previous`
+		## event for the set that followed it, and the set was left with no
+		## contact height at all. Measured: 109 of 261 sets stamped from nothing,
+		## every one of them preceded by a decision, and none of the 152 without
+		## one affected. The seam was not an asymmetry between the two sides'
+		## physics; it was one side's rallies carrying an extra event and this
+		## loop counting it as a contact.
+		##
+		## `MatchScreen._next_contact_index` skips exactly this pair, and has
+		## since it was written. Matching it rather than inventing a second
+		## opinion about what a contact is.
+		if event == null or int(event.event_type) in [
+			RallyEventModel.EventType.POINT,
+			RallyEventModel.EventType.SET_DECISION,
+		]:
 			continue
 		if previous != null \
 				and int(event.event_type) != RallyEventModel.EventType.BLOCK:

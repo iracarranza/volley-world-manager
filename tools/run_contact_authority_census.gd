@@ -79,8 +79,19 @@ func _initialize() -> void:
 				var family := str(
 					RallyEvent.EventType.keys()[int(event.event_type)]
 				)
+				## **Which side made the contact, not which side served.**
+				##
+				## This keyed on the serving side, and a rally's contacts belong
+				## to both teams -- on a home serve the *opponent* receives and
+				## sets. So the row labelled `SET/opponent` was reporting the
+				## **home** team's sets, and a reader taking the label at face
+				## value would look for an asymmetry in the wrong side's code.
+				## That happened: the brief for the FD-009 repair was written
+				## from these labels and named the wrong side.
 				var key := "%s/%s" % [
-					family, "home" if side == 0 else "opponent",
+					family, str(event.metadata.get(
+						"side", "home" if side == 0 else "opponent"
+					)),
 				]
 				if not rows.has(key):
 					rows[key] = {
@@ -153,7 +164,18 @@ func _initialize() -> void:
 				row["gap_total"] = float(row["gap_total"]) + gap
 				row["gap_worst"] = maxf(float(row["gap_worst"]), gap)
 				if gap > SEAM_TOLERANCE_METERS:
-					row["breaks"] = int(row["breaks"]) + 1
+					## **A ball cannot be drawn underground, and that is not a seam.**
+					##
+					## The resolver's flight arithmetic can put a far end below the
+					## floor for a ball scraped off it, and `contact_height` clamps
+					## to `FLOOR_CONTACT_HEIGHT_METERS` because the drawing must not
+					## follow it there. Counted apart rather than as a disagreement:
+					## measured, all 11 residual breaks were this, and the worst
+					## break *not* explained by the clamp was 0.000 m.
+					if published < BallPresentationScript.FLOOR_CONTACT_HEIGHT_METERS:
+						row["floor_clamped"] = int(row.get("floor_clamped", 0)) + 1
+					else:
+						row["breaks"] = int(row["breaks"]) + 1
 	_report(rows)
 	quit(0)
 
@@ -168,9 +190,9 @@ static func _sources(row: Dictionary, prefix: String = "src_") -> String:
 
 
 func _report(rows: Dictionary) -> void:
-	print("%-26s %6s %7s %7s %9s %9s  %s" % [
-		"family/serving side", "legs", "known", "breaks", "mean gap",
-		"worst gap", "classification",
+	print("%-26s %6s %7s %7s %7s %9s %9s  %s" % [
+		"family/contacting side", "legs", "known", "breaks", "floor",
+		"mean gap", "worst gap", "classification",
 	])
 	var keys: Array = rows.keys()
 	keys.sort()
@@ -191,8 +213,9 @@ func _report(rows: Dictionary) -> void:
 			verdict = "derivable, not derived"
 		if int(row.get("own_authority", 0)) > 0:
 			verdict = "authoritative by own proof"
-		print("%-26s %6d %7d %7d %9.3f %9.3f  %-20s launch %d, derivable %d, %s" % [
+		print("%-26s %6d %7d %7d %7d %9.3f %9.3f  %-20s launch %d, derivable %d, %s" % [
 			str(key), int(row["legs"]), known, breaks,
+			int(row.get("floor_clamped", 0)),
 			float(row["gap_total"]) / float(legs), float(row["gap_worst"]),
 			verdict, int(row.get("launch", 0)), derivable,
 			_sources(row),
@@ -205,5 +228,8 @@ func _report(rows: Dictionary) -> void:
 	print("known   = the incoming flight's writer knew its far-end height")
 	print("          (`height_source == \"resolved\"`), rather than taking the")
 	print("          1.0 m default `BallTrajectory.create` falls back to")
+	print("floor   = legs whose published far end is below the floor, where the")
+	print("          drawing clamps and is right to -- a proven exception, not")
+	print("          a disagreement")
 	print("breaks  = legs where the published far end and the drawn contact")
 	print("          height differ by more than %.2f m" % SEAM_TOLERANCE_METERS)
