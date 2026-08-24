@@ -182,7 +182,47 @@ The swing-balance move is the one worth watching and is recorded as an
 observation rather than acted on: it is a home/opponent symmetry indicator and
 it moved *away* from 1.00.
 
-## Two instrument defects found in the census itself
+## Certified
+
+**2,174 checks pass, 0 fail** at `10bfbdd`. Canonical side-out 7 of 7. Drawn
+seams 378 at the M8 baseline to **102**, with block contacts, ATTACK both sides,
+RECEPTION both sides and SET/home all at zero.
+
+The count is worth reading twice here because two consecutive deltas mean
+opposite things. 2,163 to 2,170 authored no checks at all -- the gate was
+appended after `test_runner.gd` loaded -- so that seven is entirely sampling
+gates drawing more, which is the signature of the platform resolver changing what
+rallies do. 2,170 to 2,174 is exactly the four the gate adds, so publishing the
+wall's reaches moved no population, which is the signature of a pure metadata
+addition. Both readings exist only because both predecessors were recorded.
+
+## Four instrument defects, all mine, all the same fault
+
+Worth a count rather than four asides. Every one is a value measured against the
+wrong quantity -- `FAILURE_MODES.md` §0 -- committed by tools written to find
+exactly that:
+
+1. **The census compared against the raw `end_height_meters` field**, a 1.0 m
+   placeholder on a `start_resolved` flight. It reported a serve-to-reception
+   defect the drawn path does not have.
+2. **The census scored the block against the incoming flight's far end**, which
+   was never the block's authority -- a swing that beat the wall ends somewhere
+   the contact never was.
+3. **`_contact_posture` tested `event.success`**, the contact's outcome rather
+   than whether the ball was met, so every service error and shank was drawn
+   reaching for a ball it had just struck. That one was in production, not a
+   probe.
+4. **A gate asserted the ball cleared the hands against a wall that was not
+   there.** `wall_reach_heights` was on the ATTACK event and the assertion read
+   the BLOCK event, so its loop never ran. It would have passed on any engine
+   including a broken one, and the only reason it did not ship green is that the
+   same gate carried a fourth assertion whose whole job was to prove the sample
+   was non-empty. That guard failed; the three substantive assertions passed.
+
+The lesson is the guard, not the fix. A check that cannot fail is worse than no
+check, and the cheapest way to find one is to assert that its population exists.
+
+## Two of those were in the census itself
 
 Both are the same fault this repository logs most — measuring against the wrong
 quantity — and both were in the tool I built for this pass:

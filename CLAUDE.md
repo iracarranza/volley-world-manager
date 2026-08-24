@@ -12,11 +12,27 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-24 on the §5 platform-height closure:
-**2,170 checks pass, 0 fail**, measured on a run that authored none of them.
-Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-24 on the §5 platform-height closure
+at `10bfbdd`: **2,174 checks pass, 0 fail**. Treat any test failure as a
+regression.
 
-**The interesting number is the first one: seven more checks from writing none.**
+**Two readings, and they say different things.** 2,163 to 2,170 came from a run
+that authored *no* checks -- the gate was appended after `test_runner.gd` was
+loaded -- so the whole of that seven is sampling gates drawing more, which is
+what a real behaviour change looks like. 2,170 to 2,174 is then exactly the four
+that gate adds, so publishing the wall's reaches on the block event moved no
+population at all, which is what a pure metadata addition has to look like. Two
+deltas, two different meanings, and the only reason either can be read is that
+both predecessors were written down.
+
+**A note on the second one, because the point survives being right.** 2,174 was
+written into this line as a prediction while that run was still going, and then
+removed. It turned out to be the correct number. Removing it was still right: a
+figure is worth the commit it was *measured* on, and an unmeasured guess that
+happens to land is not evidence -- it is a guess that got lucky, and the next one
+will not.
+
+**The interesting number in the entry above: seven more checks from writing none.**
 2,163 was the predecessor and the run that measured 2,170 loaded `test_runner.gd`
 before the gate was appended, so nothing was authored into it -- the whole delta
 is sampling gates drawing more, which is what a real behaviour change looks like.
