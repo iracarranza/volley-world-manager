@@ -281,26 +281,48 @@ from 1.00. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
 
 ---
 
-## FD-009 — the opponent's set disagrees with the pass that fed it, and the home side does not
+## FD-009 — CLOSED. An action event was being counted as a ball contact
 
-Class: F6 (home/opponent asymmetry)
-Subsystem: the opponent second-contact path
-Reproduction: `godot --headless --path . --script res://tools/run_contact_authority_census.gd` -- `SET/opponent` reads 73 of 139 legs breaking at a 0.161 m mean, worst 1.014, against `SET/home` at 7 of 139 and a 0.005 m mean
-Disposition: **open, non-blocking**
+Class: F3 (instrument-and-loop defect, not an asymmetry)
+Subsystem: `RallySimulator._stamp_realised_contact_heights`
+Reproduction: `godot --headless --path . --script res://tools/probe_set_seam_divergence.gd`
+Disposition: **closed and certified**
 
-Split out of FD-006 rather than keeping that entry alive, because it is a
-different defect: the ball's height at the set *has* an owner on both sides now,
-and one side's two answers disagree. That is an asymmetry, and this repository
-has found and repaired three of them in this packet alone.
+**It was not an asymmetry, and the entry's own framing was the thing that had to
+be discarded first.** The paired trace found the divergence at the first link:
+`_stamp_realised_contact_heights` skipped only `POINT`, so a `SET_DECISION` --
+which publishes no outgoing flight, because nothing is struck -- became the
+`previous` event for the set that followed it, and that set was left with no
+contact height at all.
 
-**Where it is not**: both sides call the same `_reception_pass_result` with
-symmetric arguments in the same order -- checked, not assumed -- so the pass
-itself is not forked. The opponent path carries a `SET_DECISION` event the home
-path does not (114 of them per 300 rallies, publishing no outgoing flight),
-which is the most visible structural difference between the two and the first
-place to look.
+```
+set side / events between      n  broken  stamped from
+home/-                        20       0  incoming_realised_segment: 20
+home/SET_DECISION            109       0  none: 109        <- the defect
+opponent/-                   132       0  incoming_realised_segment: 132
+```
 
-Blocks later construction: no.
+109 of 261 sets stamped from nothing, every one preceded by a decision, none of
+the 152 without one affected. `MatchScreen._next_contact_index` has skipped
+exactly this pair since it was written; the loop now matches it rather than
+keeping a second opinion about what counts as a contact.
+
+**And the side named in this entry was the wrong one.** The census keyed its rows
+on the *serving* side, but a rally's contacts belong to both teams -- on a home
+serve the opponent receives and sets -- so the row labelled `SET/opponent` was
+reporting the **home** team's sets. The entry above was written from that label.
+The census now keys on the side that made the contact.
+
+After: SET 0 breaks both sides, mean 0.007 m, and every family with a derivable
+ball height reads authoritative. Drawn seams 102 to 58, of which 55 are blocks
+the ball flew past and are not seams at all. Outcome mix byte-identical on all
+nine figures -- this moved the record, not the rally. Canonical side-out 7 of 7.
+
+The 11 legs that still register as breaks are balls the resolver puts *below the
+floor*, where `contact_height` clamps because a drawn ball must not go
+underground. Measured: the worst break not explained by that clamp is 0.000 m.
+The census now counts them apart as a proven exception rather than reporting the
+clamp as a disagreement.
 
 ---
 
@@ -309,7 +331,7 @@ Blocks later construction: no.
 Class: F4
 Subsystem: `match_screen._apply_contact_poses`
 Reproduction: `godot --headless --path . --script res://tools/probe_failed_contact_semantics.gd` -- 59 blocks and 47 digs per 180 rallies fail without publishing a ball
-Disposition: **open, non-blocking**
+Disposition: **closed and certified**
 
 The next contact's actor is posed through a wind-up-to-contact with no test for
 whether the contact occurred, so a block that never touched the ball and a dig
@@ -327,6 +349,22 @@ receptions, 3 failed sets and 14 failed attacks still publish a ball -- those ar
 service errors, shanks and swings that went out, every one of them touched. Only
 the block and the dig fail by not touching. The authoritative test is B0's: did
 the contact publish a ball.
+
+**The last item is closed, and it did not need the new animation this entry
+predicted.** A reach that misses and a reach that digs shared a pose because the
+signed phase ran the whole way through contact and out the other side for both --
+`set_pose` takes contact at zero, the wind-up below it and the follow-through
+above. The wind-up is true of a miss; the follow-through is not, because there
+was nothing to swing away from. So the phase is held at zero for a contact that
+published no ball: the body stays extended where it arrived, which is what a
+player who missed actually does, and it costs no new animation because it
+*refuses half of an existing one* rather than authoring a second.
+
+Gated on the selectors themselves rather than on a rendered frame, since what is
+under test is which pose the rally asks for. Measured over 140 rallies both
+sides: 566 contacts made and 90 missed, all 90 drawn reaching, 139 of the 566
+also reaching (full-stretch contacts, which is the pose's real subject), and the
+misses spread across the two families FD-007 named -- BLOCK 50, DIG 40.
 
 **The block half was never the pose, and a separate defect was hiding under it.**
 `match_screen._carry_trajectory` already had the right test -- it refuses to draw

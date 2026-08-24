@@ -22,6 +22,11 @@ const BLOCK_JUMP_SCRIPT := preload("res://scripts/simulation/block_jump_model.gd
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
+## The playback script itself, for the pose selectors. Instantiated bare rather
+## than as a scene: `_contact_posture` and `_touched_the_ball` read event
+## metadata and nothing else, so they need no node tree, and asserting on them
+## directly is asserting on the authority playback actually consults.
+const MATCH_SCREEN_SCRIPT := preload("res://scenes/screens/match_screen.gd")
 const PLAYER_ACTOR_3D_SCENE := preload(
 	"res://scenes/components/player_actor_3d.tscn"
 )
@@ -274,6 +279,7 @@ func _initialize() -> void:
 	_test_the_set_publishes_the_heights_it_was_solved_between()
 	_test_a_miss_pose_means_the_ball_was_not_touched()
 	_test_a_beaten_block_reaches_without_the_ball_arriving()
+	_test_a_missed_contact_has_no_follow_through()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -23163,4 +23169,76 @@ func _test_a_beaten_block_reaches_without_the_ball_arriving() -> void:
 	_check(
 		over_the_top > 0,
 		"and the sample contains balls provably above every hand in the wall",
+	)
+
+
+## A contact that never happened does not play a follow-through.
+##
+## FD-007's last item. `_contact_posture` can already say the body *reached* --
+## it tests whether the contact published a ball, which is B0's definition and
+## not `success` -- but a reach that misses and a reach that digs were still
+## drawn identically, because the signed phase ran the whole way through contact
+## and out the other side for both. Its own comment logged that as the half it
+## could not reach: "telling them apart wants the ball's absence to be visible in
+## the body rather than only in the ball."
+##
+## The wind-up is true of a miss and the follow-through is not, so the phase is
+## held at zero. Asserted on the selectors both sides of that decision rather
+## than on a rendered frame, because what is under test is which pose the rally
+## asks for, not how the mesh draws it.
+func _test_a_missed_contact_has_no_follow_through() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var screen: Object = MATCH_SCREEN_SCRIPT.new()
+	var touched := 0
+	var missed := 0
+	var missed_reaching := 0
+	var touched_reaching := 0
+	var families := {}
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(957000, 957070):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) in [
+					RALLY_EVENT_SCRIPT.EventType.POINT,
+					RALLY_EVENT_SCRIPT.EventType.SET_DECISION,
+				]:
+					continue
+				var posture := str(screen._contact_posture(event))
+				if screen._touched_the_ball(event):
+					touched += 1
+					if posture == "reaching":
+						touched_reaching += 1
+				else:
+					missed += 1
+					var family := str(
+						RALLY_EVENT_SCRIPT.EventType.keys()[int(event.event_type)]
+					)
+					families[family] = int(families.get(family, 0)) + 1
+					if posture == "reaching":
+						missed_reaching += 1
+	_check(
+		missed > 0 and touched > 0,
+		"the sample contains both contacts that were made and contacts that were not",
+	)
+	_check(
+		missed_reaching == missed,
+		"every contact that touched no ball is drawn reaching for it",
+	)
+	## The other direction, which is the one `success` got wrong: a shanked pass
+	## and a service error *did* touch the ball, and must keep their contact.
+	_check(
+		touched_reaching < touched,
+		"a contact that was made is not drawn as a miss",
+	)
+	## And the miss is not one family's quirk. Only the block and the dig fail by
+	## not touching the ball at all -- measured in FD-007 -- so a sample where
+	## only one of them appears would not be testing the shared rule.
+	_check(
+		families.size() >= 2,
+		"more than one contact family reaches without arriving",
 	)

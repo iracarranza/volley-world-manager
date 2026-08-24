@@ -815,7 +815,24 @@ func _apply_contact_poses(
 	elif draw_outgoing:
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
-			event_peak * outgoing_weight, progress, event_direction, true,
+			event_peak * outgoing_weight,
+			## **A contact that never happened has no follow-through.**
+			##
+			## `set_pose` takes a signed phase with contact at zero: the reach
+			## runs -1 to 0 and the follow-through 0 to +1. The wind-up is true
+			## of a miss -- the defender did go for it -- and the follow-through
+			## is not, because there was nothing to swing away from. Playing both
+			## halves is what left a reach-that-misses and a reach-that-digs
+			## sharing one pose, which `_contact_posture` logs as the half of
+			## FD-007 it could not reach: it can say the body reached, and only
+			## the phase can say the ball was never there.
+			##
+			## Held at zero rather than suppressed. The body stays extended where
+			## it arrived, which is what a player who missed actually does, and
+			## it costs no new animation -- this refuses to play half of an
+			## existing one rather than authoring a second.
+			0.0 if not _touched_the_ball(event) else progress,
+			event_direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
 			_platform_aim(event),
