@@ -1,0 +1,1604 @@
+{
+  "milestone": "M9 tactical causality",
+  "start_head": "4df1cfd02536629951b0055bff3a7916ed7a45de",
+  "measured_head": "4df1cfd02536629951b0055bff3a7916ed7a45de",
+  "godot": {
+    "major": 4,
+    "minor": 7,
+    "patch": 1,
+    "hex": 263937,
+    "status": "stable",
+    "build": "official",
+    "hash": "a13da4feb8d8aefc283c3763d33a2f170a18d541",
+    "timestamp": 0,
+    "string": "4.7.1-stable (official)"
+  },
+  "before_counts": {
+    "CAUSAL": 28,
+    "PARTIAL": 8,
+    "STORED_ONLY": 3,
+    "DEAD": 0,
+    "AMBIGUOUS": 0
+  },
+  "after_counts": {
+    "CAUSAL": 39,
+    "PARTIAL": 0,
+    "STORED_ONLY": 0,
+    "DEAD": 0,
+    "AMBIGUOUS": 0
+  },
+  "control_families": 39,
+  "gates": [
+    {
+      "gate": "C0",
+      "description": "39 reachable tactical control families",
+      "population": 39,
+      "passed": true
+    },
+    {
+      "gate": "C0",
+      "description": "census control ids are unique",
+      "population": 39,
+      "passed": true
+    },
+    {
+      "gate": "C0",
+      "description": "every census family has selectable options",
+      "population": 39,
+      "passed": true
+    },
+    {
+      "gate": "C0",
+      "description": "census vocabulary is present in authoring source",
+      "population": 39,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "offensive lane round trip Left Pin",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "offensive lane round trip Front Quick",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "offensive lane round trip Right Quick",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "offensive lane round trip Right Pin",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "offensive lane round trip Pipe",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "tempo round trip T0",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "tempo round trip T1",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "tempo round trip T2",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "tempo round trip T3",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "assignment order round trip P1",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "assignment order round trip P2",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "assignment order round trip P3",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "assignment order round trip P4",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "assignment order round trip P5",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "assignment order round trip P6",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "decoy eligibility round trip false",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "decoy eligibility round trip true",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "authored approach start round trip",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "Primary/Secondary identities round trip without collapse",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "setting system/second setter round trip 5-1",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "setting system/second setter round trip 6-2",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve_target round trip Zone 1",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve_target round trip Zone 5",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve_target round trip Short Middle",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve_target round trip Weak Passer",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_strategy round trip Read Block",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_strategy round trip Commit Pin",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_strategy round trip Commit Middle",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "floor_system round trip Perimeter",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "floor_system round trip Rotation Defense",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "floor_system round trip Middle-Up",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_defense_relationship round trip Balanced",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_defense_relationship round trip Defend Line",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_defense_relationship round trip Defend Cross",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "defensive_depth round trip Shallow",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "defensive_depth round trip Balanced",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "defensive_depth round trip Deep",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_posture round trip Standard",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_posture round trip Compress Short",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve risk round trip 0.0",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve risk round trip 0.5",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "serve risk round trip 1.0",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "base_responsibility round trip Net defense",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "base_responsibility round trip Perimeter defense",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "base_responsibility round trip Rotation coverage",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "base_responsibility round trip Middle-up defense",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "seam_responsibility round trip Close blocking seam",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "seam_responsibility round trip Own inside seam",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "seam_responsibility round trip Own line seam",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "seam_responsibility round trip Release cross-court seam",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_responsibility round trip Cover tip behind block",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_responsibility round trip Step into tip coverage",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_responsibility round trip Hold for roll shot",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_responsibility round trip No short-ball duty",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "emergency_responsibility round trip Release to emergency set",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "emergency_responsibility round trip Pursue deep deflection",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "emergency_responsibility round trip Cover hitter",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "emergency_responsibility round trip Take second contact",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "attack_coverage_responsibility round trip Cover nearest attacker",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "attack_coverage_responsibility round trip Cover assigned hitter",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "attack_coverage_responsibility round trip Take second contact",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "attack_coverage_responsibility round trip Release for transition",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "second_contact_responsibility round trip Primary emergency setter",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "second_contact_responsibility round trip Secondary emergency setter",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "second_contact_responsibility round trip Stay available to attack",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "second_contact_responsibility round trip No second-contact duty",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_priority round trip P0",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_priority round trip P1",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_priority round trip P2",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "short_ball_priority round trip P3",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "deflection_priority round trip P0",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "deflection_priority round trip P1",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "deflection_priority round trip P2",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "deflection_priority round trip P3",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_participation round trip false",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "block_participation round trip true",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "emergency_pursuit round trip false",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "emergency_pursuit round trip true",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "zone center/radius/priority/enabled typed round trip",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Attack/spike line by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Attack/spike cross by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Attack/tool by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Attack/roll by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Attack/feint by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Block/close line by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Block/close cross by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Block/soft block by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Block/kill block by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Floor/dig line by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Floor/dig cross by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Floor/cover the tip by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "TacticSheet round trip Floor/chase by identity",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "clipboard placement typed round trip",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "clipboard priorities and drill focus round trip",
+      "population": 5,
+      "passed": true
+    },
+    {
+      "gate": "C1",
+      "description": "career-owned Team retains TacticSheet",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C1-negative",
+      "description": "editor lenses persist without becoming gameplay input",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C2",
+      "description": "immutable handoff names seed and rotation",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C2-negative",
+      "description": "clipboard editor lenses excluded from gameplay handoff",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C2",
+      "description": "clipboard match values reach handoff exactly",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C3/C4",
+      "description": "line and cross calls reward their distinct physical courses",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C3/C4",
+      "description": "roll changes pre-contact attack action",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3/C4",
+      "description": "feint changes pre-contact attack action",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3/C4",
+      "description": "tool requests blocker-hands course",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "edge/no-opportunity",
+      "description": "tool without a wall publishes override and fabricates no action",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3/C4",
+      "description": "close line/cross move the wall in opposing directions",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C6",
+      "description": "all four seam labels produce distinct wall geometry",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C6",
+      "description": "all four base duties produce distinct physical targets",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C6",
+      "description": "all four short-ball duties produce distinct physical targets",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C6",
+      "description": "all four floor calls produce distinct physical targets",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C6",
+      "description": "Line/Seam/Cross/Tip priorities remain distinct",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "C6",
+      "description": "all emergency labels remain distinct in both shared selectors",
+      "population": 8,
+      "passed": true
+    },
+    {
+      "gate": "interaction",
+      "description": "placement/base + responsibility + floor call + priorities compose",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "interaction",
+      "description": "block close call and seam responsibility compose in named order",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "symmetry",
+      "description": "shared defensive adapter mirrors geometry across the net",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "negative",
+      "description": "clipboard phase/view leave authoritative rally byte-equivalent",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "negative",
+      "description": "off-court instruction has no live decision effect",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike line trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike line trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Attack/spike line reaches authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Attack/spike line reaches equivalent authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike cross trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike cross trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Attack/spike cross reaches authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Attack/spike cross reaches equivalent authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/tool trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/tool trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/tool trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/tool trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/tool trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Attack/tool reaches authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Attack/tool reaches equivalent authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 7,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 3,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 3,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/roll trial retains event/flight invariants",
+      "population": 10,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Attack/roll reaches authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Attack/roll reaches equivalent authoritative trace",
+      "population": 3,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/feint trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/feint trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/feint trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/feint trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/feint trial retains event/flight invariants",
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Attack/feint reaches authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Attack/feint reaches equivalent authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 3,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 3,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close line trial retains event/flight invariants",
+      "population": 10,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Block/close line reaches authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Block/close line reaches equivalent authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close cross trial retains event/flight invariants",
+      "population": 7,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/close cross trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Block/close cross reaches authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Block/close cross reaches equivalent authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/soft block trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/soft block trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/soft block trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/soft block trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/soft block trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Block/soft block reaches authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Block/soft block reaches equivalent authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/kill block trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/kill block trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/kill block trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/kill block trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/kill block trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Block/kill block reaches authoritative trace",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Block/kill block reaches equivalent authoritative trace",
+      "population": 1,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig line trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig line trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig line trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Floor/dig line reaches authoritative trace",
+      "population": 12,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Floor/dig line reaches equivalent authoritative trace",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig cross trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig cross trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/dig cross trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Floor/dig cross reaches authoritative trace",
+      "population": 12,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Floor/dig cross reaches equivalent authoritative trace",
+      "population": 4,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/cover the tip trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/cover the tip trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/cover the tip trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/cover the tip trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/cover the tip trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Floor/cover the tip reaches authoritative trace",
+      "population": 12,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Floor/cover the tip reaches equivalent authoritative trace",
+      "population": 5,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/chase trial retains event/flight invariants",
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/chase trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/chase trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/chase trial retains event/flight invariants",
+      "population": 2,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/chase trial retains event/flight invariants",
+      "population": 11,
+      "passed": true
+    },
+    {
+      "gate": "C3-live",
+      "description": "home Floor/chase reaches authoritative trace",
+      "population": 12,
+      "passed": true
+    },
+    {
+      "gate": "C3-live/symmetry",
+      "description": "opponent Floor/chase reaches equivalent authoritative trace",
+      "population": 5,
+      "passed": true
+    }
+  ],
+  "live_evidence": {
+    "Attack/spike line": {
+      "attempts": 5,
+      "home": 1,
+      "opponent": 2,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
+    },
+    "Attack/spike cross": {
+      "attempts": 5,
+      "home": 1,
+      "opponent": 2,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
+    },
+    "Attack/tool": {
+      "attempts": 5,
+      "home": 1,
+      "opponent": 2,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
+    },
+    "Attack/roll": {
+      "attempts": 8,
+      "home": 1,
+      "opponent": 3,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004,
+        97005,
+        97006,
+        97007
+      ],
+      "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
+    },
+    "Attack/feint": {
+      "attempts": 5,
+      "home": 1,
+      "opponent": 2,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
+    },
+    "Block/close line": {
+      "attempts": 8,
+      "home": 2,
+      "opponent": 1,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004,
+        97005,
+        97006,
+        97007
+      ],
+      "first_mediator": "formation_target_after or block_hands before shared contest"
+    },
+    "Block/close cross": {
+      "attempts": 5,
+      "home": 2,
+      "opponent": 1,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "formation_target_after or block_hands before shared contest"
+    },
+    "Block/soft block": {
+      "attempts": 5,
+      "home": 2,
+      "opponent": 1,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "formation_target_after or block_hands before shared contest"
+    },
+    "Block/kill block": {
+      "attempts": 5,
+      "home": 2,
+      "opponent": 1,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "formation_target_after or block_hands before shared contest"
+    },
+    "Floor/dig line": {
+      "attempts": 5,
+      "home": 12,
+      "opponent": 4,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "tactical_attribution.physical_target before movement/reach"
+    },
+    "Floor/dig cross": {
+      "attempts": 5,
+      "home": 12,
+      "opponent": 4,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "tactical_attribution.physical_target before movement/reach"
+    },
+    "Floor/cover the tip": {
+      "attempts": 5,
+      "home": 12,
+      "opponent": 5,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "tactical_attribution.physical_target before movement/reach"
+    },
+    "Floor/chase": {
+      "attempts": 5,
+      "home": 12,
+      "opponent": 5,
+      "seeds": [
+        97000,
+        97001,
+        97002,
+        97003,
+        97004
+      ],
+      "first_mediator": "tactical_attribution.physical_target before movement/reach"
+    }
+  },
+  "failures": [],
+  "passed": true
+}
