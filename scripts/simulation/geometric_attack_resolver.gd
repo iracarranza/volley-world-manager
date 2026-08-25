@@ -31,6 +31,9 @@ const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd"
 const ApproachMechanicsModel := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
+const TacticalInstructionModelRef := preload(
+	"res://scripts/simulation/tactical_instruction_model.gd"
+)
 
 ## How many bearings across the repertoire cone get evaluated. Seventeen is
 ## enough to find the gap without the scan cost mattering; the chosen bearing is
@@ -267,6 +270,7 @@ static func resolve_swing(
 	flow_for_team: float,
 	draws: Dictionary,
 	attack_type: String = "",
+	tactical_call: String = "",
 ) -> Dictionary:
 	if hitter == null:
 		return {"available": false, "reason": "no hitter"}
@@ -328,7 +332,22 @@ static func resolve_swing(
 			perceived_blockers, perceived_defenders, attacking_negative_y,
 		)
 		var score := float(openness.openness) \
-			- float(course.strain) * STRAIN_AVERSION
+			- float(course.strain) * STRAIN_AVERSION \
+			+ TacticalInstructionModelRef.attack_target_score_bias(
+				tactical_call, contact, probe, attacking_negative_y
+			)
+		if tactical_call == "tool" and not perceived_blockers.is_empty():
+			var crossing := AttackCourseModel.net_crossing_x(
+				contact, float(course.bearing_degrees), attacking_negative_y
+			)
+			var nearest_hand := 10.0
+			for blocker in perceived_blockers:
+				nearest_hand = minf(nearest_hand, absf(
+					crossing - float(blocker.get("net_x", 0.5))
+				) * CourtConstants.COURT_WIDTH_METERS)
+			## Prefer a credible hand contact, but never remove the open-course
+			## read; a sufficiently bad tooling angle can still lose the choice.
+			score += lerpf(0.38, -0.20, clampf(nearest_hand / 1.2, 0.0, 1.0))
 		if score > best_score:
 			best_score = score
 			best = course
@@ -565,6 +584,7 @@ static func resolve_swing(
 		"resolution": resolved,
 		"signature_move": move,
 		"attack_type": attack_type,
+		"tactical_call": tactical_call,
 		"shot_spread_multiplier": float(shot_shape.spread_multiplier),
 		"landing": resolved.landing,
 		"flight": resolved.flight,
@@ -1443,7 +1463,7 @@ static func _shot_shape(attack_type: String, drawn_intent: float) -> Dictionary:
 				"intent": AttackPowerModel.OFF_SPEED_INTENT,
 				"spread_multiplier": 0.62,
 			}
-		"Power swing", "Tempo swing", "Quick attack", "Pipe attack":
+		"Power swing", "Tempo swing", "Quick attack", "Pipe attack", "Tool attempt":
 			return {
 				"intent": AttackPowerModel.DRIVE_INTENT,
 				"spread_multiplier": 1.0,
