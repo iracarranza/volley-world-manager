@@ -14,12 +14,13 @@ const SERVE_RECEIVE_DEFAULTS_VERSION: int = 2
 @export_enum("Balanced", "Defend Line", "Defend Cross") var block_defense_relationship := "Balanced"
 @export_enum("Shallow", "Balanced", "Deep") var defensive_depth := "Balanced"
 @export_enum("Standard", "Compress Short") var short_ball_posture := "Standard"
-## What the block is *for*, as opposed to where it goes.
+## Latent compatibility state consumed by the block contest bands.
 ##
-## `block_defense_relationship` already chooses which lane the wall protects.
-## This chooses what it tries to do once it is there, which is a separate
-## decision a coach actually makes: seal the lane and end the rally at the net,
-## or take a piece of the ball and let the floor play the rest.
+## No runtime manager/UI path authors this field; ordinary plans therefore stay
+## Balanced unless a save or a diagnostic fixture supplies another value.  The
+## established authority lets the manager choose the blocking problem while a
+## Voli's read/execution should choose the momentary solution.  Do not expose
+## this enum as a manager control merely to activate the existing branches.
 @export_enum("Seal", "Balanced", "Funnel") var block_intent := "Balanced"
 @export var serve_target: String = "Zone 5"
 @export_range(0.0, 1.0) var serve_risk: float = 0.5

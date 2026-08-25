@@ -1,0 +1,674 @@
+{
+  "head": "8bd62f028fcebbbfb1dd81fc949b645a9070c5eb",
+  "counts": {
+    "CAUSAL": 28,
+    "PARTIAL": 8,
+    "STORED_ONLY": 3,
+    "DEAD": 0,
+    "AMBIGUOUS": 0
+  },
+  "rows": [
+    {
+      "id": "offense.lane",
+      "options": [
+        "Left Pin",
+        "Front Quick",
+        "Right Quick",
+        "Right Pin",
+        "Pipe"
+      ],
+      "store": "OffensivePlay.assignments[].lane",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_choose_assignment / _choose_set_target",
+      "decision_or_physical_mediator": "set target, approach lane and attack contact",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "offense.tempo",
+      "options": [
+        "T0",
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "store": "HitterAssignment.tempo",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "SetterCapabilityModel / ApproachMechanicsSystem",
+      "decision_or_physical_mediator": "set flight and approach timing",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "offense.responsibility_order",
+      "options": [
+        "Primary",
+        "Secondary",
+        "Option",
+        "Decoy"
+      ],
+      "store": "OffensivePlay primary/secondary ids + assignment priority/is_decoy",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_choose_assignment",
+      "decision_or_physical_mediator": "eligible hitter order before physical feasibility",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "offense.attack_start",
+      "options": [
+        "dragged normalized court point"
+      ],
+      "store": "HitterAssignment.start_position",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "ApproachMechanicsSystem.project_toward",
+      "decision_or_physical_mediator": "requested approach mark reached only through live movement",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "STORED_ONLY",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "STORED_ONLY"
+    },
+    {
+      "id": "offense.called_play",
+      "options": [
+        "saved play available in selected rotation"
+      ],
+      "store": "GameManager.active_play_ids_by_rotation/called_play_id",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "resolve_active_rally / _choose_assignment",
+      "decision_or_physical_mediator": "selected assignment set and setter options",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "system.setting",
+      "options": [
+        "5-1",
+        "6-2"
+      ],
+      "store": "RotationLineup.setting_system",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "RotationLineup.active_setter_id",
+      "decision_or_physical_mediator": "setter identity and release route",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "system.second_setter",
+      "options": [
+        "eligible non-libero roster player"
+      ],
+      "store": "RotationLineup.designated_setter_ids",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "RotationLineup.active_setter_id",
+      "decision_or_physical_mediator": "back-row setter identity in 6-2",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "serve.target",
+      "options": [
+        "Zone 1",
+        "Zone 5",
+        "Short Middle",
+        "Weak Passer"
+      ],
+      "store": "DefensivePlan.serve_target",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_resolve_home_serve / _resolve_opponent_serve",
+      "decision_or_physical_mediator": "authoritative serve aim and trajectory",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "serve.risk",
+      "options": [
+        "0%",
+        "50%",
+        "100%"
+      ],
+      "store": "DefensivePlan.serve_risk",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "serve decision and execution",
+      "decision_or_physical_mediator": "called/effective risk, pace, error judgment and trajectory",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "receive.center",
+      "options": [
+        "dragged normalized court point"
+      ],
+      "store": "DefensiveZone.center",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "reception claimant/movement",
+      "decision_or_physical_mediator": "receiver intent target and arrival",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "receive.radius",
+      "options": [
+        "0.5m",
+        "6.0m"
+      ],
+      "store": "DefensiveZone.radius_meters",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "reception claimant",
+      "decision_or_physical_mediator": "eligible reach/claim geometry",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "receive.priority",
+      "options": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "store": "DefensiveZone.priority",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "reception claimant",
+      "decision_or_physical_mediator": "claim score and receiver identity",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "receive.enabled",
+      "options": [
+        "off",
+        "on"
+      ],
+      "store": "DefensiveZone.enabled",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "reception claimant",
+      "decision_or_physical_mediator": "candidate inclusion",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "receive.setter_release",
+      "options": [
+        "dragged normalized court point"
+      ],
+      "store": "DefensivePlan.setter_release_targets",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "reception/setter handoff",
+      "decision_or_physical_mediator": "pass target and setter contact route",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "block.strategy",
+      "options": [
+        "Read Block",
+        "Commit Pin",
+        "Commit Middle"
+      ],
+      "store": "DefensivePlan.block_strategy",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_form_home_block / _form_opponent_block",
+      "decision_or_physical_mediator": "commitment window and wall close",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "block.participation",
+      "options": [
+        "off",
+        "on"
+      ],
+      "store": "DefensiveAssignment.block_participation",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "shared block candidate filter",
+      "decision_or_physical_mediator": "bodies offered to the wall",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "block.seam_responsibility",
+      "options": [
+        "Close blocking seam",
+        "Own inside seam",
+        "Own line seam",
+        "Release cross-court seam"
+      ],
+      "store": "DefensiveAssignment.seam_responsibility",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "TacticalInstructionModel.block_formation_target + defensive_target",
+      "decision_or_physical_mediator": "wall/floor seam target",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "floor.system",
+      "options": [
+        "Perimeter",
+        "Rotation Defense",
+        "Middle-Up"
+      ],
+      "store": "DefensivePlan.floor_system",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_floor_phase_positions",
+      "decision_or_physical_mediator": "defensive base shape and claim geometry",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "floor.position",
+      "options": [
+        "dragged normalized court point"
+      ],
+      "store": "DefensivePlan.defender_positions + DefensiveZone.center",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_floor_phase_positions",
+      "decision_or_physical_mediator": "live defensive intent target",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "floor.radius",
+      "options": [
+        "0.5m",
+        "6.0m"
+      ],
+      "store": "DefensiveZone.radius_meters",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "floor claimant",
+      "decision_or_physical_mediator": "eligible reach/claim geometry",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "floor.enabled",
+      "options": [
+        "off",
+        "on"
+      ],
+      "store": "DefensiveZone.enabled",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "floor claimant",
+      "decision_or_physical_mediator": "candidate inclusion",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "floor.priority",
+      "options": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "store": "DefensiveZone.priority",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "floor claimant",
+      "decision_or_physical_mediator": "claim score and defender identity",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "block.defense_relationship",
+      "options": [
+        "Balanced",
+        "Defend Line",
+        "Defend Cross"
+      ],
+      "store": "DefensivePlan.block_defense_relationship",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "block/floor geometry",
+      "decision_or_physical_mediator": "wall and coverage lane focus",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "floor.depth",
+      "options": [
+        "Shallow",
+        "Balanced",
+        "Deep"
+      ],
+      "store": "DefensivePlan.defensive_depth",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_floor_phase_positions",
+      "decision_or_physical_mediator": "defender target depth",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "floor.short_posture",
+      "options": [
+        "Standard",
+        "Compress Short"
+      ],
+      "store": "DefensivePlan.short_ball_posture",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_floor_phase_positions",
+      "decision_or_physical_mediator": "short-ball compression target",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "duty.base",
+      "options": [
+        "Net defense",
+        "Perimeter defense",
+        "Rotation coverage",
+        "Middle-up defense"
+      ],
+      "store": "DefensiveAssignment.base_responsibility",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "TacticalInstructionModel.defensive_target",
+      "decision_or_physical_mediator": "distinct base-support geometry",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "duty.short_ball",
+      "options": [
+        "Cover tip behind block",
+        "Step into tip coverage",
+        "Hold for roll shot",
+        "No short-ball duty"
+      ],
+      "store": "DefensiveAssignment.short_ball_responsibility",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "TacticalInstructionModel.defensive_target",
+      "decision_or_physical_mediator": "distinct short-ball geometry",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "duty.short_priority",
+      "options": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "store": "DefensiveAssignment.short_ball_priority",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "short-ball claimant",
+      "decision_or_physical_mediator": "claim score and defender identity",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "duty.emergency_pursuit",
+      "options": [
+        "off",
+        "on"
+      ],
+      "store": "DefensiveAssignment.emergency_pursuit",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "deflection pursuit",
+      "decision_or_physical_mediator": "candidate inclusion and recovery movement",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "duty.emergency_responsibility",
+      "options": [
+        "Release to emergency set",
+        "Pursue deep deflection",
+        "Cover hitter",
+        "Take second contact"
+      ],
+      "store": "DefensiveAssignment.emergency_responsibility",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "second-contact and coverage selectors",
+      "decision_or_physical_mediator": "setter/coverer preference before reachability",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "STORED_ONLY",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "STORED_ONLY"
+    },
+    {
+      "id": "duty.attack_coverage",
+      "options": [
+        "Cover nearest attacker",
+        "Cover assigned hitter",
+        "Take second contact",
+        "Release for transition"
+      ],
+      "store": "DefensiveAssignment.attack_coverage_responsibility",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_resolve_attack_coverage",
+      "decision_or_physical_mediator": "coverer choice and target",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "duty.deflection_priority",
+      "options": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "store": "DefensiveAssignment.deflection_priority",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "deflection pursuit/coverage selector",
+      "decision_or_physical_mediator": "pursuer choice and movement",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "duty.second_contact",
+      "options": [
+        "Primary emergency setter",
+        "Secondary emergency setter",
+        "Stay available to attack",
+        "No second-contact duty"
+      ],
+      "store": "DefensiveAssignment.second_contact_responsibility",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_second_contact_setter / _spatial_setter_choice",
+      "decision_or_physical_mediator": "emergency setter preference and approach availability",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    },
+    {
+      "id": "clipboard.block",
+      "options": [
+        "close line",
+        "close cross",
+        "soft block",
+        "kill block"
+      ],
+      "store": "TacticSheet.behaviours[player:Block]",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "block_formation_target or _block_hands_intent",
+      "decision_or_physical_mediator": "wall lane or hands intent before block contest",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "clipboard.attack",
+      "options": [
+        "spike line",
+        "spike cross",
+        "tool",
+        "roll",
+        "feint"
+      ],
+      "store": "TacticSheet.behaviours[player:Attack]",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "_attack_tactical_decision / GeometricAttackResolver",
+      "decision_or_physical_mediator": "shot type/course/target before swing physics",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "clipboard.floor",
+      "options": [
+        "dig line",
+        "dig cross",
+        "cover the tip",
+        "chase"
+      ],
+      "store": "TacticSheet.behaviours[player:Floor]",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "clipboard_floor_target",
+      "decision_or_physical_mediator": "defensive target before arrival/reach",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "clipboard.placement",
+      "options": [
+        "per-player worksheet point"
+      ],
+      "store": "TacticSheet.placements",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "normalized_placement / ApproachMechanicsSystem / _floor_phase_positions",
+      "decision_or_physical_mediator": "movement intent; never a teleport",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "PARTIAL",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "PARTIAL"
+    },
+    {
+      "id": "clipboard.net_priorities",
+      "options": [
+        "Line P0-P3",
+        "Seam P0-P3",
+        "Cross P0-P3",
+        "Tip P0-P3"
+      ],
+      "store": "TacticSheet.zone_priorities",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "clipboard_floor_target",
+      "decision_or_physical_mediator": "composed floor target weighting",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "STORED_ONLY",
+      "scope": "Match",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "STORED_ONLY"
+    },
+    {
+      "id": "training.drill_zone",
+      "options": [
+        "Line",
+        "Seam",
+        "Cross",
+        "Tip"
+      ],
+      "store": "TacticSheet.drill_zone",
+      "owner": "typed team/play/lineup/plan resource",
+      "consumer": "DrillSession.from_tactic_sheet",
+      "decision_or_physical_mediator": "training focus/activity input",
+      "m8_authority": "existing movement/contact/trajectory resolver",
+      "before": "CAUSAL",
+      "scope": "Training",
+      "balance": "deferred; certification is causal, not calibration",
+      "classification": "CAUSAL"
+    }
+  ]
+}

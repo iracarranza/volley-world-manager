@@ -164,6 +164,7 @@ func to_dict() -> Dictionary:
 	return {"id": id, "team_name": team_name, "short_name": short_name,
 		"identity": identity,
 		"principles": principles.to_dict() if principles != null else {},
+		"tactic_sheet": tactic_sheet.to_dict() if tactic_sheet != null else {},
 		"tactical_familiarity": tactical_familiarity,
 		"pair_familiarity": pair_familiarity.duplicate(true),
 		"housing_structure": housing_structure,
@@ -205,6 +206,7 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.principles = TeamPrinciplesModel.from_dict(
 		data.get("principles", {}), team.identity
 	)
+	team.tactic_sheet = TacticSheet.from_dict(Dictionary(data.get("tactic_sheet", {})))
 	team.identity = str(team.principles.preset_name)
 	team.tactical_familiarity = clampf(float(data.get("tactical_familiarity", 0.35)), 0.0, 1.0)
 	team.pair_familiarity = Dictionary(data.get("pair_familiarity", {})).duplicate(true)

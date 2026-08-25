@@ -1,0 +1,33 @@
+{
+  "baseline_head": "8bd62f028fcebbbfb1dd81fc949b645a9070c5eb",
+  "canonical_head": "78eb4614fa12057581919c571dc3081cb9e242ea",
+  "godot": "4.7.1.stable.official.a13da4feb",
+  "balance_probe": {
+    "script": "tools/run_rally_balance_probe.gd",
+    "first_seed": 20000,
+    "rallies_per_serving_side": 350,
+    "total_rallies": 700,
+    "classification": "observation",
+    "m8": {"contacts_per_rally": 4.814, "kill_rate": 0.630, "home_kill_rate": 0.653, "opponent_kill_rate": 0.605, "swing_balance": 0.888, "home_swings": 331, "opponent_swings": 294, "floor_digs_attempted": 306, "dig_rate": 0.415, "dig_quality_mean": 0.298, "coverage_attempts": 22, "coverage_rate": 1.000, "coverage_quality_mean": 0.654, "attack_quality_mean": 0.474, "home_attack_quality": 0.486, "opponent_attack_quality": 0.460, "home_dig_rate": 0.514, "opponent_dig_rate": 0.333, "block_touch_rate": 0.830, "stuff_rate": 0.106, "ace_rate": 0.010, "serve_error_rate": 0.181, "reception_quality_mean": 0.434},
+    "m9": {"contacts_per_rally": 4.801, "kill_rate": 0.623, "home_kill_rate": 0.646, "opponent_kill_rate": 0.598, "swing_balance": 0.902, "home_swings": 328, "opponent_swings": 296, "floor_digs_attempted": 305, "dig_rate": 0.410, "dig_quality_mean": 0.298, "coverage_attempts": 22, "coverage_rate": 1.000, "coverage_quality_mean": 0.693, "attack_quality_mean": 0.470, "home_attack_quality": 0.478, "opponent_attack_quality": 0.460, "home_dig_rate": 0.496, "opponent_dig_rate": 0.341, "block_touch_rate": 0.822, "stuff_rate": 0.106, "ace_rate": 0.010, "serve_error_rate": 0.181, "reception_quality_mean": 0.434}
+  },
+  "readiness_observation": {
+    "script": "tools/run_m9_readiness_guard.gd",
+    "base_seed": 900006,
+    "total_rallies": 80,
+    "classification": "denominator gate plus observational mix",
+    "m8": {"attack_attempts": 74, "terminal_attacks": 72, "side_out_rate": 0.50, "kill_rate": 0.648648648648649, "attack_error_rate": 0.27027027027027, "block_touch_rate": 0.243243243243243, "stuff_rate": 0.0540540540540541, "mean_contacts": 4.9875, "serve_error_rate": 0.1, "ace_rate": 0.0},
+    "m9": {"attack_attempts": 73, "terminal_attacks": 72, "side_out_rate": 0.55, "kill_rate": 0.684931506849315, "attack_error_rate": 0.26027397260274, "block_touch_rate": 0.246575342465753, "stuff_rate": 0.0410958904109589, "mean_contacts": 4.9625, "serve_error_rate": 0.1, "ace_rate": 0.0}
+  },
+  "regression_summary": {
+    "m9_causal_gates": 240,
+    "full_suite_checks": 2178,
+    "full_suite_failures": 0,
+    "canonical_sideout_boundaries": 7,
+    "canonical_sideout_failures": 0,
+    "block_authority_rallies": 600,
+    "block_authority_stale_or_late": 0,
+    "continuous_action_rallies": 400,
+    "continuous_action_stretched_journeys": 0
+  }
+}

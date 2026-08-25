@@ -59,6 +59,7 @@ const HIT_TYPE_FAMILY := {
 	"Controlled roll": "controlled_roll",
 	"Emergency tip": "tip",
 	"Short tip": "tip",
+	"Tool attempt": "tool_block",
 }
 
 ## Seconds of lateness that count as one full unit of shortfall, so a timing
@@ -119,6 +120,14 @@ static func prepare_for_attack(
 		target, str(assignment.get("lane", "Left Pin")), side, null,
 		APPROACH_DEPTH, int(assignment.get("tempo", 3)),
 	)
+	## An authored start is a requested runway mark, not a teleport.  It replaces
+	## the derived mark as movement intent; `project_toward` below still decides
+	## how much of that request the live body can physically reach in time.
+	var authored_start: Variant = assignment.get("authored_start_position", null)
+	if authored_start is Vector2:
+		start = Vector2(authored_start)
+		if side == &"opponent":
+			start.y = 1.0 - start.y
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
 	## Run *through* the approach mark, not to it. This is the leg that ends
 	## where the run-up begins, so stopping dead on arrival makes every hitter
@@ -150,6 +159,7 @@ static func prepare_for_attack(
 		## scouting/debug overlays ("missed their spot by 0.4m") without ever
 		## feeding it into anything that draws a court position.
 		"approach_target_position": start,
+		"authored_start_requested": authored_start is Vector2,
 		"preparation_time_seconds": preparation_time,
 		"preparation_distance_meters": float(projection.get("distance_meters", 0.0)),
 		"reached_approach_start": bool(projection.get("reached_target", false)),

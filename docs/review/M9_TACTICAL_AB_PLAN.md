@@ -1,6 +1,14 @@
 # M9 tactical A/B certification
 
-Status: **next rally milestone; measurement plan**
+Status: **superseded historical measurement plan**
+
+This plan predates the canonical M9 census and must not be used as current
+authority. The executed certification is recorded in
+`docs/review/m9_tactical_causality/FINAL_COMMITTED_STATE_REPORT.md`; the
+`block_intent` ownership correction is recorded in
+`docs/review/m9_tactical_causality/LATENT_FIELD_AUDIT.md`. In particular, the
+old B1 premise below fabricated a manager-facing owner that production does not
+have.
 
 M8 structurally certifies one canonical side-out. M9 asks a different question:
 
@@ -88,15 +96,17 @@ The first gate is changed defensive geometry. A touched-ball comparison is a sec
 
 After M9-A establishes the spatial pipeline, certify instructions whose effect depends on a decision or contact opportunity rather than a guaranteed coordinate shift.
 
-### B1 Block intent: Seal ↔ Funnel
+### B1 Block intent: ownership audit, not A/B certification
 
-Existing authority already distinguishes the intent bands and publishes `block_intent`; current code also contains a downstream defensive read of funnel intent. Certify with a seed searched for a genuine block interaction.
+The resolver distinguishes intent bands, publishes `block_intent`, and reads
+funnel intent downstream. Production does not provide a manager, UI, or runtime
+writer, however, so generated plans remain Balanced. Seal ↔ Funnel is therefore
+not a selectable A/B pair and was excluded from the 39-family M9 census.
 
-Do not require one variant to win. Require:
-
-- the called intent reaches the block contest;
-- the contact classification / wall shaping can differ for the same physical opportunity;
-- a funnelled/touched ball hands a materially different realised problem to floor defence rather than adding a hidden dig-quality bonus.
+Disposition: preserve serialization and live consumers for compatibility; do
+not add a dropdown or invent a policy owner in M9. A later design-authority
+decision must establish who chooses the problem before this can become a
+manager-facing certification fixture.
 
 ### B2 Block hands instruction
 

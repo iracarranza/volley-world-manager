@@ -5016,11 +5016,17 @@ wall.
 
 ## The block's hands are a decision, and the two things that would let it fire
 
-Proposed by the manager, and correct: `block_intent` -- Seal or Funnel -- is a
-*lateral* choice about where the wall stands, and the sport has a second axis it
-has never had. Two blockers at the same height with the same timing produce
-different balls depending on whether they pressed over the tape to end the rally
-or angled back to keep it alive. Not an attribute; a decision.
+Historical correction: `block_intent` was described here as a manager-owned
+Seal/Funnel choice, but production has no manager, UI, or runtime writer for the
+field. It is serialized, defaults to Balanced, and has live resolver consumers;
+that makes it compatibility state with missing ownership, not a selectable M9
+instruction. The manager-facing decision in this section is the separate
+per-voli **soft block / kill block** instruction.
+
+Two blockers at the same height with the same timing still produce different
+balls depending on whether they pressed over the tape to end the rally or angled
+back to keep it alive. That is a decision rather than an attribute, but this
+backlog record must not fabricate a manager-facing owner for `block_intent`.
 
 It is also the missing consumer for something already built: the clipboard
 offers **"soft block"** and **"kill block"** as two of its four per-voli block
@@ -6825,12 +6831,13 @@ This is §0 wearing a new hat: not a threshold outside its distribution, but a
 band whose value a downstream mapping cannot express. It is silent — the band
 computes correctly and is discarded one function later.
 
-**Why it matters beyond tidiness.** `block_intent` is a tactical choice the
-manager makes on the clipboard — Seal, Balanced or Funnel — and `Funnel` is the
-one whose success looks like the ball going past. With no funnel outcome, a
-funnelling wall is indistinguishable from a beaten one in the events, and the
-manager cannot feel the choice they made. `BlockVerdict` already has the row
-that would draw it correctly; it is waiting on a fact nothing produces.
+**Why it matters beyond tidiness.** The historical premise that a manager makes
+the `block_intent` choice on the clipboard was wrong. The resolver vocabulary is
+still meaningful: `Funnel` is the band whose success looks like the ball going
+past, and without that outcome a shaped wall is indistinguishable from a beaten
+one in the events. But production currently leaves `block_intent` at Balanced;
+there is no manager-facing choice to certify. `BlockVerdict` still needs the
+resolver fact so event truth is preserved independently of future ownership.
 
 **The shape of it**: give the promotion a funnel case. The resolver knows
 whether the hands were involved and whether the ball stayed playable
