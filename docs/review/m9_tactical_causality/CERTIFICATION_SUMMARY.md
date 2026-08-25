@@ -1,10 +1,10 @@
 # M9 tactical causality certification summary
 
-Measured from start HEAD `4df1cfd02536629951b0055bff3a7916ed7a45de`; authoritative gameplay ancestry is the accepted M8 baseline `8bd62f0`. The executable census corrects the packet's coincidentally-39-row audit: `fallback_lane` and `secondary_hitter_id` are latent/derived values, not independent selectors, while second-setter selection and the separately editable floor-zone fields are real selectors.
+The shared workspace initially opened on concurrent presentation HEAD `4df1cfd02536629951b0055bff3a7916ed7a45de`. M9 implementation and the BEFORE census are instead rooted, as required, at accepted M8 baseline `8bd62f028fcebbbfb1dd81fc949b645a9070c5eb`. The executable census corrects the packet's coincidentally-39-row audit: `fallback_lane` and `secondary_hitter_id` are latent/derived values, not independent selectors, while second-setter selection and the separately editable floor-zone fields are real selectors.
 
 Before: **28 CAUSAL / 8 PARTIAL / 3 STORED_ONLY / 0 DEAD / 0 AMBIGUOUS** across 39 reachable families. After: **39 CAUSAL / 0 PARTIAL / 0 STORED_ONLY / 0 DEAD / 0 AMBIGUOUS**.
 
-The machine-readable source of truth is `artifacts/m9-tactical-causality/{before_census.json,after_census.json,certification.json}`. `tools/run_m9_tactical_causality.gd` hard-fails zero-population gates and runs live Clipboard trials through `GameManager.resolve_active_rally()` for both teams.
+The machine-readable source of truth is `artifacts/m9-tactical-causality/{before_census.json,after_census.json,certification.json}`. `tools/run_m9_tactical_causality.gd` hard-fails zero-population gates and runs live Clipboard trials through `GameManager.resolve_active_rally()` for both teams. Its final 240 gates include paired C7 distributions: 9+ line/cross attack activations, 8+ close-line/cross block activations, 72 matched floor targets, and 200 adherence observations.
 
 ## Final causal chains
 
@@ -69,6 +69,7 @@ Every row ends in the existing M8 movement, reach, contact, block-contest and tr
 - Attack behaviour is chosen before capability judgment. A poor set/run-up can downgrade or defeat the call; tool with no wall reports `no block available to tool` and leaves the action unchanged.
 - Emergency responsibility contributes to both second-contact and coverage decisions, while the dedicated second-contact/coverage duty remains the stronger semantic axis.
 - Phase/view changes and instructions for an off-court identity leave the authoritative rally trace unchanged (the input receipt itself correctly differs for the off-court authoring case).
+- Historical front/back responsibility combinations and `[3,2,1,2]` net priorities are migration-neutral; choosing a different label/weight produces the certified relative target change.
 - Live gates report populations separately. The final run exercised every Clipboard option on both `home` and `opponent`; no zero-population result can pass.
 
 Balance tuning remains outside M9. The new magnitudes are decision/geometry preferences and were not fitted to kill, stuff, dig, side-out or win-rate targets.

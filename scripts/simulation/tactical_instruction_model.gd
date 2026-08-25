@@ -151,14 +151,23 @@ static func defensive_target(
 	var target := base
 	var forward := -1.0 if opponent_side else 1.0
 	var net_y := 0.44 if opponent_side else 0.56
+	var local_depth := 1.0 - base.y if opponent_side else base.y
+	var front_row_base := local_depth <= 0.70
+	## The plan generator has always assigned Net/Close/Cover-tip to its front
+	## row and Perimeter/Inside/Step-tip to its back row.  Treat that historical
+	## combination as the migration-neutral base.  Selecting another label still
+	## creates a distinct target, while an old save does not acquire six surprise
+	## position shifts simply because M9 connected the vocabulary.
 	var terms := {}
 	match str(assignment.base_responsibility):
 		"Net defense":
-			target.y = lerpf(target.y, net_y + 0.05 * forward, 0.34)
+			if not front_row_base:
+				target.y = lerpf(target.y, net_y + 0.05 * forward, 0.34)
 			terms.base = "shallower net support"
 		"Perimeter defense":
-			target.x = lerpf(target.x, 0.12 if target.x < 0.5 else 0.88, 0.18)
-			target.y += 0.025 * forward
+			if front_row_base:
+				target.x = lerpf(target.x, 0.12 if target.x < 0.5 else 0.88, 0.18)
+				target.y += 0.025 * forward
 			terms.base = "deep perimeter support"
 		"Rotation coverage":
 			target.x = lerpf(target.x, 1.0 - attack_x, 0.18)
@@ -169,10 +178,12 @@ static func defensive_target(
 			terms.base = "middle-up support"
 	match str(assignment.seam_responsibility):
 		"Close blocking seam":
-			target.x = lerpf(target.x, attack_x, 0.12)
+			if not front_row_base:
+				target.x = lerpf(target.x, attack_x, 0.12)
 			terms.seam = "close attack seam"
 		"Own inside seam":
-			target.x = lerpf(target.x, 0.50, 0.13)
+			if front_row_base:
+				target.x = lerpf(target.x, 0.50, 0.13)
 			terms.seam = "own inside seam"
 		"Own line seam":
 			target.x = lerpf(target.x, attack_x, 0.13)
@@ -182,17 +193,20 @@ static func defensive_target(
 			terms.seam = "release to cross seam"
 	match str(assignment.short_ball_responsibility):
 		"Cover tip behind block":
-			target.x = lerpf(target.x, attack_x, 0.10)
-			target.y = lerpf(target.y, net_y + 0.09 * forward, 0.18)
+			if not front_row_base:
+				target.x = lerpf(target.x, attack_x, 0.10)
+				target.y = lerpf(target.y, net_y + 0.09 * forward, 0.18)
 			terms.short_ball = "tip behind block"
 		"Step into tip coverage":
-			target.y = lerpf(target.y, net_y + 0.13 * forward, 0.24)
+			if front_row_base:
+				target.y = lerpf(target.y, net_y + 0.13 * forward, 0.24)
 			terms.short_ball = "step into tip"
 		"Hold for roll shot":
 			target.y = lerpf(target.y, net_y + 0.23 * forward, 0.16)
 			terms.short_ball = "hold roll depth"
 		"No short-ball duty":
-			terms.short_ball = "no short-ball shift"
+			target.y += 0.018 * forward
+			terms.short_ball = "hold ordinary depth"
 	return {
 		"target": Vector2(
 			clampf(target.x, 0.06, 0.94),

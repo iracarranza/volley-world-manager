@@ -72,7 +72,7 @@ Clipboard phase/view are editing lenses, not tactical inputs. Preset names are e
 
 The original rows totalled 39 only by coincidence. They included two values without independent selectors, combined independently editable floor-zone fields, and combined setting-system/second-setter selection. The executable UI census resolves those boundaries at **39 reachable families**.
 
-- BEFORE (`4df1cfd02536629951b0055bff3a7916ed7a45de`): **28 causal, 8 partial, 3 stored-only, 0 dead, 0 ambiguous**.
+- BEFORE (`8bd62f028fcebbbfb1dd81fc949b645a9070c5eb`): **28 causal, 8 partial, 3 stored-only, 0 dead, 0 ambiguous**.
 - AFTER: **39 causal, 0 partial, 0 stored-only, 0 dead, 0 ambiguous**.
 
 Implemented changes promote the partial/stored rows as follows: Secondary/priority orders otherwise feasible setter options; authored starts feed physically bounded approach preparation; all seam/base/short/emergency labels have distinct shared decision terms; Clipboard Attack/Block/Floor behaviour and identity-routed placements reach match authority; net priorities compose into floor positioning; and `Team` career serialization owns the sheet. Exact consumers, physical mediators, evidence and interactions for every row are in the linked certification summary and JSON rows.

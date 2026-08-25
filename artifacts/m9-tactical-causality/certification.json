@@ -1,7 +1,7 @@
 {
   "milestone": "M9 tactical causality",
-  "start_head": "4df1cfd02536629951b0055bff3a7916ed7a45de",
-  "measured_head": "4df1cfd02536629951b0055bff3a7916ed7a45de",
+  "start_head": "8bd62f028fcebbbfb1dd81fc949b645a9070c5eb",
+  "measured_head": "",
   "godot": {
     "major": 4,
     "minor": 7,
@@ -866,7 +866,13 @@
     {
       "gate": "M8-live",
       "description": "Attack/spike line trial retains event/flight invariants",
-      "population": 11,
+      "population": 5,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Attack/spike line trial retains event/flight invariants",
+      "population": 7,
       "passed": true
     },
     {
@@ -908,7 +914,7 @@
     {
       "gate": "M8-live",
       "description": "Attack/spike cross trial retains event/flight invariants",
-      "population": 11,
+      "population": 9,
       "passed": true
     },
     {
@@ -950,7 +956,7 @@
     {
       "gate": "M8-live",
       "description": "Attack/tool trial retains event/flight invariants",
-      "population": 11,
+      "population": 9,
       "passed": true
     },
     {
@@ -998,19 +1004,7 @@
     {
       "gate": "M8-live",
       "description": "Attack/roll trial retains event/flight invariants",
-      "population": 3,
-      "passed": true
-    },
-    {
-      "gate": "M8-live",
-      "description": "Attack/roll trial retains event/flight invariants",
-      "population": 3,
-      "passed": true
-    },
-    {
-      "gate": "M8-live",
-      "description": "Attack/roll trial retains event/flight invariants",
-      "population": 10,
+      "population": 7,
       "passed": true
     },
     {
@@ -1022,7 +1016,7 @@
     {
       "gate": "C3-live/symmetry",
       "description": "opponent Attack/roll reaches equivalent authoritative trace",
-      "population": 3,
+      "population": 2,
       "passed": true
     },
     {
@@ -1100,19 +1094,7 @@
     {
       "gate": "M8-live",
       "description": "Block/close line trial retains event/flight invariants",
-      "population": 3,
-      "passed": true
-    },
-    {
-      "gate": "M8-live",
-      "description": "Block/close line trial retains event/flight invariants",
-      "population": 3,
-      "passed": true
-    },
-    {
-      "gate": "M8-live",
-      "description": "Block/close line trial retains event/flight invariants",
-      "population": 10,
+      "population": 7,
       "passed": true
     },
     {
@@ -1196,7 +1178,13 @@
     {
       "gate": "M8-live",
       "description": "Block/soft block trial retains event/flight invariants",
-      "population": 11,
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/soft block trial retains event/flight invariants",
+      "population": 7,
       "passed": true
     },
     {
@@ -1238,7 +1226,13 @@
     {
       "gate": "M8-live",
       "description": "Block/kill block trial retains event/flight invariants",
-      "population": 11,
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Block/kill block trial retains event/flight invariants",
+      "population": 7,
       "passed": true
     },
     {
@@ -1322,7 +1316,7 @@
     {
       "gate": "M8-live",
       "description": "Floor/dig cross trial retains event/flight invariants",
-      "population": 11,
+      "population": 13,
       "passed": true
     },
     {
@@ -1364,7 +1358,13 @@
     {
       "gate": "M8-live",
       "description": "Floor/cover the tip trial retains event/flight invariants",
-      "population": 11,
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/cover the tip trial retains event/flight invariants",
+      "population": 7,
       "passed": true
     },
     {
@@ -1376,7 +1376,7 @@
     {
       "gate": "C3-live/symmetry",
       "description": "opponent Floor/cover the tip reaches equivalent authoritative trace",
-      "population": 5,
+      "population": 6,
       "passed": true
     },
     {
@@ -1406,7 +1406,13 @@
     {
       "gate": "M8-live",
       "description": "Floor/chase trial retains event/flight invariants",
-      "population": 11,
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "M8-live",
+      "description": "Floor/chase trial retains event/flight invariants",
+      "population": 7,
       "passed": true
     },
     {
@@ -1418,13 +1424,55 @@
     {
       "gate": "C3-live/symmetry",
       "description": "opponent Floor/chase reaches equivalent authoritative trace",
-      "population": 5,
+      "population": 6,
+      "passed": true
+    },
+    {
+      "gate": "C7-population",
+      "description": "paired line/cross attack course arms both activate",
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "C7-direction",
+      "description": "spike cross produces a wider first-mediator course distribution than line",
+      "population": 9,
+      "passed": true
+    },
+    {
+      "gate": "C7-population",
+      "description": "paired close-line/cross wall arms both activate",
+      "population": 8,
+      "passed": true
+    },
+    {
+      "gate": "C7-direction",
+      "description": "close line moves walls outward while close cross moves inward",
+      "population": 8,
+      "passed": true
+    },
+    {
+      "gate": "C7-population",
+      "description": "paired dig-line/cross floor arms share downstream target opportunities",
+      "population": 72,
+      "passed": true
+    },
+    {
+      "gate": "C7-direction",
+      "description": "dig line/cross produce different physical target distributions",
+      "population": 72,
+      "passed": true
+    },
+    {
+      "gate": "C7-preference",
+      "description": "discipline shifts adherence without scripting either arm",
+      "population": 200,
       "passed": true
     }
   ],
   "live_evidence": {
     "Attack/spike line": {
-      "attempts": 5,
+      "attempts": 6,
       "home": 1,
       "opponent": 2,
       "seeds": [
@@ -1432,7 +1480,8 @@
         97001,
         97002,
         97003,
-        97004
+        97004,
+        97005
       ],
       "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
     },
@@ -1463,18 +1512,16 @@
       "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
     },
     "Attack/roll": {
-      "attempts": 8,
+      "attempts": 6,
       "home": 1,
-      "opponent": 3,
+      "opponent": 2,
       "seeds": [
         97000,
         97001,
         97002,
         97003,
         97004,
-        97005,
-        97006,
-        97007
+        97005
       ],
       "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
     },
@@ -1492,7 +1539,7 @@
       "first_mediator": "attack_type_after / intended_target / outgoing attack trajectory"
     },
     "Block/close line": {
-      "attempts": 8,
+      "attempts": 6,
       "home": 2,
       "opponent": 1,
       "seeds": [
@@ -1501,9 +1548,7 @@
         97002,
         97003,
         97004,
-        97005,
-        97006,
-        97007
+        97005
       ],
       "first_mediator": "formation_target_after or block_hands before shared contest"
     },
@@ -1521,7 +1566,7 @@
       "first_mediator": "formation_target_after or block_hands before shared contest"
     },
     "Block/soft block": {
-      "attempts": 5,
+      "attempts": 6,
       "home": 2,
       "opponent": 1,
       "seeds": [
@@ -1529,12 +1574,13 @@
         97001,
         97002,
         97003,
-        97004
+        97004,
+        97005
       ],
       "first_mediator": "formation_target_after or block_hands before shared contest"
     },
     "Block/kill block": {
-      "attempts": 5,
+      "attempts": 6,
       "home": 2,
       "opponent": 1,
       "seeds": [
@@ -1542,7 +1588,8 @@
         97001,
         97002,
         97003,
-        97004
+        97004,
+        97005
       ],
       "first_mediator": "formation_target_after or block_hands before shared contest"
     },
@@ -1573,32 +1620,60 @@
       "first_mediator": "tactical_attribution.physical_target before movement/reach"
     },
     "Floor/cover the tip": {
-      "attempts": 5,
+      "attempts": 6,
       "home": 12,
-      "opponent": 5,
+      "opponent": 6,
       "seeds": [
         97000,
         97001,
         97002,
         97003,
-        97004
+        97004,
+        97005
       ],
       "first_mediator": "tactical_attribution.physical_target before movement/reach"
     },
     "Floor/chase": {
-      "attempts": 5,
+      "attempts": 6,
       "home": 12,
-      "opponent": 5,
+      "opponent": 6,
       "seeds": [
         97000,
         97001,
         97002,
         97003,
-        97004
+        97004,
+        97005
       ],
       "first_mediator": "tactical_attribution.physical_target before movement/reach"
     }
   },
   "failures": [],
+  "distribution_evidence": {
+    "attack_line_vs_cross": {
+      "seeds_per_arm": 24,
+      "line_n": 10,
+      "cross_n": 9,
+      "line_lateral_mean": 0.206621770560741,
+      "cross_lateral_mean": 0.253246464663082
+    },
+    "block_line_vs_cross": {
+      "seeds_per_arm": 24,
+      "line_n": 8,
+      "cross_n": 8,
+      "line_outward_mean": 0.0386414346218109,
+      "cross_outward_mean": -0.05470005646348
+    },
+    "floor_line_vs_cross": {
+      "seeds_per_arm": 16,
+      "matched_targets": 72,
+      "mean_target_delta": 0.0429638485527701
+    },
+    "discipline_adherence": {
+      "population": 200,
+      "low_followed": 94,
+      "high_followed": 174
+    }
+  },
   "passed": true
 }

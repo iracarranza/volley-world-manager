@@ -24,13 +24,14 @@ const TacticalInstructionModelScript := preload(
 const RallyEventScript := preload("res://scripts/models/rally_event.gd")
 
 const ARTIFACT_DIR := "res://artifacts/m9-tactical-causality"
-const START_HEAD := "4df1cfd02536629951b0055bff3a7916ed7a45de"
+const START_HEAD := "8bd62f028fcebbbfb1dd81fc949b645a9070c5eb"
 const LIVE_FIRST_SEED := 97000
 const MAX_LIVE_ATTEMPTS := 18
 
 var failures: Array[String] = []
 var gates: Array[Dictionary] = []
 var live_evidence: Dictionary = {}
+var distribution_evidence: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -43,6 +44,7 @@ func _initialize() -> void:
 	_pure_consumer_gates()
 	_negative_control_gates()
 	_live_behaviour_gates()
+	_paired_distribution_gates()
 	var report := _report(rows)
 	_write_artifacts(rows, report)
 	_print_summary(report)
@@ -427,6 +429,140 @@ func _live_behaviour_gates() -> void:
 				"opponent %s/%s reaches equivalent authoritative trace" % [phase, option], int(evidence.get("opponent", 0)))
 
 
+func _paired_distribution_gates() -> void:
+	var attack := _paired_attack_courses(24)
+	distribution_evidence["attack_line_vs_cross"] = attack
+	_gate(int(attack.get("line_n", 0)) > 0 and int(attack.get("cross_n", 0)) > 0,
+		"C7-population", "paired line/cross attack course arms both activate",
+		mini(int(attack.get("line_n", 0)), int(attack.get("cross_n", 0))))
+	_gate(float(attack.get("cross_lateral_mean", 0.0))
+		> float(attack.get("line_lateral_mean", 0.0)), "C7-direction",
+		"spike cross produces a wider first-mediator course distribution than line",
+		mini(int(attack.get("line_n", 0)), int(attack.get("cross_n", 0))))
+
+	var block := _paired_block_geometry(24)
+	distribution_evidence["block_line_vs_cross"] = block
+	_gate(int(block.get("line_n", 0)) > 0 and int(block.get("cross_n", 0)) > 0,
+		"C7-population", "paired close-line/cross wall arms both activate",
+		mini(int(block.get("line_n", 0)), int(block.get("cross_n", 0))))
+	_gate(float(block.get("line_outward_mean", 0.0)) > 0.0
+		and float(block.get("cross_outward_mean", 0.0)) < 0.0,
+		"C7-direction", "close line moves walls outward while close cross moves inward",
+		mini(int(block.get("line_n", 0)), int(block.get("cross_n", 0))))
+
+	var floor := _paired_floor_targets(16)
+	distribution_evidence["floor_line_vs_cross"] = floor
+	_gate(int(floor.get("matched_targets", 0)) > 0, "C7-population",
+		"paired dig-line/cross floor arms share downstream target opportunities",
+		int(floor.get("matched_targets", 0)))
+	_gate(float(floor.get("mean_target_delta", 0.0)) > 0.005,
+		"C7-direction", "dig line/cross produce different physical target distributions",
+		int(floor.get("matched_targets", 0)))
+
+	var low_followed := 0
+	var high_followed := 0
+	for index in range(200):
+		var roll := float(index) / 199.0
+		if bool(TacticalInstructionModelScript.adherence("feint", 0.10, roll).followed):
+			low_followed += 1
+		if bool(TacticalInstructionModelScript.adherence("feint", 0.90, roll).followed):
+			high_followed += 1
+	distribution_evidence["discipline_adherence"] = {
+		"population": 200, "low_followed": low_followed,
+		"high_followed": high_followed,
+	}
+	_gate(high_followed > low_followed and low_followed > 0 and high_followed < 200,
+		"C7-preference", "discipline shifts adherence without scripting either arm",
+		200)
+
+
+func _paired_attack_courses(seed_count: int) -> Dictionary:
+	var values := {"spike line": [], "spike cross": []}
+	for option in values:
+		for offset in range(seed_count):
+			var manager: Object = GameManagerScript.new()
+			manager.seed_vertical_slice_data()
+			_assign_phase_to_side(manager.team.tactic_sheet, manager.current_lineup(), "Attack", option)
+			_assign_phase_to_side(manager.opponent_team.tactic_sheet,
+				manager.opponent_team.current_lineup(), "Attack", option)
+			manager.match_state.serving_home = offset % 2 == 0
+			var rally: Resource = manager.resolve_active_rally(LIVE_FIRST_SEED + 100 + offset)
+			for event in rally.events:
+				if int(event.event_type) != RallyEventScript.EventType.ATTACK: continue
+				var call: Dictionary = event.metadata.get("tactical_instruction", {})
+				if str(call.get("effective", "")) != option: continue
+				var contact := Vector2(event.metadata.get("body_contact_position", event.start_position))
+				var target := Vector2(event.metadata.get("intended_target", event.end_position))
+				values[option].append(absf(target.x - contact.x))
+			manager.free()
+	return {"seeds_per_arm": seed_count,
+		"line_n": values["spike line"].size(), "cross_n": values["spike cross"].size(),
+		"line_lateral_mean": _mean(values["spike line"]),
+		"cross_lateral_mean": _mean(values["spike cross"])}
+
+
+func _paired_block_geometry(seed_count: int) -> Dictionary:
+	var values := {"close line": [], "close cross": []}
+	for option in values:
+		for offset in range(seed_count):
+			var manager: Object = GameManagerScript.new()
+			manager.seed_vertical_slice_data()
+			_assign_phase_to_side(manager.team.tactic_sheet, manager.current_lineup(), "Block", option)
+			_assign_phase_to_side(manager.opponent_team.tactic_sheet,
+				manager.opponent_team.current_lineup(), "Block", option)
+			manager.match_state.serving_home = offset % 2 == 0
+			var rally: Resource = manager.resolve_active_rally(LIVE_FIRST_SEED + 200 + offset)
+			for event in rally.events:
+				if int(event.event_type) != RallyEventScript.EventType.BLOCK: continue
+				var geometry: Dictionary = event.metadata.get("block_geometry_instruction", {})
+				if str(geometry.get("effective", "")) != option: continue
+				var before := float(geometry.get("formation_target_before", 0.5))
+				var after_behaviour := float(geometry.get("formation_target_after_behaviour", before))
+				values[option].append(absf(after_behaviour - 0.5) - absf(before - 0.5))
+			manager.free()
+	return {"seeds_per_arm": seed_count,
+		"line_n": values["close line"].size(), "cross_n": values["close cross"].size(),
+		"line_outward_mean": _mean(values["close line"]),
+		"cross_outward_mean": _mean(values["close cross"])}
+
+
+func _paired_floor_targets(seed_count: int) -> Dictionary:
+	var matched := 0
+	var total_delta := 0.0
+	for offset in range(seed_count):
+		var arms := {}
+		for option in ["dig line", "dig cross"]:
+			var manager: Object = GameManagerScript.new()
+			manager.seed_vertical_slice_data()
+			_assign_phase_to_side(manager.team.tactic_sheet, manager.current_lineup(), "Floor", option)
+			_assign_phase_to_side(manager.opponent_team.tactic_sheet,
+				manager.opponent_team.current_lineup(), "Floor", option)
+			manager.match_state.serving_home = offset % 2 == 0
+			var rally: Resource = manager.resolve_active_rally(LIVE_FIRST_SEED + 300 + offset)
+			var targets := {}
+			for raw_key in Dictionary(rally.analysis.get("tactical_attribution", {})):
+				var row: Dictionary = rally.analysis.tactical_attribution[raw_key]
+				if str(row.get("clipboard_behaviour", "")) == option:
+					targets[str(raw_key)] = Vector2(row.physical_target)
+			arms[option] = targets
+			manager.free()
+		for key in arms["dig line"]:
+			if not arms["dig cross"].has(key): continue
+			matched += 1
+			total_delta += Vector2(arms["dig line"][key]).distance_to(
+				Vector2(arms["dig cross"][key])
+			)
+	return {"seeds_per_arm": seed_count, "matched_targets": matched,
+		"mean_target_delta": total_delta / maxf(float(matched), 1.0)}
+
+
+func _mean(values: Array) -> float:
+	if values.is_empty(): return 0.0
+	var total := 0.0
+	for value in values: total += float(value)
+	return total / float(values.size())
+
+
 func _find_live_activation(phase: String, option: String) -> Dictionary:
 	var evidence := {"attempts": 0, "home": 0, "opponent": 0, "seeds": [],
 		"first_mediator": _phase_mediator(phase)}
@@ -547,6 +683,7 @@ func _report(rows: Array[Dictionary]) -> Dictionary:
 		"before_counts": before, "after_counts": after,
 		"control_families": rows.size(), "gates": gates,
 		"live_evidence": live_evidence, "failures": failures,
+		"distribution_evidence": distribution_evidence,
 		"passed": failures.is_empty()}
 
 
