@@ -6,6 +6,8 @@
 
 Certification proves **causal mediation**, not merely correlation. Each test holds roster, opponent, rotation, match state, feature flags and seed fixed; changes exactly one authored tactic; resolves through the normal gameplay handoff; and compares authoritative decisions/positions/trajectories. Presentation and commentary are never evidence.
 
+Certification also does not invent semantics. A selectable instruction without an established governing meaning must receive a product/design decision or be removed/disabled as false agency. A latent field with no player writer cannot pass merely because a diagnostic fixture can set it.
+
 ## Gate stack
 
 ### C0 — inventory
@@ -49,6 +51,14 @@ Use paired or multi-arm seeds chosen for an opportunity where the instruction ca
 ### C7 — distribution sanity
 
 After structural proof, run a common-seed population. Report activation, adherence/override, first-mediator delta and downstream result with confidence intervals. This is a detection gate for inert/saturated/inverted controls, not a calibration mandate. M9 does not tune rates.
+
+## Observation set
+
+After causal certification, record before→after contacts/rally, serve error/ace, reception quality, kill, block touch/stuff, dig, rally length, side-out and existing swing/balance readings where instruments exist. These figures are observations unless an existing explicit acceptance bound makes one a gate. Do not calibrate M9 magnitudes to reproduce the baseline.
+
+## Regression set
+
+Run the canonical contact and block authority instruments, canonical side-out, relevant movement/continuous-action and playback diagnostics, and the full foundation suite. Record populations, FAIL lines and invariant results. Check-count movement alone is not regression evidence.
 
 ## Required certification matrix
 

@@ -14,7 +14,7 @@ Each row is one independently authored value family; named alternatives share th
 | Assignment priority (`HitterAssignment.priority`) | created/reordered by play editor and serialized | exposed in shadow/assignment facts but official `_choose_assignment()` does not rank by it | **partial** |
 | Dragged attack start | editor → `HitterAssignment.start_position` | persisted and visible in preview; official live approach starts from live state/lane geometry, not authored start | **stored-only** |
 | Called play per rotation | saved-play control → `active_play_ids_by_rotation` / `called_play_id` | passed to resolver; follow-play path biases primary and supplies assignment set | **causal** |
-| Play `fallback_lane` | serialized `OffensivePlay` metadata; **no dedicated player control** | no official consumer | **latent schema; excluded from selectable census** |
+| Play `fallback_lane` | `OffensivePlay` default/from_dict/to_dict only; **no runtime writer or player control** | validator checks lane syntax; live simulator never reads it (`ShadowAttackSystem._fallback_lane()` is an unrelated helper) | **compatibility-only latent schema; excluded from selectable census** |
 | `secondary_hitter_id` | derived from the selectable Secondary responsibility | `_choose_assignment()` now applies its documented fallback preference | **part of Responsibility/order; not an independent selector** |
 | Setting system (`5-1`, `6-2`) and selected second setter | system controls → every `RotationLineup.setting_system` / `designated_setter_ids` | `active_setter_id()` selects eligible back-row setter → setter identity, release movement and set execution | **causal** |
 
@@ -52,7 +52,7 @@ Each row is one independently authored value family; named alternatives share th
 | Deflection priority (0–3) | popup → assignment | deflection pursuit candidate score → pursuer choice/movement | **causal** |
 | Second-contact duty (four labels) | editor → assignment | emergency-setter selection and approach duty → setter candidate and transition availability | **causal** |
 
-`DefensivePlan.block_intent` (`Seal`, `Balanced`, `Funnel`) is already strongly causal in block promotion/contact margins but is **not player-selectable** in the audited UI. M9 must not silently count its default as an implemented choice; a later UI decision requires its own certification row.
+`DefensivePlan.block_intent` (`Seal`, `Balanced`, `Funnel`) is restored from saves and materially shifts block promotion/contact bands, but no runtime manager/UI writer exists and ordinary plans remain `Balanced`. Existing authority says the manager chooses the blocking problem while the Voli should likely choose the momentary solution from read, attributes, timing and position. This is an explicit ownership defect, not an invitation to add a dropdown. It remains outside the selectable census until product/design assigns an owner.
 
 ## Clipboard tactics and training
 

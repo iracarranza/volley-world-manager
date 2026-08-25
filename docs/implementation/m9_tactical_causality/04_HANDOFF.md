@@ -20,15 +20,15 @@ Any work at seam 4 must be coordinated with the M8 owner. Prefer adapters and at
 
 - Secondary is the named fallback behind Primary; assignment priority orders other feasible options.
 - Authored attack start is a requested approach mark passed through continuous `project_toward`, never an origin teleport.
-- `fallback_lane` remains non-selectable save-schema compatibility and is outside the census.
+- `fallback_lane` is serialized and syntax-validated but has no runtime writer or live read; it remains compatibility-only schema outside the census.
 - Seam/base/short labels map to explicit, distinct geometry; emergency labels add bounded preferences to existing second-contact/coverage selectors.
 - Clipboard composes with Match-board state at decision/positioning seams; it does not replace plan/play resources.
 - close line/cross are wall-formation calls; soft/kill are hands calls.
-- `block_intent` remains a latent/non-selectable term and is outside M9.
+- `block_intent` is a live-but-unowned compatibility term. Saves/tests can set it and the resolver consumes it, but production has no writer and stays Balanced. It is ownership debt, not a manager dropdown task.
 
 ## Implementation result
 
-See `docs/review/m9_tactical_causality/CERTIFICATION_SUMMARY.md` for all 39 final chains and `INTERACTION_MATRIX.md` for precedence/conflicts. The executable source and generated artifacts are named in the checklist below.
+See `docs/review/m9_tactical_causality/CERTIFICATION_SUMMARY.md` for all 39 final chains, `INTERACTION_MATRIX.md` for precedence/conflicts, `LATENT_FIELD_AUDIT.md` for the two excluded fields, and `FINAL_COMMITTED_STATE_REPORT.md` for exact committed-state regression and observations.
 
 ## Read-only audit commands used
 
@@ -48,7 +48,7 @@ rg -n "tactic_sheet|TacticSheet|zone_priorities|placements|behaviour_of\\(|behav
 - Project import/parse: green with repository Godot 4.7.1.
 - M9 C0–C6 executable instrument: green, with live both-side population for all 13 Clipboard behaviours and adversarial negative/interaction checks.
 - Typed career/team, rotation/play/plan/assignment/zone/sheet round trips: green.
-- Canonical M8 authority probes and full suite are recorded in the final committed-state report; any failure blocks closure.
+- Canonical M8 authority populations, before→after observations and the full suite are recorded in `docs/review/m9_tactical_causality/FINAL_COMMITTED_STATE_REPORT.md`; any gated failure blocks closure.
 
 ## Handoff completion checklist
 

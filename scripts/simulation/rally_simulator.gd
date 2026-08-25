@@ -557,15 +557,13 @@ const BLOCK_ABSORB_FIRM: float = 0.68
 ## What the hands are *trying to do*, which is a different axis from where the
 ## wall stands.
 ##
-## `block_intent` -- Seal or Funnel -- is lateral: it decides which part of the
-## hitter's cone the wall takes away. This is the other axis, and the sport has
-## always had both: two blockers at the same height with the same timing produce
-## different balls depending on whether they pressed over the tape to end it or
-## angled back to keep it alive. It is not an attribute. It is a decision, and
-## `AttemptJudgment` is the module that already models exactly this decision for
-## the second and third contacts -- a setter backing off a quick, a hitter
-## rolling instead of swinging. The block is the fourth contact that needs it and
-## the only one that never asked.
+## `block_defense_relationship`, close calls and seam duties choose where the
+## wall stands.  The legacy `block_intent` enum separately shifts contest bands,
+## but no runtime policy owns it and ordinary plans stay Balanced.  The live
+## decision here is the established Clipboard soft/kill hands preference,
+## mediated by the blocker's own read and tactical discipline.  A future Voli
+## block-solution decision may subsume the latent enum; this resolver does not
+## pretend that an unwritten value is a manager instruction.
 ##
 ## **Pressing is not simply better.** A kill block that comes off wins more
 ## rallies outright; one that is beaten hands the hitter a tool at full pace,
@@ -8376,12 +8374,10 @@ func _form_opponent_block(
 ## moves all three rather than one, and what it really changes is the *width* of
 ## the band where the block gets a piece of the ball without ending the rally.
 ##
-## Sealing narrows it from both directions: the wall is committed, so it either
-## beats the swing outright or the swing goes past it. Funnelling widens it: the
-## block is not trying to end the rally, it is trying to slow the ball down and
-## put it somewhere the floor is already standing. That is the whole tactical
-## choice, and it is a real one -- a terminal block wins points a funnel does
-## not, and a funnel keeps rallies alive that a beaten seal loses.
+## Sealing narrows it from both directions; funnelling widens it.  Those branches
+## are mechanically real, but they are not evidence of selectable authority:
+## production has no writer and therefore supplies Balanced.  The distinction is
+## retained for save compatibility and an eventual explicit ownership decision.
 static func _block_intent_margins(intent: String) -> Dictionary:
 	## Sized against the same distribution the bands are. The previous shifts moved
 	## the touch rung by 0.015 between the two intents -- a fortieth of the spread --

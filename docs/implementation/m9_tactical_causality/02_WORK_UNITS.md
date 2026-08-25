@@ -45,7 +45,7 @@ Do not manufacture a bonus merely to make a field “causal.” Secondary must m
 
 - Map every seam/base/short-ball label to an explicit decision and geometric consequence, or reduce the UI vocabulary to what the resolver actually distinguishes.
 - Wire emergency-responsibility labels into the already-authoritative pursuit/emergency-setter/coverage decisions, without duplicating those decisions.
-- Expose `block_intent` only if product design confirms it is a manager choice; otherwise keep it out of the player-selectable census.
+- Audit `block_intent` ownership without exposing it merely to activate latent code. Keep it outside the selectable census unless product/design assigns an owner.
 
 **Done:** option-level A/B certification exists for every remaining label.
 
@@ -78,8 +78,8 @@ M9-0/1 can proceed independently of presentation work. M9-2 can be split by serv
 - M9-0: 39-row executable vocabulary/source census; unknown/missing vocabulary and zero populations fail.
 - M9-1: typed round trips for play, lineup, plan, assignment, zones and sheet; sheet is included in `Team` save data; immutable handoff manifest added.
 - M9-2: serve called/effective risk, attack tactical decision, block geometry/hands and floor target attribution are published at authoritative events/results; existing causal telemetry remains in place.
-- M9-3: priority/Secondary feed feasible option ordering; authored start feeds physically bounded approach intent. `fallback_lane` is correctly excluded as non-selectable latent schema.
-- M9-4: every base/seam/short/emergency label is distinct at a shared decision/geometry seam.
+- M9-3: priority/Secondary feed feasible option ordering; authored start feeds physically bounded approach intent. `fallback_lane` is correctly excluded as serialized/validated but unread compatibility schema.
+- M9-4: every selectable base/seam/short/emergency label is distinct at a shared decision/geometry seam. Live-but-unowned `block_intent` is recorded separately as ownership debt.
 - M9-5: identity-safe shared adapter consumes all 13 behaviours, placement and four priorities. Drill zone remains explicitly training-only.
 - M9-6: structural, live symmetric, negative, interaction and M8 invariant gates run through the normal manager/resolver handoff.
 - M9-7: final causal summary, interaction matrix and before/after/certification JSON are present.

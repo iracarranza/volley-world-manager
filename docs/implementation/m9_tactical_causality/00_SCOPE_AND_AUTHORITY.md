@@ -4,7 +4,7 @@
 
 M9 makes every **player-selectable tactical instruction** auditable from the control that authors it to an observable, authoritative consequence. The implementation is now complete; this packet records the authority, causal map and certification. It does not rebalance tactics.
 
-A tactic is in census when the shipped UI lets a manager select, drag, toggle, or set it and it purports to affect a match or tactical training. Debug-only rotation selection, playback speed/layers, camera/view/phase selectors, opponent adaptation developer controls, roster selection and substitutions are not tactics. Team principles are a separate identity system. `DefensivePlan.block_intent` is a live simulator input but has no player control, so it is a latent input rather than a player-selectable tactic.
+A tactic is in census when the shipped UI lets a manager select, drag, toggle, or set it and it purports to affect a match or tactical training. Debug-only rotation selection, playback speed/layers, camera/view/phase selectors, opponent adaptation developer controls, roster selection and substitutions are not tactics. Team principles are a separate identity system. `DefensivePlan.block_intent` is a live simulator input but has no runtime writer, so it is latent compatibility state rather than a player-selectable tactic.
 
 ## Authority boundary
 
@@ -29,11 +29,19 @@ The storage authority is `Team.tactic_sheet`, the rotation lineups, saved offens
 
 “Code mentions the field” is insufficient. Presentation, summaries, preview drawings and commentary are not consequences. A numerical outcome difference alone is also insufficient without a decision/physical mediator.
 
+## Anti-fabrication rule
+
+The census does not create product semantics. A selectable instruction may become causal only when existing UI language, design authority, or an established volleyball decision defines what it governs. If no such authority exists, the truthful resolution is an explicit product decision or removal/disablement of false agency—not a new simulation branch invented to improve the census. Latent, unowned fields remain outside the selectable census and are recorded as debt.
+
+## Observation and regression rule
+
+After structural causality, measure contacts per rally, serve error/ace, reception quality, kill, block touch/stuff, dig, rally length, side-out, and existing balance/swing observations. These are observations unless an already-existing explicit acceptance bound makes one a gate; M9 never fits rates to preserve historical values. Regression evidence is the actual population and invariant result from the canonical M8 authority, side-out, movement/continuity, and full-suite instruments. A changed aggregate check count alone is not evidence.
+
 ## Final headline
 
 The corrected reachable census is 39 families: 28 causal, 8 partial and 3 stored-only before implementation; 39 causal afterward. The original packet accidentally preserved a total of 39 while counting two non-selectable schema values (`fallback_lane`, derived `secondary_hitter_id`) and missing/squashing real independent selectors. The executable rows in `artifacts/m9-tactical-causality/` supersede that stale accounting.
 
-All Match-board and Clipboard values now reach typed state, an explicit pre-resolution decision/positioning seam, and existing M8 physical authority. Drill zone remains intentionally training-only. `block_intent` and `fallback_lane` remain latent, non-selectable schema and are not M9 census rows. Clipboard phase/view remain editor lenses and are deliberately excluded from the resolver manifest.
+All Match-board and Clipboard values now reach typed state, an explicit pre-resolution decision/positioning seam, and existing M8 physical authority. Drill zone remains intentionally training-only. `block_intent` remains live-but-unowned compatibility state; `fallback_lane` is serialized/validated but unread compatibility schema. Neither is selectable or an M9 census row. Clipboard phase/view remain editor lenses and are deliberately excluded from the resolver manifest.
 
 ## Audit method
 

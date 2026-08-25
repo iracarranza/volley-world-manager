@@ -73,3 +73,5 @@ Every row ends in the existing M8 movement, reach, contact, block-contest and tr
 - Live gates report populations separately. The final run exercised every Clipboard option on both `home` and `opponent`; no zero-population result can pass.
 
 Balance tuning remains outside M9. The new magnitudes are decision/geometry preferences and were not fitted to kill, stuff, dig, side-out or win-rate targets.
+
+Two excluded schema values remain explicit rather than being made artificially causal: `block_intent` is materially consumed but has no production writer and needs an ownership decision; `fallback_lane` is serialized/validated but never read by live gameplay. See `LATENT_FIELD_AUDIT.md`.
