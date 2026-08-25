@@ -162,7 +162,13 @@ func _measure_desync(
 	## is FD-007's whole point -- so counting them as desync would manufacture a
 	## defect out of correct behaviour. B0's test: did this contact publish a
 	## ball.
-	if not event.metadata.has("outgoing_trajectory"):
+	##
+	## **Non-empty, not present.** This asked `metadata.has(...)`, and a beaten
+	## block publishes the key holding an *empty dictionary* -- so the filter
+	## passed every block that never touched the ball and counted the whole of
+	## FD-007's correct behaviour as desync. Measured on the same population, the
+	## key is present on 100% of `ATTACK -> BLOCK` legs and non-empty on half.
+	if Dictionary(event.metadata.get("outgoing_trajectory", {})).is_empty():
 		return
 	var family := str(RallyEvent.EventType.keys()[int(event.event_type)])
 	if not rows.has(family):
