@@ -24,6 +24,7 @@ Purpose: reduce drift as the design corpus grows. This is an index, not a replac
 | Subject | Primary design authority |
 |---|---|
 | Career UI routing / information architecture | `docs/design/MASTER_UI_FLOW.md` |
+| UI interaction grammar / manager attention | `docs/design/INTERACTION_GRAMMAR_AND_ATTENTION.md` |
 | Diegetic management / object roles | `docs/design/DIEGETIC_MANAGEMENT.md` |
 | Journal / knowledge | `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` |
 | Day / live clock / manager time | `docs/design/THE_DAY_AND_THE_CLOCK.md` |
@@ -32,7 +33,7 @@ Purpose: reduce drift as the design corpus grows. This is an index, not a replac
 
 Use the dedicated design documents for club/region/roster, staff/fallibility, accommodations/care, academy proof and SixNet. `docs/BACKLOG.md` owns cross-document implementation ordering when a subsystem's own design order conflicts with project-level priority.
 
-`MASTER_UI_FLOW.md` connects the domain documents and owns **where the player goes and which interface owns a verb**. It does not override the simulation authority of the relevant domain document or model.
+`MASTER_UI_FLOW.md` connects the domain documents and owns **where the player goes and which interface owns a verb**. `INTERACTION_GRAMMAR_AND_ATTENTION.md` owns the cross-cutting rules for **how the player reads, manipulates, observes and receives feedback from those interfaces**. Neither overrides the simulation authority of the relevant domain document or model.
 
 ## Terminology
 
