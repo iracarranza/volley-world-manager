@@ -32,6 +32,22 @@ The compact bottom diagnostic label can ellipsize its event/time suffix at
 1280 px. It is instrumentation rather than semantic commentary and remains
 presentation debt.
 
+## Verification receipts
+
+Measured on integrated gameplay commit
+`29b993dbee34f4959ec6d99cf6f71564c539bb4d` with Godot
+`4.7.1.stable.official.a13da4feb`:
+
+- foundation suite: **2,186 / 2,186 PASS**;
+- canonical M9: **240 / 240 PASS**, 39/39 causal families;
+- real Match View capture: **6 / 6 frames written**;
+- camera follow-name regression: **3 / 3 real actors named**, zero failures;
+- `git diff --check`: clean.
+
+The foundation run still emits the repository's known off-tree pose and shutdown
+resource-leak diagnostics. They are not counted as test failures and are not
+misreported as presentation regressions.
+
 ## Management-intelligence recensus
 
 M9 supplies certified authored tactic and first-mediator seams. It does not add
