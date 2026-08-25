@@ -1,0 +1,45 @@
+
+-- arrival shape: does the leg drop onto its contact? --
+leg                            n  climbs  level   lifts    falls mean ratio     worst
+ATTACK -> BLOCK              179       0      0       0      179       1.50      3.45
+ATTACK -> floor               38       0      0       0       38       2.11      3.74
+ATTACK_COVERAGE -> SET         6       1      1       0        4       3.80      4.16
+ATTACK_COVERAGE -> floor       4       0      0       0        4       3.76      5.06
+BLOCK -> ATTACK_COVERAGE      10       0      0       0       10       2.33      2.62
+BLOCK -> DIG                  19       0      0       0       19       2.76      3.61
+BLOCK -> floor                58       0      0       0       58       1.30      3.62
+DIG -> SET                    40      27      1       0       12      11.32     46.78
+DIG -> floor                   2       0      0       0        2       4.37      4.38
+RECEPTION -> SET             171     150      3       0       18      26.70     93.75
+RECEPTION -> floor            21       0      0       0       21       7.11     10.15
+SERVE -> RECEPTION           192       0      2       0      190       5.37     67.73
+SERVE -> floor                48       0      0       0       48       4.01      5.78
+SET -> ATTACK                217     217      0       0        0       0.00      0.00
+
+ratio = descent rate over the last tenth / the leg's own mean, over
+the FALLING legs only. Calibrated against true projectiles through the
+same `BallFlightModel.height_between` the court samples:
+  serve -> pass  2.40->0.90 m in 0.90 s  ratio 3.91
+  attack -> floor 2.30->0.30 m in 0.75 s ratio 2.42
+A real ball accelerates downward, so a correct arrival is ABOVE 2.
+Well below that is a ball that fell early and skimmed in flat.
+
+-- body against ball at the contact --
+family                    n    apart     mean m    worst m
+ATTACK                  217       45      0.617      0.899
+ATTACK_COVERAGE          10        6      1.271      2.325
+BLOCK                   179       50      0.595      3.202
+DIG                     111       50      0.894      3.654
+RECEPTION               192        1      0.487      0.874
+SERVE                   240        0      0.000      0.000
+SET                     217        0      0.329      0.524
+
+apart = contacts where the body is more than 0.75 m from the
+published contact point.
+
+-- set flight seconds by achieved tempo --
+tempo         n     mean s      min s      max s
+T0           10      0.119      0.100      0.173
+T1           16      0.205      0.141      0.258
+T2           74      0.648      0.243      1.070
+T3           28      1.146      1.017      1.312
