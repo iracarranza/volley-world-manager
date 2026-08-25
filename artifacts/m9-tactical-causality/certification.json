@@ -1,7 +1,7 @@
 {
   "milestone": "M9 tactical causality",
   "start_head": "8bd62f028fcebbbfb1dd81fc949b645a9070c5eb",
-  "measured_head": "78eb4614fa12057581919c571dc3081cb9e242ea",
+  "measured_head": "b8bc9119c7e4d2e7cf9c20f0fc1470504c07c70f",
   "godot": {
     "major": 4,
     "minor": 7,
