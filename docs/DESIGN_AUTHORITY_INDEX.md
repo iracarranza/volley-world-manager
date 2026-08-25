@@ -21,7 +21,18 @@ Purpose: reduce drift as the design corpus grows. This is an index, not a replac
 
 ## Management/world authority
 
-Use the dedicated design documents for club/region/roster, day/clock, recruitment/offer, staff/fallibility, accommodations/care, academy proof, SixNet, journal/knowledge and desk/phone. `docs/BACKLOG.md` owns cross-document implementation ordering when a subsystem's own design order conflicts with project-level priority.
+| Subject | Primary design authority |
+|---|---|
+| Career UI routing / information architecture | `docs/design/MASTER_UI_FLOW.md` |
+| Diegetic management / object roles | `docs/design/DIEGETIC_MANAGEMENT.md` |
+| Journal / knowledge | `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` |
+| Day / live clock / manager time | `docs/design/THE_DAY_AND_THE_CLOCK.md` |
+| Recruitment / interview / offer | `docs/design/RECRUITMENT_AND_THE_OFFER.md` |
+| Desk / phone / answering machine | `docs/design/THE_DESK_AND_THE_PHONE.md` |
+
+Use the dedicated design documents for club/region/roster, staff/fallibility, accommodations/care, academy proof and SixNet. `docs/BACKLOG.md` owns cross-document implementation ordering when a subsystem's own design order conflicts with project-level priority.
+
+`MASTER_UI_FLOW.md` connects the domain documents and owns **where the player goes and which interface owns a verb**. It does not override the simulation authority of the relevant domain document or model.
 
 ## Terminology
 
