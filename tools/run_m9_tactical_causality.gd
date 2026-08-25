@@ -717,11 +717,31 @@ func _write_json(path: String, value: Variant) -> void:
 
 
 func _git_head() -> String:
-	var head := FileAccess.get_file_as_string("res://.git/HEAD").strip_edges()
+	var project_root := ProjectSettings.globalize_path("res://").trim_suffix("/")
+	var command_output: Array = []
+	var command_status := OS.execute(
+		"/usr/bin/git", ["-C", project_root, "rev-parse", "HEAD"], command_output, true)
+	if command_status == 0 and not command_output.is_empty():
+		return str(command_output[0]).strip_edges()
+	var git_path := project_root.path_join(".git")
+	var git_dir := git_path
+	if FileAccess.file_exists(git_path):
+		var worktree_pointer := _read_text_file(git_path)
+		if worktree_pointer.begins_with("gitdir: "):
+			git_dir = worktree_pointer.trim_prefix("gitdir: ").strip_edges()
+	var head := _read_text_file(git_dir.path_join("HEAD"))
 	if head.begins_with("ref: "):
-		var ref_path := "res://.git/%s" % head.trim_prefix("ref: ")
-		return FileAccess.get_file_as_string(ref_path).strip_edges()
+		return _read_text_file(git_dir.path_join(head.trim_prefix("ref: ")))
 	return head
+
+
+func _read_text_file(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var text := file.get_as_text().strip_edges()
+	file.close()
+	return text
 
 
 func _print_summary(report: Dictionary) -> void:
