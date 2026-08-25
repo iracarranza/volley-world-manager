@@ -2,6 +2,12 @@
 
 This file translates `docs/design/TRAINING_PLAY_DESIGNER.md` into prerequisites without implementing the feature.
 
+Post-M9 status: the 39 selectable tactical families now have certified causal
+handoffs, which gives a future demonstration compiler truthful destinations.
+The learned-preference authority, ask schema, fit evaluator and training writer
+below are still absent. Presentation integration did not build the Play Designer
+or use presentation geometry as tactical truth.
+
 ## Existing substrate
 
 - `VolleyballPlayer` ratings and state.

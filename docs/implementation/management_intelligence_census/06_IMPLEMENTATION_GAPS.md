@@ -65,6 +65,10 @@ Do **not** create these as fixes:
 
 ## Interaction with M9
 
-M9 should establish that selectable tactics have real causal paths. This packet deliberately does not compete with that work.
+Canonical M9 now establishes that all 39 selectable tactical families have real
+causal paths. This packet deliberately does not compete with that work.
 
-After M9, rebase/re-census before implementing these gaps. M9 may change tactic consumers, which will sharpen where learned preference and adaptation should attach. Do not build around pre-M9 dead/partial tactical paths.
+The post-M9 recensus found that the gaps above remain gaps. Learned preference
+can attach to the certified authored ask / first-mediator seams rather than to
+pre-M9 dead or partial paths, but no such state or consumer was added during
+integration. Implementation still requires its own authorized milestone.

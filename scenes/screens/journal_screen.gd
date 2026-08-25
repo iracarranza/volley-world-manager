@@ -203,6 +203,7 @@ var roster_camera: Camera3D = null
 ## Built in `_build_opponent_picker` rather than in the scene; see there.
 var opponent_region_option: OptionButton
 var opponent_club_option: OptionButton
+var fixture_venue_option: OptionButton
 @onready var fixture_detail: RichTextLabel = %FixtureDetail
 @onready var play_match_button: Button = %PlayMatchButton
 @onready var simulate_match_button: Button = %SimulateMatchButton
@@ -2664,6 +2665,24 @@ func _build_opponent_picker() -> void:
 		opponent_region_option.add_item(str(region_name))
 	opponent_region_option.item_selected.connect(_opponent_region_chosen)
 	opponent_club_option.item_selected.connect(_opponent_club_chosen)
+	var venue_row := HBoxContainer.new()
+	venue_row.name = "FixtureVenuePicker"
+	venue_row.add_theme_constant_override("separation", 8)
+	var venue_label := Label.new()
+	venue_label.text = "Venue"
+	venue_row.add_child(venue_label)
+	fixture_venue_option = OptionButton.new()
+	fixture_venue_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fixture_venue_option.tooltip_text = (
+		"Scheduled matches use the host venue. Friendly and exhibition fixtures "
+		+ "may select another room independently of the opponent."
+	)
+	for venue_identity in RegionalVenue3D.selectable_venues():
+		fixture_venue_option.add_item(str(venue_identity))
+	fixture_venue_option.item_selected.connect(_fixture_venue_chosen)
+	venue_row.add_child(fixture_venue_option)
+	side.add_child(venue_row)
+	side.move_child(venue_row, actions.get_index())
 
 ## Point the selected fixture at a club, and say so on the calendar.
 ##
@@ -2714,6 +2733,17 @@ func _opponent_club_chosen(index: int) -> void:
 		return
 	_retarget_fixture(str(fixture.opponent_region), index)
 
+
+func _fixture_venue_chosen(index: int) -> void:
+	var fixture := CareerManager.fixture_by_id(selected_fixture_id)
+	var venues := RegionalVenue3D.selectable_venues()
+	if fixture == null or not fixture.allows_venue_selection() \
+			or index < 0 or index >= venues.size():
+		return
+	fixture.venue_id = str(venues[index])
+	CareerManager.save_career()
+	_set_status("Venue set to %s." % str(fixture.venue_id))
+
 ## Show the picker where the fixture actually stands, without firing it.
 ##
 ## `select` rather than any signalling setter, because syncing a control to the
@@ -2732,6 +2762,21 @@ func _sync_opponent_picker(fixture: Resource) -> void:
 	var region_index := names.find(region_name)
 	if region_index >= 0:
 		opponent_region_option.select(region_index)
+	if fixture_venue_option != null:
+		fixture_venue_option.disabled = not fixture.allows_venue_selection()
+		var venue_identity := str(fixture.venue_id)
+		if venue_identity.is_empty():
+			venue_identity = RegionalVenue3D.venue_id_for_region(
+				str(CareerManager.career.region)
+			)
+		var venue_index := RegionalVenue3D.selectable_venues().find(venue_identity)
+		if venue_index >= 0:
+			fixture_venue_option.select(venue_index)
+		fixture_venue_option.tooltip_text = (
+			"Select the venue independently of the opponent."
+			if fixture.allows_venue_selection()
+			else "This scheduled fixture is hosted in %s." % venue_identity
+		)
 	opponent_club_option.clear()
 	if region_name.is_empty():
 		## A fixture written before fixtures carried a region. It still has a

@@ -2,6 +2,14 @@
 
 Baseline: M8 line plus documentation commits through `SIGNATURE_VOCABULARY.md`. This packet audits the management-intelligence systems that sit around, but are not the M9 tactical-causality implementation itself.
 
+Post-M9 recensus: canonical M9 proves 39/39 selectable tactical families reach
+real decision/physical mediators. That closes uncertainty about whether the
+manager's authored asks reach gameplay, but it does not create learned tactical
+preferences, tempo-specific relationship comfort, scouting freshness, signature
+vocabulary ownership, or a Play Designer. The classifications below therefore
+remain the management-intelligence baseline; no implementation is implied by
+this recensus.
+
 ## Classification
 
 - **LIVE** — authoritative data, producer and meaningful consumer exist.

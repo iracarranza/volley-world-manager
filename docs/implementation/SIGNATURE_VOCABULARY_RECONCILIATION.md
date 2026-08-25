@@ -2,6 +2,13 @@
 
 Authority: `docs/design/SIGNATURE_VOCABULARY.md` for the new tier/vocabulary model. Existing rally/signature code remains implementation reality until deliberately migrated.
 
+Post-presentation status: the real Match View now integrates fixture venues,
+regional kits, a score bug, wrapped commentary, neutral announcers and camera
+controls around authoritative rally playback. It does **not** migrate signature
+vocabulary. Existing `SignatureMoveModel` / `SignatureSurge3D` paths remain the
+legacy capability/manifestation/effect implementation and must not be relabeled
+as tiered vocabulary without the census and ownership work below.
+
 ## Semantic migration
 
 The older implementation/presentation term **surge** must not be interpreted as the design object. It is legacy naming for a manifestation/effect path.

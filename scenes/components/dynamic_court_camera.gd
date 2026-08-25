@@ -31,6 +31,8 @@ var _court: MatchCourt3D
 var _free_button: Button
 var _follow_option: OptionButton
 var _camera_button: Button
+var _zoom_out_button: Button
+var _zoom_in_button: Button
 
 
 func _ready() -> void:
@@ -126,7 +128,7 @@ func enable_free(enabled: bool) -> void:
 	free_enabled = enabled
 	if _free_button != null:
 		_free_button.button_pressed = free_enabled
-		_free_button.text = "Free view" if not free_enabled else "Free: on"
+		_free_button.text = "Free" if not free_enabled else "Free ✓"
 	if free_enabled:
 		_apply_free_camera()
 
@@ -191,17 +193,21 @@ func _build_controls() -> void:
 	var root := get_parent()
 	if root == null:
 		return
-	var controls := root.get_node_or_null("HUD/TopPanel/Margin/Controls") as HBoxContainer
+	var controls := root.get_node_or_null("HUD/ControlRibbon/Margin/Controls") as HBoxContainer
 	if controls == null:
 		return
-	_camera_button = root.get_node_or_null("HUD/TopPanel/Margin/Controls/CameraButton") as Button
-	var close_button := root.get_node_or_null("HUD/TopPanel/Margin/Controls/CloseButton") as Button
+	_camera_button = root.get_node_or_null(
+		"HUD/ControlRibbon/Margin/Controls/CameraButton"
+	) as Button
+	var close_button := root.get_node_or_null(
+		"HUD/ControlRibbon/Margin/Controls/CloseButton"
+	) as Button
 
 	_free_button = Button.new()
 	_free_button.name = "FreeCameraButton"
-	_free_button.text = "Free view"
+	_free_button.text = "Free"
 	_free_button.toggle_mode = true
-	_free_button.custom_minimum_size = Vector2(88.0, 0.0)
+	_free_button.custom_minimum_size = Vector2(62.0, 0.0)
 	_free_button.tooltip_text = "Free camera (V): right-drag orbit, wheel zoom"
 	_free_button.toggled.connect(func(on: bool) -> void: enable_free(on))
 	controls.add_child(_free_button)
@@ -210,12 +216,35 @@ func _build_controls() -> void:
 
 	_follow_option = OptionButton.new()
 	_follow_option.name = "CameraFollowOption"
-	_follow_option.custom_minimum_size = Vector2(122.0, 0.0)
+	_follow_option.custom_minimum_size = Vector2(112.0, 0.0)
 	_follow_option.tooltip_text = "Follow a player (F cycles)"
 	_follow_option.item_selected.connect(_follow_selected)
 	controls.add_child(_follow_option)
 	if close_button != null:
 		controls.move_child(_follow_option, close_button.get_index())
+
+	_zoom_out_button = Button.new()
+	_zoom_out_button.name = "ZoomOutButton"
+	_zoom_out_button.text = "−"
+	_zoom_out_button.tooltip_text = "Zoom out"
+	_zoom_out_button.pressed.connect(func() -> void:
+		enable_free(true)
+		zoom_steps(-1.0)
+	)
+	controls.add_child(_zoom_out_button)
+	if close_button != null:
+		controls.move_child(_zoom_out_button, close_button.get_index())
+	_zoom_in_button = Button.new()
+	_zoom_in_button.name = "ZoomInButton"
+	_zoom_in_button.text = "+"
+	_zoom_in_button.tooltip_text = "Zoom in"
+	_zoom_in_button.pressed.connect(func() -> void:
+		enable_free(true)
+		zoom_steps(1.0)
+	)
+	controls.add_child(_zoom_in_button)
+	if close_button != null:
+		controls.move_child(_zoom_in_button, close_button.get_index())
 
 	if _camera_button != null:
 		## Static preset selection should always win over the free camera. Connected
@@ -225,7 +254,7 @@ func _build_controls() -> void:
 			follow_player_id = -1
 			if _free_button != null:
 				_free_button.set_pressed_no_signal(false)
-				_free_button.text = "Free view"
+				_free_button.text = "Free"
 			_select_follow_for_id(-1)
 		)
 	_refresh_players(true)

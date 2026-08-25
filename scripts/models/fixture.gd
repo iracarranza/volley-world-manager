@@ -55,6 +55,15 @@ extends Resource
 ## Indexed rather than drawn, because a fixture must field the same eleven
 ## people every time it is loaded.
 @export var opponent_club_index: int = 0
+## Which room the match is actually played in. Region identity is the persisted
+## contract because the current venue set has one canonical room per region.
+## Empty is deliberately valid for saves written before venues reached fixtures;
+## CareerManager resolves those to the host region when the match is prepared.
+@export var venue_id: String = ""
+## Explicit seam for friendly/exhibition fixture builders. Scheduled league
+## fixtures leave this false and derive the host venue; a future fixture type may
+## opt in without inferring editability from display text.
+@export var venue_selectable: bool = false
 
 
 func result_text() -> String:
@@ -69,7 +78,8 @@ func to_dict() -> Dictionary:
 		"opponent_statistics": opponent_statistics.duplicate(true),
 		"player_statistics": player_statistics.duplicate(true),
 		"opponent_region": opponent_region,
-		"opponent_club_index": opponent_club_index}
+		"opponent_club_index": opponent_club_index,
+		"venue_id": venue_id, "venue_selectable": venue_selectable}
 
 
 static func from_dict(data: Dictionary) -> VolleyballFixture:
@@ -94,4 +104,11 @@ static func from_dict(data: Dictionary) -> VolleyballFixture:
 	).duplicate(true)
 	fixture.opponent_region = str(data.get("opponent_region", ""))
 	fixture.opponent_club_index = int(data.get("opponent_club_index", 0))
+	fixture.venue_id = str(data.get("venue_id", ""))
+	fixture.venue_selectable = bool(data.get("venue_selectable", false))
 	return fixture
+
+
+func allows_venue_selection() -> bool:
+	var competition := competition_name.to_lower()
+	return venue_selectable or "friendly" in competition or "exhibition" in competition

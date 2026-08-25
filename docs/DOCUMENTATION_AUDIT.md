@@ -2,6 +2,13 @@
 
 Scope: high-value design/implementation authority around volleyball intelligence, scouting, training, traits, signatures, planning and current backlog. This is a conservative audit: it records contradictions/staleness rather than rewriting historical reasoning that documents intentionally preserve.
 
+Post-integration status (2026-08-25): canonical M9 is integrated and certifies
+39/39 selectable tactical families. The management-intelligence census was
+rechecked against those seams; no management-intelligence implementation was
+added. The real Match View presentation integration changes appearance and
+framing only. It does not implement the Play Designer or the tiered signature
+vocabulary.
+
 ## Findings
 
 ### 1. Historical implementation prose is easy to mistake for current state
@@ -99,3 +106,7 @@ Rather than rewriting source design records, this pass added:
 ## Deferred cleanup
 
 Do not mass-edit the large historical design files solely for wording consistency. Their preserved reasoning is useful. A later documentation maintenance pass can add compact status banners/cross-links once M9 is integrated and the target branch is stable.
+
+M9's integration satisfies the first condition, so focused banners/cross-links
+have now been added to the affected implementation packets. A mass historical
+rewrite remains deferred.

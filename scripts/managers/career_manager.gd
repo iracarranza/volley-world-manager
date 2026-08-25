@@ -589,6 +589,11 @@ func prepare_fixture(fixture_id: int) -> String:
 	if not errors.is_empty():
 		return errors[0]
 	career.active_fixture_id = fixture_id
+	## Old saves have no venue field. Scheduled fixtures are hosted in the club's
+	## own region unless a fixture type explicitly allowed a venue choice and one
+	## was saved. Resolve once and persist so replay and reload name the same room.
+	if str(fixture.venue_id).is_empty() or not fixture.allows_venue_selection():
+		fixture.venue_id = RegionalVenue3D.venue_id_for_region(str(career.region))
 	## Point the match at the club on the calendar. Without this the fixture's
 	## name was decoration: every match of every season was played against the
 	## default squad, whatever the schedule said. Guarded on a named region so a
@@ -1047,6 +1052,7 @@ func _starting_fixtures(region: String) -> Array[Resource]:
 		fixture.opponent_club_index = club_index
 		fixture.opponent_name = VolleyballRegions.club_name(opponent_region, club_index)
 		fixture.competition_name = "Regional Series"
+		fixture.venue_id = RegionalVenue3D.venue_id_for_region(home_region)
 		result.append(fixture)
 	return result
 

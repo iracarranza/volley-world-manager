@@ -2,9 +2,16 @@
 
 This is a dependency sequence, not permission to interrupt the current M9 task.
 
+Status: M9 and the read-only Phase 1 recensus are complete. Phases 2–9 remain
+unimplemented and are not part of presentation integration.
+
 ## Phase 1 — Re-census against M9
 
-Re-run this packet's claims after M9 lands. In particular, trace tactic consumers, setter option decomposition, block/floor choices and opponent symmetry.
+**Complete, documentation only.** Canonical M9 certifies the tactical consumers,
+setter/offensive option paths, block/floor choices and opponent symmetry. The
+recensus does not change the management classifications: learned preference,
+planner decomposition, long-sample adaptation proof and knowledge systems remain
+future work.
 
 ## Phase 2 — Learned preference substrate
 

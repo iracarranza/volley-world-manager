@@ -17,6 +17,11 @@ var live_positions: Dictionary = {}
 var home_player_ids: Dictionary = {}
 var camera_preset: int = 0
 var light_mode_enabled: bool = false
+var venue_identity: String = "Landavol"
+var venue_builder: RegionalVenue3D
+var _venue_base_environment: Environment
+var _venue_base_key: Dictionary = {}
+var _venue_base_fill: Dictionary = {}
 
 ## Where the match is watched from.
 ##
@@ -46,6 +51,42 @@ func _ready() -> void:
 	apply_ui_palette(false)
 	_apply_camera_preset()
 	ball_actor.reset_flight()
+	_venue_base_environment = ($WorldEnvironment as WorldEnvironment).environment.duplicate(true)
+	_venue_base_key = {
+		"rotation": ($KeyLight as DirectionalLight3D).rotation,
+		"energy": ($KeyLight as DirectionalLight3D).light_energy,
+		"color": ($KeyLight as DirectionalLight3D).light_color,
+	}
+	_venue_base_fill = {
+		"energy": ($FillLight as OmniLight3D).light_energy,
+		"color": ($FillLight as OmniLight3D).light_color,
+	}
+
+
+## Apply the persisted fixture venue to this real playback court. The builder is
+## also the gallery's authority, so court, backdrop and lighting cannot drift
+## into a second staged implementation.
+func apply_venue(identity: String) -> void:
+	venue_identity = RegionalVenue3D.venue_id_for_region(identity)
+	if venue_builder != null:
+		venue_builder.free()
+		var old_extras := get_node_or_null("VenueExtras")
+		if old_extras != null:
+			old_extras.free()
+	if _venue_base_environment != null:
+		($WorldEnvironment as WorldEnvironment).environment = _venue_base_environment.duplicate(true)
+	var key := $KeyLight as DirectionalLight3D
+	key.rotation = Vector3(_venue_base_key.get("rotation", key.rotation))
+	key.light_energy = float(_venue_base_key.get("energy", key.light_energy))
+	key.light_color = Color(_venue_base_key.get("color", key.light_color))
+	var fill := $FillLight as OmniLight3D
+	fill.light_energy = float(_venue_base_fill.get("energy", fill.light_energy))
+	fill.light_color = Color(_venue_base_fill.get("color", fill.light_color))
+	apply_ui_palette(light_mode_enabled)
+	venue_builder = RegionalVenue3D.new()
+	venue_builder.name = "RegionalVenue"
+	add_child(venue_builder)
+	venue_builder.configure_existing(self, venue_identity)
 
 
 func tactical_to_world(tactical_x: float, tactical_y: float, height: float = 0.0) -> Vector3:
@@ -731,6 +772,9 @@ func cycle_camera() -> String:
 
 func _apply_camera_preset() -> void:
 	if camera_3d == null:
+		return
+	if camera_preset == 0 and venue_builder != null:
+		venue_builder.frame_broadcast()
 		return
 	var preset: Dictionary = CAMERA_PRESETS[camera_preset]
 	camera_3d.position = Vector3(preset["position"])

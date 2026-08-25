@@ -7221,3 +7221,37 @@ Worth knowing before either is attempted: inside a normal defensive window
 (~0.53 s) neither form reaches its own ceiling, so the comparison is worth
 almost nothing for the balls a defender actually plays and only pays on long
 pursuits.
+
+---
+
+## 2026-08-25 integration checkpoint — canonical M9 and real Match View
+
+Canonical M9 is integrated from `chatgpt/m9-tactical-causality`: 39/39
+selectable tactic families are causal and 240/240 certification gates pass.
+`block_intent` remains live-but-unowned compatibility state and `fallback_lane`
+remains serialized/validated but unread schema; neither was promoted or exposed
+to manufacture agency.
+
+The presentation collision was resolved around real gameplay authority. The
+parallel branch's presentation specification and already-accepted name/ace
+diagnostics were retained; its competing five-file M9 packet and unbound
+`MatchScreen` draft were not. The gameplay-broadcast line supplies persisted
+fixture venues, the production venue builder, regional kits, live score bug,
+wrapped commentary, neutral announcers, camera ribbon and real-rally capture.
+Its branch-specific Godot 4.7.2 workflow was excluded pending a repository-wide
+toolchain/CI decision.
+
+Explicit remaining seams:
+
+- management intelligence was re-censused, not implemented; learned tactical
+  preference, planner asks/fit, adaptation proof, scouting freshness/history and
+  knowledge UI remain future milestones;
+- the Training Play Designer still waits on learned-preference/ask/training
+  authority and must not make drawn paths gameplay truth;
+- tiered signature vocabulary is design authority only; existing surge/VFX code
+  remains legacy implementation until a capability/vocabulary/manifestation
+  census and migration are authorized;
+- the compact bottom-ribbon diagnostic event string can ellipsize at 1280 px;
+  semantic commentary is wrapped and not truncated;
+- `block_intent` ownership, `fallback_lane` schema migration, known playback
+  seam diagnostics and the 4.7.1→4.7.2 toolchain decision remain explicit debt.

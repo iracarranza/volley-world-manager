@@ -5,17 +5,17 @@
 [ext_resource type="Script" path="res://scenes/components/dynamic_court_camera.gd" id="3_dynamic_camera"]
 
 [sub_resource type="StyleBoxFlat" id="HudPanel"]
-bg_color = Color(0.025, 0.045, 0.075, 0.92)
+bg_color = Color(0.018, 0.03, 0.05, 0.92)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.28, 0.43, 0.62, 0.7)
+border_color = Color(0.42, 0.51, 0.62, 0.55)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
-shadow_color = Color(0, 0, 0, 0.4)
+shadow_color = Color(0, 0, 0, 0.45)
 shadow_size = 8
 
 [node name="MatchScreen" type="Control"]
@@ -55,15 +55,6 @@ render_target_update_mode = 2
 [node name="MatchCourt3D" parent="SubViewportContainer/SubViewport" instance=ExtResource("2_court")]
 unique_name_in_owner = true
 
-[node name="VignetteTop" type="ColorRect" parent="."]
-mouse_filter = 2
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_bottom = 92.0
-grow_horizontal = 2
-color = Color(0.01, 0.02, 0.04, 0.38)
-
 [node name="HUD" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -73,135 +64,244 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 
-[node name="TopPanel" type="PanelContainer" parent="HUD"]
+[node name="ScoreBug" type="PanelContainer" parent="HUD"]
 layout_mode = 1
-anchors_preset = 10
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -594.0
-offset_top = 18.0
-offset_right = 594.0
-offset_bottom = 74.0
-grow_horizontal = 2
+offset_left = 22.0
+offset_top = 20.0
+offset_right = 350.0
+offset_bottom = 132.0
 theme_override_styles/panel = SubResource("HudPanel")
 
-[node name="Margin" type="MarginContainer" parent="HUD/TopPanel"]
+[node name="Margin" type="MarginContainer" parent="HUD/ScoreBug"]
 layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 9
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 9
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 8
 
-[node name="Controls" type="HBoxContainer" parent="HUD/TopPanel/Margin"]
+[node name="Content" type="VBoxContainer" parent="HUD/ScoreBug/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 9
+theme_override_constants/separation = 2
 
-[node name="ModeLabel" type="Label" parent="HUD/TopPanel/Margin/Controls"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.96, 0.82, 0.28, 1)
-theme_override_font_sizes/font_size = 17
-text = "3D MATCH ENGINE"
-
-[node name="Divider" type="VSeparator" parent="HUD/TopPanel/Margin/Controls"]
+[node name="SetLine" type="HBoxContainer" parent="HUD/ScoreBug/Margin/Content"]
 layout_mode = 2
 
-[node name="EventLabel" type="Label" parent="HUD/TopPanel/Margin/Controls"]
+[node name="SetLabel" type="Label" parent="HUD/ScoreBug/Margin/Content/SetLine"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(270, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.72, 0.82, 0.94, 1)
-text = "READY"
+theme_override_colors/font_color = Color(0.78, 0.82, 0.87, 1)
+theme_override_font_sizes/font_size = 13
+text = "SET 1"
 
-[node name="Spacer" type="Control" parent="HUD/TopPanel/Margin/Controls"]
+[node name="Spacer" type="Control" parent="HUD/ScoreBug/Margin/Content/SetLine"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="SpeedOption" type="OptionButton" parent="HUD/TopPanel/Margin/Controls"]
+[node name="SetCountLabel" type="Label" parent="HUD/ScoreBug/Margin/Content/SetLine"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(82, 0)
 layout_mode = 2
-tooltip_text = "Playback speed"
+theme_override_colors/font_color = Color(0.96, 0.78, 0.3, 1)
+theme_override_font_sizes/font_size = 13
+text = "SETS 0–0"
 
-[node name="PauseButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
+[node name="HomeRow" type="HBoxContainer" parent="HUD/ScoreBug/Margin/Content"]
+layout_mode = 2
+
+[node name="HomeServe" type="Label" parent="HUD/ScoreBug/Margin/Content/HomeRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(76, 0)
+custom_minimum_size = Vector2(18, 0)
 layout_mode = 2
-text = "Pause"
+theme_override_colors/font_color = Color(0.96, 0.78, 0.3, 1)
+text = "●"
 
-[node name="ReplayButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
+[node name="HomeRegionLabel" type="Label" parent="HUD/ScoreBug/Margin/Content/HomeRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(76, 0)
 layout_mode = 2
-text = "Replay"
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.95, 0.96, 0.98, 1)
+theme_override_font_sizes/font_size = 18
+text = "LANDAVOL"
 
-[node name="SkipButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
+[node name="HomeScoreLabel" type="Label" parent="HUD/ScoreBug/Margin/Content/HomeRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 0)
+custom_minimum_size = Vector2(34, 0)
 layout_mode = 2
-text = "Skip"
+theme_override_font_sizes/font_size = 24
+text = "0"
+horizontal_alignment = 2
 
-[node name="CameraButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
+[node name="OpponentRow" type="HBoxContainer" parent="HUD/ScoreBug/Margin/Content"]
+layout_mode = 2
+
+[node name="OpponentServe" type="Label" parent="HUD/ScoreBug/Margin/Content/OpponentRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(96, 0)
+custom_minimum_size = Vector2(18, 0)
 layout_mode = 2
-tooltip_text = "Cycle camera (C)"
-text = "Broadcast"
+theme_override_colors/font_color = Color(0.96, 0.78, 0.3, 1)
+text = ""
 
-[node name="CloseButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
+[node name="OpponentRegionLabel" type="Label" parent="HUD/ScoreBug/Margin/Content/OpponentRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(72, 0)
 layout_mode = 2
-tooltip_text = "Close 3D replay (Esc)"
-text = "Close"
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.95, 0.96, 0.98, 1)
+theme_override_font_sizes/font_size = 17
+text = "OPPONENT"
 
-[node name="BottomPanel" type="PanelContainer" parent="HUD"]
+[node name="OpponentScoreLabel" type="Label" parent="HUD/ScoreBug/Margin/Content/OpponentRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(34, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "0"
+horizontal_alignment = 2
+
+[node name="CommentaryCluster" type="Control" parent="HUD"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -452.0
+offset_top = 20.0
+offset_right = -22.0
+offset_bottom = 210.0
+grow_horizontal = 0
+mouse_filter = 2
+
+[node name="CommentaryBubble" type="PanelContainer" parent="HUD/CommentaryCluster"]
+layout_mode = 0
+offset_right = 430.0
+offset_bottom = 148.0
+custom_minimum_size = Vector2(430, 148)
+theme_override_styles/panel = SubResource("HudPanel")
+
+[node name="Margin" type="MarginContainer" parent="HUD/CommentaryCluster/CommentaryBubble"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 9
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 10
+
+[node name="Copy" type="VBoxContainer" parent="HUD/CommentaryCluster/CommentaryBubble/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="SpeakerLabel" type="Label" parent="HUD/CommentaryCluster/CommentaryBubble/Margin/Copy"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.3, 1)
+theme_override_font_sizes/font_size = 12
+text = "KAI"
+
+[node name="CaptionLabel" type="Label" parent="HUD/CommentaryCluster/CommentaryBubble/Margin/Copy"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.93, 0.7, 1)
+theme_override_font_sizes/font_size = 16
+text = "Rally playback"
+autowrap_mode = 3
+
+[node name="DetailLabel" type="Label" parent="HUD/CommentaryCluster/CommentaryBubble/Margin/Copy"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.9, 0.92, 0.95, 1)
+theme_override_font_sizes/font_size = 14
+text = "Resolved simulation events appear here."
+autowrap_mode = 3
+
+[node name="Headshots" type="HBoxContainer" parent="HUD/CommentaryCluster"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 276.0
+offset_top = 154.0
+offset_right = 430.0
+offset_bottom = 222.0
+theme_override_constants/separation = 10
+alignment = 2
+
+[node name="ControlRibbon" type="PanelContainer" parent="HUD"]
 layout_mode = 1
 anchors_preset = 12
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -520.0
-offset_top = -154.0
-offset_right = 520.0
-offset_bottom = -22.0
+offset_left = -555.0
+offset_top = -66.0
+offset_right = 555.0
+offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_styles/panel = SubResource("HudPanel")
 
-[node name="Margin" type="MarginContainer" parent="HUD/BottomPanel"]
+[node name="Margin" type="MarginContainer" parent="HUD/ControlRibbon"]
 layout_mode = 2
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 14
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 7
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 7
 
-[node name="Content" type="VBoxContainer" parent="HUD/BottomPanel/Margin"]
+[node name="Controls" type="HBoxContainer" parent="HUD/ControlRibbon/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 5
+theme_override_constants/separation = 8
 
-[node name="CaptionLabel" type="Label" parent="HUD/BottomPanel/Margin/Content"]
+[node name="EventLabel" type="Label" parent="HUD/ControlRibbon/Margin/Controls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(170, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.93, 0.70, 1)
-theme_override_font_sizes/font_size = 22
-text = "Rally playback"
-horizontal_alignment = 1
-
-[node name="DetailLabel" type="Label" parent="HUD/BottomPanel/Margin/Content"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.83, 0.88, 0.94, 1)
-text = "Resolved simulation events appear here."
-horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.82, 0.94, 1)
+text = "READY"
 text_overrun_behavior = 3
 
-[node name="ProgressBar" type="ProgressBar" parent="HUD/BottomPanel/Margin/Content"]
+[node name="ProgressBar" type="ProgressBar" parent="HUD/ControlRibbon/Margin/Controls"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(130, 8)
 layout_mode = 2
 mouse_filter = 2
 show_percentage = false
+
+[node name="SpeedOption" type="OptionButton" parent="HUD/ControlRibbon/Margin/Controls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+tooltip_text = "Playback speed"
+
+[node name="PauseButton" type="Button" parent="HUD/ControlRibbon/Margin/Controls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 0)
+layout_mode = 2
+text = "Pause"
+
+[node name="SkipButton" type="Button" parent="HUD/ControlRibbon/Margin/Controls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(54, 0)
+layout_mode = 2
+text = "Skip"
+
+[node name="CameraButton" type="Button" parent="HUD/ControlRibbon/Margin/Controls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(92, 0)
+layout_mode = 2
+tooltip_text = "Cycle broadcast cameras (C)"
+text = "Broadcast"
+
+[node name="RibbonSpacer" type="Control" parent="HUD/ControlRibbon/Margin/Controls"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ReplayButton" type="Button" parent="HUD/ControlRibbon/Margin/Controls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(68, 0)
+layout_mode = 2
+text = "Replay"
+
+[node name="CloseButton" type="Button" parent="HUD/ControlRibbon/Margin/Controls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(62, 0)
+layout_mode = 2
+tooltip_text = "Close Match View (Esc)"
+text = "Close"
 
 [node name="DynamicCourtCamera" type="Node" parent="."]
 script = ExtResource("3_dynamic_camera")

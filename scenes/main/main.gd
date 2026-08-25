@@ -89,6 +89,7 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var opponent_scouting_label: Label = %OpponentScoutingLabel
 @onready var opponent_adaptation_rate_slider: HSlider = %OpponentAdaptationRateSlider
 @onready var opponent_region_option: OptionButton = %OpponentRegionOption
+@onready var exhibition_venue_option: OptionButton = %ExhibitionVenueOption
 @onready var save_defense_button: Button = %SaveDefenseButton
 @onready var timeout_button: Button = %TimeoutButton
 @onready var substitute_out_option: OptionButton = %SubstituteOutOption
@@ -141,6 +142,7 @@ var pending_drag_lane: String = ""
 var pending_substitution_out_id: int = -1
 var pending_substitution_in_id: int = -1
 var selected_defensive_zone_type: int = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+var exhibition_venue_identity: String = "Landavol"
 var match_preview_lineup: RotationLineup
 var match_preview_plan: DefensivePlan
 var match_preview_play: OffensivePlay
@@ -201,6 +203,9 @@ func _ready() -> void:
 	apply_zone_button.pressed.connect(_apply_selected_zone)
 	opponent_adaptation_rate_slider.value_changed.connect(_opponent_adaptation_rate_changed)
 	opponent_region_option.item_selected.connect(_opponent_region_selected)
+	for venue_name in RegionalVenue3D.selectable_venues():
+		exhibition_venue_option.add_item(str(venue_name))
+	exhibition_venue_option.item_selected.connect(_exhibition_venue_selected)
 	timeout_button.pressed.connect(_call_timeout)
 	apply_substitution_button.pressed.connect(_apply_substitution)
 	undo_substitution_button.pressed.connect(_undo_substitution)
@@ -236,6 +241,7 @@ func _ready() -> void:
 	_refresh_roster_popup()
 	_update_interface_scale()
 	return_career_button.visible = CareerManager.has_career()
+	exhibition_venue_option.disabled = CareerManager.has_career()
 
 
 func enter_career_match() -> void:
@@ -249,6 +255,11 @@ func enter_career_match() -> void:
 	## fixture was being played.
 	if CareerManager.has_career():
 		rally_seed = CareerManager.fixture_base_seed(int(CareerManager.career.active_fixture_id))
+		var fixture := CareerManager.fixture_by_id(int(CareerManager.career.active_fixture_id))
+		if fixture != null:
+			exhibition_venue_identity = str(fixture.venue_id)
+			_select_option_text(exhibition_venue_option, exhibition_venue_identity)
+	exhibition_venue_option.disabled = true
 	_capture_match_preview_snapshot()
 	_refresh_rotation()
 	_refresh_match_header()
@@ -1503,6 +1514,29 @@ func _opponent_region_selected(index: int) -> void:
 	])
 
 
+func _exhibition_venue_selected(index: int) -> void:
+	var venues := RegionalVenue3D.selectable_venues()
+	if index < 0 or index >= venues.size() or exhibition_venue_option.disabled:
+		return
+	exhibition_venue_identity = str(venues[index])
+	_set_status("Match View venue: %s." % exhibition_venue_identity)
+
+
+func _configure_match_view() -> void:
+	var home_region := RegionalKits.side_region(GameManager.players)
+	var fixture_venue := exhibition_venue_identity
+	if CareerManager.has_career():
+		home_region = str(CareerManager.career.region)
+		var fixture := CareerManager.fixture_by_id(int(CareerManager.career.active_fixture_id))
+		if fixture != null:
+			fixture_venue = str(fixture.venue_id)
+	if fixture_venue.is_empty():
+		fixture_venue = RegionalVenue3D.venue_id_for_region(home_region)
+	match_screen.configure_match_presentation(
+		home_region, str(GameManager.opponent_team.region), fixture_venue
+	)
+
+
 func _populate_text_options(option: OptionButton, values: Array[String]) -> void:
 	option.clear()
 	for value in values:
@@ -1559,6 +1593,7 @@ func _replay_last_rally_3d() -> void:
 	if rally_playback_active or last_rally_result == null:
 		return
 	var selected_speed := float(_selected_metadata(playback_speed_option))
+	_configure_match_view()
 	await match_screen.load_and_play_rally(last_rally_result, selected_speed)
 
 
@@ -2501,6 +2536,7 @@ func _update_status_color() -> void:
 func _on_rally_completed(rally_result: RallyResult) -> void:
 	if match_screen == null:
 		return
+	_configure_match_view()
 	await match_screen.load_and_play_rally(rally_result)
 
 

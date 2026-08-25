@@ -18,6 +18,12 @@ Purpose: reduce drift as the design corpus grows. This is an index, not a replac
 | Recruitment scouting | `docs/design/SCOUTING.md` |
 | Signature vocabulary | `docs/design/SIGNATURE_VOCABULARY.md` |
 | Match-training visual authoring | `docs/design/TRAINING_PLAY_DESIGNER.md` |
+| Match presentation / broadcast integration | `docs/implementation/PRESENTATION_INTEGRATION_SPEC.md` |
+
+Implementation evidence does not replace these design authorities. Canonical M9
+causal evidence lives under `docs/review/m9_tactical_causality/`; the pre-merge
+presentation disposition and resulting authority order live under
+`docs/review/presentation_integration/`.
 
 ## Management/world authority
 
