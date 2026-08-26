@@ -22,6 +22,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 @onready var office_shell: CanonicalOfficeShell = %OfficeShell
 @onready var title_screen: VolleyballTitleScreen = %TitleScreen
 @onready var new_career_screen: VolleyballNewCareerScreen = %NewCareerScreen
+@onready var career_workspace_host: Control = %CareerWorkspaceHost
 @onready var journal: VolleyballJournalScreen = %Journal
 @onready var match_center: Control = %MatchCenter
 @onready var career_navigation: CareerNavigation = %CareerNavigation
@@ -130,18 +131,19 @@ func _ensure_lock_in_screen() -> void:
 	if _lock_in_screen != null:
 		return
 	_lock_in_screen = LockInScreenScript.new()
-	_adopt_screen(_lock_in_screen)
+	_adopt_screen(_lock_in_screen, false)
 	_lock_in_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_lock_in_screen.cancelled.connect(_show_journal)
 	_lock_in_screen.confirmed.connect(_show_match)
 
 
-func _adopt_screen(screen: Control) -> void:
-	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+func _adopt_screen(screen: Control, ordinary_workspace := true) -> void:
 	screen.visible = false
-	add_child(screen)
-	# Lazy screens are appended after the persistent navigation node. Keep the
-	# navigation above ordinary content, and the wipe above both.
+	var host: Control = career_workspace_host if ordinary_workspace else self
+	host.add_child(screen)
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Global navigation and transition chrome are Application-owned layers. Lazy
+	# screens can be created in any order without becoming accidental top layers.
 	if career_navigation != null and career_navigation.is_inside_tree():
 		move_child(career_navigation, -1)
 	if _wipe != null and _wipe.is_inside_tree():
@@ -184,21 +186,21 @@ func _swap_to(screen: Control) -> void:
 
 func _sync_career_navigation(screen: Control) -> void:
 	if _desk_screen != null and screen == _desk_screen:
-		career_navigation.present(&"desk", screen, true)
+		career_navigation.present(&"desk")
 	elif screen == journal:
-		career_navigation.present(&"journal", screen)
+		career_navigation.present(&"journal")
 	elif _schedule_screen != null and screen == _schedule_screen:
-		career_navigation.present(&"calendar", screen)
+		career_navigation.present(&"calendar")
 	elif _training_screen != null and screen == _training_screen:
-		career_navigation.present(&"training", screen)
+		career_navigation.present(&"training")
 	elif _scouting_screen != null and screen == _scouting_screen:
-		career_navigation.present(&"scouting", screen)
+		career_navigation.present(&"scouting")
 	elif _accommodation_screen != null and screen == _accommodation_screen:
-		career_navigation.present(&"housing", screen)
+		career_navigation.present(&"housing")
 	elif _kitchen_screen != null and screen == _kitchen_screen:
-		career_navigation.present(&"kitchen", screen)
+		career_navigation.present(&"kitchen")
 	elif _encyclopedia_screen != null and screen == _encyclopedia_screen:
-		career_navigation.present(&"encyclopedia", screen)
+		career_navigation.present(&"encyclopedia")
 	else:
 		# Title, New Career, Lock-In and Match are not ordinary workspaces.
 		career_navigation.clear()
@@ -266,7 +268,7 @@ func _show_journal() -> void:
 
 
 func _apply_journal_vocabulary() -> void:
-	# `Home` is an old implementation name. The Journal's first page is the
+	# `Home` is an old implementation id. The Journal's first page is the
 	# manager's current working record; career home is the physical Desk.
 	var sections := journal.get_node_or_null("%Sections") as TabContainer
 	if sections != null and sections.get_tab_count() > 0:
@@ -286,7 +288,7 @@ func _ensure_desk_screen() -> void:
 	if _desk_screen != null:
 		return
 	_desk_screen = DeskScreenScript.new()
-	_adopt_screen(_desk_screen)
+	_adopt_screen(_desk_screen, false)
 	_desk_screen.opened.connect(_desk_opened)
 
 
