@@ -102,7 +102,9 @@ func _build_cameras() -> void:
 	var cams := Node3D.new(); cams.name = "Cameras"; add_child(cams)
 	_camera(cams, "MainMenu", Vector3(0.0, 6.7, 3.9), Vector3(0.0, 0.35, -0.15), 42.0)
 	_camera(cams, "TransitionMid", Vector3(0.75, 3.75, 2.0), Vector3(0.75, 0.65, -1.0), 48.0)
-	var desk := _camera(cams, "Desk", Vector3(1.05, 1.42, -0.38), Vector3(1.03, 0.82, -1.48), 56.0)
+	# The Desk camera represents the manager's eye position after sitting down.
+	# It is forward of/above the chair rather than behind the chair back.
+	var desk := _camera(cams, "Desk", Vector3(1.05, 1.34, -1.03), Vector3(1.05, 0.79, -1.58), 58.0)
 	desk.current = true
 	_camera(cams, "Calendar", Vector3(1.30, 1.55, -0.58), Vector3(1.62, 1.62, -1.94), 48.0)
 	_camera(cams, "Door", Vector3(0.55, 1.55, -0.25), Vector3(2.35, 1.0, 1.05), 52.0)
