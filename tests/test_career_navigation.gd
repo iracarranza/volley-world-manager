@@ -23,19 +23,12 @@ func _run() -> void:
 	]:
 		_expect(nav.button_for(key) != null, "header exposes %s" % key)
 
-	var journal := Control.new()
-	host.add_child(journal)
-	nav.present(&"journal", journal)
+	nav.present(&"journal")
 	_expect(nav.visible, "ordinary career workspace shows persistent navigation")
 	_expect(nav.current_destination() == &"journal", "Journal becomes active destination")
-	_expect(is_equal_approx(journal.offset_top, NavigationScript.HEADER_HEIGHT), "paper workspace is inset below global header")
 	_expect(nav.button_for(&"journal").button_pressed, "active Journal button is selected")
 
-	var desk := Control.new()
-	host.add_child(desk)
-	nav.present(&"desk", desk, true)
-	_expect(is_zero_approx(journal.offset_top), "leaving a workspace restores its original top offset")
-	_expect(is_zero_approx(desk.offset_top), "spatial Desk is not pushed down by the header")
+	nav.present(&"desk")
 	_expect(nav.button_for(&"desk").button_pressed, "Desk becomes selected")
 	_expect(not nav.button_for(&"journal").button_pressed, "previous destination is deselected")
 
@@ -47,7 +40,7 @@ func _run() -> void:
 	await process_frame
 	_expect(requested == [&"training"], "inactive peer emits one routing request")
 
-	nav.present(&"training", journal)
+	nav.present(&"training")
 	nav.button_for(&"training").emit_signal("pressed")
 	await process_frame
 	_expect(requested.size() == 1, "active destination does not request redundant navigation")
@@ -55,7 +48,6 @@ func _run() -> void:
 	nav.clear()
 	_expect(not nav.visible, "presence/pre-career state can suppress global navigation")
 	_expect(nav.current_destination().is_empty(), "clear removes active destination")
-	_expect(is_zero_approx(journal.offset_top), "clear restores workspace geometry")
 
 	if _failures.is_empty():
 		print("CAREER_NAVIGATION_TEST PASS")
