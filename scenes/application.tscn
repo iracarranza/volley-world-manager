@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://cf25mxv5ivoek" path="res://scenes/main/main.tscn" id="5"]
 [ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/office/office_shell.tscn" id="7_office"]
+[ext_resource type="Script" path="res://scenes/components/career_navigation.gd" id="8_nav"]
 
 [node name="Application" type="Control" unique_id=1540949880]
 layout_mode = 3
@@ -40,3 +41,13 @@ layout_mode = 1
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
+
+[node name="CareerNavigation" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("8_nav")
