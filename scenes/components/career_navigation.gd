@@ -5,8 +5,9 @@ extends Control
 ##
 ## The Desk remains the spatial home, but it is not a mandatory interchange.
 ## Once the manager is in ordinary career UI, the destinations named by
-## MASTER_UI_FLOW.md are peers. This component owns only presentation and emits
-## destination intent; Application owns the actual routing graph.
+## MASTER_UI_FLOW.md are peers. This component owns presentation and emits
+## destination intent; Application owns the actual routing graph and workspace
+## geometry.
 
 signal destination_requested(destination: StringName)
 
@@ -25,14 +26,11 @@ const DESTINATIONS := [
 var _buttons: Dictionary = {}
 var _bar: PanelContainer = null
 var _active: StringName = &""
-var _last_content_screen: Control = null
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	# This is global career chrome, not content. Dynamic workspaces may carry
-	# their own CanvasItem ordering, so make the contract explicit rather than
-	# depending on the order lazy screens happened to be appended to Application.
+	# Global career chrome, explicitly above ordinary workspace content.
 	z_index = 40
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
@@ -72,22 +70,14 @@ func _build() -> void:
 		_buttons[key] = button
 
 
-func present(active: StringName, content_screen: Control = null, spatial := false) -> void:
-	if _last_content_screen != null and _last_content_screen != content_screen:
-		_last_content_screen.offset_top = 0.0
-	_last_content_screen = content_screen
+func present(active: StringName) -> void:
 	_active = active
 	visible = not active.is_empty()
-	if content_screen != null:
-		content_screen.offset_top = 0.0 if spatial else HEADER_HEIGHT
 	for key in _buttons:
 		(_buttons[key] as Button).set_pressed_no_signal(key == active)
 
 
 func clear() -> void:
-	if _last_content_screen != null:
-		_last_content_screen.offset_top = 0.0
-	_last_content_screen = null
 	_active = &""
 	visible = false
 	for key in _buttons:
