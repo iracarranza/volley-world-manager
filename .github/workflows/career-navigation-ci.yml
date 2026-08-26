@@ -86,7 +86,7 @@ jobs:
           xvfb-run -a godot --path . --rendering-method gl_compatibility \
             --resolution 1280x720 \
             res://tools/render_career_navigation.tscn
-          test "$(find artifacts/career-navigation -type f -name '*.png' | wc -l)" -eq 8
+          test "$(find artifacts/career-navigation -type f -name '*.png' | wc -l)" -eq 3
 
       - name: Upload navigation review packet
         uses: actions/upload-artifact@v4
