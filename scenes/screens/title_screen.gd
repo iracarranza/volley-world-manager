@@ -52,12 +52,7 @@ func _ready() -> void:
 func _install_live_office_overlay() -> void:
 	# No second title-room representation. The persistent OfficeShell is already
 	# underneath this Control in Application. Everything here is UI laid over it.
-	if desk_surface != null:
-		desk_surface.visible = false
-	%Background.visible = false
-	%CourtBand.visible = false
-	%CourtLineA.visible = false
-	%CourtLineB.visible = false
+	_hide_legacy_backdrop()
 	_brand_veil = ColorRect.new()
 	_brand_veil.name = "BrandVeil"
 	_brand_veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -73,13 +68,20 @@ func _install_live_office_overlay() -> void:
 
 
 func enforce_live_office_overlay() -> void:
+	_hide_legacy_backdrop()
+	_apply_overlay_palette()
+
+
+func _hide_legacy_backdrop() -> void:
+	# CourtLineA/B predate the live-office title and are ordinary child nodes, not
+	# unique-name nodes. Address them by their stable local paths rather than `%`
+	# so loading the real Application does not emit Node-not-found errors.
 	if desk_surface != null:
 		desk_surface.visible = false
-	%Background.visible = false
-	%CourtBand.visible = false
-	%CourtLineA.visible = false
-	%CourtLineB.visible = false
-	_apply_overlay_palette()
+	for path in ["Background", "CourtBand", "CourtLineA", "CourtLineB"]:
+		var legacy := get_node_or_null(path) as CanvasItem
+		if legacy != null:
+			legacy.visible = false
 
 
 func refresh_saves() -> void:
@@ -89,7 +91,7 @@ func refresh_saves() -> void:
 		save_list.add_item("%s  /  %s" % [
 			metadata.get("career_name", "Career"),
 			metadata.get("organization_name", "Organization"),
-		])
+	])
 	load_menu_button.disabled = saves.is_empty()
 	load_selected_button.disabled = saves.is_empty()
 	delete_button.disabled = saves.is_empty()
