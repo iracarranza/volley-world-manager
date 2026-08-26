@@ -25,14 +25,15 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var cams := office.get_node("Cameras")
-	# Review override: pull the Desk camera back/up so it reads as a seated
-	# workspace rather than a macro shot of desk props. Sync this into scene
-	# authority once the composition is accepted.
+	var manager_chair: Node3D = office.get_node("DeskZone/ManagerChair")
+	# Review override: seated desk POV. The chair itself is hidden only for this
+	# camera, just as a first-person body would not occupy the rendered foreground.
 	var desk_camera: Camera3D = cams.get_node("Desk")
 	desk_camera.position = Vector3(1.05, 1.48, -0.62)
 	desk_camera.fov = 58.0
 	desk_camera.look_at(Vector3(1.05, 1.10, -1.62), Vector3.UP)
 	for camera_name in CAMERA_NAMES:
+		manager_chair.visible = camera_name != "Desk"
 		for child in cams.get_children():
 			if child is Camera3D:
 				child.current = child.name == camera_name
