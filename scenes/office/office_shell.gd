@@ -2,10 +2,8 @@ class_name CanonicalOfficeShell
 extends Control
 
 ## Persistent renderer for the canonical manager office-bedroom.
-##
 ## Title, Desk, Calendar, Door and Interview are camera states of one unchanged
-## room. Screens are UI overlays above this shell; they must not author their own
-## office geometry.
+## room. Screens are UI overlays above this shell; they never author room geometry.
 
 const CAMERA_NAMES := [&"MainMenu", &"TransitionMid", &"Desk", &"Calendar", &"Door", &"Interview", &"OfficeWide"]
 const TITLE_IDLE_SECONDS := 22.0
@@ -30,6 +28,7 @@ func _ready() -> void:
 	_main_menu_transform = _camera(&"MainMenu").transform
 	_main_menu_fov = _camera(&"MainMenu").fov
 	snap_to(&"MainMenu")
+	apply_career_state(null)
 	set_process(true)
 
 
@@ -40,8 +39,6 @@ func _process(delta: float) -> void:
 	var phase := TAU * (_idle_t / TITLE_IDLE_SECONDS)
 	var camera := _camera(&"MainMenu")
 	camera.transform = _main_menu_transform
-	# Deliberately tiny: the room should feel alive before the player consciously
-	# notices that the camera is moving.
 	camera.rotate_y(deg_to_rad(sin(phase) * TITLE_IDLE_YAW_DEGREES))
 	camera.rotate_object_local(Vector3.RIGHT, deg_to_rad(cos(phase * 0.73) * TITLE_IDLE_PITCH_DEGREES))
 	camera.position.y += sin(phase * 0.57) * TITLE_IDLE_BOB_METRES
@@ -117,11 +114,47 @@ func focus_desk() -> void:
 
 
 func apply_career_state(career: Variant) -> void:
-	# The modeled room owns career-state presentation. The first integrated pass
-	# exposes the hook now so title/load/Desk all call the same place. Exact
-	# history-to-frame mapping can grow without any screen learning room geometry.
-	if office != null and office.has_method("apply_career_state"):
-		office.apply_career_state(career)
+	# History is automatic environmental accretion. A new/no career starts with
+	# empty frame anchors; known historical collections reveal frames without the
+	# player needing to curate them manually.
+	var history_count := _history_event_count(career)
+	for i in 4:
+		var frame := office.find_child("HistoryFrame%02d" % i, true, false)
+		var image := office.find_child("HistoryImage%02d" % i, true, false)
+		var show := i < mini(history_count, 4)
+		if frame != null:
+			frame.visible = show
+		if image != null:
+			image.visible = show
+
+	# The archive is a slow visual record of elapsed career time. It changes
+	# subtly rather than acting like a meter; concrete historical pictures still
+	# depend on actual events above.
+	var archive := office.find_child("ArchiveBox", true, false) as Node3D
+	if archive != null:
+		var weeks := 0
+		if career != null and "absolute_week" in career:
+			weeks = maxi(int(career.absolute_week), 0)
+		var fullness := clampf(float(weeks) / 156.0, 0.0, 1.0)
+		archive.scale = Vector3(1.0 + fullness * 0.14, 1.0 + fullness * 0.18, 1.0 + fullness * 0.10)
+
+
+func _history_event_count(career: Variant) -> int:
+	if career == null:
+		return 0
+	var total := 0
+	for key in ["history", "club_history", "honours", "trophies", "competition_wins", "major_events", "fan_favorites"]:
+		if not key in career:
+			continue
+		var value = career.get(key)
+		match typeof(value):
+			TYPE_ARRAY:
+				total += Array(value).size()
+			TYPE_DICTIONARY:
+				total += Dictionary(value).size()
+			TYPE_INT, TYPE_FLOAT:
+				total += maxi(int(value), 0)
+	return total
 
 
 func _camera(name: StringName) -> Camera3D:
