@@ -21,10 +21,17 @@ var _idle_t := 0.0
 var _main_menu_transform := Transform3D.IDENTITY
 var _main_menu_fov := 37.0
 var _blend_camera: Camera3D = null
+var _manager_chair: Node3D = null
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Promote the accepted Desk review composition into live camera authority.
+	var desk := _camera(&"Desk")
+	desk.position = Vector3(1.05, 1.48, -0.62)
+	desk.fov = 58.0
+	desk.look_at(Vector3(1.05, 1.10, -1.62), Vector3.UP)
+	_manager_chair = office.find_child("ManagerChair", true, false) as Node3D
 	_main_menu_transform = _camera(&"MainMenu").transform
 	_main_menu_fov = _camera(&"MainMenu").fov
 	snap_to(&"MainMenu")
@@ -58,6 +65,7 @@ func snap_to(name: StringName) -> void:
 		push_warning("Unknown office camera: %s" % name)
 		return
 	_clear_blend_camera()
+	_set_camera_specific_visibility(name)
 	for child in cameras.get_children():
 		if child is Camera3D:
 			(child as Camera3D).current = child.name == name
@@ -75,6 +83,7 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	var source := _current_camera()
 	if source == target:
 		_active_name = name
+		_set_camera_specific_visibility(name)
 		return
 	_clear_blend_camera()
 	_blend_camera = Camera3D.new()
@@ -83,6 +92,10 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	_blend_camera.fov = source.fov
 	cameras.add_child(_blend_camera)
 	_blend_camera.current = true
+	# The chair remains part of the room during the journey; it disappears only
+	# when the eye settles into the seated Desk POV.
+	if _manager_chair != null:
+		_manager_chair.visible = true
 	var tween := create_tween().set_parallel(true)
 	tween.set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_property(_blend_camera, "transform", target.transform, duration)
@@ -91,6 +104,12 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	target.current = true
 	_active_name = name
 	_clear_blend_camera()
+	_set_camera_specific_visibility(name)
+
+
+func _set_camera_specific_visibility(name: StringName) -> void:
+	if _manager_chair != null:
+		_manager_chair.visible = name != &"Desk"
 
 
 func focus_calendar() -> void:
@@ -114,9 +133,6 @@ func focus_desk() -> void:
 
 
 func apply_career_state(career: Variant) -> void:
-	# History is automatic environmental accretion. A new/no career starts with
-	# empty frame anchors; known historical collections reveal frames without the
-	# player needing to curate them manually.
 	var history_count := _history_event_count(career)
 	for i in 4:
 		var frame := office.find_child("HistoryFrame%02d" % i, true, false)
@@ -127,9 +143,6 @@ func apply_career_state(career: Variant) -> void:
 		if image != null:
 			image.visible = show
 
-	# The archive is a slow visual record of elapsed career time. It changes
-	# subtly rather than acting like a meter; concrete historical pictures still
-	# depend on actual events above.
 	var archive := office.find_child("ArchiveBox", true, false) as Node3D
 	if archive != null:
 		var weeks := 0
