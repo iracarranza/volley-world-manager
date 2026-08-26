@@ -80,8 +80,8 @@ func _read_the_desk() -> Dictionary:
 	]
 	var team = _game_manager.team if _game_manager != null else null
 	if team != null:
-		if "accommodation_structure" in team:
-			out["housing"] = "The housing folder — %s" % str(team.accommodation_structure)
+		if "housing_structure" in team:
+			out["housing"] = "The housing folder — %s" % str(team.housing_structure)
 		out["kitchen"] = "The meal plan — %s" % str(team.food_block)
 	out["calendar"] = "Calendar"
 	return out
