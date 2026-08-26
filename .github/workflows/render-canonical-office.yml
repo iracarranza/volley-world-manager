@@ -6,9 +6,15 @@ on:
       - chatgpt/canonical-office-greybox
     paths:
       - 'scenes/office/**'
+      - 'scenes/application.gd'
+      - 'scenes/application.tscn'
+      - 'scenes/screens/title_screen.gd'
+      - 'scenes/screens/title_screen.tscn'
+      - 'scenes/screens/desk_screen.gd'
       - 'tools/render_canonical_office_greybox.gd'
       - 'tools/render_canonical_office_low_poly.gd'
       - 'tools/render_current_title_screen.gd'
+      - 'tools/render_integrated_office_ui.gd'
       - '.github/workflows/render-canonical-office.yml'
       - 'project.godot'
   workflow_dispatch:
@@ -50,6 +56,15 @@ jobs:
             --script tools/render_current_title_screen.gd
           ls -lh artifacts/current-title-screen/
 
+      - name: Render integrated title and desk
+        run: |
+          xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            --path . \
+            --rendering-method gl_compatibility \
+            --resolution 1280x720 \
+            --script tools/render_integrated_office_ui.gd
+          ls -lh artifacts/integrated-office-ui/
+
       - name: Render seven greybox cameras
         run: |
           xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
@@ -73,6 +88,14 @@ jobs:
         with:
           name: current-title-screen-render
           path: artifacts/current-title-screen/title_screen.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload integrated office UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: integrated-office-ui-renders
+          path: artifacts/integrated-office-ui/*.png
           if-no-files-found: error
           retention-days: 14
 
