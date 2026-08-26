@@ -13,6 +13,7 @@ on:
       - 'scenes/screens/training_screen.gd'
       - 'scenes/screens/schedule_screen.gd'
       - 'tests/test_career_navigation.gd'
+      - 'tests/test_application_navigation.gd'
       - 'tools/render_career_navigation.gd'
       - '.github/workflows/career-navigation-ci.yml'
   workflow_dispatch:
@@ -50,11 +51,17 @@ jobs:
           set -euo pipefail
           godot --headless --path . --editor --quit
 
-      - name: Run navigation regression test
+      - name: Run navigation component regression test
         shell: bash
         run: |
           set -euo pipefail
           godot --headless --path . --script tests/test_career_navigation.gd
+
+      - name: Run Application routing regression test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --script tests/test_application_navigation.gd
 
       - name: Install virtual display
         shell: bash
