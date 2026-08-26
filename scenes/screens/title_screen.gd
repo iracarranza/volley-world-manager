@@ -27,6 +27,7 @@ const RIGHT_BAND_OPACITY := 0.035
 
 var saves: Array[Dictionary] = []
 var _brand_veil: ColorRect = null
+var _light_mode := false
 
 
 func _ready() -> void:
@@ -45,12 +46,10 @@ func _ready() -> void:
 	theme_option.add_item("Molten")
 	theme_option.item_selected.connect(_theme_selected)
 	refresh_saves()
+	call_deferred("enforce_live_office_overlay")
 
 
 func _install_live_office_overlay() -> void:
-	# The old title desk was a second authored room representation. The real
-	# canonical office now renders underneath this screen, so title graphics are
-	# translucent overlays only.
 	if desk_surface != null:
 		desk_surface.visible = false
 	%CourtLineA.visible = false
@@ -62,8 +61,18 @@ func _install_live_office_overlay() -> void:
 	_brand_veil.anchor_right = 0.56
 	_brand_veil.grow_horizontal = Control.GROW_DIRECTION_END
 	add_child(_brand_veil)
-	# Behind all title text/menu, but above the faint full-screen wash.
 	move_child(_brand_veil, 1)
+
+
+func enforce_live_office_overlay() -> void:
+	# UIStyleSystem owns broad screen styling and can touch the old decorative
+	# controls after this screen first configures itself. Reassert the title-only
+	# exceptions after that pass: no duplicate desk, and translucent room veils.
+	if desk_surface != null:
+		desk_surface.visible = false
+	%CourtLineA.visible = false
+	%CourtLineB.visible = false
+	_apply_overlay_palette()
 
 
 func refresh_saves() -> void:
@@ -104,23 +113,27 @@ func _continue_last_played() -> void:
 
 
 func set_theme_name(theme_name: String) -> void:
-	var light_mode := theme_name == "light"
-	theme_option.select(1 if light_mode else 0)
-	var canvas := UIPalette.color(&"canvas", light_mode)
-	var canvas_alt := UIPalette.color(&"canvas_alt", light_mode)
+	_light_mode = theme_name == "light"
+	theme_option.select(1 if _light_mode else 0)
+	_apply_overlay_palette()
+	%AccentBar.color = UIPalette.color(&"accent", _light_mode)
+	%Title.modulate = UIPalette.color(&"ink", _light_mode)
+	%Edition.modulate = UIPalette.color(&"accent", _light_mode)
+	_tint_menu(_light_mode)
+	# Application's style walk follows this call. Reapply the deliberate alpha
+	# values one frame later so generic ColorRect styling cannot make them opaque.
+	call_deferred("enforce_live_office_overlay")
+
+
+func _apply_overlay_palette() -> void:
+	var canvas := UIPalette.color(&"canvas", _light_mode)
+	var canvas_alt := UIPalette.color(&"canvas_alt", _light_mode)
 	%Background.color = Color(canvas, BACKDROP_WASH_OPACITY)
 	%CourtBand.color = Color(canvas_alt, RIGHT_BAND_OPACITY)
 	if _brand_veil != null:
-		_brand_veil.color = Color(canvas, BRAND_VEIL_OPACITY_LIGHT if light_mode else BRAND_VEIL_OPACITY_DARK)
-	%AccentBar.color = UIPalette.color(&"accent", light_mode)
-	%Title.modulate = UIPalette.color(&"ink", light_mode)
-	%Edition.modulate = UIPalette.color(&"accent", light_mode)
-	_tint_menu(light_mode)
+		_brand_veil.color = Color(canvas, BRAND_VEIL_OPACITY_LIGHT if _light_mode else BRAND_VEIL_OPACITY_DARK)
 
 
-## The office itself now moves from MainMenu to Desk in CanonicalOfficeShell.
-## This method only lets the title furniture clear out while that camera move is
-## happening underneath it.
 func play_desk_departure() -> void:
 	if not visible:
 		return
@@ -142,6 +155,7 @@ func reset_departure() -> void:
 	%CourtBand.modulate = Color.WHITE
 	if _brand_veil != null:
 		_brand_veil.modulate = Color.WHITE
+	enforce_live_office_overlay()
 
 
 func _tint_menu(light_mode: bool) -> void:
