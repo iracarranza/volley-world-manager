@@ -37,11 +37,11 @@ var _esc_menu: EscMenu = null
 var _desk_screen: DeskScreen = null
 var _encyclopedia_screen: EncyclopediaScreen = null
 var _theme_name := "dark"
+var _schedule_return_to_desk := false
 
 
 func _ready() -> void:
-	var window_viewport := get_viewport()
-	window_viewport.size_changed.connect(_sync_halftone_scale)
+	get_viewport().size_changed.connect(_sync_halftone_scale)
 	_sync_halftone_scale()
 	journal.set_meta(UIStyleSystem.MEDIUM_META, UIStyleSystem.MEDIUM_SEWN)
 
@@ -53,13 +53,13 @@ func _ready() -> void:
 	new_career_screen.career_created.connect(_show_desk)
 	journal.title_requested.connect(_show_title)
 	journal.play_match_requested.connect(_show_lock_in)
-	call_deferred("_connect_match_center_signal")
 	journal.training_requested.connect(_show_training)
 	journal.scouting_requested.connect(_show_scouting)
 	journal.encyclopedia_requested.connect(_show_encyclopedia)
 	journal.accommodation_requested.connect(_show_accommodation)
 	journal.kitchen_requested.connect(_show_kitchen)
 	journal.menu_requested.connect(_open_menu)
+	call_deferred("_connect_match_center_signal")
 
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
@@ -73,7 +73,10 @@ func _ensure_training_screen() -> void:
 	_training_screen = TrainingScreenScript.new()
 	_adopt_screen(_training_screen)
 	_training_screen.back_requested.connect(_show_journal)
-	_training_screen.schedule_requested.connect(_show_schedule)
+	_training_screen.schedule_requested.connect(func() -> void:
+		_schedule_return_to_desk = false
+		_show_schedule()
+	)
 
 
 func _ensure_scouting_screen() -> void:
@@ -89,8 +92,7 @@ func _ensure_schedule_screen() -> void:
 		return
 	_schedule_screen = ScheduleScreenScript.new()
 	_adopt_screen(_schedule_screen)
-	_training_screen = _training_screen
-	_schedule_screen.back_requested.connect(_show_desk)
+	_schedule_screen.back_requested.connect(_return_from_schedule)
 
 
 func _ensure_accommodation_screen() -> void:
@@ -164,6 +166,8 @@ func _swap_to(screen: Control) -> void:
 	var office_visible := screen == title_screen or (_desk_screen != null and screen == _desk_screen)
 	office_shell.visible = office_visible
 	UIStyleSystem.reveal(screen)
+	if screen == title_screen:
+		title_screen.enforce_live_office_overlay()
 
 
 func _show_title() -> void:
@@ -190,9 +194,8 @@ func _load_career(save_id: String) -> void:
 		return
 	_apply_office_career_state()
 	office_shell.set_title_idle(false)
-	# Start the title furniture fade and the actual room-camera move together.
-	# The old transition transformed a second authored desk; this moves one camera
-	# through the one canonical room.
+	# One room, one camera move: title furniture fades while the persistent office
+	# camera physically moves from MainMenu to Desk.
 	title_screen.play_desk_departure()
 	await office_shell.play_to(&"Desk", 1.55)
 	_show_desk_after_title_transition()
@@ -243,8 +246,17 @@ func _desk_opened(what: String) -> void:
 
 
 func _open_calendar_from_desk() -> void:
+	_schedule_return_to_desk = true
 	await office_shell.focus_calendar()
 	_show_schedule()
+
+
+func _return_from_schedule() -> void:
+	if _schedule_return_to_desk:
+		_schedule_return_to_desk = false
+		_show_desk()
+	else:
+		_show_training()
 
 
 func _apply_office_career_state() -> void:
@@ -277,7 +289,8 @@ func _ensure_esc_menu() -> void:
 	add_child(_esc_menu)
 	UIStyleSystem.apply(_esc_menu, _theme_name == "light")
 	_esc_menu.save_requested.connect(func() -> void:
-		if CareerManager.has_career(): CareerManager.save_career()
+		if CareerManager.has_career():
+			CareerManager.save_career()
 	)
 	_esc_menu.title_requested.connect(_show_title)
 	_esc_menu.load_requested.connect(_load_career)
@@ -352,13 +365,15 @@ func _apply_theme(theme_name: String, persist: bool = true) -> void:
 			Color(0.94, 0.92, 0.86) if resolved == "light" else Color(0.09, 0.10, 0.13),
 			Color(0.20, 0.18, 0.14) if resolved == "light" else Color(0.02, 0.02, 0.03),
 		)
-	title_screen.set_theme_name(resolved)
 	new_career_screen.set_light_mode(resolved == "light")
 	if match_center.has_method("set_light_mode"):
 		match_center.set_light_mode(resolved == "light")
 	UIHalftone.clear_cache()
 	UICardStock.clear_cache()
 	UIStyleSystem.apply(self, resolved == "light")
+	# The title deliberately breaks the generic opaque-screen rule so the live
+	# room can show through; apply its alpha treatment after the broad style walk.
+	title_screen.set_theme_name(resolved)
 	for palette_node in get_tree().get_nodes_in_group("ui_palette_3d"):
 		if palette_node.has_method("apply_ui_palette"):
 			palette_node.apply_ui_palette(resolved == "light")
