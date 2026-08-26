@@ -4,7 +4,7 @@ extends SceneTree
 
 const APPLICATION := preload("res://scenes/application.tscn")
 const OUTPUT_DIR := "res://artifacts/office-transition"
-const FRAME_COUNT := 32
+const FRAME_COUNT := 54
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -20,13 +20,9 @@ func _run() -> void:
 	var office := app.get_node("OfficeShell") as CanonicalOfficeShell
 	office.set_title_idle(false)
 	_save(0)
-	# Start both asynchronous presentation actions without awaiting either so the
-	# captured sequence is the composition the player actually sees.
 	title.play_desk_departure()
 	office.play_to(&"Desk", 1.55)
 	for index in range(1, FRAME_COUNT):
-		# Two rendered frames between captures gives a compact but smooth review
-		# sequence without making CI artifacts unnecessarily large.
 		await process_frame
 		await process_frame
 		_save(index)
