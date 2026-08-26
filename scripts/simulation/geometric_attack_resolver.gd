@@ -145,6 +145,13 @@ const NET_PATH_STRETCH_CAP: float = 2.0
 ## which is how the previous attempt at this moved the 4.00 m net rate by a point
 ## and a half in the wrong direction.
 const NET_CLEARANCE_SPREAD_SIGMAS: float = 2.0
+## A float has no Magnus dive to make a steep launch read as a serve. This is
+## the upper edge of its authored *intended* launch repertoire. Execution error
+## remains free to miss outside it: clipping the delivered random tail would
+## turn a choice constraint into an artificial outcome constraint. Resolution
+## flies the delivered launch and owns every resulting net/landing change;
+## presentation never reshapes it.
+const FLOAT_LAUNCH_ANGLE_LIMIT_DEGREES: float = 30.0
 ## The least air a hitter will accept over the tape when the margin they wanted
 ## is not on offer.
 ##
@@ -729,6 +736,7 @@ static func resolve_serve(
 		AttackSwingModel.vertical_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 		AttackSwingModel.bearing_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 		AttackSwingModel.power_error_scale(control, SERVE_SPREAD_MULTIPLIER, false),
+		str(server.primary_serve_style).to_lower().contains("float"),
 	)
 	## **The one launch state.** Everything below reads pace, angle and gravity
 	## from here and from nowhere else, which is the whole of what this pass
@@ -842,6 +850,7 @@ static func _serve_launch(
 	## quantity is named and reachable when that decision is made.
 	## See `docs/design/CONTACT_AND_BALL_FLIGHT.md`, UNRESOLVED PHYSICS 7.
 	_power_shortfall_scale: float,
+	is_float_serve: bool = false,
 ) -> Dictionary:
 	var aimed_to_net := _ground_distance_to_net(
 		contact, bearing_degrees, attacking_negative_y
@@ -877,6 +886,12 @@ static func _serve_launch(
 	## cannot get the ball over still tries to get the ball over.
 	var forced := {}
 	var forced_height := -INF
+	## A float is struck through the centre with almost no rotation; it does not
+	## buy the Magnus dive that makes a steep topspin launch viable. Above this
+	## angle the authoritative solve produced the visibly rising, punt-like ball
+	## the float report identifies. This is a launch-selection constraint, not a
+	## display curve: candidates still use the shared projectile model and must
+	## clear the same tape.
 	## **Spin outside, pace inside, because the floor of the pace sweep is a
 	## property of the spin.** A ball falling at 25 m/s squared needs more speed
 	## to carry the same distance than one falling at 9.8, so there is no single
@@ -952,6 +967,15 @@ static func _serve_launch(
 				best_ground_speed = ground_speed
 				best = candidate
 	if not best.is_empty():
+		if is_float_serve \
+				and float(best.angle_degrees) > FLOAT_LAUNCH_ANGLE_LIMIT_DEGREES:
+			best["angle_degrees"] = FLOAT_LAUNCH_ANGLE_LIMIT_DEGREES
+			best["mode"] = "driven_flattened"
+			best["cleared"] = _height_at_net(
+				float(best.speed_mps), FLOAT_LAUNCH_ANGLE_LIMIT_DEGREES,
+				contact_height_meters, ground_to_net,
+				float(best.gravity_mps2),
+			) >= needed
 		return best
 	if not forced.is_empty():
 		return forced

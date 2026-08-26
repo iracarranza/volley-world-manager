@@ -362,6 +362,18 @@ static func recognize_release_progress(
 	var delivered := clampf(
 		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
 	)
+	## Coordination error changes when the ball arrives, so it also changes the
+	## takeoff that would physically meet that ball. Keeping the pre-error offset
+	## here published two incompatible clocks: achieved T1 (takeoff at release),
+	## a 0.122 s flight, and 0.197 s from takeoff to hand contact. Playback could
+	## satisfy them only by accelerating the body. Reconcile the relationship
+	## from the delivered flight while retaining the intended offset beside it.
+	var intended_takeoff_offset := takeoff_offset
+	var physical_takeoff_offset := delivered - float(result.get(
+		"takeoff_to_contact_seconds", 0.22
+	))
+	if actual_tempo <= 1:
+		actual_tempo = 0 if physical_takeoff_offset < -0.025 else 1
 	result.merge({
 		"requested_tempo": called_tempo,
 		"requested_relationship": TEMPO_RELATIONSHIPS[called_tempo],
@@ -369,11 +381,15 @@ static func recognize_release_progress(
 		"recognized_tempo": actual_tempo,
 		"recognized_relationship": TEMPO_RELATIONSHIPS[actual_tempo],
 		"approach_start_delay_seconds": delay,
-		"takeoff_offset_seconds": takeoff_offset,
+		"intended_takeoff_offset_seconds": intended_takeoff_offset,
+		"takeoff_offset_seconds": physical_takeoff_offset,
+		"physical_takeoff_offset_seconds": physical_takeoff_offset,
 		"expected_flight_seconds": observed_expected,
 		"target_flight_seconds": target,
 		"coordination_error_seconds": delivered - observed_expected,
 		"delivered_flight_seconds": delivered,
+		"achieved_tempo": actual_tempo,
+		"achieved_relationship": TEMPO_RELATIONSHIPS[actual_tempo],
 	}, true)
 	return result
 

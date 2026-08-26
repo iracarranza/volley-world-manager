@@ -16,6 +16,7 @@ var player_actors: Dictionary = {}
 var live_positions: Dictionary = {}
 var home_player_ids: Dictionary = {}
 var camera_preset: int = 0
+var camera_follow_player_id: int = -1
 var light_mode_enabled: bool = false
 
 ## Where the match is watched from.
@@ -562,7 +563,7 @@ func set_player_pose(
 	if not player_actors.has(player_id):
 		return
 	var actor := player_actors[player_id] as PlayerActor3D
-	actor.set_highlighted(highlighted)
+	actor.set_highlighted(highlighted or player_id == camera_follow_player_id)
 	## Carried rather than derived here. The resolver already decided how
 	## strained this contact was; the court's job is to hand that verdict to the
 	## actor, not to form a second opinion from the positions.
@@ -579,6 +580,16 @@ func set_player_pose(
 	actor.set_pose(
 		event_type, elevation, phase, direction, highlighted, action_context
 	)
+	## Contact is the single shared frame between the incoming and outgoing ball.
+	## Fit only at that frame; carrying the fit through a follow-through would
+	## freeze the hand where the ball used to be.
+	if absf(phase) <= 0.02 \
+			and action_context.has("contact_anchor_height_meters"):
+		actor.fit_contact_anchor_height(
+			event_type,
+			float(action_context["contact_anchor_height_meters"]),
+			action_context,
+		)
 
 
 ## What this voli stands like between contacts. See `ReadyStance`.
@@ -610,32 +621,18 @@ func at_the_net(player_id: int) -> bool:
 func reset_player_poses() -> void:
 	for actor_resource in player_actors.values():
 		var actor := actor_resource as PlayerActor3D
-		actor.set_highlighted(false)
+		actor.set_highlighted(actor.player_id == camera_follow_player_id)
 		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 
 func trajectory_world_position(trajectory: Dictionary, progress: float) -> Vector3:
-	var t := clampf(progress, 0.0, 1.0)
-	var start := Vector2(trajectory.get("start_position", Vector2(0.5, 0.5)))
-	var control := Vector2(trajectory.get("control_position", start.lerp(
-		Vector2(trajectory.get("end_position", start)), 0.5
-	)))
-	var end := Vector2(trajectory.get("end_position", start))
-	var inverse := 1.0 - t
-	var court_position := inverse * inverse * start \
-		+ 2.0 * inverse * t * control + t * t * end
-	## The same parabola `BallTrajectory.height_at_progress` draws, from the same
-	## function, because it is the same ball. These were two hand-kept copies of
-	## one curve -- the court sampled a Dictionary and the resource sampled its own
-	## fields -- and a court that disagreed with the model about where the ball was
-	## would have been invisible until something checked one against the other.
-	var height := BallFlightModel.height_between(
-		float(trajectory.get("start_height_meters", 1.0)),
-		float(trajectory.get("end_height_meters", 1.0)),
-		float(trajectory.get("duration", 0.5)),
-		t,
+	## No local trajectory arithmetic. The screen, probes and court all consume
+	## the same sample, including the launch's spin-adjusted gravity.
+	var sample := BallPresentation.sample(trajectory, progress)
+	var court_position := Vector2(sample.court)
+	return tactical_to_world(
+		court_position.x, court_position.y, float(sample.height_meters)
 	)
-	return tactical_to_world(court_position.x, court_position.y, height)
 
 
 func trajectory_world_velocity(trajectory: Dictionary, progress: float) -> Vector3:
@@ -724,9 +721,30 @@ func _watch_the_ball(ball_position: Vector3) -> void:
 
 
 func cycle_camera() -> String:
-	camera_preset = (camera_preset + 1) % CAMERA_PRESETS.size()
+	return set_camera_preset(camera_preset + 1)
+
+
+func camera_preset_names() -> Array[String]:
+	var names: Array[String] = []
+	for preset in CAMERA_PRESETS:
+		names.append(str(preset["name"]))
+	return names
+
+
+func set_camera_preset(index: int) -> String:
+	camera_preset = posmod(index, CAMERA_PRESETS.size())
 	_apply_camera_preset()
 	return str(CAMERA_PRESETS[camera_preset]["name"])
+
+
+## Camera focus is presentation state only. Keeping it on the court lets the
+## followed voli retain their nameplate while contact playback highlights other
+## actors in the normal way.
+func set_camera_follow_target(player_id: int) -> void:
+	camera_follow_player_id = player_id if player_actors.has(player_id) else -1
+	for raw_id in player_actors:
+		var actor := player_actors[raw_id] as PlayerActor3D
+		actor.set_highlighted(int(raw_id) == camera_follow_player_id)
 
 
 func _apply_camera_preset() -> void:

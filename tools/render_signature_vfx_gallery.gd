@@ -9,11 +9,15 @@ const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 
 const CASES := [
-	{"move": "block_crush", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28},
-	{"move": "high_hands", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28},
-	{"move": "foresight", "event": RallyEventModel.EventType.SET, "pose": 0.76, "anchor": 2.04},
-	{"move": "heroics", "event": RallyEventModel.EventType.DIG, "pose": 0.76, "anchor": 1.15},
-	{"move": "monster_block", "event": RallyEventModel.EventType.BLOCK, "pose": 0.84, "anchor": 2.34},
+	{"id": "block_crush", "move": "block_crush", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28, "succeeded": true},
+	{"id": "high_hands", "move": "high_hands", "event": RallyEventModel.EventType.ATTACK, "pose": 0.92, "anchor": 2.28, "succeeded": true},
+	{"id": "foresight_read", "move": "foresight", "event": RallyEventModel.EventType.DIG, "pose": 0.54, "anchor": 1.42, "succeeded": true},
+	## A misread is the same pre-contact field: presentation must not reveal the
+	## answer early. Only later authoritative body/ball playback distinguishes it.
+	{"id": "foresight_misread", "move": "foresight", "event": RallyEventModel.EventType.DIG, "pose": 0.54, "anchor": 1.42, "succeeded": false},
+	{"id": "heroics_committed", "move": "heroics", "event": RallyEventModel.EventType.DIG, "pose": 0.76, "anchor": 1.15, "succeeded": true},
+	{"id": "heroics_denied", "move": "heroics", "event": RallyEventModel.EventType.DIG, "pose": 0.34, "anchor": 1.15, "succeeded": false},
+	{"id": "monster_block", "move": "monster_block", "event": RallyEventModel.EventType.BLOCK, "pose": 0.84, "anchor": 2.34, "succeeded": true},
 ]
 const PHASES := [
 	{"id": "gather", "phase": -0.20},
@@ -57,6 +61,7 @@ func _ready() -> void:
 
 func _render_case(case_data: Dictionary) -> void:
 	var move := str(case_data.move)
+	var case_id := str(case_data.id)
 	var event_type := int(case_data.event)
 	var pose_phase := float(case_data.pose)
 	var anchor := float(case_data.anchor)
@@ -66,10 +71,10 @@ func _render_case(case_data: Dictionary) -> void:
 	surge.contact_anchor_meters = anchor
 	for phase_data in PHASES:
 		var phase := float(phase_data.phase)
-		surge.set_cue(move, 1.0, true, phase)
+		surge.set_cue(move, 1.0, bool(case_data.succeeded), phase)
 		await get_tree().process_frame
 		await get_tree().process_frame
-		var path := "res://artifacts/signature-vfx/%s_%s.png" % [move, str(phase_data.id)]
+		var path := "res://artifacts/signature-vfx/%s_%s.png" % [case_id, str(phase_data.id)]
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://artifacts/signature-vfx"))
 		get_tree().root.get_texture().get_image().save_png(path)
 		print("saved %s" % ProjectSettings.globalize_path(path))

@@ -2682,8 +2682,14 @@ func resolve(
 	home_tempo_timing["achieved_release_progress"] = hitter_release_progress
 	home_tempo_timing["release_position"] = hitter_start
 	home_tempo_timing["full_approach_start"] = hitter_full_approach_start
-	home_tempo_timing["achieved_tempo"] = home_effective_tempo
-	home_tempo_timing["achieved_relationship"] = \
+	## `home_effective_tempo` remains the release-progress classification used by
+	## gameplay that was already resolved against it. The coordination record's
+	## achieved tempo also includes the delivered ball clock: a ball arriving
+	## before the published takeoff-to-contact interval is physically T0 even
+	## when the hitter had reached a nominal T1 plant. Keeping both prevents a
+	## reporting correction from silently changing this rally's block/outcome.
+	home_tempo_timing["release_progress_tempo"] = home_effective_tempo
+	home_tempo_timing["release_progress_relationship"] = \
 		ApproachMechanicsModel.achieved_relationship(
 			home_tempo_timing, hitter_release_progress
 		)
@@ -5239,8 +5245,8 @@ func _resolve_opponent_transition(
 	opponent_tempo_timing["achieved_release_progress"] = opponent_release_progress
 	opponent_tempo_timing["release_position"] = opponent_approach_start
 	opponent_tempo_timing["full_approach_start"] = opponent_full_approach_start
-	opponent_tempo_timing["achieved_tempo"] = opponent_effective_tempo
-	opponent_tempo_timing["achieved_relationship"] = \
+	opponent_tempo_timing["release_progress_tempo"] = opponent_effective_tempo
+	opponent_tempo_timing["release_progress_relationship"] = \
 		ApproachMechanicsModel.achieved_relationship(
 			opponent_tempo_timing, opponent_release_progress
 		)
@@ -7020,8 +7026,8 @@ func _resolve_home_continuation(
 	cont_tempo_timing["release_position"] = hitter_start
 	cont_tempo_timing["full_approach_start"] = \
 		continuation_full_approach_start
-	cont_tempo_timing["achieved_tempo"] = continuation_effective_tempo
-	cont_tempo_timing["achieved_relationship"] = \
+	cont_tempo_timing["release_progress_tempo"] = continuation_effective_tempo
+	cont_tempo_timing["release_progress_relationship"] = \
 		ApproachMechanicsModel.achieved_relationship(
 			cont_tempo_timing, continuation_release_progress
 		)
