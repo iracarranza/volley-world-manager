@@ -14,6 +14,13 @@ This document maps the researched broadcast corpus onto the existing Volley Worl
 - **RESEARCH** — no sufficiently close corpus evidence yet.
 - **CORPUS GAP** — explicitly absent from the current corpus.
 
+The targeted continuation pass uses the requested evidence labels. **DIRECT
+MATCH** means the new physical event and commentary category align without
+normalizing the quote. **PBP** and **ANALYST** identify the broadcast layer.
+**TERM VALIDATED** / **TERM NOT VALIDATED** apply only to the literal term, not
+to a related volleyball phenomenon. **OPTIONAL / OFTEN SILENT** and **UI /
+DIAGNOSTIC** retain their existing routing meanings.
+
 ## Core broadcast rule
 
 The simulation event stream and spoken commentary stream should not be identical. A blank PBP line is valid; a blank analyst line should be normal.
@@ -37,8 +44,8 @@ The play-by-play commentator should primarily describe observable physical event
 | Reception seam conflict | MATCH | PBP / Analyst | Directly represented by neither passer taking ownership. |
 | Arrival margin | UI / DIAGNOSTIC | — / Analyst evidence | Preserve for causality; not routine PBP. |
 | Nearby support count | UI / DIAGNOSTIC | — | Preserve in analysis UI. |
-| Platform dime | PARTIAL | Named moment | Exceptional reception is represented; exact VWM label is not validated by current corpus. |
-| Scramble pass | RESEARCH | PBP / named moment | `[RESEARCH: late successful reception / scramble pass]` |
+| Platform dime | PARTIAL / TERM NOT VALIDATED | Named moment | S7–S9 validate `dime` for reception, but none says the compound `platform dime`. Do not treat the compound term as validated. |
+| Scramble pass | DIRECT MATCH | PBP / named moment | S5 directly calls the setter scrambling after two passers converge and the first contact sends the offense out of system. |
 
 ### Required serve subtype structure
 
@@ -59,18 +66,18 @@ serve_error
 | VWM concept | Status | Speaker | Mapping / action |
 |---|---|---|---|
 | Setter decision | ANALYST EVIDENCE | Analyst | The invisible tactical decision should not require PBP speech. |
-| Called play followed | ANALYST EVIDENCE | Analyst | Useful interpretation after the delivered set/attack. |
+| Called play followed | ANALYST EVIDENCE / PARTIAL | Analyst | S7 and S9 analyze visible overload/combination patterns and the decoy's effect. They infer the pattern from replay; they do not establish that a called play was signalled or followed. |
 | No active play / default offense | ANALYST EVIDENCE / UI | Analyst | Internal tactical context, not a live contact. |
 | Called play abandoned | ANALYST EVIDENCE | Analyst | Useful causal context; not standalone PBP. |
 | Routine set | MATCH | PBP | Corpus supports compact setter→hitter/location calls. |
 | Quick / fast-tempo set | MATCH | PBP | Tempo is explicitly called when visually salient. |
-| Emergency / out-of-system set | PARTIAL | PBP | One strong high-ball example exists; one corpus row labelled emergency set is actually a free-ball return and should not be used as set evidence. |
+| Emergency / out-of-system set | DIRECT MATCH | PBP / Analyst | S5 and S9 directly show setters salvaging off-target first contacts. The old S1 “Free ball coming” row has been relabelled because it is a return over the net, not a set. |
 | Set accuracy % | UI / DIAGNOSTIC | — | Tactical display. |
-| Requested vs achieved tempo | ANALYST EVIDENCE | Analyst | `[RESEARCH: commentary on visible tempo adjustment / mismatch]` |
-| Setter early/late timing | ANALYST EVIDENCE / UI | Analyst | Causal evidence; exact spoken treatment not yet researched. |
-| Dime | RESEARCH | Named moment | `[RESEARCH: high-quality set isolating hitter from second blocker]` |
-| Save set | RESEARCH | Named moment / Analyst | `[RESEARCH: setter salvages poor first contact]` |
-| Telegraphed | RESEARCH | Analyst | `[RESEARCH: predictable set / blockers reading setter]` |
+| Requested vs achieved tempo | ANALYST / DIRECT MATCH | Analyst | S6 says the tempo was not fast enough and that Ewert had to slow down and wait; S7 independently identifies an early hitter and a set behind him. |
+| Setter early/late timing | ANALYST / DIRECT MATCH | Analyst | S6 and S7 explicitly discuss hitter/setter timing and connection. Keep numerical timing in UI, but the visible mismatch is broadcast-natural analysis. |
+| Dime | PARTIAL | Named moment | `Dime` is TERM VALIDATED for reception in S7–S9. No targeted source uses it for a high-quality set isolating a hitter, so the setter-specific placeholder remains unresolved. |
+| Save set | ANALYST / DIRECT MATCH | Named moment / Analyst | S9 describes Orro turning an off-net pass into “almost a perfect set even in an imperfect situation”; S5 independently calls Sekita's scramble. |
+| Telegraphed | ANALYST / DIRECT MATCH | Analyst | S6 explicitly calls a pipe predictable; S8 explains that an out-of-system outside set was known in advance. The exact word `telegraphed` remains unvalidated. |
 
 Avoid broadcast lines that merely expose engine state such as “assignment activated.” Keep the engine state, research the spoken form separately.
 
@@ -97,7 +104,7 @@ attack
 │   ├── tip
 │   ├── roll
 │   ├── tool
-│   └── seam        [RESEARCH]
+│   └── seam        [DIRECT MATCH]
 └── error
     ├── net
     ├── long
@@ -121,11 +128,11 @@ attack
 | Attack wide | MATCH | PBP | Directly represented. |
 | Antenna/contact fault | MATCH | PBP | Directly represented. |
 | Whiff / missed delivered set | CORPUS GAP | PBP | `[RESEARCH: hitter completely misses delivered set]` |
-| Seam kill | RESEARCH | PBP / named moment | `[RESEARCH: kill through defensive seam]` |
-| Emergency tip | RESEARCH | PBP / named moment | `[RESEARCH: emergency/non-approach tip]` |
-| Cross-court bullet | PARTIAL | Named moment | Cross-court attack is supported; this exact emphatic label is not corpus-validated. |
+| Seam kill | DIRECT MATCH | PBP / named moment | S5 explicitly calls Lucarelli hammering the ball into an open seam on a pipe kill. |
+| Emergency tip | CORPUS GAP | PBP / named moment | NOT FOUND: the reviewed broadcasts contain many approach tips, power tips, and roll shots, but no reliable emergency/non-approach tip call. Placeholder retained. |
+| Cross-court bullet | PARTIAL / TERM NOT VALIDATED | Named moment | Cross-court attack and emphatic hard-crosscourt calls are supported; the exact compound label was not found. |
 | Attack quality % | UI / DIAGNOSTIC | — | Do not require live spoken percentage. |
-| Hitter early/late | ANALYST EVIDENCE / UI | Analyst | Causal evidence for timing failures. |
+| Hitter early/late | ANALYST / DIRECT MATCH | Analyst | S6 and S7 explicitly identify a hitter waiting for the ball or arriving early. Exact measurements remain UI / DIAGNOSTIC. |
 
 The scoring category `attack_error` can remain, but it should never force one generic physical description such as “goes wide.”
 
@@ -138,15 +145,16 @@ The scoring category `attack_error` can remain, but it should never force one ge
 | Block forms | MATCH / OPTIONAL | PBP | Observable, but not every formed block needs a call. |
 | Stuff block | MATCH | PBP | Directly represented. |
 | Roof | MATCH | PBP / named moment | Directly represented as a stuff-block concept. |
-| Block touch / soft touch | MATCH | PBP | Directly represented as touch/off-hands slowing the attack. |
+| Block touch / soft touch | MATCH / TERM NOT VALIDATED | PBP | Touch/off-hands/deflection behavior is directly represented. The exact term `soft block` is not; two corpus physical labels were corrected to avoid implying that it was spoken. |
 | Missed / no block | MATCH | PBP / Analyst | “No block” / incomplete close is directly represented. |
 | Late block | MATCH | PBP / Analyst | Physical outcome supported. |
 | Primary close % | UI / DIAGNOSTIC | — | Keep numerical value out of routine speech. |
 | Assistant close % | UI / DIAGNOSTIC | — | Same. |
 | Block quality % | UI / DIAGNOSTIC | — | Same. |
-| Got tooled | PARTIAL | Named moment | Tool phenomenon is represented; exact VWM label not validated. |
-| Funnel | RESEARCH | Analyst / named moment | `[RESEARCH: intentional block funnel into floor defense]` |
-| Beaten by tempo | RESEARCH | Analyst | Late/no block is represented, but explicit causal tempo language is not yet established. |
+| Got tooled | PARTIAL / TERM NOT VALIDATED | Named moment | Tool phenomenon is represented; the exact phrase `got tooled` was not found. |
+| Funnel | PARTIAL / TERM NOT VALIDATED | Analyst / named moment | S9 describes blockers taking away cross-court while a defender holds short for the tip. That is block-defense shaping, but neither an intentional funnel nor the exact term `funnel` is stated; placeholder retained. |
+| Beaten by tempo | ANALYST / DIRECT MATCH | Analyst | S8 says Japan's speed leaves “no time to close up the seam”; S9 says the tempo is too quick after the decoy holds the middle. The exact phrase `beaten by tempo` is not validated. |
+| Block touch intentionally creates dig chance | PARTIAL | Analyst | S5 praises a block deflection that goes directly to Leal, but the commentator does not infer that Wallace intentionally directed it. Intentional-touch placeholder retained. |
 
 A stuff block, `ROOF` tag, block-point result, and analyst reaction are four representations of one event. They should not automatically create four independent spoken lines.
 
@@ -157,14 +165,14 @@ A stuff block, `ROOF` tag, block-point result, and analyst reaction are four rep
 | VWM concept | Status | Speaker | Mapping / action |
 |---|---|---|---|
 | Routine dig | MATCH / OPTIONAL | PBP | Often minimally called; can be silent in dense rallies. |
-| Exceptional / sprawl dig | MATCH / PARTIAL | PBP / named moment | Exceptional defensive saves are strongly represented; exact `sprawl dig` label is not validated. |
+| Exceptional / sprawl dig | MATCH / TERM NOT VALIDATED | PBP / named moment | Exceptional defensive saves are strongly represented; exact `sprawl dig` label is not validated. |
 | Failed dig | MATCH | PBP | Observable result can be called; exact causes need event data. |
 | Defensive control % | UI / DIAGNOSTIC | — | Tactical display. |
 | Defender movement distance | UI / DIAGNOSTIC | — | Tactical display. |
 | No defensive plan | ANALYST EVIDENCE / UI | Analyst | Internal tactical state. |
-| Defender outside assignment | ANALYST EVIDENCE | Analyst | Preserve causal evidence; research broadcast phrasing separately. |
+| Defender outside assignment | ANALYST EVIDENCE / PARTIAL | Analyst | S10 says Sekita stepped in and “probably should have stayed where he was,” directly linking movement away from his effective position to the missed dig. It does not prove a formal team assignment, so the VWM assignment placeholder remains. |
 | Assignment fit | ANALYST EVIDENCE | Analyst | Same. |
-| Missed the easy one | RESEARCH | Analyst / named moment | `[RESEARCH: defender fails despite comfortable arrival margin]` |
+| Missed the easy one | ANALYST / DIRECT MATCH | Analyst / named moment | S7 says Fornal should have handled a float serve easily; S10 independently says a jump float should have been dealt with and identifies Lavia's indecision. |
 
 ---
 
@@ -221,24 +229,24 @@ Important pacing rule: commentary should become **shorter**, not more verbose, d
 
 ### Phenomenon supported; exact VWM label not validated
 
-- Platform dime — PARTIAL
-- Dime — PARTIAL / needs targeted setter evidence
-- Cross-court bullet — PARTIAL
-- Got tooled — PARTIAL
-- Soft block — PARTIAL
-- Sprawl dig — PARTIAL
+- Platform dime — TERM NOT VALIDATED; `dime` alone is validated for reception
+- Dime as a set — PARTIAL; `dime` is TERM VALIDATED only for reception
+- Cross-court bullet — TERM NOT VALIDATED
+- Got tooled — TERM NOT VALIDATED; `tool`, `off the block`, and `off the hands` are supported equivalents
+- Soft block — TERM NOT VALIDATED; `touch`, `off the hands`, and `deflection` are supported equivalents
+- Sprawl dig — TERM NOT VALIDATED; the physical action is supported
+- Funnel — TERM NOT VALIDATED; block-defense shaping is PARTIAL evidence
+- Beaten by tempo — TERM NOT VALIDATED; the causal phenomenon is a DIRECT MATCH
 
-### Research backlog
+### Remaining research backlog
 
-- Scramble pass
-- Save set
-- Telegraphed
-- Seam kill
-- Emergency tip
-- Funnel
-- Beaten by tempo
-- Missed the easy one
-- Whiff / missed set
+- Whiff / hitter completely misses a delivered set — CORPUS GAP
+- Emergency/non-approach tip — CORPUS GAP
+- Intentional block funnel — PARTIAL; direct intent remains a gap
+- Block touch intentionally creating a dig opportunity — PARTIAL; direct intent remains a gap
+- Dime used for a high-quality set — CORPUS GAP
+- Defender leaving a formal called assignment — PARTIAL; only effective-position evidence was found
+- Called offensive play being explicitly identified as called/followed — PARTIAL; visible pattern evidence was found
 
 A corpus gap does **not** mean remove the mechanic or VWM-specific term; it means do not claim real-broadcast validation yet.
 
@@ -339,34 +347,38 @@ The existing factor strings should be reclassified rather than independently app
 
 ## Targeted research placeholders
 
-### High priority
+Only placeholders with direct new support are closed. PARTIAL and CORPUS GAP
+items remain explicit rather than being promoted through analogy.
 
-- `[RESEARCH: attack whiff / hitter misses delivered ball]`
-- `[RESEARCH: setter saves a bad first contact]`
-- `[RESEARCH: blocker explicitly beaten by attack tempo]`
-- `[RESEARCH: setter/set described as telegraphed or predictable]`
-- `[RESEARCH: kill through defensive seam]`
-- `[RESEARCH: intentional block funnel]`
-- `[RESEARCH: late successful / scramble reception]`
-- `[RESEARCH: defender misses despite ample arrival time]`
-
-### Medium priority
-
-- `[RESEARCH: emergency second-contact setter]`
-- `[RESEARCH: emergency/non-approach tip]`
-- `[RESEARCH: analyst discussion of hitter/setter timing mismatch]`
-- `[RESEARCH: analyst discussion of defender leaving assignment]`
-- `[RESEARCH: analyst discussion of called offensive play/pattern]`
-- `[RESEARCH: block touch intentionally creating a dig opportunity]`
+| Target | Classification | Evidence / disposition |
+|---|---|---|
+| Attack whiff / hitter misses delivered ball | CORPUS GAP | NOT FOUND. S5 says “a little whiff” about an ambiguous middle-net play after a broken contact, not a hitter completely missing a delivered set. Placeholder retained. |
+| Setter saves a bad first contact | DIRECT MATCH / ANALYST | RESOLVED by S5 and S9. |
+| Blocker explicitly beaten by attack tempo | DIRECT MATCH / ANALYST | RESOLVED by S8's “no time to close up the seam” and supported independently by S9. |
+| Predictable / telegraphed set | DIRECT MATCH / ANALYST | RESOLVED for `predictable` by S6 and for blocker foreknowledge by S8; exact `telegraphed` remains TERM NOT VALIDATED. |
+| Kill through defensive seam | DIRECT MATCH / PBP | RESOLVED by S5. |
+| Intentional block funnel | PARTIAL / ANALYST | S9 supports block-defense shaping, not an intentional funnel. Placeholder retained. |
+| Late successful / scramble reception | DIRECT MATCH / PBP | RESOLVED by S5's conflicted reception and deep emergency second contact. |
+| Defender misses despite apparently easy ball | DIRECT MATCH / ANALYST | RESOLVED independently by S7 and S10. |
+| Emergency second-contact setter | DIRECT MATCH / PBP / ANALYST | RESOLVED by S5 (libero setting from deep) and S6 (non-setter forced to take second contact). |
+| Emergency/non-approach tip | CORPUS GAP | NOT FOUND. Approach tips, power tips, and roll shots were rejected as nonmatches. Placeholder retained. |
+| Hitter/setter timing mismatch | DIRECT MATCH / ANALYST | RESOLVED independently by S6 and S7. |
+| Defender leaving assignment | PARTIAL / ANALYST | S10 directly supports leaving an effective position, but a formal called assignment remains an inference. Placeholder retained at the assignment level. |
+| Called offensive play/pattern | PARTIAL / ANALYST | S7 and S9 directly support visible overload/combination-pattern analysis, but neither quote establishes that a called play was signalled or followed. Placeholder retained at the called-play level. |
+| Block touch intentionally creates dig chance | PARTIAL / ANALYST | S5 directly supports a useful deflection to a defender, but not intent. Placeholder retained. |
 
 ### Terminology validation
 
-- `[VALIDATE TERM: platform dime]`
-- `[VALIDATE TERM: dime]`
-- `[VALIDATE TERM: got tooled]`
-- `[VALIDATE TERM: soft block]`
-- `[VALIDATE TERM: sprawl dig]`
-- `[VALIDATE TERM: cross-court bullet]`
+| Exact term | Classification | Corpus result |
+|---|---|---|
+| `platform dime` | TERM NOT VALIDATED | NOT FOUND. Three independent broadcasts use `dime` for reception without `platform`. |
+| `dime` | TERM VALIDATED | S7: “He dimed that ball”; S8: “Dime pass”; S9: “passed a dime.” All three refer to reception, not setting. |
+| `got tooled` | TERM NOT VALIDATED | NOT FOUND. Close equivalents `tool`, `off the block`, `off the hands`, and “tool the block” occur. |
+| `soft block` | TERM NOT VALIDATED | NOT FOUND. Close equivalents `touch`, `off the hands`, and `deflection` occur. |
+| `sprawl dig` | TERM NOT VALIDATED | NOT FOUND. Physical sprawls/diving saves are called `dig`, `save`, `pancake`, or `one-arm stab` in the reviewed material. |
+| `cross-court bullet` | TERM NOT VALIDATED | NOT FOUND. `Cross-court`, `hard crosscourt`, and `hammers` occur separately. |
+| `funnel` | TERM NOT VALIDATED | NOT FOUND. S9 instead describes what the blockers take away and where the floor defender holds. |
+| `beaten by tempo` | TERM NOT VALIDATED | NOT FOUND verbatim. S8's close equivalent says speed is used to beat the block and leaves no time to close the seam. |
 
 ---
 
