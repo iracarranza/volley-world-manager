@@ -1,4 +1,4 @@
-name: Render canonical office greybox
+name: Render canonical office
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
     paths:
       - 'scenes/office/**'
       - 'tools/render_canonical_office_greybox.gd'
+      - 'tools/render_canonical_office_low_poly.gd'
       - 'tools/render_current_title_screen.gd'
       - '.github/workflows/render-canonical-office.yml'
       - 'project.godot'
@@ -49,7 +50,7 @@ jobs:
             --script tools/render_current_title_screen.gd
           ls -lh artifacts/current-title-screen/
 
-      - name: Render seven office cameras
+      - name: Render seven greybox cameras
         run: |
           xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
             --path . \
@@ -57,6 +58,15 @@ jobs:
             --resolution 1280x720 \
             --script tools/render_canonical_office_greybox.gd
           ls -lh artifacts/canonical-office-greybox/
+
+      - name: Render seven low-poly cameras
+        run: |
+          xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            --path . \
+            --rendering-method gl_compatibility \
+            --resolution 1280x720 \
+            --script tools/render_canonical_office_low_poly.gd
+          ls -lh artifacts/canonical-office-low-poly/
 
       - name: Upload current title screen
         uses: actions/upload-artifact@v4
@@ -66,10 +76,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload office render packet
+      - name: Upload greybox render packet
         uses: actions/upload-artifact@v4
         with:
           name: canonical-office-greybox-renders
           path: artifacts/canonical-office-greybox/*.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload low-poly render packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-office-low-poly-renders
+          path: artifacts/canonical-office-low-poly/*.png
           if-no-files-found: error
           retention-days: 14
