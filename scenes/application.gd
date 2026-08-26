@@ -24,6 +24,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 @onready var new_career_screen: VolleyballNewCareerScreen = %NewCareerScreen
 @onready var journal: VolleyballJournalScreen = %Journal
 @onready var match_center: Control = %MatchCenter
+@onready var career_navigation: CareerNavigation = %CareerNavigation
 
 var _wipe: ScreenWipe = null
 var _has_shown := false
@@ -37,7 +38,6 @@ var _esc_menu: EscMenu = null
 var _desk_screen: DeskScreen = null
 var _encyclopedia_screen: EncyclopediaScreen = null
 var _theme_name := "dark"
-var _schedule_return_to_desk := false
 
 
 func _ready() -> void:
@@ -59,11 +59,18 @@ func _ready() -> void:
 	journal.accommodation_requested.connect(_show_accommodation)
 	journal.kitchen_requested.connect(_show_kitchen)
 	journal.menu_requested.connect(_open_menu)
+	career_navigation.destination_requested.connect(_navigate_career)
+	var journal_sections := journal.get_node_or_null("%Sections") as TabContainer
+	if journal_sections != null:
+		journal_sections.tab_changed.connect(func(_tab: int) -> void:
+			call_deferred("_apply_journal_vocabulary")
+		)
 	call_deferred("_connect_match_center_signal")
 
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
 	_load_theme()
+	_apply_journal_vocabulary()
 	_show_title()
 
 
@@ -72,11 +79,10 @@ func _ensure_training_screen() -> void:
 		return
 	_training_screen = TrainingScreenScript.new()
 	_adopt_screen(_training_screen)
-	_training_screen.back_requested.connect(_show_journal)
-	_training_screen.schedule_requested.connect(func() -> void:
-		_schedule_return_to_desk = false
-		_show_schedule()
-	)
+	_training_screen.back_requested.connect(_show_desk)
+	# This is a cross-workspace link, not ownership: Training describes what is
+	# taught; Calendar remains the peer workspace that owns when it happens.
+	_training_screen.schedule_requested.connect(_show_schedule)
 
 
 func _ensure_scouting_screen() -> void:
@@ -84,7 +90,7 @@ func _ensure_scouting_screen() -> void:
 		return
 	_scouting_screen = ScoutingScreenScript.new()
 	_adopt_screen(_scouting_screen)
-	_scouting_screen.back_requested.connect(_show_journal)
+	_scouting_screen.back_requested.connect(_show_desk)
 
 
 func _ensure_schedule_screen() -> void:
@@ -92,7 +98,7 @@ func _ensure_schedule_screen() -> void:
 		return
 	_schedule_screen = ScheduleScreenScript.new()
 	_adopt_screen(_schedule_screen)
-	_schedule_screen.back_requested.connect(_return_from_schedule)
+	_schedule_screen.back_requested.connect(_show_desk)
 
 
 func _ensure_accommodation_screen() -> void:
@@ -100,7 +106,7 @@ func _ensure_accommodation_screen() -> void:
 		return
 	_accommodation_screen = AccommodationScreenScript.new()
 	_adopt_screen(_accommodation_screen)
-	_accommodation_screen.back_requested.connect(_show_journal)
+	_accommodation_screen.back_requested.connect(_show_desk)
 
 
 func _ensure_kitchen_screen() -> void:
@@ -108,7 +114,7 @@ func _ensure_kitchen_screen() -> void:
 		return
 	_kitchen_screen = KitchenScreenScript.new()
 	_adopt_screen(_kitchen_screen)
-	_kitchen_screen.back_requested.connect(_show_journal)
+	_kitchen_screen.back_requested.connect(_show_desk)
 
 
 func _ensure_encyclopedia_screen() -> void:
@@ -116,7 +122,7 @@ func _ensure_encyclopedia_screen() -> void:
 		return
 	_encyclopedia_screen = EncyclopediaScreenScript.new()
 	_adopt_screen(_encyclopedia_screen)
-	_encyclopedia_screen.back_requested.connect(_show_journal)
+	_encyclopedia_screen.back_requested.connect(_show_desk)
 
 
 func _ensure_lock_in_screen() -> void:
@@ -133,6 +139,10 @@ func _adopt_screen(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	screen.visible = false
 	add_child(screen)
+	# Lazy screens are appended after the persistent navigation node. Keep the
+	# navigation above ordinary content, and the wipe above both.
+	if career_navigation != null and career_navigation.is_inside_tree():
+		move_child(career_navigation, -1)
 	if _wipe != null and _wipe.is_inside_tree():
 		move_child(_wipe, -1)
 	var is_light := _theme_name == "light"
@@ -165,9 +175,48 @@ func _swap_to(screen: Control) -> void:
 			candidate.visible = candidate == screen
 	var office_visible := screen == title_screen or (_desk_screen != null and screen == _desk_screen)
 	office_shell.visible = office_visible
+	_sync_career_navigation(screen)
 	UIStyleSystem.reveal(screen)
 	if screen == title_screen:
 		title_screen.enforce_live_office_overlay()
+
+
+func _sync_career_navigation(screen: Control) -> void:
+	if _desk_screen != null and screen == _desk_screen:
+		career_navigation.present(&"desk", screen, true)
+	elif screen == journal:
+		career_navigation.present(&"journal", screen)
+	elif _schedule_screen != null and screen == _schedule_screen:
+		career_navigation.present(&"calendar", screen)
+	elif _training_screen != null and screen == _training_screen:
+		career_navigation.present(&"training", screen)
+	elif _scouting_screen != null and screen == _scouting_screen:
+		career_navigation.present(&"scouting", screen)
+	elif _accommodation_screen != null and screen == _accommodation_screen:
+		career_navigation.present(&"housing", screen)
+	elif _kitchen_screen != null and screen == _kitchen_screen:
+		career_navigation.present(&"kitchen", screen)
+	elif _encyclopedia_screen != null and screen == _encyclopedia_screen:
+		career_navigation.present(&"encyclopedia", screen)
+	else:
+		# Title, New Career, Lock-In and Match are not ordinary workspaces.
+		career_navigation.clear()
+
+
+func _navigate_career(destination: StringName) -> void:
+	match destination:
+		&"desk": _show_desk()
+		&"journal": _show_journal()
+		&"calendar":
+			if career_navigation.current_destination() == &"desk":
+				_open_calendar_from_desk()
+			else:
+				_show_schedule()
+		&"training": _show_training()
+		&"scouting": _show_scouting()
+		&"housing": _show_accommodation()
+		&"kitchen": _show_kitchen()
+		&"encyclopedia": _show_encyclopedia()
 
 
 func _show_title() -> void:
@@ -211,7 +260,19 @@ func _show_desk_after_title_transition() -> void:
 
 func _show_journal() -> void:
 	journal.refresh()
+	_apply_journal_vocabulary()
 	_show_only(journal)
+
+
+func _apply_journal_vocabulary() -> void:
+	# `Home` is an old implementation name. The Journal's first page is the
+	# manager's current working record; career home is the physical Desk.
+	var sections := journal.get_node_or_null("%Sections") as TabContainer
+	if sections != null and sections.get_tab_count() > 0:
+		sections.set_tab_title(0, "Current")
+	var section_title := journal.get_node_or_null("%SectionTitle") as Label
+	if section_title != null and section_title.text == "Home":
+		section_title.text = "Current"
 
 
 func _ensure_desk_screen() -> void:
@@ -246,17 +307,8 @@ func _desk_opened(what: String) -> void:
 
 
 func _open_calendar_from_desk() -> void:
-	_schedule_return_to_desk = true
 	await office_shell.focus_calendar()
 	_show_schedule()
-
-
-func _return_from_schedule() -> void:
-	if _schedule_return_to_desk:
-		_schedule_return_to_desk = false
-		_show_desk()
-	else:
-		_show_training()
 
 
 func _apply_office_career_state() -> void:
