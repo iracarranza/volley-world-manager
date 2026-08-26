@@ -1,21 +1,23 @@
-extends SceneTree
+extends Node
+## Application-level routing test. This runs as an ordinary project scene rather
+## than with Godot's `--script` MainLoop override, so the project's GameManager
+## and CareerManager autoload identifiers exist exactly as they do in gameplay.
 
-const ApplicationScene := preload("res://scenes/application.tscn")
 const NavigationScript := preload("res://scenes/components/career_navigation.gd")
+const ApplicationScene := preload("res://scenes/application.tscn")
 
 var _failures: Array[String] = []
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	call_deferred("_run")
 
 
 func _run() -> void:
-	root.size = Vector2i(1280, 720)
 	var app := ApplicationScene.instantiate()
-	root.add_child(app)
+	add_child(app)
 	for _i in 8:
-		await process_frame
+		await get_tree().process_frame
 
 	var nav := app.get_node("CareerNavigation") as CareerNavigation
 	_expect(nav != null, "Application owns one persistent navigation shell")
@@ -24,7 +26,7 @@ func _run() -> void:
 	app.call("_ensure_training_screen")
 	var training := app.get("_training_screen") as Control
 	app.call("_swap_to", training)
-	await process_frame
+	await get_tree().process_frame
 	_expect(nav.current_destination() == &"training", "Training is a peer destination")
 	_expect(is_equal_approx(training.offset_top, NavigationScript.HEADER_HEIGHT), "Training is inset below the global header")
 	_expect(_has_back_route(training, app), "Training Back routes to Desk")
@@ -32,7 +34,7 @@ func _run() -> void:
 	app.call("_ensure_schedule_screen")
 	var calendar := app.get("_schedule_screen") as Control
 	app.call("_swap_to", calendar)
-	await process_frame
+	await get_tree().process_frame
 	_expect(nav.current_destination() == &"calendar", "Calendar is a first-class peer destination")
 	_expect(is_zero_approx(training.offset_top), "leaving Training restores its layout")
 	_expect(_has_back_route(calendar, app), "Calendar Back routes to Desk rather than Training")
@@ -46,14 +48,14 @@ func _run() -> void:
 		app.call(str(entry[0]))
 		var screen := app.get(str(entry[1])) as Control
 		app.call("_swap_to", screen)
-		await process_frame
+		await get_tree().process_frame
 		_expect(nav.current_destination() == entry[2], "%s is a peer destination" % entry[2])
 		_expect(_has_back_route(screen, app), "%s Back routes to Desk" % entry[2])
 
 	var journal := app.get_node("Journal") as Control
 	app.call("_swap_to", journal)
 	app.call("_apply_journal_vocabulary")
-	await process_frame
+	await get_tree().process_frame
 	_expect(nav.current_destination() == &"journal", "Journal is a peer destination, not the hub")
 	var section_title := journal.get_node_or_null("%SectionTitle") as Label
 	_expect(section_title != null and section_title.text == "Current", "Journal presents Current rather than Home")
@@ -65,22 +67,22 @@ func _run() -> void:
 	app.call("_ensure_desk_screen")
 	var desk := app.get("_desk_screen") as Control
 	app.call("_swap_to", desk)
-	await process_frame
+	await get_tree().process_frame
 	_expect(nav.current_destination() == &"desk", "Desk remains the spatial home destination")
 	_expect(is_zero_approx(desk.offset_top), "Desk remains a full spatial surface")
 
 	var match_center := app.get_node("MatchCenter") as Control
 	app.call("_swap_to", match_center)
-	await process_frame
+	await get_tree().process_frame
 	_expect(not nav.visible and nav.current_destination().is_empty(), "presence mode suppresses ordinary navigation")
 
 	if _failures.is_empty():
 		print("APPLICATION_NAVIGATION_TEST PASS")
-		quit(0)
+		get_tree().quit(0)
 	else:
 		for failure in _failures:
 			push_error("APPLICATION_NAVIGATION_TEST " + failure)
-		quit(1)
+		get_tree().quit(1)
 
 
 func _has_back_route(screen: Object, app: Object) -> bool:
