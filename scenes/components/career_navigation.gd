@@ -30,6 +30,10 @@ var _last_content_screen: Control = null
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# This is global career chrome, not content. Dynamic workspaces may carry
+	# their own CanvasItem ordering, so make the contract explicit rather than
+	# depending on the order lazy screens happened to be appended to Application.
+	z_index = 40
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
 	clear()
