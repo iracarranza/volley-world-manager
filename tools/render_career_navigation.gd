@@ -19,7 +19,7 @@ func _run() -> void:
 	for _i in 14:
 		await get_tree().process_frame
 
-	var journal := app.get_node("Journal") as Control
+	var journal := app.get_node("CareerWorkspaceHost/Journal") as Control
 	app.call("_apply_journal_vocabulary")
 	app.call("_swap_to", journal)
 	await _settle(journal)
