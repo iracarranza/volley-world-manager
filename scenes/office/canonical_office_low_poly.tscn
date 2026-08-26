@@ -1,0 +1,36 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource path="res://scenes/office/canonical_office_low_poly.gd" type="Script" id="1"]
+
+[sub_resource type="Environment" id="Environment_office_low_poly"]
+background_mode = 1
+background_color = Color(0.055, 0.058, 0.064, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.78, 0.76, 0.71, 1)
+ambient_light_energy = 0.48
+
+[node name="CanonicalOfficeLowPoly" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_office_low_poly")
+
+[node name="WindowLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-52, -25, 0)
+light_color = Color(0.92, 0.94, 1, 1)
+light_energy = 0.78
+shadow_enabled = true
+
+[node name="WarmRoomFill" type="OmniLight3D" parent="."]
+position = Vector3(-0.55, 1.85, -0.75)
+light_color = Color(1, 0.78, 0.57, 1)
+light_energy = 0.46
+omni_range = 4.0
+shadow_enabled = false
+
+[node name="DeskFill" type="OmniLight3D" parent="."]
+position = Vector3(1.05, 1.65, -1.0)
+light_color = Color(1, 0.9, 0.76, 1)
+light_energy = 0.28
+omni_range = 2.4
+shadow_enabled = false
