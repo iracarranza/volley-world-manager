@@ -1,10 +1,11 @@
 extends SceneTree
-## Captures the actual title-overlay fade, persistent office camera move, and the
-## final swap to the transparent Desk interaction layer.
+## Compact review capture of the live MainMenu -> Desk move. Four rendered
+## frames elapse between PNGs, so 28 captures cover the full 1.55s transition
+## without spending CI time encoding dozens of near-identical full-size PNGs.
 
 const APPLICATION := preload("res://scenes/application.tscn")
 const OUTPUT_DIR := "res://artifacts/office-transition"
-const FRAME_COUNT := 58
+const FRAME_COUNT := 28
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -24,13 +25,12 @@ func _run() -> void:
 	office.play_to(&"Desk", 1.55)
 	var swapped := false
 	for index in range(1, FRAME_COUNT):
-		await process_frame
-		await process_frame
-		# Application performs this same swap immediately after play_to(Desk)
-		# resolves. Mirror it here so the artifact includes the real endpoint rather
-		# than leaving an invisible-but-present title Control over the room.
+		for _frame in 4:
+			await process_frame
 		if not swapped and StringName(office.get("_active_name")) == &"Desk":
-			app.call("_show_desk_after_title_transition")
+			# Application hides the title at exactly this point before showing the
+			# transparent Desk layer. The review only needs the visual endpoint.
+			title.visible = false
 			swapped = true
 			await process_frame
 		_save(index)
