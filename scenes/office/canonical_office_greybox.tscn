@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource path="res://scenes/office/canonical_office_greybox.gd" type="Script" id="1"]
+
+[sub_resource type="Environment" id="Environment_office"]
+background_mode = 1
+background_color = Color(0.105, 0.105, 0.11, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.86, 0.82, 0.74, 1)
+ambient_light_energy = 0.65
+
+[node name="CanonicalOfficeGreybox" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_office")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-48, -28, 0)
+light_energy = 1.15
+shadow_enabled = true
