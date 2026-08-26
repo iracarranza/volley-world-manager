@@ -68,6 +68,7 @@ func _ready() -> void:
 	call_deferred("_connect_match_center_signal")
 
 	_wipe = ScreenWipeScript.new()
+	_wipe.z_index = 80
 	add_child(_wipe)
 	_load_theme()
 	_apply_journal_vocabulary()
@@ -273,6 +274,12 @@ func _apply_journal_vocabulary() -> void:
 	var section_title := journal.get_node_or_null("%SectionTitle") as Label
 	if section_title != null and section_title.text == "Home":
 		section_title.text = "Current"
+	# Keep internal section ids stable for the large existing Journal script, but
+	# translate any visible navigation control that still presents that id.
+	for node in journal.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button != null and str(button.get_meta("section", "")) == "Home":
+			button.text = "Current"
 
 
 func _ensure_desk_screen() -> void:
@@ -338,6 +345,7 @@ func _ensure_esc_menu() -> void:
 	if _esc_menu != null:
 		return
 	_esc_menu = EscMenuScript.build()
+	_esc_menu.z_index = 100
 	add_child(_esc_menu)
 	UIStyleSystem.apply(_esc_menu, _theme_name == "light")
 	_esc_menu.save_requested.connect(func() -> void:
