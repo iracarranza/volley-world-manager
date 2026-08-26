@@ -3,15 +3,17 @@
 ## Scope and transcription method
 
 This is a research corpus of broadcast language, not dialogue for Volley World
-Manager.  The ten recordings below were treated as primary audiovisual
-sources.  Sampling was rally-led: a contact was identified from the picture,
+Manager. The thirteen recordings below contributed retained evidence. The
+targeted caption search covered 28 official full-match broadcasts; together
+with the four earlier manually sampled sources, the documented review spans 32
+recordings. Sampling was rally-led: a contact was identified from the picture,
 the surrounding call was replayed, and only the words audible in that interval
 were transcribed.  Words have not been polished or expanded.  A dash in the
 speaker field means that the voice could not be identified confidently.  Square
 brackets describe overlap or a contact about which the booth said nothing; they
 are editorial metadata and are not purported speech.
 
-For S5–S10, the official upload's English original-language captions were used
+For S5–S13, the official upload's English original-language captions were used
 to locate and transcribe candidate passages. Each retained passage was checked
 against the corresponding video action; obvious caption errors in player names
 were corrected only when the picture and roster identity made the correction
@@ -133,12 +135,74 @@ treated as timecode from the original telecast master.
 * **Booth:** two English voices are audible; names are not credited in the upload metadata
 * **Text acquisition:** English original-language captions checked against the full-match video action
 
+## S11 — Brazil vs. Japan (Volleyball World)
+
+* **Match title:** Brazil vs. Japan — Semi Final | VNL 2025 — Full Match
+* **Competition:** 2025 Volleyball Nations League, women — semifinal
+* **Teams:** Brazil vs. Japan
+* **Source:** [Official Volleyball World full-match upload](https://www.youtube.com/watch?v=X_pv2nfY8yM)
+* **Duration:** 2:06:42
+* **Booth:** two English voices are audible; names are not credited in the upload metadata
+* **Text acquisition:** English original-language captions checked against the full-match video action
+
+## S12 — Czechia vs. USA (Volleyball World)
+
+* **Match title:** Czechia vs. USA | VNL 2025 — Full Match | Week 1
+* **Competition:** 2025 Volleyball Nations League, women
+* **Teams:** Czechia vs. United States
+* **Source:** [Official Volleyball World full-match upload](https://www.youtube.com/watch?v=MsZp3iz_6KI)
+* **Duration:** 2:21:13
+* **Booth:** two English voices are audible; names are not credited in the upload metadata
+* **Text acquisition:** English original-language captions checked against the full-match video action
+
+## S13 — China vs. USA (Volleyball World)
+
+* **Match title:** China vs. USA | VNL 2025 — Full Match | Week 3
+* **Competition:** 2025 Volleyball Nations League, women
+* **Teams:** China vs. United States
+* **Source:** [Official Volleyball World full-match upload](https://www.youtube.com/watch?v=teFuBW7yvUk)
+* **Duration:** 2:06:35
+* **Booth:** two English voices are audible; names are not credited in the upload metadata
+* **Text acquisition:** English original-language captions checked against the full-match video action
+
+## Expanded targeted-search pool
+
+The following official Volleyball World full-match uploads were also screened
+through their English original-language caption tracks. Candidate passages were
+rejected when the physical event did not match the requested case or when the
+wording was only a nearby concept. They therefore do not receive source keys or
+corpus rows, but they are part of the documented negative-search scope.
+
+| Upload | Official match | Duration |
+|---|---|---:|
+| [4krltF0OwMA](https://www.youtube.com/watch?v=4krltF0OwMA) | Germany vs. Japan, VNL 2025 Week 3 | 1:53:21 |
+| [uMAuZu5bq6U](https://www.youtube.com/watch?v=uMAuZu5bq6U) | Japan vs. Türkiye, VNL 2025 quarterfinal | 2:08:49 |
+| [BEVcwxnoAwc](https://www.youtube.com/watch?v=BEVcwxnoAwc) | Japan vs. Argentina, VNL 2025 Week 3 | 2:24:14 |
+| [o-E31sQlLF8](https://www.youtube.com/watch?v=o-E31sQlLF8) | France vs. USA, VNL 2025 Week 2 | 2:19:02 |
+| [74tBsMKQuqE](https://www.youtube.com/watch?v=74tBsMKQuqE) | Canada vs. USA, VNL 2025 Week 3 | 2:05:08 |
+| [DykP0EdwJYk](https://www.youtube.com/watch?v=DykP0EdwJYk) | France vs. Japan, VNL 2025 Week 2 | 2:02:47 |
+| [RmZZsIdnlE4](https://www.youtube.com/watch?v=RmZZsIdnlE4) | Serbia vs. USA, VNL 2025 Week 2 | 2:01:01 |
+| [TSR3_o48Kl8](https://www.youtube.com/watch?v=TSR3_o48Kl8) | Poland vs. Japan, VNL 2025 bronze match | 1:49:23 |
+| [EhWRUU_ll2I](https://www.youtube.com/watch?v=EhWRUU_ll2I) | Japan vs. Italy, VNL 2025 Week 2 | 2:03:27 |
+| [pw457RkLcoU](https://www.youtube.com/watch?v=pw457RkLcoU) | France vs. Poland, VNL 2025 Week 3 | 2:26:24 |
+| [VH9SI3Dh0E8](https://www.youtube.com/watch?v=VH9SI3Dh0E8) | USA vs. Poland, VNL 2025 Week 2 | 1:36:39 |
+| [bufgvevHKQ8](https://www.youtube.com/watch?v=bufgvevHKQ8) | Türkiye vs. Italy, VNL 2025 Week 3 | 2:07:06 |
+| [G3N62yv7TKI](https://www.youtube.com/watch?v=G3N62yv7TKI) | USA vs. Türkiye, Women's VNL 2023 semifinal | 1:59:38 |
+| [RQHeDLq4bpY](https://www.youtube.com/watch?v=RQHeDLq4bpY) | Brazil vs. Türkiye, VNL 2025 Week 2 | 1:50:20 |
+| [B-eKL0hIqUA](https://www.youtube.com/watch?v=B-eKL0hIqUA) | USA vs. Italy, VNL 2025 quarterfinal | 1:37:48 |
+| [xF4nKarMQ-M](https://www.youtube.com/watch?v=xF4nKarMQ-M) | USA vs. Türkiye, VNL 2024 Week 2 | 2:04:12 |
+| [M2IfS9CHo30](https://www.youtube.com/watch?v=M2IfS9CHo30) | Poland vs. Italy, VNL 2025 gold match | 1:26:12 |
+| [V-PC4mjsz1Q](https://www.youtube.com/watch?v=V-PC4mjsz1Q) | Japan vs. Germany, VNL 2024 Week 2 | 2:12:14 |
+| [bIeBY6nMoXQ](https://www.youtube.com/watch?v=bIeBY6nMoXQ) | Japan vs. Brazil, VNL 2025 Week 3 | 1:12:30 |
+
 ## Coverage and absences
 
 The corpus deliberately includes bare names, minimal outcome calls, silence,
 analyst overlap, and targeted nonmatches. `physical event` describes the
-observed contact rather than normalizing the announcer's vocabulary. No
-reliable direct example was found for a completely missed/whiffed attack, an
-emergency/non-approach tip, an intentional block funnel, or a block touch whose
+observed contact rather than normalizing the announcer's vocabulary. The
+expanded pass found direct evidence for an emergency/out-of-system tip,
+intentional funnel strategy, and a huddle instruction followed on court. No
+reliable direct example was found for a completely missed/whiffed attack, a
+floor defender leaving a formal called assignment, or a block touch whose
 dig-producing direction the commentator described as intentional. These remain
 explicit gaps rather than receiving conjectural entries.

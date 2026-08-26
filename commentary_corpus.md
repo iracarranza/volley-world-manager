@@ -67,7 +67,7 @@ for review. Bracketed text is an observation, not spoken commentary.
 | S6 | 00:13:11 | — | emergency second contact by non-setter | And this ball has to be Briggs that takes a second contact. His outlet, shortest outlet is probably to go back to Garcia. | The analyst explains Briggs's forced second contact after the setter cannot take it. |
 | S6 | 00:40:58 | — | predictable set | It was, like, a little bit predictable on the pipe. | Replay follows a Japanese block of the USA pipe attack; predictability is the commentator's inference. |
 | S6 | 00:51:50 | — | hitter/setter timing mismatch | The tempo was not fast enough. Jordan Ewert, he really wanted to be on this ball a little bit quicker. Has to slow down, wait. Ball drops. | Ewert slows his approach to wait for the set and then attacks into the net. |
-| S7 | 00:09:27 | — | offensive overload / called pattern | Yeah, overload on the left side. Love it. You talk about that overload, getting the middle to go in the 31 gap to hold and setting it super fast over the top. | Replay analysis identifies the 31-gap decoy and fast outside ball; the play call itself is inferred from the visible pattern. |
+| S7 | 00:09:27 | — | offensive overload / visible pattern | Yeah, overload on the left side. Love it. You talk about that overload, getting the middle to go in the 31 gap to hold and setting it super fast over the top. | Replay analysis identifies the 31-gap decoy and fast outside ball; the play call itself is inferred from the visible pattern. |
 | S7 | 00:43:24 | — | hitter/setter timing mismatch | No, I feel like he's a little early. I just feel like the connection's off. So, he's early and then the set's behind him. | The analyst answers a question about whether the preceding ball was a setting mistake. |
 | S7 | 01:39:06 | — | excellent reception / dime | Everyone was shallow except him. He dimed that ball. | Replay analysis praises Maique's isolated reception before Brazil runs the middle. |
 | S7 | 01:57:06 | — | apparently easy reception missed | Ball passed a little bit off the net. It was a float serve. Fornal should have scooped up easily. | The analyst attributes Poland's off-net reception to Fornal failing to control a float serve that looked routine. |
@@ -80,18 +80,26 @@ for review. Bracketed text is an observation, not spoken commentary.
 | S9 | 01:07:15 | — | setter salvages poor first contact | Even when they're targeting Sylla, that ball's coming off the net. Orro gets her hands around it. She gets her feet there and throws it outside with zero spin. That's almost a perfect set even in an imperfect situation. | Replay shows Sylla's pass off the net and Orro moving under it to deliver a hittable outside set. |
 | S10 | 00:57:07 | — | apparently easy reception missed | This is a little jump floater, and really that should have been dealt with. Lavia is off balance. He's not sure; he doesn't commit to it. | Japan's low-risk jump float becomes an ace when Lavia fails to control it. |
 | S10 | 01:30:38 | — | defender leaves effective position | Sekita's stepping in. He knows where he's coming, and he probably should have stayed where he was, actually. He would have got his hips right under it, made a better dig. | Replay analysis attributes the missed dig to Sekita stepping away from his original defensive position. |
+| S11 | 00:07:14 | Analyst exchange (names not credited) | offensive overload / visible pattern | You had the middle going on a slide, then the D ball, a back-court attack coming from right back. Really difficult to defend when you have two hitters in the same zone at different depths. Yeah, we call that an overload and it almost always splits the blocking assignments. | Replay analysis identifies two attackers at different depths in the same zone and names the resulting overload; it does not claim that the team called the play by that name. |
+| S11 | 00:07:46 | Analyst (name not credited) | intentional block-defense funnel | Yeah, both Japan's outsides are now having a lot of success with that cross-court shot. Brazil's blocking that line away, trying to funnel everything cross court, but Japan's outsides having a field day with it. | After a Japanese outside scores cross-court, the analyst infers that Brazil is intentionally removing line with the block to send attacks cross-court and notes that the plan is not succeeding. |
+| S11 | 01:31:23 | Analyst (name not credited) | block touch supports back-court defense | Brazil's blockers are completely dialed in this set. Everything they're either getting a stuff block on or really nice touch up front to slow it down for their back-court defense. | After another Brazilian touch at the net, the analyst states the defensive function of the team's block touches; no deliberate direction to a particular defender is claimed. |
+| S11 | 01:46:42 | Two-person booth (names not credited) | huddle request followed by outside attack | Yoshino outside. There it is. You asked for it in the huddle. It's delivered here off the block of Rosamaria. | The first rally after Japan's huddle sends the outside set to Yoshino, whose attack scores off the block; the booth explicitly links the action to the huddle request. |
+| S12 | 00:29:29 | Analyst exchange (names not credited) | emergency/out-of-system tip | I don't think that's necessarily dirty. I think it's more like clever, because I think dirty is more like if you're perfectly in system and then you just tip it right over. She was a little out of there. She kind of had to tip. | Replay shows the Czech attacker use a tip after an off-system setup; the analyst infers that the poor situation forced the choice rather than treating it as a planned approach tip. |
+| S12 | 02:01:00 | Analyst (name not credited) | called overload pattern followed | I'm thinking about, again, what they were talking about: Molly keeping her in front. So the idea there is to overload the blockers and make them pay attention to Molly with a quick ball in front, hopefully opening that outside attack up so there's a hole in the block. So it looked like it worked. | The USA huddle had just specified McCage running in front; on the next offensive phase she runs the front quick and the outside attack reaches the block seam. The analyst identifies the huddle instruction and infers its effect. |
+| S13 | 01:10:12 | Analyst (name not credited) | intentional defensive funnel toward libero | Yeah, USA trying to funnel the ball to Hentz, but that one going a little too short on her. | China sends a short attack over/around the block and Hentz dives forward; the analyst states USA's intended defensive target and explains why the ball evaded it. |
 
 ## Targeted-pass audit
 
-The new rows resolve the evidence gaps for setter rescue, tempo-beaten block,
-predictable set, seam kill, late/scramble reception, apparently easy reception
-miss, emergency second contact, and hitter/setter timing mismatch. The corpus
-also now has position-level and visible-pattern evidence, but not proof of a
-formal defensive assignment or a signalled offensive call. “Dime” is validated
-for reception in three independent broadcasts, not for a high-quality set.
+The targeted rows resolve the evidence gaps for setter rescue, tempo-beaten
+block, predictable set, seam kill, late/scramble reception, apparently easy
+reception miss, emergency second contact, emergency/out-of-system tip,
+hitter/setter timing mismatch, intentional funnel, and a called offensive
+instruction being followed. “Dime” is validated for reception in three
+independent corpus broadcasts, not for a high-quality set.
 
 No reliable direct example was found for an attacker completely whiffing a
-delivered set, an emergency/non-approach tip, an intentional block funnel, or a
-block touch described as intentionally creating a dig opportunity. The S5
-“whiff” and block-deflection rows are retained as explicit nonmatches/partial
-evidence rather than promoted into those categories.
+delivered set, a floor defender leaving a formal called assignment, or a block
+touch deliberately directed to create a dig opportunity. S11 directly links
+good touches to slowing the ball for back-court defense, but does not claim a
+particular touch direction was intentional. The S5 “whiff” and block-deflection
+rows remain explicit nonmatches/partial evidence rather than being promoted.
