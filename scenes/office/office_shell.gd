@@ -78,13 +78,18 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	if not name in CAMERA_NAMES:
 		push_warning("Unknown office camera: %s" % name)
 		return
+	# A second request no longer tears down the blend camera underneath the first
+	# tween. Desk hotspots can be clicked twice even while global navigation is
+	# disabled, so serialize those repeats and let the first transition settle.
+	while _blend_camera != null:
+		await get_tree().process_frame
+	if _active_name == name:
+		_set_camera_specific_visibility(name)
+		return
+	_set_navigation_enabled(false)
 	set_title_idle(false)
 	var target := _camera(name)
 	var source := _current_camera()
-	if source == target:
-		_active_name = name
-		_set_camera_specific_visibility(name)
-		return
 	_clear_blend_camera()
 	_blend_camera = Camera3D.new()
 	_blend_camera.name = "OfficeBlendCamera"
@@ -105,6 +110,22 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	_active_name = name
 	_clear_blend_camera()
 	_set_camera_specific_visibility(name)
+	_set_navigation_enabled(true)
+
+
+func _set_navigation_enabled(enabled: bool) -> void:
+	# Camera focus is itself navigation. While the room is physically moving,
+	# accepting a second workspace choice would allow an older coroutine to land
+	# after a newer route and overwrite it. Disable only the global peer controls;
+	# their visual state remains visible and the current route remains legible.
+	var app := get_parent()
+	if app == null:
+		return
+	var nav := app.get_node_or_null("CareerNavigation")
+	if nav == null:
+		return
+	for node in nav.find_children("*", "Button", true, false):
+		(node as Button).disabled = not enabled
 
 
 func _set_camera_specific_visibility(name: StringName) -> void:
