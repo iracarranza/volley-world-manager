@@ -9,10 +9,10 @@ signal exit_requested
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
-const BRAND_VEIL_OPACITY_DARK := 0.895
-const BRAND_VEIL_OPACITY_LIGHT := 0.87
-const BACKDROP_WASH_OPACITY := 0.08
-const RIGHT_BAND_OPACITY := 0.035
+## A little denser than the approved composition study: the room should remain
+## perceptible through the brand field without reducing the title's first read.
+const BRAND_VEIL_OPACITY_DARK := 0.92
+const BRAND_VEIL_OPACITY_LIGHT := 0.90
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var save_list: ItemList = %SaveList
@@ -50,26 +50,33 @@ func _ready() -> void:
 
 
 func _install_live_office_overlay() -> void:
+	# No second title-room representation. The persistent OfficeShell is already
+	# underneath this Control in Application. Everything here is UI laid over it.
 	if desk_surface != null:
 		desk_surface.visible = false
+	%Background.visible = false
+	%CourtBand.visible = false
 	%CourtLineA.visible = false
 	%CourtLineB.visible = false
 	_brand_veil = ColorRect.new()
 	_brand_veil.name = "BrandVeil"
 	_brand_veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_brand_veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_brand_veil.anchor_left = 0.0
+	_brand_veil.anchor_top = 0.0
 	_brand_veil.anchor_right = 0.56
+	_brand_veil.anchor_bottom = 1.0
 	_brand_veil.grow_horizontal = Control.GROW_DIRECTION_END
+	_brand_veil.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(_brand_veil)
-	move_child(_brand_veil, 1)
+	# The veil lives directly under the title Content and above the 3D room.
+	move_child(_brand_veil, 0)
 
 
 func enforce_live_office_overlay() -> void:
-	# UIStyleSystem owns broad screen styling and can touch the old decorative
-	# controls after this screen first configures itself. Reassert the title-only
-	# exceptions after that pass: no duplicate desk, and translucent room veils.
 	if desk_surface != null:
 		desk_surface.visible = false
+	%Background.visible = false
+	%CourtBand.visible = false
 	%CourtLineA.visible = false
 	%CourtLineB.visible = false
 	_apply_overlay_palette()
@@ -120,20 +127,17 @@ func set_theme_name(theme_name: String) -> void:
 	%Title.modulate = UIPalette.color(&"ink", _light_mode)
 	%Edition.modulate = UIPalette.color(&"accent", _light_mode)
 	_tint_menu(_light_mode)
-	# Application's style walk follows this call. Reapply the deliberate alpha
-	# values one frame later so generic ColorRect styling cannot make them opaque.
 	call_deferred("enforce_live_office_overlay")
 
 
 func _apply_overlay_palette() -> void:
+	if _brand_veil == null:
+		return
 	var canvas := UIPalette.color(&"canvas", _light_mode)
-	var canvas_alt := UIPalette.color(&"canvas_alt", _light_mode)
-	%Background.color = Color(canvas, BACKDROP_WASH_OPACITY)
-	%CourtBand.color = Color(canvas_alt, RIGHT_BAND_OPACITY)
-	if _brand_veil != null:
-		_brand_veil.color = Color(canvas, BRAND_VEIL_OPACITY_LIGHT if _light_mode else BRAND_VEIL_OPACITY_DARK)
+	_brand_veil.color = Color(canvas, BRAND_VEIL_OPACITY_LIGHT if _light_mode else BRAND_VEIL_OPACITY_DARK)
 
 
+## The office camera moves underneath this screen. This only clears title UI.
 func play_desk_departure() -> void:
 	if not visible:
 		return
@@ -143,16 +147,12 @@ func play_desk_departure() -> void:
 	tween.tween_property(%Brand, "modulate:a", 0.0, 0.78).set_delay(0.28)
 	if _brand_veil != null:
 		tween.tween_property(_brand_veil, "modulate:a", 0.0, 1.18).set_delay(0.12)
-	tween.tween_property(%Background, "modulate:a", 0.0, 1.10)
-	tween.tween_property(%CourtBand, "modulate:a", 0.0, 0.92)
 	await tween.finished
 
 
 func reset_departure() -> void:
 	%MenuPanel.modulate = Color.WHITE
 	%Brand.modulate = Color.WHITE
-	%Background.modulate = Color.WHITE
-	%CourtBand.modulate = Color.WHITE
 	if _brand_veil != null:
 		_brand_veil.modulate = Color.WHITE
 	enforce_live_office_overlay()
