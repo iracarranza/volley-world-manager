@@ -1,0 +1,25 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/office/office_shell.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/office/canonical_office_low_poly.tscn" id="2"]
+
+[node name="OfficeShell" type="SubViewportContainer"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+stretch = true
+script = ExtResource("1")
+
+[node name="OfficeViewport" type="SubViewport" parent="."]
+unique_name_in_owner = true
+transparent_bg = false
+handle_input_locally = false
+size = Vector2i(1280, 720)
+render_target_update_mode = 4
+
+[node name="CanonicalOfficeLowPoly" parent="OfficeViewport" instance=ExtResource("2")]
+unique_name_in_owner = true
