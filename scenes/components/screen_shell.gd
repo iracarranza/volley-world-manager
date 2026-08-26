@@ -100,6 +100,7 @@ static func build(
 	## The ribbon. Title on the left taking the slack, actions on the right, in
 	## the journal's own order and at its own type size.
 	var ribbon := HBoxContainer.new()
+	ribbon.name = "ScreenRibbon"
 	ribbon.add_theme_constant_override("separation", RIBBON_SEPARATION)
 	root.add_child(ribbon)
 	var title := Label.new()
