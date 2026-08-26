@@ -100,13 +100,13 @@ func _camera(parent: Node3D, name_: String, pos: Vector3, target: Vector3, fov :
 
 func _build_cameras() -> void:
 	var cams := Node3D.new(); cams.name = "Cameras"; add_child(cams)
-	# C0 pass 2: preserve the current title screen's asymmetric composition.
-	# The bed remains readable on the left, while the work zone owns the right.
-	_camera(cams, "MainMenu", Vector3(0.95, 5.75, 3.15), Vector3(0.45, 0.40, -0.55), 34.0)
-	_camera(cams, "TransitionMid", Vector3(0.98, 3.55, 1.95), Vector3(0.88, 0.72, -1.02), 45.0)
-	# Desk view is in front of the chair and pulled back/up enough to retain
-	# the calendar and history wall as part of the ordinary workspace.
-	var desk := _camera(cams, "Desk", Vector3(1.02, 1.56, 0.28), Vector3(1.06, 1.05, -1.62), 47.0)
+	# C0 pass 3: a higher, more title-like oblique. Bed-left and work-right stay
+	# readable, but the shot is less like a centred architectural survey.
+	_camera(cams, "MainMenu", Vector3(0.78, 6.85, 3.55), Vector3(0.38, 0.30, -0.42), 37.0)
+	_camera(cams, "TransitionMid", Vector3(0.92, 3.35, 1.65), Vector3(0.88, 0.82, -1.10), 46.0)
+	# The camera is physically between the chair and desk, so the chair is behind
+	# the player's eye. A wider view deliberately retains wall context above the desk.
+	var desk := _camera(cams, "Desk", Vector3(1.05, 1.28, -0.98), Vector3(1.08, 1.20, -1.90), 66.0)
 	desk.current = true
 	_camera(cams, "Calendar", Vector3(1.18, 1.62, -0.10), Vector3(1.62, 1.62, -1.94), 42.0)
 	_camera(cams, "Door", Vector3(0.72, 1.56, -0.05), Vector3(2.35, 1.0, 1.05), 50.0)
