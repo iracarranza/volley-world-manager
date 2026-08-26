@@ -4,10 +4,10 @@
 
 [sub_resource type="Environment" id="Environment_office"]
 background_mode = 1
-background_color = Color(0.105, 0.105, 0.11, 1)
+background_color = Color(0.095, 0.095, 0.102, 1)
 ambient_light_source = 3
-ambient_light_color = Color(0.94, 0.91, 0.84, 1)
-ambient_light_energy = 0.9
+ambient_light_color = Color(0.86, 0.82, 0.74, 1)
+ambient_light_energy = 0.5
 
 [node name="CanonicalOfficeGreybox" type="Node3D"]
 script = ExtResource("1")
@@ -16,6 +16,6 @@ script = ExtResource("1")
 environment = SubResource("Environment_office")
 
 [node name="KeyLight" type="DirectionalLight3D" parent="."]
-rotation_degrees = Vector3(-48, -28, 0)
-light_energy = 0.62
+rotation_degrees = Vector3(-42, -24, 0)
+light_energy = 0.88
 shadow_enabled = true
