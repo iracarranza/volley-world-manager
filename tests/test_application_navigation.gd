@@ -20,7 +20,10 @@ func _run() -> void:
 		await get_tree().process_frame
 
 	var nav := app.get_node("CareerNavigation") as CareerNavigation
+	var workspace_host := app.get_node("CareerWorkspaceHost") as Control
 	_expect(nav != null, "Application owns one persistent navigation shell")
+	_expect(workspace_host != null, "Application owns one ordinary-workspace host")
+	_expect(is_equal_approx(workspace_host.offset_top, NavigationScript.HEADER_HEIGHT), "workspace host reserves the navigation header height")
 	_expect(not nav.visible and nav.current_destination().is_empty(), "Title suppresses ordinary career navigation")
 
 	app.call("_ensure_training_screen")
@@ -28,7 +31,7 @@ func _run() -> void:
 	app.call("_swap_to", training)
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"training", "Training is a peer destination")
-	_expect(is_equal_approx(training.offset_top, NavigationScript.HEADER_HEIGHT), "Training is inset below the global header")
+	_expect(training.get_parent() == workspace_host, "Training lives in the shared ordinary-workspace host")
 	_expect(_has_back_route(training, app), "Training Back routes to Desk")
 
 	app.call("_ensure_schedule_screen")
@@ -36,7 +39,7 @@ func _run() -> void:
 	app.call("_swap_to", calendar)
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"calendar", "Calendar is a first-class peer destination")
-	_expect(is_zero_approx(training.offset_top), "leaving Training restores its layout")
+	_expect(calendar.get_parent() == workspace_host, "Calendar lives in the shared ordinary-workspace host")
 	_expect(_has_back_route(calendar, app), "Calendar Back routes to Desk rather than Training")
 
 	for entry in [
@@ -50,13 +53,15 @@ func _run() -> void:
 		app.call("_swap_to", screen)
 		await get_tree().process_frame
 		_expect(nav.current_destination() == entry[2], "%s is a peer destination" % entry[2])
+		_expect(screen.get_parent() == workspace_host, "%s shares the ordinary-workspace host" % entry[2])
 		_expect(_has_back_route(screen, app), "%s Back routes to Desk" % entry[2])
 
-	var journal := app.get_node("Journal") as Control
+	var journal := app.get_node("CareerWorkspaceHost/Journal") as Control
 	app.call("_swap_to", journal)
 	app.call("_apply_journal_vocabulary")
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"journal", "Journal is a peer destination, not the hub")
+	_expect(journal.get_parent() == workspace_host, "Journal shares the ordinary-workspace host")
 	var section_title := journal.get_node_or_null("%SectionTitle") as Label
 	_expect(section_title != null and section_title.text == "Current", "Journal presents Current rather than Home")
 	for node in journal.find_children("*", "Button", true, false):
@@ -69,7 +74,11 @@ func _run() -> void:
 	app.call("_swap_to", desk)
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"desk", "Desk remains the spatial home destination")
-	_expect(is_zero_approx(desk.offset_top), "Desk remains a full spatial surface")
+	_expect(desk.get_parent() == app, "Desk remains a full-screen spatial layer outside the inset workspace host")
+
+	app.call("_ensure_lock_in_screen")
+	var lock_in := app.get("_lock_in_screen") as Control
+	_expect(lock_in.get_parent() == app, "Lock-In remains a presence layer outside ordinary workspace geometry")
 
 	var match_center := app.get_node("MatchCenter") as Control
 	app.call("_swap_to", match_center)
