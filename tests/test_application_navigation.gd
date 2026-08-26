@@ -32,7 +32,8 @@ func _run() -> void:
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"training", "Training is a peer destination")
 	_expect(training.get_parent() == workspace_host, "Training lives in the shared ordinary-workspace host")
-	_expect(_has_back_route(training, app), "Training Back routes to Desk")
+	_expect(_has_back_route(training, app), "Training Back route remains wired as a compatibility fallback")
+	_expect_no_visible_shell_navigation(training, "Training")
 
 	app.call("_ensure_schedule_screen")
 	var calendar := app.get("_schedule_screen") as Control
@@ -40,7 +41,8 @@ func _run() -> void:
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"calendar", "Calendar is a first-class peer destination")
 	_expect(calendar.get_parent() == workspace_host, "Calendar lives in the shared ordinary-workspace host")
-	_expect(_has_back_route(calendar, app), "Calendar Back routes to Desk rather than Training")
+	_expect(_has_back_route(calendar, app), "Calendar Back route remains wired as a compatibility fallback")
+	_expect_no_visible_shell_navigation(calendar, "Calendar")
 
 	for entry in [
 		["_ensure_scouting_screen", "_scouting_screen", &"scouting"],
@@ -54,7 +56,8 @@ func _run() -> void:
 		await get_tree().process_frame
 		_expect(nav.current_destination() == entry[2], "%s is a peer destination" % entry[2])
 		_expect(screen.get_parent() == workspace_host, "%s shares the ordinary-workspace host" % entry[2])
-		_expect(_has_back_route(screen, app), "%s Back routes to Desk" % entry[2])
+		_expect(_has_back_route(screen, app), "%s Back route remains wired as a compatibility fallback" % entry[2])
+		_expect_no_visible_shell_navigation(screen, str(entry[2]))
 
 	var journal := app.get_node("CareerWorkspaceHost/Journal") as Control
 	app.call("_swap_to", journal)
@@ -68,9 +71,14 @@ func _run() -> void:
 		var button := node as Button
 		if button != null and str(button.get_meta("section", "")) == "Home":
 			_expect(button.text == "Current", "Journal navigation translates legacy Home id to Current")
+		if button != null and button.get_parent() != null and button.get_parent().name == &"Header" \
+				and button.text in NavigationScript.JOURNAL_LEGACY_PEERS:
+			_expect(not button.visible, "Journal suppresses duplicate %s peer button" % button.text)
 
 	app.call("_ensure_desk_screen")
 	var desk := app.get("_desk_screen") as Control
+	var office_shell := app.get_node("OfficeShell") as CanonicalOfficeShell
+	office_shell.snap_to(&"Desk")
 	app.call("_swap_to", desk)
 	await get_tree().process_frame
 	_expect(nav.current_destination() == &"desk", "Desk remains the spatial home destination")
@@ -102,6 +110,16 @@ func _has_back_route(screen: Object, app: Object) -> bool:
 		if connection.get("callable") == expected:
 			return true
 	return false
+
+
+func _expect_no_visible_shell_navigation(screen: Control, label: String) -> void:
+	for node in screen.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button == null or button.get_parent() == null:
+			continue
+		if button.get_parent().name == &"ScreenRibbon" \
+				and button.text in NavigationScript.WORKSPACE_REDUNDANT_ACTIONS:
+			_expect(not button.visible, "%s suppresses duplicate ribbon action %s" % [label, button.text])
 
 
 func _expect(condition: bool, message: String) -> void:
