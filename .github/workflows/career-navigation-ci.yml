@@ -7,10 +7,12 @@ on:
     paths:
       - 'scenes/application.gd'
       - 'scenes/application.tscn'
+      - 'scenes/office/**'
       - 'scenes/components/career_navigation.gd'
       - 'scenes/components/screen_shell.gd'
       - 'scenes/screens/title_screen.gd'
       - 'scenes/screens/title_screen.tscn'
+      - 'scenes/screens/desk_screen.gd'
       - 'scenes/screens/journal_screen.gd'
       - 'scenes/screens/journal_screen.tscn'
       - 'scenes/screens/training_screen.gd'
