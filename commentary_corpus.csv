@@ -1,0 +1,53 @@
+source,timestamp,speaker if identifiable,physical event,exact commentary,immediate context
+S1,00:12:41,Paul Sunderland,serve in play,"Hames, serving.",Nebraska serves to Wisconsin; routine pass follows.
+S1,00:13:08,Paul Sunderland,routine reception,"Good pass.",Wisconsin receives and runs the middle.
+S1,00:13:10,Paul Sunderland,quick/fast-tempo set,"Hilley, Rettke.",Quick set in front; Rettke attacks.
+S1,00:13:11,Paul Sunderland,attack kill,"And down.",Middle attack lands cleanly.
+S1,00:18:57,Paul Sunderland,serve long,"That serve is long.",Ball carries beyond the end line.
+S1,00:22:34,Paul Sunderland,shank,"Trouble on the pass.",Reception deflects well away from target.
+S1,00:22:37,Paul Sunderland,emergency/out-of-system set,"Free ball coming.",Receiver can only send a high ball over.
+S1,00:27:46,Paul Sunderland,tip,"Tipped over.",Attacker takes pace off into the front court.
+S1,00:27:48,Salima Rockwell,routine dig,"Nice cover.",Back-row defender controls the tip.
+S1,00:27:53,Paul Sunderland,transition offense,"Back to Wisconsin.",Wisconsin converts defense into an approach.
+S1,00:27:55,Paul Sunderland,tool/off hands,"Off the block and out.",Attack touches the outside hands and exits.
+S1,00:35:19,Paul Sunderland,serve into net,"Into the net.",Serve fails to cross.
+S1,00:41:03,Paul Sunderland,overpass,"Overpass.",Reception crosses the plane near the middle.
+S1,00:41:04,Paul Sunderland,stuff block / roof,"Rejected!",Front-row player puts the overpass straight down.
+S1,00:49:26,Paul Sunderland,exceptional/sprawl dig,"What a dig by Barnes!",Barnes sprawls and keeps a hard-driven ball alive.
+S1,00:49:30,Paul Sunderland,long rally,"Still alive.",Multiple digs extend the exchange.
+S1,00:49:35,Salima Rockwell,point-ending analyst reaction,"That is tremendous defense.",Spoken immediately after the whistle.
+S2,00:14:22,Paul Sunderland,ace,"Ace serve.",Serve lands untouched between passers.
+S2,00:18:06,Paul Sunderland,excellent reception,"Perfect pass.",Pass reaches the setter at the net.
+S2,00:18:08,Paul Sunderland,routine set,"Skinner on the left.",High outside set follows the pass.
+S2,00:18:09,Paul Sunderland,line attack,"Down the line.",Outside hitter scores inside the sideline.
+S2,00:24:51,Paul Sunderland,serve wide,"Serve is wide.",Ball misses the sideline.
+S2,00:29:13,—,routine reception,"[no call on reception]",Controlled pass; play-by-play resumes at the set.
+S2,00:29:15,Paul Sunderland,cross-court attack,"Skinner cross-court.",Attack travels diagonally and scores.
+S2,00:34:40,Paul Sunderland,attack into net,"Into the net.",Swing does not clear the tape.
+S2,00:38:17,Paul Sunderland,attack long,"That ball is long.",Attack lands beyond the end line.
+S2,00:44:06,Paul Sunderland,attack wide,"Wide.",Attack misses beyond the sideline.
+S2,00:51:32,Paul Sunderland,soft block / block touch,"Touch at the net.",Block slows the attack for the back row.
+S2,00:51:35,Salima Rockwell,attack coverage,"Great cover by Louisville.",Louisville retrieves its hitter's blocked ball.
+S2,01:02:11,Paul Sunderland,antenna/contact fault,"Off the antenna.",Attack contacts the antenna; whistle follows.
+S3,00:16:04,—,serve in play,"Koga with the serve.",Japan serves; USA passes in-system.
+S3,00:16:07,—,routine set,"And Poulter sets Thompson.",High ball goes to the right side.
+S3,00:16:09,—,attack kill,"Thompson puts it away.",Right-side attack lands.
+S3,00:21:36,—,seam/ownership confusion,"Neither player taking it.",Serve drops between two USA passers.
+S3,00:26:18,—,roll shot,"Rolls it over the block.",Japanese outside hitter sends a controlled shot deep.
+S3,00:26:22,—,late or incomplete block,"No block there.",USA attacks before the Japanese blocker closes.
+S3,00:31:44,—,routine dig,"Picked up by Robinson.",Robinson controls the attack in the back court.
+S3,00:31:47,—,emergency/out-of-system set,"High ball for Koga.",Japan sets from well off the net.
+S3,00:31:50,—,soft block / block touch,"Off the hands.",Block touch slows Koga's swing.
+S3,00:39:02,—,serve long,"Too long.",Serve lands beyond the baseline.
+S4,00:14:38,—,excellent reception,"That's a very good pass.",Poland passes to target and runs the middle.
+S4,00:14:40,—,quick/fast-tempo set,"Quick ball, Kakolewska.",Fast middle set is attacked.
+S4,00:14:41,—,stuff block / roof,"Roofed by Brazil.",Brazilian double block sends the attack straight down.
+S4,00:20:17,—,overpass,"Overpass, chance for Brazil.",Polish reception crosses the net.
+S4,00:20:18,—,attack kill,"And Gabi finishes it.",Gabi attacks the overpass for the point.
+S4,00:25:53,—,serve into net,"Serve into the net.",Polish serve clips the net and falls back.
+S4,00:30:29,—,tip,"Just a little tip.",Brazilian attacker places the ball behind the block.
+S4,00:30:31,—,exceptional/sprawl dig,"Brilliant save!",Polish defender dives forward and keeps the ball up.
+S4,00:30:35,—,long rally,"They keep it alive again.",Brazil returns another defended attack.
+S4,00:30:40,—,point-ending analyst reaction,"What a rally!",Spoken as the point ends; single-commentator broadcast.
+S4,00:36:12,—,attack wide,"She has hit that wide.",Polish outside attack misses the sideline.
+S4,00:42:08,—,attack coverage,"Covered by Macris.",Macris plays a ball rebounding from the block.
