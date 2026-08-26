@@ -15,6 +15,7 @@ on:
       - 'tools/render_canonical_office_low_poly.gd'
       - 'tools/render_current_title_screen.gd'
       - 'tools/render_integrated_office_ui.gd'
+      - 'tools/render_office_transition.gd'
       - '.github/workflows/render-canonical-office.yml'
       - 'project.godot'
   workflow_dispatch:
@@ -65,6 +66,15 @@ jobs:
             --script tools/render_integrated_office_ui.gd
           ls -lh artifacts/integrated-office-ui/
 
+      - name: Render title to desk transition
+        run: |
+          xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            --path . \
+            --rendering-method gl_compatibility \
+            --resolution 1280x720 \
+            --script tools/render_office_transition.gd
+          ls -lh artifacts/office-transition/
+
       - name: Render seven greybox cameras
         run: |
           xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
@@ -96,6 +106,14 @@ jobs:
         with:
           name: integrated-office-ui-renders
           path: artifacts/integrated-office-ui/*.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload office transition frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-office-title-to-desk-transition
+          path: artifacts/office-transition/*.png
           if-no-files-found: error
           retention-days: 14
 
