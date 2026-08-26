@@ -3,7 +3,26 @@ name: Render canonical office
 on:
   push:
     branches:
+      - main
       - chatgpt/canonical-office-greybox
+      - chatgpt/career-navigation
+    paths:
+      - 'scenes/office/**'
+      - 'scenes/application.gd'
+      - 'scenes/application.tscn'
+      - 'scenes/screens/title_screen.gd'
+      - 'scenes/screens/title_screen.tscn'
+      - 'scenes/screens/desk_screen.gd'
+      - 'tools/render_canonical_office_greybox.gd'
+      - 'tools/render_canonical_office_low_poly.gd'
+      - 'tools/render_current_title_screen.gd'
+      - 'tools/render_integrated_office_ui.gd'
+      - 'tools/render_office_transition.gd'
+      - '.github/workflows/render-canonical-office.yml'
+      - 'project.godot'
+  pull_request:
+    branches:
+      - main
     paths:
       - 'scenes/office/**'
       - 'scenes/application.gd'
