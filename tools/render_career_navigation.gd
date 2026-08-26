@@ -31,8 +31,43 @@ func _run() -> void:
 	await _settle(training)
 	_save("training")
 
+	app.call("_ensure_scouting_screen")
+	var scouting := app.get("_scouting_screen") as Control
+	app.call("_swap_to", scouting)
+	await _settle(scouting)
+	_save("scouting")
+
+	app.call("_ensure_schedule_screen")
+	var calendar := app.get("_schedule_screen") as Control
+	app.call("_swap_to", calendar)
+	await _settle(calendar)
+	_save("calendar")
+
+	app.call("_ensure_accommodation_screen")
+	var housing := app.get("_accommodation_screen") as Control
+	app.call("_swap_to", housing)
+	await _settle(housing)
+	_save("housing")
+
+	app.call("_ensure_kitchen_screen")
+	var kitchen := app.get("_kitchen_screen") as Control
+	app.call("_swap_to", kitchen)
+	await _settle(kitchen)
+	_save("kitchen")
+
+	app.call("_ensure_encyclopedia_screen")
+	var encyclopedia := app.get("_encyclopedia_screen") as Control
+	app.call("_swap_to", encyclopedia)
+	await _settle(encyclopedia)
+	_save("encyclopedia")
+
+	# Desk is spatial rather than a paper workspace. The review image must use the
+	# same close seated camera that the real Desk destination uses, not whatever
+	# office camera happened to be current when the renderer started.
 	app.call("_ensure_desk_screen")
 	var desk := app.get("_desk_screen") as Control
+	var office_shell := app.get_node("OfficeShell") as CanonicalOfficeShell
+	office_shell.snap_to(&"Desk")
 	app.call("_swap_to", desk)
 	await _settle(desk)
 	_save("desk")
