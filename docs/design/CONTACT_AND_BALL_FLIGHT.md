@@ -168,6 +168,49 @@ resolver. Its placement is a future ownership migration. **Do not move it as a
 side effect of another pass** — it changes reception inputs, so it is its own
 task with its own measurement.
 
+**Implemented boundary, 2026-08-25.** A displayed trajectory now consumes the
+launch's published `launch_gravity_mps2`; both `BallPresentation` and the 3D
+court call the same sampler. For a successful serve/reception pair, presentation
+draws the physically played prefix of the published free flight, ending at its
+descending crossing of the receiver's platform height. The outgoing pass begins
+at that identical point. The launch, gravity and free-flight landing remain
+simulator facts; no second serve curve or visual snap is authored.
+
+Promoting that descending crossing to the simulator's responsibility window was
+tested and rejected, not hidden. In a fixed 800-rally census it shortened 643
+successful contacts by a mean 0.188487 s (range 0.102480–1.542407 s), changed 128
+claimants, 364 terminal outcomes and 251 winners, and moved aces 7 → 54. Existing
+authority fixtures also failed. Until §4/§5 own interception, the calibrated
+floor-landing window therefore remains gameplay authority and the exact
+descending prefix is an explicitly marked realized-display segment.
+
+**Float repertoire boundary, 2026-08-25.** The visibly steep Jump Float was
+confirmed to be authoritative rather than a presentation reconstruction. The
+intended launch distribution had a continuous main band through 30 degrees, an
+empty 30--35 degree interval apart from one sample, then a separate lofted tail
+from 35--45 degrees. Float launch selection now limits intended angle to 30
+degrees. `AttackSwingModel.deliver` remains downstream and unbounded, so an
+execution miss can still deliver a ball above 30 degrees. This distinction is
+load-bearing: repertoire constrains what ball the server chooses; execution
+describes how that attempt actually leaves the hand. Clipping the latter would
+rewrite outcomes. The boundary is float-only because topspin owns an
+authoritative increased gravity that makes a steep launch dive.
+
+**Posed contact anchors, 2026-08-25.** The simulator's contact point stays
+fixed. Presentation poses the actual silhouette for the action and reads its
+forearm, hand or block anchor, then derives that actor's body destination from
+the measured offset. Reception/dig, standing/jump/underhand front/back sets,
+attack, serve and contacted block all follow this contract. There is no shared
+0.88 m platform constant and no ball snap.
+
+**Quick-tempo clock, 2026-08-25.** A short set flight remains short. Playback
+draws the hitter's already-resolved preparation during the incoming pass and
+continues from the setter-release pose on the delivered physical clock. The
+physically achieved tempo is reconciled from delivered flight and
+takeoff-to-contact; the old release-progress classification is retained under a
+separate key for gameplay consumers. This makes the correction observable
+without silently changing rally resolution.
+
 ## 8. Cognition and read — TARGET
 
     authoritative physical ball → cognition/read model → perceived state → decision
@@ -636,8 +679,18 @@ the two disagree.
    `_desired_pass_target` already compiles an overpass-avoidance preference into
    the reception's target point as five bare literals; the selection pass should
    take that rule over rather than sit beside it.
-5. **Serve endpoint semantics** — floor landing or reception contact — unresolved
-   until §4/§5 are represented. Sharpened rather than settled by the forward
+5. **Serve endpoint semantics** — structurally unresolved until §4/§5 are
+	represented. The 2026-08-25 presentation pass made the current boundary
+	explicit: the simulator retains the natural floor endpoint and calibrated
+	responsibility time, while presentation derives and marks the physically
+	played prefix at the descending platform-height crossing. The next outgoing
+	flight starts at that same derived contact, so the visible segment is
+	continuous without pretending that its endpoint owns gameplay. Promoting the
+	crossing to gameplay produced the measured large outcome changes recorded in
+	§7 and was reverted. This is a legible interim contract, not the future
+	interception model.
+
+	Sharpened rather than settled by the forward
    serve: its *launch* height is now exact and published, and `height_source`
    grew a third value, `start_resolved`, to say so. The ending height is still
    the 1.0 m default, because `BallFlight.from_trajectory` reads
