@@ -1,7 +1,7 @@
 extends RefCounted
 
-## Canonical player-attribute vocabulary and metadata. Gameplay formulas stay in
-## their owning systems; this registry makes integration points auditable.
+## Canonical player-attribute vocabulary. Gameplay formulas stay in their owning
+## systems; this file exists so integration tooling has one auditable vocabulary.
 const ABILITY_ATTRIBUTES = [
 	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
 	"stamina", "work_rate", "arm_speed", "serve_power", "serve_technique", "serve_placement",
@@ -23,33 +23,6 @@ const MENTAL_ATTRIBUTES = [
 	"improvisation", "adaptability", "unpredictability", "work_rate",
 ]
 
-## These are player traits profile data may reference, but they are not trainable
-## ability attributes. Leadership acts on teammates; ego is temperament.
+## Profile data can reference these even though they are not trainable ability
+## attributes. Leadership acts on teammates; ego is temperament.
 const NON_ABILITY_TRAITS = ["leadership", "ego"]
-
-static func all_ids() -> Array:
-	return ABILITY_ATTRIBUTES.duplicate()
-
-static func all_player_traits() -> Array:
-	var result: Array = ABILITY_ATTRIBUTES.duplicate()
-	for trait in NON_ABILITY_TRAITS:
-		if trait not in result:
-			result.append(trait)
-	return result
-
-static func category_of(attribute_id: String) -> String:
-	if attribute_id in PHYSICAL_ATTRIBUTES:
-		return "Physical"
-	if attribute_id in MENTAL_ATTRIBUTES:
-		return "Mental"
-	if attribute_id in NON_ABILITY_TRAITS:
-		return "Temperament"
-	return "Technical"
-
-static func definition(attribute_id: String) -> Dictionary:
-	return {
-		"id": attribute_id,
-		"category": category_of(attribute_id),
-		"trainable": attribute_id in ABILITY_ATTRIBUTES,
-		"scoutable": attribute_id in all_player_traits(),
-	}
