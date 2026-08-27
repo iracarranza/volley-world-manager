@@ -5805,10 +5805,19 @@ func _resolve_opponent_transition(
 	if not geometric.is_empty():
 		block_outcome = str(geometric.block_outcome)
 	var opponent_hitter_point := bool(geometric.get("hitter_point", false))
+	## The wall was already staged from `_block_wall_positions` at release. Keep
+	## those same two authoritative slots when the contest resolves. This used to
+	## overwrite both blockers with `Vector2(opponent_contact.x, 0.54)`, collapsing
+	## a correctly formed wall onto one point before the phase map separated it
+	## again. Playback could sample that contradictory live state as the next leg's
+	## start, and protected block targets correctly refused to cosmetically repair
+	## it.
 	if blocker != null:
-		live_positions[blocker.id] = Vector2(opponent_contact.x, 0.54)
+		live_positions[blocker.id] = Vector2(home_wall_positions.primary_position)
 	if assisting_blocker != null:
-		live_positions[assisting_blocker.id] = Vector2(opponent_contact.x, 0.54)
+		live_positions[assisting_blocker.id] = Vector2(
+			home_wall_positions.assist_position
+		)
 	var deflection_target := home_target
 	if block_outcome in ["touch", "funnel"]:
 		deflection_target = _home_block_deflection_target(
@@ -5946,6 +5955,19 @@ func _resolve_opponent_transition(
 			_defensive_intents(floor_phase_positions, home_floor_intents)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
+	## Snapshot the same authoritative live state onto the block event. This is
+	## diagnostics/presentation evidence, not another placement calculation: the
+	## regression gate can now prove the resolver's live map, its phase map and the
+	## two explicit wall-position fields all describe one wall.
+	var home_blocker_live_positions := {}
+	if blocker != null:
+		home_blocker_live_positions[blocker.id] = Vector2(
+			live_positions[blocker.id]
+		)
+	if assisting_blocker != null:
+		home_blocker_live_positions[assisting_blocker.id] = Vector2(
+			live_positions[assisting_blocker.id]
+		)
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
 	narration["blocker"] = blocker_name
 	var opponent_cover_intents := {}
@@ -6032,6 +6054,7 @@ func _resolve_opponent_transition(
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			"primary_position": Vector2(home_wall_positions.primary_position),
 			"assist_position": Vector2(home_wall_positions.assist_position),
+			"blocker_live_positions": home_blocker_live_positions.duplicate(true),
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
 			"setter_pull": block_result.setter_pull,

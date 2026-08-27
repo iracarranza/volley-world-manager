@@ -200,6 +200,10 @@ func _initialize() -> void:
 		_test_commentary_routing_contract()
 		_finish_test_run()
 		return
+	if "--block-overlap-only" in OS.get_cmdline_user_args():
+		_test_double_block_position_contract()
+		_finish_test_run()
+		return
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
@@ -242,6 +246,7 @@ func _initialize() -> void:
 	_test_shadow_movement_integration()
 	_test_event_physical_time_is_derived()
 	_test_playback_samples_resolved_movement()
+	_test_double_block_position_contract()
 	_test_3d_playback_contract()
 	_test_block_visualization_geometry()
 	_test_gate_fifty_continuous_reachability_timeline()
@@ -7299,6 +7304,140 @@ func _test_playback_samples_resolved_movement() -> void:
 		"Playback falls back to interpolation when no player profile resolves",
 	)
 	court.free()
+
+
+## The opponent-attack/home-block resolver path used to stage a correct wall,
+## overwrite both blockers onto the attack contact x, then publish separated
+## phase targets again. That contradictory middle state was visible as merged
+## torsos when playback sampled it as a leg start. Assert the whole emitted
+## contract—live snapshot, attack phase, block phase and explicit metadata—not
+## merely the geometry helper in isolation.
+func _test_double_block_position_contract() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = true
+	var observed := 0
+	var collapsed := 0
+	var disagreements := 0
+	var narrowest := INF
+	for seed_value in range(5000, 5600):
+		var result: RallyResult = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		var opponent_attack: RallyEvent = null
+		for raw_event in result.events:
+			var event := raw_event as RallyEvent
+			if event == null:
+				continue
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == "opponent":
+				opponent_attack = event
+				continue
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					or str(event.metadata.get("side", "")) != "home":
+				continue
+			var primary_id := int(event.actor_id)
+			var assist_id := int(event.metadata.get("assist_id", -1))
+			if primary_id < 0 or assist_id < 0:
+				continue
+			observed += 1
+			var primary := Vector2(event.metadata.get("primary_position", Vector2.ZERO))
+			var assist := Vector2(event.metadata.get("assist_position", Vector2.ZERO))
+			var gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(primary, assist).length()
+			narrowest = minf(narrowest, gap)
+			if primary.is_equal_approx(assist):
+				collapsed += 1
+			var block_phase: Dictionary = event.metadata.get("home_phase_targets", {})
+			var attack_phase: Dictionary = opponent_attack.metadata.get(
+				"home_phase_targets", {}
+			) if opponent_attack != null else {}
+			var live_snapshot: Dictionary = event.metadata.get(
+				"blocker_live_positions", {}
+			)
+			## The wall closes during the attack flight, so the opponent ATTACK's
+			## phase map is the authoritative wall movement. A BLOCK event may carry
+			## only the next post-contact mover after timeline finalisation; when it
+			## still carries the wall pair, it must agree too.
+			var block_phase_carries_wall := block_phase.has(primary_id) \
+				or block_phase.has(assist_id)
+			var block_phase_agrees := not block_phase_carries_wall \
+				or (block_phase.has(primary_id) and block_phase.has(assist_id) \
+					and Vector2(block_phase[primary_id]).is_equal_approx(primary) \
+					and Vector2(block_phase[assist_id]).is_equal_approx(assist))
+			var agrees := attack_phase.has(primary_id) and attack_phase.has(assist_id) \
+				and live_snapshot.has(primary_id) and live_snapshot.has(assist_id) \
+				and Vector2(attack_phase[primary_id]).is_equal_approx(primary) \
+				and Vector2(attack_phase[assist_id]).is_equal_approx(assist) \
+				and Vector2(live_snapshot[primary_id]).is_equal_approx(primary) \
+				and Vector2(live_snapshot[assist_id]).is_equal_approx(assist) \
+				and Vector2(event.metadata.get(
+					"body_contact_position", Vector2.ZERO
+				)).is_equal_approx(primary) and block_phase_agrees
+			if not agrees:
+				disagreements += 1
+				print("double-block disagreement seed %d primary %d assist %d" % [
+					seed_value, primary_id, assist_id,
+				])
+				print("  explicit %s / %s" % [primary, assist])
+				print("  attack phase %s / %s" % [
+					attack_phase.get(primary_id, null), attack_phase.get(assist_id, null),
+				])
+				print("  block phase %s / %s" % [
+					block_phase.get(primary_id, null), block_phase.get(assist_id, null),
+				])
+				print("  live %s / %s; body %s" % [
+					live_snapshot.get(primary_id, null), live_snapshot.get(assist_id, null),
+					event.metadata.get("body_contact_position", null),
+				])
+			if observed >= 4:
+				break
+		if observed >= 4:
+			break
+	manager.free()
+	_check(
+		observed >= 2,
+		"double-block regression fixture publishes representative home walls (%d)"
+			% observed,
+	)
+	_check(
+		collapsed == 0 and narrowest >= 0.84,
+		"two-person blocks never publish identical primary/assist coordinates (%d collapsed; %.3f m narrowest)"
+			% [collapsed, narrowest],
+	)
+	_check(
+		disagreements == 0,
+		"live blocker positions, wall phase targets and block metadata agree",
+	)
+	var deterministic_samples: Array[Dictionary] = []
+	for _run_index in range(2):
+		var replay_manager := GAME_MANAGER_SCRIPT.new()
+		replay_manager.seed_vertical_slice_data()
+		replay_manager.match_state.serving_home = true
+		var replayed: RallyResult = replay_manager.resolve_active_rally(5012)
+		for raw_event in replayed.events:
+			var event := raw_event as RallyEvent
+			if event != null \
+					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					and str(event.metadata.get("side", "")) == "home" \
+					and int(event.metadata.get("assist_id", -1)) >= 0:
+				deterministic_samples.append({
+					"primary": Vector2(event.metadata.get(
+						"primary_position", Vector2.ZERO
+					)),
+					"assist": Vector2(event.metadata.get(
+						"assist_position", Vector2.ZERO
+					)),
+					"live": Dictionary(event.metadata.get(
+						"blocker_live_positions", {}
+					)).duplicate(true),
+				})
+				break
+		replay_manager.free()
+	_check(
+		deterministic_samples.size() == 2 \
+			and deterministic_samples[0] == deterministic_samples[1],
+		"double-block wall coordinates remain deterministic for seed 5012",
+	)
 
 
 ## Pure geometry/color checks for the per-blocker square and double-block

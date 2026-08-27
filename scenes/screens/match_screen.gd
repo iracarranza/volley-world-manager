@@ -404,6 +404,8 @@ func _play_flight(
 	var movement_plan := _build_movement_plan(
 		event, movement_contact if movement_contact != null else next_contact,
 		duration,
+		next_contact if next_contact != null \
+			and next_contact.event_type == RallyEventModel.EventType.BLOCK else null,
 	)
 	var elapsed := 0.0
 	match_court_3d.ball_actor.reset_flight()
@@ -1307,7 +1309,8 @@ func _apply_unsuccessful_attack_block(
 
 
 func _build_movement_plan(
-	event: RallyEvent, next_contact: RallyEvent, window_seconds: float = 0.0
+	event: RallyEvent, next_contact: RallyEvent, window_seconds: float = 0.0,
+	airborne_block_event: RallyEvent = null,
 ) -> Dictionary:
 	var plan := {}
 	if next_contact == null:
@@ -1362,7 +1365,6 @@ func _build_movement_plan(
 	## to publish it, not for playback to make it up.
 	_apply_base_positions(plan, event, next_contact)
 	_apply_cheat_steps(plan, action_target, next_contact)
-	_hold_airborne_blocker(plan, event)
 	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
 	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
 	## The player who just made this contact goes where their own event said they
@@ -1486,6 +1488,18 @@ func _build_movement_plan(
 		for raw_player_id in Dictionary(next_contact.metadata.get(key, {})):
 			_previously_placed[int(raw_player_id)] = true
 	_pacing_event_type = int(next_contact.event_type)
+	## Last positional authority before pacing. The next contact and its phase
+	## maps may legitimately ask a landing blocker to cover ground, but neither
+	## member of a wall can begin that along-net journey while still airborne.
+	## During the incoming ATTACK flight, `_run_rally` supplies the physical BLOCK
+	## event separately even when movement is already aimed at the later DIG.
+	var held_block := airborne_block_event
+	if held_block == null and event.event_type == RallyEventModel.EventType.BLOCK:
+		held_block = event
+	elif held_block == null \
+			and next_contact.event_type == RallyEventModel.EventType.BLOCK:
+		held_block = next_contact
+	_hold_airborne_blocker(plan, held_block)
 	_separate_plan(plan, next_actor_id)
 	_pace_plan(plan, window_seconds, next_actor_id)
 	## After pacing, not before: `_set_plan_target` writes a fresh entry with no
@@ -1812,6 +1826,11 @@ func _apply_base_positions(
 ## other one is free because coming *down* and backing off the net is exactly
 ## what a landing blocker does; it is the sideways slide that no body can
 ## perform.
+##
+## Both members are held. Holding only `event.actor_id` let the assistant begin
+## the next phase in the same airborne window, contracting a visibly separated
+## late close until the torsos merged at contact. This runs after explicit and
+## contact-actor targets are assembled so no later plan source can undo it.
 func _hold_airborne_blocker(plan: Dictionary, event: RallyEvent) -> void:
 	if event == null or event.event_type != RallyEventModel.EventType.BLOCK:
 		return
@@ -1819,13 +1838,13 @@ func _hold_airborne_blocker(plan: Dictionary, event: RallyEvent) -> void:
 		## Defensive: if the rule is ever relaxed, this stops enforcing it
 		## rather than silently keeping a stale copy of it.
 		return
-	var blocker_id := int(event.actor_id)
-	if not plan.has(blocker_id) \
-			or not match_court_3d.live_positions.has(blocker_id):
-		return
-	var held := Vector2(match_court_3d.live_positions[blocker_id])
-	var target := Vector2(plan[blocker_id]["target"])
-	plan[blocker_id]["target"] = Vector2(held.x, target.y)
+	for blocker_id in _blocker_ids(event):
+		if not plan.has(blocker_id) \
+				or not match_court_3d.live_positions.has(blocker_id):
+			continue
+		var held := Vector2(match_court_3d.live_positions[blocker_id])
+		var target := Vector2(plan[blocker_id]["target"])
+		plan[blocker_id]["target"] = Vector2(held.x, target.y)
 
 
 ## How far a voli with no assignment will drift toward the play, in metres.
