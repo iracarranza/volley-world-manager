@@ -1,4 +1,5 @@
 name: Fix registry aliases
+# One-time migration workflow; removed after a successful registry validation.
 on:
   push:
     branches: [chatgpt/modularity-efficiency-refactor]
