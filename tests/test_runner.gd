@@ -7408,6 +7408,28 @@ func _test_double_block_position_contract() -> void:
 		disagreements == 0,
 		"live blocker positions, wall phase targets and block metadata agree",
 	)
+	## A separate endpoint is not enough if assigning those endpoints makes the
+	## two named blockers exchange sides. A middle attack can draw its assistant
+	## from either half of the net, while `_block_wall_positions` has one stable
+	## default side. The pair-aware step must mirror that assistant slot without
+	## moving the primary off the read crossing.
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	var default_wall: Dictionary = simulator._block_wall_positions(0.55, false)
+	var ordered_wall: Dictionary = simulator._block_wall_positions_preserving_order(
+		default_wall, 10, 11,
+		{10: Vector2(0.42, 0.50), 11: Vector2(0.70, 0.50)},
+	)
+	var ordered_primary := Vector2(ordered_wall.primary_position)
+	var ordered_assist := Vector2(ordered_wall.assist_position)
+	var ordered_gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+		ordered_primary, ordered_assist
+	).length()
+	_check(
+		is_equal_approx(ordered_primary.x, 0.55)
+			and ordered_primary.x < ordered_assist.x
+			and ordered_gap >= 0.84,
+		"pair-aware wall slots preserve blocker order without moving the primary off the crossing",
+	)
 	var deterministic_samples: Array[Dictionary] = []
 	for _run_index in range(2):
 		var replay_manager := GAME_MANAGER_SCRIPT.new()

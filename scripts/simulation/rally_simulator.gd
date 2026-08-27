@@ -5343,13 +5343,19 @@ func _resolve_opponent_transition(
 		float(home_block_formation.get("read_quality", 0.0)),
 		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
 	)
-	var home_wall_positions := _block_wall_positions(home_wall_x, false)
 	var staged_home_primary := home_block_formation.get(
 		"primary"
 	) as VolleyballPlayer
 	var staged_home_assist := home_block_formation.get(
 		"assist"
 	) as VolleyballPlayer
+	var home_wall_positions := _block_wall_positions(home_wall_x, false)
+	home_wall_positions = _block_wall_positions_preserving_order(
+		home_wall_positions,
+		staged_home_primary.id if staged_home_primary != null else -1,
+		staged_home_assist.id if staged_home_assist != null else -1,
+		live_positions,
+	)
 	if staged_home_primary != null:
 		live_positions[staged_home_primary.id] = Vector2(
 			home_wall_positions.primary_position
@@ -5943,6 +5949,7 @@ func _resolve_opponent_transition(
 		_home_floor_phase_positions(
 			lineup, defensive_plan, opponent_contact.x,
 			blocker_id, assisting_blocker_id, home_wall_x,
+			home_wall_positions,
 		),
 		players, live_positions, float(set_flight_time), home_floor_intents,
 	)
@@ -9528,10 +9535,12 @@ func _home_floor_phase_positions(
 	primary_blocker_id: int,
 	assisting_blocker_id: int,
 	wall_x: float = NAN,
+	wall_positions: Dictionary = {},
 ) -> Dictionary:
 	return _floor_phase_positions(
 		lineup, defensive_plan, attack_x,
 		primary_blocker_id, assisting_blocker_id, false, wall_x,
+		wall_positions,
 	)
 
 
@@ -9636,6 +9645,7 @@ func _floor_phase_positions(
 	assisting_blocker_id: int,
 	opponent_side: bool,
 	wall_x: float = NAN,
+	wall_positions: Dictionary = {},
 ) -> Dictionary:
 	var positions := {}
 	if lineup == null:
@@ -9663,9 +9673,10 @@ func _floor_phase_positions(
 	## floor behind them still shades on the attack lane: where the hitter is and
 	## where the ball goes through the tape are different facts, and only the wall
 	## stands on the second one.
-	var wall := _block_wall_positions(
-		attack_x if is_nan(wall_x) else wall_x, opponent_side
-	)
+	var wall := wall_positions.duplicate(true) \
+		if not wall_positions.is_empty() else _block_wall_positions(
+			attack_x if is_nan(wall_x) else wall_x, opponent_side
+		)
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id == primary_blocker_id:
@@ -10145,6 +10156,55 @@ static func _block_wall_positions(
 			clampf(lane_x + BLOCK_SHOULDER_OFFSET * inward, 0.05, 0.95), wall_y
 		),
 	}
+
+
+## Keep the named primary on the read crossing while choosing the assistant's
+## shoulder from the side that player is actually closing from. The basic wall
+## helper quite reasonably prefers the court's inward side, but on a middle
+## attack either side is inward. If the resolved assistant came from the other
+## half, blindly using that default inverted the pair's left/right order: two
+## independent straight-line journeys crossed during the jump, merged, and
+## emerged in the opposite slots.
+##
+## This is still the same two-slot wall and the same shoulder offset. It only
+## mirrors the assistant slot when the default would force the two identified
+## bodies to exchange sides. The pair is shifted together at a clamp boundary
+## so the full shoulder spacing survives deterministically.
+static func _block_wall_positions_preserving_order(
+	wall: Dictionary,
+	primary_id: int,
+	assist_id: int,
+	live: Dictionary,
+) -> Dictionary:
+	var ordered := wall.duplicate(true)
+	if primary_id < 0 or assist_id < 0 \
+			or not live.has(primary_id) or not live.has(assist_id):
+		return ordered
+	var primary_start := Vector2(live[primary_id])
+	var assist_start := Vector2(live[assist_id])
+	var primary_target := Vector2(ordered.get(
+		"primary_position", primary_start
+	))
+	var assist_target := Vector2(ordered.get(
+		"assist_position", assist_start
+	))
+	var start_delta := primary_start.x - assist_start.x
+	var target_delta := primary_target.x - assist_target.x
+	if absf(start_delta) <= 0.001 or start_delta * target_delta >= 0.0:
+		return ordered
+	var start_sign := signf(start_delta)
+	assist_target.x = primary_target.x - start_sign * BLOCK_SHOULDER_OFFSET
+	if assist_target.x < 0.05:
+		var shift_right := 0.05 - assist_target.x
+		assist_target.x += shift_right
+		primary_target.x += shift_right
+	elif assist_target.x > 0.95:
+		var shift_left := assist_target.x - 0.95
+		assist_target.x -= shift_left
+		primary_target.x -= shift_left
+	ordered["primary_position"] = primary_target
+	ordered["assist_position"] = assist_target
+	return ordered
 
 
 ## Where this opponent setter takes the ball in serve receive: the same release

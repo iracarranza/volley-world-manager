@@ -7,6 +7,7 @@ extends Node
 ##   godot --path . res://tools/double_block_regression.tscn
 
 const SCREEN := preload("res://scenes/screens/match_screen.tscn")
+const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const Events := preload("res://scripts/models/rally_event.gd")
 const OUTPUT := "res://artifacts/blocker-overlap-regression"
 const SEED := 5012
@@ -15,6 +16,7 @@ const SEED := 5012
 func _ready() -> void:
 	get_window().size = Vector2i(1280, 720)
 	var screen := SCREEN.instantiate() as MatchScreen
+	screen.theme = DARK_THEME
 	add_child(screen)
 	await get_tree().process_frame
 	var manager: Object = load("res://scripts/managers/game_manager.gd").new()
@@ -28,9 +30,10 @@ func _ready() -> void:
 		return
 	var block := result.events[block_index] as RallyEvent
 	var attack_index := _previous_attack_index(result.events, block_index)
+	var set_index := _previous_set_index(result.events, attack_index)
 	var primary_id := int(block.actor_id)
 	var assist_id := int(block.metadata.get("assist_id", -1))
-	if attack_index < 0 or primary_id < 0 or assist_id < 0:
+	if set_index < 0 or attack_index < 0 or primary_id < 0 or assist_id < 0:
 		push_error("double-block fixture is missing its attack or blocker ids")
 		get_tree().quit(1)
 		return
@@ -58,10 +61,23 @@ func _ready() -> void:
 
 	var captured := {}
 	var failed := false
+	var ordering := {
+		"samples": 0,
+		"initial_sign": 0.0,
+		"last_sign": 0.0,
+		"sign_flips": 0,
+		"minimum_centre_gap": INF,
+		"minimum_torso_clearance": INF,
+	}
 	while screen.playback_active:
 		await get_tree().process_frame
 		var global_progress := float(screen.progress_bar.value) / 100.0 \
 			* float(result.events.size())
+		if global_progress >= float(set_index) \
+				and global_progress <= float(block_index) + 0.20:
+			_sample_wall_order(
+				screen, primary_id, assist_id, ordering
+			)
 		if not captured.has("late_close") \
 				and global_progress >= float(attack_index) + 0.72 \
 				and global_progress < float(block_index):
@@ -80,6 +96,17 @@ func _ready() -> void:
 
 	if captured.size() != 2:
 		push_error("double-block probe missed one or more capture milestones: %s" % captured)
+		failed = true
+	print("wall trajectory: %d frames; %d order reversals; minimum centre gap %.3f m; minimum torso clearance %.3f m" % [
+		int(ordering.samples), int(ordering.sign_flips),
+		float(ordering.minimum_centre_gap),
+		float(ordering.minimum_torso_clearance),
+	])
+	if int(ordering.samples) < 2 \
+			or int(ordering.sign_flips) > 0 \
+			or float(ordering.minimum_centre_gap) < 0.84 \
+			or float(ordering.minimum_torso_clearance) < -0.01:
+		push_error("double-block wall crosses, swaps order, or merges during its jump")
 		failed = true
 	manager.free()
 	screen.queue_free()
@@ -120,6 +147,50 @@ func _capture_and_check(
 	return true
 
 
+## Sample every rendered frame from the set flight that raises the wall through
+## block contact. Absolute gap alone cannot detect a pair that crosses, merges,
+## and emerges in the opposite order, so preserve the sign of primary-minus-
+## assist X as well as the bodies' planar clearance.
+func _sample_wall_order(
+	screen: MatchScreen, primary_id: int, assist_id: int, ordering: Dictionary,
+) -> void:
+	var primary := screen.match_court_3d.actor_for(primary_id)
+	var assist := screen.match_court_3d.actor_for(assist_id)
+	if primary == null or assist == null:
+		return
+	var signed_x := primary.global_position.x - assist.global_position.x
+	var current_sign := signf(signed_x)
+	if is_zero_approx(float(ordering.initial_sign)) and absf(signed_x) > 0.001:
+		ordering.initial_sign = current_sign
+		ordering.last_sign = current_sign
+	elif absf(signed_x) > 0.001 \
+			and current_sign != float(ordering.last_sign):
+		ordering.sign_flips = int(ordering.sign_flips) + 1
+		ordering.last_sign = current_sign
+	var primary_ground := Vector2(
+		primary.global_position.x, primary.global_position.z
+	)
+	var assist_ground := Vector2(
+		assist.global_position.x, assist.global_position.z
+	)
+	var centre_gap := primary_ground.distance_to(assist_ground)
+	var primary_torso := Vector2(
+		primary.torso.global_position.x, primary.torso.global_position.z
+	)
+	var assist_torso := Vector2(
+		assist.torso.global_position.x, assist.torso.global_position.z
+	)
+	var torso_clearance := primary_torso.distance_to(assist_torso) \
+		- _torso_half_width(primary) - _torso_half_width(assist)
+	ordering.samples = int(ordering.samples) + 1
+	ordering.minimum_centre_gap = minf(
+		float(ordering.minimum_centre_gap), centre_gap
+	)
+	ordering.minimum_torso_clearance = minf(
+		float(ordering.minimum_torso_clearance), torso_clearance
+	)
+
+
 func _torso_half_width(actor: PlayerActor3D) -> float:
 	if actor.torso == null or actor.torso.mesh == null:
 		return 0.36
@@ -142,5 +213,13 @@ func _previous_attack_index(events: Array[Resource], before: int) -> int:
 		var event := events[index] as RallyEvent
 		if event != null and event.event_type == Events.EventType.ATTACK \
 				and str(event.metadata.get("side", "")) == "opponent":
+			return index
+	return -1
+
+
+func _previous_set_index(events: Array[Resource], before: int) -> int:
+	for index in range(before - 1, -1, -1):
+		var event := events[index] as RallyEvent
+		if event != null and event.event_type == Events.EventType.SET:
 			return index
 	return -1
