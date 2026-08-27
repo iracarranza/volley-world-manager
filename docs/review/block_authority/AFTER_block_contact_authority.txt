@@ -1,0 +1,34 @@
+
+rallies: 300 (both serving sides)
+attack->block pairs: 236, of which the wall touched the ball: 97
+contact kinds: { "stuff": 31, "tool": 37, "recycle": 18, "touch": 11 }
+wall sizes at contact: { 2: 83, 1: 14 }
+
+-- which event carries the proof, over 236 pairs --
+fact                                 ATTACK    BLOCK
+kind                                    236      236
+crossing                                  0      236
+depth                                    97        0
+reaches                                 236        0
+
+-- published contact position against the proven crossing --
+  legs measured           97
+  mean |gap|              0.000 m
+  worst |gap|             0.000 m
+  gap wider than a hand   0 (0.0%)
+  home                  n=46    mean 0.000 m  worst 0.000 m
+  opponent              n=51    mean 0.000 m  worst 0.000 m
+  contacts with no crossing published: 0 of 97
+
+-- the height the ball was met at, on solo walls --
+  solo contacts           14
+  mean proven height      2.773 m
+  range                   2.448 m .. 3.107 m
+
+credited actor never jumped: 0 of 97 checkable
+
+-- the contact actor, against the wall that formed --
+  contacts publishing a proven hand   97 of 97
+  event actor disagrees with it       0
+  proven hand outside this wall       0
+  ball met a hand other than primary  35 (36.1%)

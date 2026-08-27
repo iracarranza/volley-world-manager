@@ -601,6 +601,25 @@ static func resolve_swing(
 		"block_contact_kind": str(
 			Dictionary(resolved.get("block", {})).get("kind", "")
 		),
+		## **Which hand met the ball, and how high it was when they met it.**
+		##
+		## `_block_contact` proves both -- it is a ball-by-body intersection, not a
+		## quality comparison -- and both were consumed inside it. The consequence
+		## was not that the proof was missing but that nothing downstream could
+		## quote it: the BLOCK event named the formation's *primary* blocker and
+		## placed the contact at the hitter's own contact x, because those were the
+		## only two facts that survived this seam.
+		##
+		## The centrality note inside `_block_contact` is the reason the id matters
+		## rather than being cosmetic: 32% of two-blocker contacts were credited to
+		## a less central hand than the ball met, which that function fixed for its
+		## own bands and could not fix for the event.
+		"block_contact_actor_id": int(Dictionary(
+			Dictionary(resolved.get("block", {})).get("blocker", {})
+		).get("player_id", -1)),
+		"block_contact_height_meters": Dictionary(
+			resolved.get("block", {})
+		).get("height_at_net_meters", null),
 		## Where the ball went after the hands, flat rather than as a nested
 		## dictionary because two curators between here and the event copy named
 		## keys and a nested one has been dropped at that seam three times.
@@ -621,6 +640,9 @@ static func resolve_swing(
 		).get("playable", false)),
 		"net_height_over_block_meters": float(
 			resolved.get("net_height_over_block_meters", 0.0)
+		),
+		"ball_height_at_net_meters": resolved.get(
+			"ball_height_at_net_meters", null
 		),
 		"block_edge_miss_meters": float(
 			resolved.get("block_edge_miss_meters", 0.0)

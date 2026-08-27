@@ -1,0 +1,16 @@
+
+set side / events between              n  broken  mean gap worst gap  no pass   lineage
+home/-                                20       0     0.000     0.000        0         0
+                                     stamped from: { "incoming_realised_segment": 20 }
+home/SET_DECISION                    109       0     0.000     0.000        0         0
+                                     stamped from: { "incoming_realised_segment": 109 }
+opponent/-                           132       0     0.000     0.000        0         0
+                                     stamped from: { "incoming_realised_segment": 132 }
+
+-- broken chains --
+
+-- clean chains --
+  set_side=opponent  between=-              feed=RECEPTION  pass_src=resolved      
+    pass end 2.023 m @ t=2.357 | set says 2.023 m (from incoming_realised_segment) | set launches 2.023 m @ t=2.630 | gap 0.000
+  set_side=opponent  between=-              feed=RECEPTION  pass_src=resolved      
+    pass end 2.011 m @ t=2.481 | set says 2.011 m (from incoming_realised_segment) | set launches 2.011 m @ t=2.736 | gap 0.000

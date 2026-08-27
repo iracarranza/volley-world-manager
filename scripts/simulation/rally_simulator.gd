@@ -1,6 +1,8 @@
 class_name RallySimulator
 extends RefCounted
 
+const SetterDecisionMath := preload("res://scripts/simulation/setter_decision_math.gd")
+
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
@@ -2340,7 +2342,9 @@ func resolve(
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
 		float(set_arc.apex_height_meters),
-		set_contact_time
+		set_contact_time, NAN, NAN,
+		float(set_arc.get("release_height_meters", NAN)),
+		float(set_arc.get("arrival_height_meters", NAN)),
 	)
 	if using_live_attack:
 		set_trajectory = Dictionary(selected_live_attack.get(
@@ -2671,6 +2675,8 @@ func resolve(
 		set_event, set_target, "set", float(set_flight_time),
 		float(set_arc.apex_height_meters),
 		set_contact_time,
+		float(set_arc.get("release_height_meters", NAN)),
+		float(set_arc.get("arrival_height_meters", NAN)),
 	)
 	if set_event != null:
 		set_trajectory = Dictionary(
@@ -3227,7 +3233,11 @@ func resolve(
 	var recycle_target := _attack_coverage_target(
 		set_target, block_strength, geometric
 	) if recycled else Vector2(set_target.x, 0.50)
-	var net_contact := Vector2(set_target.x, 0.50)
+	## Where the ball crossed, not where the hitter contacted it -- see
+	## `_block_contact_point`. This is the swing's truncation and the
+	## deflection's origin at once, so it is the §5 realised contact and both
+	## legs have to meet at it.
+	var net_contact := _block_contact_point(geometric, set_target.x, 0.50)
 	var attack_event: Resource = result.events[-1]
 	## A block that never touches the ball must not shorten the shot.
 	##
@@ -3412,14 +3422,22 @@ func resolve(
 			hitter, assignment.lane, set_target, hitter_point
 		)
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
-	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
-	var opponent_blocker_name := opponent_blocker.display_name \
-		if opponent_blocker != null else "Open block"
+	## The hand the ball met rather than the one that closed furthest. The
+	## formation's primary still owns the wall -- the close percentages, the
+	## coverage segments, the deflection -- and only the contact is attributed
+	## to whoever `_block_contact` proved was in the ball's path.
+	var contact_blocker := _block_contact_blocker(
+		geometric, opponent_blocker, assisting_blocker
+	)
+	var opponent_blocker_id := contact_blocker.id if contact_blocker != null else -1
+	var opponent_blocker_name := contact_blocker.display_name \
+		if contact_blocker != null else "Open block"
 	narration["opponent_blocker"] = opponent_blocker_name
 	var home_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker_id,
 		opponent_blocker_name,
-		Vector2(set_target.x, 0.47), post_block_target, block_contacts_ball,
+		_block_contact_point(geometric, set_target.x, 0.47),
+		post_block_target, block_contacts_ball,
 		block_strength, "Block forms at %s" % assignment.lane,
 		"%d%% close speed; the blockers seal the chosen lane.%s" % [
 			roundi(block_strength * 100.0),
@@ -3462,6 +3480,41 @@ func resolve(
 			## perfectly timed -- the one thing `block_timing` is supposed to show.
 			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
+			## Where the ball actually crossed the tape, which this event places
+			## its contact at. Published on all three block sites so the two can
+			## be checked against each other without re-running the resolver.
+			"net_crossing_x": float(geometric.get("net_crossing_x", set_target.x)),
+			## The intersection this contact *is* -- see `_block_contact_point`.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_contact_actor_id": int(
+				geometric.get("block_contact_actor_id", -1)
+			),
+			"block_contact_height_meters": geometric.get(
+				"block_contact_height_meters", null
+			),
+			## And how high the ball was at the tape whether or not it was met,
+			## so a beaten block is drawn where the ball went rather than where
+			## the hands were.
+			"ball_height_at_net_meters": geometric.get(
+				"ball_height_at_net_meters", null
+			),
+			## The wall's reaches, beside the ball's height at the same moment.
+			## Without both on one event "the ball cleared the hands" is not a
+			## statement anything can check -- the reaches were on the ATTACK
+			## event and the ball's height here, so a gate asserting the first
+			## was reading an absent key and passing vacuously. Found by that
+			## gate failing its own guard.
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## The wall's primary and assist, which is what the event used to
+			## credit. Published beside the contact so "the ball met a hand other
+			## than the one that closed furthest" is a statement a reader can
+			## check rather than a claim about code.
+			"block_wall_primary_id": int(
+				opponent_blocker.id if opponent_blocker != null else -1
+			),
+			"block_wall_assist_id": int(
+				assisting_blocker.id if assisting_blocker != null else -1
+			),
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
 			"signature_charge": float(geometric.get("signature_charge", 0.0)),
@@ -4953,7 +5006,9 @@ func _resolve_opponent_transition(
 			"outgoing_trajectory": _ball_trajectory(
 				"opponent_set", opponent_setter_position, opponent_contact,
 				set_flight_time, float(set_arc.apex_height_meters),
-				opponent_set_contact_time
+				opponent_set_contact_time, NAN, NAN,
+				float(set_arc.get("release_height_meters", NAN)),
+				float(set_arc.get("arrival_height_meters", NAN)),
 			)})
 	var opponent_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(opponent_set_event, opponent_setter_choice)
@@ -5319,6 +5374,8 @@ func _resolve_opponent_transition(
 	_retarget_set_event(
 		opponent_set_event, opponent_contact, "opponent_set", set_flight_time,
 		float(set_arc.apex_height_meters), opponent_set_contact_time,
+		float(set_arc.get("release_height_meters", NAN)),
+		float(set_arc.get("arrival_height_meters", NAN)),
 	)
 	if opponent_set_event != null:
 		opponent_set_event.metadata["set_flight_time"] = set_flight_time
@@ -5490,7 +5547,15 @@ func _resolve_opponent_transition(
 
 	## The swing's shape is solved only now, so the run-up that just adjusted
 	## `opponent_attack` also shapes the arc it produces.
-	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
+	##
+	## The net crossing, not the hitter's contact x. This point is the swing's
+	## truncation *and* the deflection's origin, so it is the realised contact of
+	## §5 and both legs have to meet at it. Placing it under the hitter put the
+	## wall's contact wherever the hitter had been standing, which for any shot
+	## that was not straight down the line is somewhere the ball never was.
+	var opponent_net_contact := _block_contact_point(
+		geometric, opponent_contact.x, 0.50
+	)
 	var opponent_attack_angle := _attack_launch_angle_degrees(
 		opponent_hitter, str(attack_choice.attack_type), opponent_attack
 	)
@@ -5753,7 +5818,9 @@ func _resolve_opponent_transition(
 			home_target, opponent_contact.x, home_block, block_outcome,
 			str(defensive_plan.block_defense_relationship) if defensive_plan != null else "Balanced"
 		)
-	var home_block_target := Vector2(opponent_contact.x, 0.43) \
+	## Under the hands, not under the hitter -- the mirror of the continuation
+	## site's `block_event_end`.
+	var home_block_target := Vector2(opponent_net_contact.x, 0.43) \
 		if block_outcome == "stuff" else deflection_target
 	## Same contract as the two home-attack block paths: only a block that
 	## actually touches the ball shortens the shot or deflects it.
@@ -5867,6 +5934,17 @@ func _resolve_opponent_transition(
 	var blocker_id := blocker.id if blocker != null else -1
 	var assisting_blocker_id := assisting_blocker.id \
 		if assisting_blocker != null else -1
+	## The hand the ball met, which is not always the hand that closed furthest.
+	##
+	## Kept apart from `blocker_id` deliberately: that one is the formation's
+	## primary and is what excludes both bodies from the floor shape below, so
+	## re-attributing it would put whichever blocker did not touch the ball into
+	## a defensive position while they were still at the tape. The wall that
+	## formed and the hand inside it that met the ball are two facts, and only
+	## the second belongs on the contact.
+	var contact_blocker := _block_contact_blocker(
+		geometric, blocker, assisting_blocker
+	)
 	var home_floor_intents := {}
 	var floor_phase_positions := _establish_shape(
 		_home_floor_phase_positions(
@@ -5884,11 +5962,18 @@ func _resolve_opponent_transition(
 			_defensive_intents(floor_phase_positions, home_floor_intents)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
-	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
+	var blocker_name := contact_blocker.display_name if contact_blocker != null \
+		else "No assigned blocker"
 	narration["blocker"] = blocker_name
 	var opponent_cover_intents := {}
-	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
-		Vector2(opponent_contact.x, 0.53), home_block_target,
+	_add_event(result, RallyEventModel.EventType.BLOCK,
+		contact_blocker.id if contact_blocker != null else -1, blocker_name,
+		## The proven crossing at the tape, a hair onto the blocking side. Same
+		## point as `opponent_net_contact` above, which is where the swing was
+		## truncated and where the deflection leaves from -- one contact, both
+		## legs meeting at it.
+		_block_contact_point(geometric, opponent_contact.x, 0.53),
+		home_block_target,
 		home_block_contacts, home_block,
 		"%s · %s" % [blocker_name, block_outcome.capitalize()],
 		"Primary close %d%%; block quality %d%%.%s" % [
@@ -5944,6 +6029,34 @@ func _resolve_opponent_transition(
 				geometric.get("block_edge_miss_meters", 0.0)
 			),
 			"net_crossing_x": float(geometric.get("net_crossing_x", 0.5)),
+			## The intersection this contact *is*, published alongside the actor
+			## and position built from it so the agreement is checkable from the
+			## event rather than by re-running the resolver. `_block_contact`
+			## proves all three; until now none of them left it.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_contact_actor_id": int(
+				geometric.get("block_contact_actor_id", -1)
+			),
+			"block_contact_height_meters": geometric.get(
+				"block_contact_height_meters", null
+			),
+			## And how high the ball was at the tape whether or not it was met,
+			## so a beaten block is drawn where the ball went rather than where
+			## the hands were.
+			"ball_height_at_net_meters": geometric.get(
+				"ball_height_at_net_meters", null
+			),
+			## The wall's reaches, beside the ball's height at the same moment.
+			## Without both on one event "the ball cleared the hands" is not a
+			## statement anything can check -- the reaches were on the ATTACK
+			## event and the ball's height here, so a gate asserting the first
+			## was reading an absent key and passing vacuously. Found by that
+			## gate failing its own guard.
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## The wall's own two, beside the hand that met the ball -- see the
+			## note at the first-ball block site.
+			"block_wall_primary_id": blocker_id,
+			"block_wall_assist_id": assisting_blocker_id,
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"home_phase_intents": _defensive_intents(
@@ -6819,7 +6932,10 @@ func _resolve_home_continuation(
 			"event_time": cont_set_contact_time,
 			"outgoing_trajectory": _ball_trajectory(
 				"set", set_contact, set_target, continuation_flight_time,
-				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
+				float(continuation_set_arc.apex_height_meters),
+				cont_set_contact_time, NAN, NAN,
+				float(continuation_set_arc.get("release_height_meters", NAN)),
+				float(continuation_set_arc.get("arrival_height_meters", NAN)),
 			)})
 	## Lineage, as on the opponent side: the flight this set was resolved
 	## against, so a probe can prove the chain instead of comparing endpoints.
@@ -7012,6 +7128,8 @@ func _resolve_home_continuation(
 	_retarget_set_event(
 		set_event_for_staging, set_target, "set", continuation_flight_time,
 		float(continuation_set_arc.apex_height_meters), cont_set_contact_time,
+		float(continuation_set_arc.get("release_height_meters", NAN)),
+		float(continuation_set_arc.get("arrival_height_meters", NAN)),
 	)
 	if prepared_hitter != null:
 		continuation_approach = ApproachMechanicsModel.evaluate_takeoff(
@@ -7430,9 +7548,16 @@ func _resolve_home_continuation(
 		## or for how long, which the other two both did. Same map, same shape.
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
 			_defensive_intents(cont_block_stage, cont_floor_intents)
-	var cont_net_contact := Vector2(set_target.x, 0.50)
-	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
-		else Vector2(set_target.x, 0.47)
+	## The proven crossing, matching the other two block sites -- see
+	## `_block_contact_point`. Truncation and deflection origin at once, so this
+	## is the §5 realised contact for the continuation swing.
+	var cont_net_contact := _block_contact_point(geometric, set_target.x, 0.50)
+	## A stuffed ball comes down under the hands that stuffed it, so this target
+	## follows the contact rather than the hitter -- same reason as
+	## `cont_net_contact` above. Overwritten by `_trajectory_endpoint` whenever a
+	## deflection is drawn; it is the target that feeds that deflection.
+	var block_event_end := Vector2(cont_net_contact.x, 0.50) if not blocked \
+		else Vector2(cont_net_contact.x, 0.47)
 	var continuation_visible_attack_trajectory := continuation_attack_trajectory
 	if cont_block_contacts:
 		var cont_attack_event: Resource = result.events[-1]
@@ -7496,10 +7621,15 @@ func _resolve_home_continuation(
 		)
 		attack_target = block_event_end
 	var continuation_cover_intents := {}
+	## The hand the ball met, on the same rule as the other two block sites.
+	var cont_contact_blocker := _block_contact_blocker(
+		geometric, opponent_blocker, assisting_blocker
+	)
 	_add_event(result, RallyEventModel.EventType.BLOCK,
-		opponent_blocker.id if opponent_blocker != null else -1,
-		opponent_blocker.display_name if opponent_blocker != null else "Open block",
-		Vector2(set_target.x, 0.47),
+		cont_contact_blocker.id if cont_contact_blocker != null else -1,
+		cont_contact_blocker.display_name if cont_contact_blocker != null \
+			else "Open block",
+		_block_contact_point(geometric, set_target.x, 0.47),
 		block_event_end, cont_block_contacts, block_quality,
 		"Opponent block · exchange %d" % exchange_number,
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
@@ -7525,6 +7655,36 @@ func _resolve_home_continuation(
 			"block_hands_call": str(block_result.get("block_hands_call", "")),
 			"block_hands_followed": bool(
 				block_result.get("block_hands_followed", false)
+			),
+			## Where the ball crossed, and the intersection this contact is --
+			## see `_block_contact_point`. Same three keys as the other two block
+			## sites carry.
+			"net_crossing_x": float(geometric.get("net_crossing_x", set_target.x)),
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_contact_actor_id": int(
+				geometric.get("block_contact_actor_id", -1)
+			),
+			"block_contact_height_meters": geometric.get(
+				"block_contact_height_meters", null
+			),
+			## And how high the ball was at the tape whether or not it was met,
+			## so a beaten block is drawn where the ball went rather than where
+			## the hands were.
+			"ball_height_at_net_meters": geometric.get(
+				"ball_height_at_net_meters", null
+			),
+			## The wall's reaches, beside the ball's height at the same moment.
+			## Without both on one event "the ball cleared the hands" is not a
+			## statement anything can check -- the reaches were on the ATTACK
+			## event and the ball's height here, so a gate asserting the first
+			## was reading an absent key and passing vacuously. Found by that
+			## gate failing its own guard.
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			"block_wall_primary_id": int(
+				opponent_blocker.id if opponent_blocker != null else -1
+			),
+			"block_wall_assist_id": int(
+				assisting_blocker.id if assisting_blocker != null else -1
 			),
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			## When each blocker jumped, so playback can draw the apex where the
@@ -8155,6 +8315,63 @@ static func _block_intent_margins(intent: String) -> Dictionary:
 		"Funnel":
 			return {"stuff": 0.09, "touch": -0.03, "funnel": -0.07}
 	return {"stuff": 0.0, "touch": 0.0, "funnel": 0.0}
+
+
+## Where the ball met the tape, as the realised contact rather than a position
+## assembled beside it.
+##
+## `CONTACT_AND_BALL_FLIGHT.md` §5: a realised contact is the single point where
+## the incoming segment ends and the outgoing one begins, so it has to *be* the
+## intersection that was proved. `AttackResolutionModel._block_contact` proves
+## one -- height against reach, lateral against half width, timing folded into
+## both -- and publishes the crossing it cut on. All three block events placed
+## the contact at the **hitter's** contact x instead, which is where the wall was
+## staged and not where the ball went: measured over 300 rallies, mean 0.278 m
+## apart, worst 0.784 m, and wider than a blocker's own hand on 17.4% of the
+## contacts that published both. See
+## `docs/review/block_authority/BEFORE_block_contact_authority.txt`.
+##
+## `fallback_x` is that hitter contact, and it stays as the fallback for one
+## reason: with `ENABLE_GEOMETRIC_ATTACK` shut there is no crossing to read, and
+## the legacy contest stages the wall on the hitter's lane by construction, so
+## the hitter's x is then the best available statement rather than a wrong one.
+static func _block_contact_point(
+	geometric: Dictionary, fallback_x: float, net_plane_y: float
+) -> Vector2:
+	return Vector2(
+		clampf(float(geometric.get("net_crossing_x", fallback_x)), 0.0, 1.0),
+		net_plane_y,
+	)
+
+
+## Whose hands, when the ball met any.
+##
+## The event named the formation's *primary* blocker -- the one who closed
+## furthest -- and `_block_contact` picks by centrality, because the ball meets
+## the surface in its path rather than the tallest or the best-closed one. Its
+## own note records the cost of getting that wrong: 32% of two-blocker contacts
+## credited to a less central hand than the ball met, which read as hitters
+## finding the outside hand and made a second blocker easier to tool.
+##
+## Falls back to the primary when nothing was touched, because a beaten block is
+## still an event about the blocker who went up, and there is no contact to take
+## an actor from.
+static func _block_contact_blocker(
+	geometric: Dictionary,
+	primary: VolleyballPlayer,
+	assist: VolleyballPlayer,
+) -> VolleyballPlayer:
+	var proven := int(geometric.get("block_contact_actor_id", -1))
+	if proven < 0:
+		return primary
+	if assist != null and assist.id == proven:
+		return assist
+	## Including the primary explicitly rather than falling through to it, so
+	## that the one case this cannot serve -- a proven id belonging to neither
+	## body this event holds -- is the same return as "no contact" and is caught
+	## by the gate rather than hidden here. The event publishes
+	## `block_contact_actor_id` alongside its actor for exactly that check.
+	return primary
 
 
 func _contest_block(
@@ -10338,13 +10555,18 @@ func _retarget_set_event(
 	flight_time: float,
 	apex_height: float,
 	release_time: float,
+	## The heights `_set_arc` solved this flight between. NAN keeps the old
+	## 1.0 m default, which is what every caller used to get; every caller now
+	## has the arc in scope and passes them.
+	release_height: float = NAN,
+	arrival_height: float = NAN,
 ) -> void:
 	if set_event == null:
 		return
 	set_event.end_position = contact
 	set_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 		kind, set_event.start_position, contact, flight_time, apex_height,
-		release_time,
+		release_time, NAN, NAN, release_height, arrival_height,
 	)
 
 
@@ -10998,8 +11220,26 @@ func _physical_platform_dig_result(
 ) -> Dictionary:
 	if digger == null:
 		return {}
+	## **The ball's height, where the incoming flight can state it.**
+	##
+	## This was the passer's own platform height for every platform family, and
+	## the reception's site says why in its own words: the trajectory's endpoint
+	## height was "ambiguous", so the body's number was used rather than make
+	## either meaning of `end_height_meters` authoritative by accident. That
+	## ambiguity is resolved -- the serve's published flight terminates at the
+	## pass, and a flight that resolves its start and publishes its launch states
+	## its far end -- so the deferral has expired and the ball can be read
+	## directly.
+	##
+	## The body stays as the fallback for a flight that resolves neither end, and
+	## for the degenerate case where the derivation lands at or below the floor:
+	## `PlatformContactModel` refuses a contact at zero height, and a ball that
+	## reached the floor is a ball nobody passed.
 	var contact_height := GeometricAttackPromotionModel \
 		.pass_contact_height_meters(digger)
+	var ball_height := realised_flight_end_height(incoming_trajectory)
+	if not is_nan(ball_height) and ball_height > 0.0:
+		contact_height = ball_height
 	var incoming := PlatformContactModel.incoming_velocity_at_contact(
 		incoming_trajectory, contact_height
 	)
@@ -13828,8 +14068,155 @@ func _net_crossing_time(attack_trajectory: Dictionary) -> float:
 	return float(attack_trajectory["start_time"]) 		+ float(attack_trajectory.get("duration", 0.0)) * fraction
 
 
+## **Where the ball was when each contact was made, carried forward once.**
+##
+## `CONTACT_AND_BALL_FLIGHT.md` §5: a realised contact is one point, so the
+## incoming segment's far end *is* the contact's height. Every family that
+## publishes a resolved flight already states that far end; nothing read it, and
+## presentation fell back to a body measurement -- a reach, a platform, a hip --
+## which is a fact about the player standing in for a fact about the ball.
+##
+## This is a copy, not a computation. It reads the incoming leg's own
+## `end_height_meters` and only when that leg says it knows
+## (`height_source == "resolved"`), so a family whose writer never resolved its
+## heights is left alone rather than given a number invented here. That is the
+## difference between propagating authority and minting a second one.
+##
+## The block is skipped because it already publishes its own, proved by the
+## intersection test rather than inherited from the incoming flight -- and on a
+## beaten block there is no contact for this to be the height of. See
+## `docs/review/BLOCK_REALISED_CONTACT.md`.
+## Where a published flight ends, in absolute metres, from the flight itself.
+##
+## Two ways a flight can say, and no third. A writer that resolved both ends
+## states it (`height_source == "resolved"`). A writer that resolved its start
+## and published its launch has said it implicitly, and integrating that launch
+## across the flight's own duration reads it out -- that is evaluating the
+## flight, not extrapolating past it, because the duration is the flight's.
+##
+## `NAN` for a flight that resolved neither, which is honest: the 1.0 m default
+## `BallTrajectory.create` falls back to is not a height anybody measured.
+static func realised_flight_end_height(trajectory: Dictionary) -> float:
+	var source := str(trajectory.get("height_source", "default"))
+	if source == "resolved":
+		return float(trajectory.get("end_height_meters", NAN))
+	if source == "start_resolved" and trajectory.has("launch_vertical_mps"):
+		var flown := maxf(float(trajectory.get(
+			"physical_duration_seconds",
+			float(trajectory.get("duration", 0.0)),
+		)), 0.0)
+		return float(trajectory.get("start_height_meters", 1.0)) \
+			+ float(trajectory["launch_vertical_mps"]) * flown \
+			- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * flown * flown
+	return NAN
+
+
+func _stamp_realised_contact_heights(result: Resource) -> void:
+	if result == null:
+		return
+	var previous: RallyEvent = null
+	for raw_event in result.events:
+		var event := raw_event as RallyEvent
+		## **An action event is not a ball contact, and must not become one by
+		## standing between two.**
+		##
+		## This skipped only `POINT`, so a `SET_DECISION` -- which publishes no
+		## outgoing flight, because nothing was struck -- became the `previous`
+		## event for the set that followed it, and the set was left with no
+		## contact height at all. Measured: 109 of 261 sets stamped from nothing,
+		## every one of them preceded by a decision, and none of the 152 without
+		## one affected. The seam was not an asymmetry between the two sides'
+		## physics; it was one side's rallies carrying an extra event and this
+		## loop counting it as a contact.
+		##
+		## `MatchScreen._next_contact_index` skips exactly this pair, and has
+		## since it was written. Matching it rather than inventing a second
+		## opinion about what a contact is.
+		if event == null or int(event.event_type) in [
+			RallyEventModel.EventType.POINT,
+			RallyEventModel.EventType.SET_DECISION,
+		]:
+			continue
+		if previous != null \
+				and int(event.event_type) != RallyEventModel.EventType.BLOCK:
+			## **Only when the incoming flight actually ends at this contact.**
+			##
+			## `height_source == "resolved"` is that test, and it is a narrower
+			## one than it looks. A set is solved *between* two heights, so its
+			## far end is the contact that receives it and the two are one point.
+			## A serve is not: it publishes the whole flight to where the ball
+			## would land, and the reception happens partway along it, so the
+			## serve leaves `end_height_meters` unresolved and this correctly
+			## declines to speak for the pass.
+			##
+			## The contact's own outgoing launch height was tried as a second
+			## source and rejected on measurement: on the reception it equals the
+			## body proxy to three decimals (`|launch - body| = 0.000` over 162
+			## legs), so it is the platform wearing a flight's clothes rather
+			## than an independent statement about the ball. Preferring it moved
+			## no reception seam and widened the opponent set's from 42 breaks to
+			## 63. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+			var incoming: Dictionary = previous.metadata.get(
+				"outgoing_trajectory", {}
+			)
+			var source := str(incoming.get("height_source", "default"))
+			if source == "resolved":
+				event.metadata["ball_contact_height_meters"] = float(
+					incoming.get("end_height_meters", 1.0)
+				)
+				event.metadata["ball_contact_height_source"] = \
+					"incoming_realised_segment"
+			elif source == "start_resolved" \
+					and incoming.has("launch_vertical_mps"):
+				## Same derivation the platform resolver now uses, so the height
+				## a contact is *resolved* at and the height it is *drawn* at are
+				## one function rather than two that agree by inspection.
+				## **A flight that knows where it started and how it left can say
+				## where it finished.**
+				##
+				## The serve is the family this exists for. It resolves its own
+				## contact height and its launch and leaves its far end unstated,
+				## which read as "the serve cannot say where the pass was" -- and
+				## the measurement says otherwise: the serve flight's published
+				## end time and the reception's own stamp agree, so the flight is
+				## already terminated at the pass rather than running on to the
+				## floor. Integrating its launch across its own duration is
+				## therefore evaluating the flight *at the contact*, not
+				## extrapolating past one.
+				##
+				## Not a second physics. This is the same integration
+				## `BallPresentation` performs to draw the leg, moved to the side
+				## of the boundary that owns the fact -- which is the whole of §5.
+				event.metadata["ball_contact_height_meters"] = maxf(
+					realised_flight_end_height(incoming), 0.0
+				)
+				event.metadata["ball_contact_height_source"] = \
+					"incoming_launch_integrated"
+		## **`outgoing.start == C` is the third term and it is not closed here.**
+		##
+		## Writing the contact height back onto this event's own flight was tried
+		## and does nothing: every family that reaches this point publishes a
+		## launch, and a launch was solved *from* the start height it shipped
+		## with. Overwriting only the height would leave a flight disagreeing with
+		## its own length, which is a worse record than an honest gap.
+		##
+		## What the gap is, exactly: the reception's arc is solved from the
+		## platform's height, so once its contact says the ball's height instead,
+		## the arc departs from somewhere the contact no longer claims -- 0.29 to
+		## 0.42 m, and it appears as a set seam. That disagreement is not created
+		## here. It was always in the record and the platform proxy was hiding it
+		## on both ends at once. Closing it means re-solving the pass from the
+		## ball's height, which moves `pass_apex_meters` and therefore the set
+		## clamp, and is simulation work rather than a seam repair. See
+		## `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+		previous = event
+
+
 func _finalize_rally_timeline(result: Resource) -> void:
 	_ensure_event_trajectories(result)
+	## After the trajectories exist and before the timeline is finalised: this
+	## reads flights and writes only heights, so it cannot move a contact in time.
+	_stamp_realised_contact_heights(result)
 	result.analysis["physical_time_corrections"] = _stamp_physical_times(result)
 	var timeline := 0.0
 	for event_resource in result.events:
@@ -14309,20 +14696,13 @@ func _natural_hitter_lane(
 static func _set_rescue_height_meters(
 	travel_time: float, ordinary_flight_time: float
 ) -> float:
-	return clampf(maxf(travel_time - ordinary_flight_time, 0.0) * 1.35, 0.0, 1.80)
+	return SetterDecisionMath.rescue_height_meters(travel_time, ordinary_flight_time)
 
 
 static func _set_height_difficulty(
 	setter: VolleyballPlayer, rescue_height_meters: float
 ) -> float:
-	if setter == null:
-		return rescue_height_meters * 0.08
-	var height_control := (
-		float(setter.set_accuracy) * 0.45
-			+ float(setter.hand_control) * 0.35
-			+ float(setter.tempo_control) * 0.20
-	) / 100.0
-	return rescue_height_meters * lerpf(0.11, 0.045, height_control)
+	return SetterDecisionMath.set_height_difficulty(setter, rescue_height_meters)
 
 
 func _choose_assignment(
@@ -15609,6 +15989,11 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		),
 		"block_edge_gap_meters": swing.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(swing.get("block_contact_kind", "")),
+		"block_contact_actor_id": int(swing.get("block_contact_actor_id", -1)),
+		"block_contact_height_meters": swing.get(
+			"block_contact_height_meters", null
+		),
+		"ball_height_at_net_meters": swing.get("ball_height_at_net_meters", null),
 		"block_deflection_landing": swing.get("block_deflection_landing", null),
 		"block_deflection_speed_mps": float(swing.get("block_deflection_speed_mps", 0.0)),
 		"block_deflection_vertical_angle_degrees": float(swing.get(
@@ -15719,6 +16104,16 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		),
 		"block_edge_gap_meters": record.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(record.get("block_contact_kind", "")),
+		## The contact itself: who met the ball and how high it was. Forwarded so
+		## the BLOCK event can be built from the intersection that was proved
+		## rather than from the formation that was assembled before the swing.
+		"block_contact_actor_id": int(record.get("block_contact_actor_id", -1)),
+		"block_contact_height_meters": record.get(
+			"block_contact_height_meters", null
+		),
+		"ball_height_at_net_meters": record.get(
+			"ball_height_at_net_meters", null
+		),
 		"block_deflection_landing": record.get("block_deflection_landing", null),
 		"block_deflection_speed_mps": float(record.get("block_deflection_speed_mps", 0.0)),
 		"block_deflection_vertical_angle_degrees": float(record.get(
@@ -18152,6 +18547,12 @@ func _set_arc(
 		var level := RallyKinematics.solve_launch_arc(distance_meters, angle)
 		level["apex_absolute_meters"] = release_height_meters \
 			+ float(level.apex_height_meters)
+		## The two heights this arc was solved between, returned rather than
+		## consumed. See the note on the timed branch below; the same reasoning
+		## applies here, where `solve_launch_arc` is a ground-to-ground solver and
+		## the release height is the only absolute either end has.
+		level["release_height_meters"] = release_height_meters
+		level["arrival_height_meters"] = hitter_contact_height_meters
 		return level
 	var apex := _set_apex_meters(
 		setter, tempo, set_quality, hitter_contact_height_meters,
@@ -18164,6 +18565,23 @@ func _set_arc(
 		"apex_height_meters": maxf(apex - release_height_meters, 0.0),
 		"apex_absolute_meters": apex,
 		"launch_angle_degrees": angle,
+		## **Where this ball starts and where it arrives, in absolute metres.**
+		##
+		## `duration_for_apex` is solved *between* these two and then neither left
+		## the function, so every set published a trajectory carrying
+		## `BallTrajectory`'s 1.0 m default at both ends -- measured at 159 of 159
+		## set flights, `height_source == "default"`. The set is the seam where
+		## the chain breaks: it consumes a reception flight whose heights are
+		## resolved and hands the attack one that has forgotten them, so every
+		## family downstream reads a body proxy for want of a number that was in
+		## scope here all along. See
+		## `docs/review/contact_authority/BEFORE_contact_authority_census.txt`.
+		##
+		## Not a second opinion about where the ball goes: the duration above is
+		## the time to fall from `apex` to `arrival_height_meters`, so a flight
+		## drawn to any other far end disagrees with its own length.
+		"release_height_meters": release_height_meters,
+		"arrival_height_meters": hitter_contact_height_meters,
 	}
 
 

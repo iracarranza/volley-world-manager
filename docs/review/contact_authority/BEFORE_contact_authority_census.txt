@@ -1,0 +1,34 @@
+
+family/serving side          legs   known  breaks  mean gap worst gap  classification
+ATTACK/home                   135       0     135     2.065     2.419  body-proxy           launch 0, derivable 0, default=135
+                                  publishes: none=0, launch=135, default=135
+ATTACK/opponent               138       0     138     2.110     2.422  body-proxy           launch 0, derivable 0, default=138
+                                  publishes: none=0, launch=138, default=138
+ATTACK_COVERAGE/home            2       0       0     0.038     0.038  body-proxy           launch 0, derivable 0, default=2
+                                  publishes: none=0, launch=2, resolved=2
+ATTACK_COVERAGE/opponent       11       0       1     0.036     0.085  body-proxy           launch 0, derivable 0, default=11
+                                  publishes: none=0, launch=11, resolved=11
+BLOCK/home                    104       0     104     1.886     3.003  body-proxy           launch 104, derivable 0, default=104
+                                  publishes: none=64, launch=34, default=40
+BLOCK/opponent                120       0     120     1.880     2.468  body-proxy           launch 120, derivable 0, default=120
+                                  publishes: none=57, launch=37, default=63
+DIG/home                       68       0       0     0.016     0.038  body-proxy           launch 0, derivable 0, default=4
+                                  publishes: none=3, launch=1, resolved=1
+DIG/opponent                   72       0       0     0.020     0.038  body-proxy           launch 0, derivable 0, default=15
+                                  publishes: none=6, launch=9, resolved=9
+RECEPTION/home                126       1      39     0.049     1.793  computed+dropped     launch 126, derivable 126, resolved=1, start_resolved=125
+                                  publishes: none=0, launch=126, resolved=126
+RECEPTION/opponent            125       0      33     0.033     0.085  derivable, not derived launch 125, derivable 125, start_resolved=125
+                                  publishes: none=0, launch=125, resolved=125
+SET/home                      135     135     108     0.312     1.035  computed+dropped     launch 135, derivable 135, resolved=135
+                                  publishes: none=0, launch=0, default=135
+SET/opponent                  138      24      17     0.354     0.997  computed+dropped     launch 24, derivable 24, resolved=24
+                                  publishes: none=0, launch=0, default=24
+SET_DECISION/opponent         114     114     113     1.074     1.688  computed+dropped     launch 114, derivable 114, resolved=114
+                                  publishes: none=114, launch=0, 
+
+known   = the incoming flight's writer knew its far-end height
+          (`height_source == "resolved"`), rather than taking the
+          1.0 m default `BallTrajectory.create` falls back to
+breaks  = legs where the published far end and the drawn contact
+          height differ by more than 0.05 m

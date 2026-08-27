@@ -49,6 +49,12 @@ jobs:
           set -euo pipefail
           godot --headless --path . --editor --quit
 
+      - name: Validate domain registry contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --script tools/validate_domain_registries.gd
+
       - name: Install virtual display
         shell: bash
         run: |

@@ -22,6 +22,11 @@ const BLOCK_JUMP_SCRIPT := preload("res://scripts/simulation/block_jump_model.gd
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
+## The playback script itself, for the pose selectors. Instantiated bare rather
+## than as a scene: `_contact_posture` and `_touched_the_ball` read event
+## metadata and nothing else, so they need no node tree, and asserting on them
+## directly is asserting on the authority playback actually consults.
+const MATCH_SCREEN_SCRIPT := preload("res://scenes/screens/match_screen.gd")
 const PLAYER_ACTOR_3D_SCENE := preload(
 	"res://scenes/components/player_actor_3d.tscn"
 )
@@ -269,6 +274,12 @@ func _initialize() -> void:
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
 	_test_a_blocker_has_five_states()
+	_test_block_contact_is_an_intersection()
+	_test_block_event_publishes_the_contact_it_proved()
+	_test_the_set_publishes_the_heights_it_was_solved_between()
+	_test_a_miss_pose_means_the_ball_was_not_touched()
+	_test_a_beaten_block_reaches_without_the_ball_arriving()
+	_test_a_missed_contact_has_no_follow_through()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -22622,4 +22633,612 @@ func _test_body_facing_rule() -> void:
 		PlayerActor3D.HEAD_YAW_LIMIT_DEGREES > 0.0
 			and PlayerActor3D.HEAD_YAW_LIMIT_DEGREES < 90.0,
 		"head yaw is limited to less than a quarter turn off the body",
+	)
+
+
+## A block contact is an intersection, and the event has to say the one that was
+## proved.
+##
+## `AttackResolutionModel._block_contact` has always been a real ball-by-body
+## test -- height against reach, lateral against half width, timing folded into
+## both -- so quality never created a contact on the production path. What it
+## could not do was *say* what it proved: the crossing, the height and the hand
+## all stopped at the promotion seam, and the BLOCK event published the
+## formation's primary blocker at the **hitter's** contact x instead.
+##
+## Measured before the repair, over 300 rallies: the published contact sat a
+## mean 0.278 m from the crossing the feasibility test cut on, worst 0.784 m,
+## and further than a blocker's own hand is wide on 17.4% of contacts -- and on
+## 36.1% of them the ball met a hand other than the primary. See
+## `docs/review/block_authority/BEFORE_block_contact_authority.txt`.
+##
+## One miss this model does not have, stated rather than invented a fixture for:
+## there is no *below* miss. A ball too low to clear the tape never reaches the
+## wall at all -- `_feasible_launch` and the net-clearance search own that -- so
+## the two ways past a block are over it and around it, and the model names
+## exactly those two.
+func _test_block_contact_is_an_intersection() -> void:
+	const HALF := 0.45
+	const REACH := 3.20
+	var lane := 0.5
+	var wall: Array = [
+		{"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF},
+	]
+
+	## Reachable: under the hands and inside the width.
+	var reachable: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, 2.90, wall
+	)
+	_check(
+		not reachable.is_empty()
+			and is_equal_approx(float(reachable.height_at_net_meters), 2.90)
+			and float(reachable.depth_below_reach_meters) > 0.0,
+		"a ball under the hands and inside them is met, at the height it was met",
+	)
+
+	## Over the top: a reach problem, and it says so.
+	var over_detail := {}
+	var over: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, REACH + 0.01, wall, over_detail
+	)
+	_check(
+		over.is_empty() and str(over_detail.get("reason", "")) == "over",
+		"a ball above the hands is not touched, and the miss is a reach problem",
+	)
+
+	## Around the edge: a positioning problem, and the gap is reported negative.
+	var around_detail := {}
+	var wide_x := lane + (HALF + 0.20) / CourtConstants.COURT_WIDTH_METERS
+	var around: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		wide_x, 2.90, wall, around_detail
+	)
+	_check(
+		around.is_empty()
+			and str(around_detail.get("reason", "")) == "around"
+			and float(around_detail.get("edge_miss_meters", 0.0)) < 0.0,
+		"a ball past the outside hand is not touched, and the miss is a positioning one",
+	)
+
+	## Both at once, on a wall of two that each fail differently. The reasons
+	## compose rather than one silently winning.
+	##
+	## Both blockers stand in the lane and the ball goes wide *and* high, which
+	## is the only shape that produces both reasons: the height test comes first
+	## and continues, so a blocker too short to reach never gets as far as the
+	## lateral test and can only ever report `over`. Written the other way round
+	## first, and this assertion is what caught it.
+	var mixed_detail := {}
+	var mixed: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		wide_x, REACH + 0.01, [
+			{"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF},
+			{"net_x": lane, "reach_height_m": REACH + 0.40, "half_width_m": HALF},
+		], mixed_detail
+	)
+	_check(
+		mixed.is_empty()
+			and str(mixed_detail.get("reason", "")) == "over and around",
+		"a swing that clears one hand and passes the other is beaten both ways",
+	)
+
+	## **Only one blocker is feasible.** The short one cannot be the contact
+	## however central they stand, because centrality only ranks hands the ball
+	## can actually reach.
+	var one_feasible: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, 3.05, [
+			{"net_x": lane, "reach_height_m": 2.60, "half_width_m": HALF,
+				"player_id": 11},
+			{"net_x": lane + 0.30 / CourtConstants.COURT_WIDTH_METERS,
+				"reach_height_m": 3.30, "half_width_m": HALF, "player_id": 12},
+		]
+	)
+	_check(
+		not one_feasible.is_empty()
+			and int(Dictionary(one_feasible.blocker).player_id) == 12,
+		"the ball meets the only hand that could reach it, not the nearest one",
+	)
+
+	## **Centrality, not reach.** Both hands can get to this ball; the ball meets
+	## the one in its path. This is the 36.1% the event used to misattribute,
+	## because it credited whoever closed furthest instead.
+	var central: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, 2.90, [
+			{"net_x": lane + 0.36 / CourtConstants.COURT_WIDTH_METERS,
+				"reach_height_m": 3.40, "half_width_m": HALF, "player_id": 21},
+			{"net_x": lane, "reach_height_m": 3.20, "half_width_m": HALF,
+				"player_id": 22},
+		]
+	)
+	_check(
+		not central.is_empty()
+			and int(Dictionary(central.blocker).player_id) == 22,
+		"a taller hand off the ball's line does not beat a shorter one under it",
+	)
+
+	## The four kinds, by the two quantities that cut them: depth under the hands
+	## and distance from the outside edge.
+	var stuffed: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, REACH - ATTACK_RESOLUTION_SCRIPT.STUFF_DEPTH_METERS - 0.05, wall
+	)
+	var grazed: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane, REACH - 0.01, wall
+	)
+	var tool_x := lane \
+		+ (HALF - ATTACK_RESOLUTION_SCRIPT.TOOL_EDGE_MARGIN_METERS * 0.5) \
+		/ CourtConstants.COURT_WIDTH_METERS
+	var tooled: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		tool_x, REACH - 0.60, wall
+	)
+	_check(
+		str(stuffed.get("kind", "")) == "stuff"
+			and str(grazed.get("kind", "")) == "touch"
+			and str(tooled.get("kind", "")) == "tool",
+		"depth under the hands and distance from the edge decide what the contact was",
+	)
+
+	## **Early and late are not the same hands.** Identical geometry, one blocker
+	## with their arms still coming down: the effective edge of a dropping hand is
+	## not where the hand is, so the same ball is tooled rather than touched.
+	var edge_height := REACH - 0.60
+	var square_edge: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane + (HALF - ATTACK_RESOLUTION_SCRIPT.TOOL_EDGE_MARGIN_METERS * 1.2)
+			/ CourtConstants.COURT_WIDTH_METERS,
+		edge_height, [{
+			"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF,
+			"arm_state": "extended",
+			"block_effectiveness": BlockJumpModel.REFERENCE_EFFECTIVENESS,
+		}]
+	)
+	var dropping_edge: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		lane + (HALF - ATTACK_RESOLUTION_SCRIPT.TOOL_EDGE_MARGIN_METERS * 1.2)
+			/ CourtConstants.COURT_WIDTH_METERS,
+		edge_height, [{
+			"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF,
+			"arm_state": "descending",
+			"block_effectiveness": BlockJumpModel.REFERENCE_EFFECTIVENESS,
+		}]
+	)
+	_check(
+		str(square_edge.get("kind", "")) != "tool"
+			and str(dropping_edge.get("kind", "")) == "tool",
+		"the same ball off a dropping hand is tooled where a locked one touches it",
+	)
+
+	## Source-state immutability: the wall a swing is hit into is not edited by
+	## being hit into.
+	var probe_wall: Array = [
+		{"net_x": lane, "reach_height_m": REACH, "half_width_m": HALF,
+			"player_id": 31},
+	]
+	var before := str(probe_wall)
+	ATTACK_RESOLUTION_SCRIPT._block_contact(lane, 2.90, probe_wall)
+	_check(
+		str(probe_wall) == before,
+		"resolving a contact does not edit the wall it was resolved against",
+	)
+
+
+## And the event says it: same hand, same place, on both sides of the net.
+##
+## The half of the repair that could not be tested against the model, because the
+## defect was never in the model. Read entirely off published metadata -- if this
+## gate had to re-run the resolver to check the resolver, it would be checking
+## nothing.
+func _test_block_event_publishes_the_contact_it_proved() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var per_side := {"home": 0, "opponent": 0}
+	var contacts := 0
+	var actor_disagrees := 0
+	var actor_outside_wall := 0
+	var position_disagrees := 0
+	var contact_without_hand := 0
+	var hand_without_contact := 0
+	var height_missing := 0
+	var seam_breaks := 0
+	var time_out_of_order := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(931000, 931090):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			var previous: Resource = null
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+					previous = event
+					continue
+				var meta: Dictionary = event.metadata
+				var kind := str(meta.get("block_contact_kind", ""))
+				var hand := int(meta.get("block_contact_actor_id", -1))
+				## Contact if and only if a hand was proved. Neither direction is
+				## allowed to drift: a kind with no hand is a contact nobody made,
+				## and a hand with no kind is a hand that met nothing.
+				if not kind.is_empty() and hand < 0:
+					contact_without_hand += 1
+				if kind.is_empty() and hand >= 0:
+					hand_without_contact += 1
+				if kind.is_empty():
+					previous = event
+					continue
+				contacts += 1
+				var side_key := str(meta.get("side", "?"))
+				if per_side.has(side_key):
+					per_side[side_key] = int(per_side[side_key]) + 1
+				if int(event.actor_id) != hand:
+					actor_disagrees += 1
+				if not (hand in [
+					int(meta.get("block_wall_primary_id", -1)),
+					int(meta.get("block_wall_assist_id", -1)),
+				]):
+					actor_outside_wall += 1
+				if not is_equal_approx(
+					float(meta.get("net_crossing_x", -1.0)), event.start_position.x
+				):
+					position_disagrees += 1
+				if meta.get("block_contact_height_meters", null) == null:
+					height_missing += 1
+				## The contact happens after the swing that produced it and
+				## before whatever plays it next. Stamped from the rally clock
+				## through `_swing_reaches_net`, which exists because a block
+				## happens partway through a flight rather than at its end -- the
+				## fault it was written for was hands stamped up to 1.140 s after
+				## the ball they were touching had landed.
+				if previous != null:
+					var struck := float(previous.metadata.get("event_time", -1.0))
+					var met := float(meta.get("event_time", -1.0))
+					if struck >= 0.0 and met >= 0.0 and met < struck:
+						time_out_of_order += 1
+				## The incoming leg ends where the contact is. `_truncated_arc`
+				## re-slices the swing to the net when the wall touches it, and
+				## the point it slices to is this same contact -- so a break here
+				## is the two coming apart, which is the whole of §5.
+				if previous != null:
+					var flight: Dictionary = previous.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if flight.has("end_position") and not is_equal_approx(
+						Vector2(flight["end_position"]).x, event.start_position.x
+					):
+						seam_breaks += 1
+				previous = event
+	_check(
+		contacts > 0 and int(per_side.home) > 0 and int(per_side.opponent) > 0,
+		"both sides of the net produce block contacts to check",
+	)
+	_check(
+		contact_without_hand == 0 and hand_without_contact == 0,
+		"a block event names a hand exactly when the ball met one",
+	)
+	_check(
+		actor_disagrees == 0,
+		"the block event's actor is the hand the intersection proved",
+	)
+	_check(
+		actor_outside_wall == 0,
+		"the hand the ball met belongs to the wall that formed",
+	)
+	_check(
+		position_disagrees == 0,
+		"the contact is published where the ball crossed, not where the hitter stood",
+	)
+	_check(
+		height_missing == 0,
+		"every block contact publishes the height the ball was met at",
+	)
+	_check(
+		seam_breaks == 0,
+		"the swing's drawn end and the block's contact are one point",
+	)
+	_check(
+		time_out_of_order == 0,
+		"a block contact is stamped after the swing it met",
+	)
+
+
+## The set stops throwing away the two heights it was solved between.
+##
+## `_set_arc` is handed a release height and a hitter contact height and solves
+## `duration_for_apex` *between* them -- then returned neither, so every set
+## published a flight carrying `BallTrajectory`'s 1.0 m default at both ends.
+## Measured at 159 of 159 set flights before the repair. The cost was not local:
+## the set is the seam where the chain breaks, and every family downstream read a
+## body proxy for want of a number that was in scope here all along. The attack
+## in particular went from `body-proxy` with 273 of 273 legs breaking at a mean
+## 2.09 m to `authoritative` with none, on this change alone. See
+## `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+func _test_the_set_publishes_the_heights_it_was_solved_between() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var sets := 0
+	var resolved := 0
+	var attacks := 0
+	var attack_agrees := 0
+	var attack_stamped := 0
+	var inverted := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(952000, 952060):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			var previous: Resource = null
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.POINT:
+					continue
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.SET:
+					sets += 1
+					var flight: Dictionary = event.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if str(flight.get("height_source", "default")) == "resolved":
+						resolved += 1
+						## A set is thrown up to be hit, so it arrives higher
+						## than it left. Stated as the direction rather than a
+						## magnitude: the heights are the setter's and the
+						## hitter's own bodies and no figure is authored here.
+						if float(flight.get("end_height_meters", 0.0)) \
+								< float(flight.get("start_height_meters", 0.0)):
+							inverted += 1
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+						and previous != null \
+						and int(previous.event_type) \
+							== RALLY_EVENT_SCRIPT.EventType.SET:
+					attacks += 1
+					var incoming: Dictionary = previous.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					var stamped: Variant = event.metadata.get(
+						"ball_contact_height_meters", null
+					)
+					if stamped != null:
+						attack_stamped += 1
+						## §5's identity, as a copy that can be checked: the
+						## incoming segment's far end *is* the contact.
+						if is_equal_approx(
+							float(stamped),
+							float(incoming.get("end_height_meters", -1.0)),
+						):
+							attack_agrees += 1
+				previous = event
+	_check(
+		sets > 0 and resolved == sets,
+		"every set publishes a flight that knows both its own heights",
+	)
+	_check(
+		inverted == 0,
+		"a set arrives higher than it was released, as the arc it was solved as",
+	)
+	_check(
+		attacks > 0 and attack_stamped == attacks,
+		"every attack off a set carries the height the ball was met at",
+	)
+	_check(
+		attack_agrees == attack_stamped,
+		"the attack's contact height is the set flight's own far end, copied",
+	)
+
+
+## A pose says the ball was touched only when it was.
+##
+## FD-007. `_contact_posture` reached for the miss pose on `not event.success`,
+## which is the contact's *outcome* and not whether the ball was met. Measured
+## over 180 rallies: all 35 failed serves, 4 failed receptions, 3 failed sets and
+## 14 failed attacks still publish an outgoing ball -- service errors, shanks and
+## swings that went out, every one of them struck -- so those were all drawn
+## reaching for a ball they had just hit. Only the block and the dig fail by not
+## touching, and the block never reaches this function at all: it poses through
+## `_pose_block_wall`, which draws the jump the blocker actually made.
+##
+## The test is B0's, the same one the one-ball chain was certified with: did this
+## contact publish a ball. Asserted here on the two populations that make the two
+## errors visible -- contacts that failed but struck, and contacts that struck
+## nothing.
+func _test_a_miss_pose_means_the_ball_was_not_touched() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var failed_but_struck := 0
+	var struck_nothing := 0
+	var struck_nothing_reaching := 0
+	var failed_but_struck_reaching := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(953000, 953060):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) in [
+					RALLY_EVENT_SCRIPT.EventType.POINT,
+					## Posed by `_pose_block_wall`, which never consults this.
+					RALLY_EVENT_SCRIPT.EventType.BLOCK,
+				]:
+					continue
+				if bool(event.success):
+					continue
+				var outgoing: Dictionary = event.metadata.get(
+					"outgoing_trajectory", {}
+				)
+				var touched: bool = not outgoing.is_empty() \
+					and float(outgoing.get("duration", 0.0)) > 0.0
+				var reaching := str(
+					MatchScreen._touched_the_ball(event as RallyEvent)
+				) == "false"
+				if touched:
+					failed_but_struck += 1
+					if reaching:
+						failed_but_struck_reaching += 1
+				else:
+					struck_nothing += 1
+					if reaching:
+						struck_nothing_reaching += 1
+	_check(
+		failed_but_struck > 0 and struck_nothing > 0,
+		"a rally sample contains both kinds of unsuccessful contact",
+	)
+	_check(
+		failed_but_struck_reaching == 0,
+		"a shank or a service error is not drawn reaching for a ball it struck",
+	)
+	_check(
+		struck_nothing_reaching == struck_nothing,
+		"a contact that launched no ball is drawn reaching, every time",
+	)
+
+
+## A beaten block reaches and misses, and the ball does not go to its hands.
+##
+## FD-007 names two properties for the block specifically, and both are now
+## answerable from published data rather than by reading the pose code.
+##
+## **It reaches.** A wall the ball flew past still jumped, and `block_jump_timing`
+## carries an entry per body that left the floor -- so the beaten block is posed
+## through `_pose_block_wall` from a real jump, not suppressed. Suppressing it
+## would replace one false statement with another: the blocker did go up.
+##
+## **The ball does not snap to the hands.** `BallPresentation.contact_height`
+## returned `block_contact_from_reach(jumping_reach)` for every block, touched or
+## not, so a swing that cleared a wall by half a metre was drawn arriving in the
+## hands it had just beaten. It reads the published ball height now, and for a
+## beaten block that is `ball_height_at_net_meters` -- where the ball was at the
+## tape, which is the honest number when no hand met it.
+func _test_a_beaten_block_reaches_without_the_ball_arriving() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var beaten := 0
+	var beaten_with_a_jump := 0
+	var beaten_stating_ball_height := 0
+	var drawn_at_reach := 0
+	var over_the_top := 0
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(954000, 954070):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+					continue
+				if not str(
+					event.metadata.get("block_contact_kind", "")
+				).is_empty():
+					continue
+				beaten += 1
+				if not Dictionary(
+					event.metadata.get("block_jump_timing", {})
+				).is_empty():
+					beaten_with_a_jump += 1
+				var stated: Variant = event.metadata.get(
+					"ball_height_at_net_meters", null
+				)
+				if stated == null:
+					continue
+				beaten_stating_ball_height += 1
+				var drawn := BallPresentation.contact_height(
+					event as RallyEvent, result.player_physical_profiles
+				)
+				if not is_equal_approx(drawn, maxf(
+					float(stated),
+					BallPresentation.FLOOR_CONTACT_HEIGHT_METERS,
+				)):
+					drawn_at_reach += 1
+				## The wall was beaten *over the top* on some of these, and there
+				## the ball is provably above every hand. Counted so the check
+				## below is not vacuously true on a population where the ball
+				## happened to sit at hand height anyway.
+				var reaches: Array = event.metadata.get("wall_reach_heights", [])
+				for raw_reach in reaches:
+					if float(stated) > float(raw_reach):
+						over_the_top += 1
+						break
+	_check(
+		beaten > 0 and beaten_stating_ball_height == beaten,
+		"every beaten block states where the ball was at the tape",
+	)
+	_check(
+		beaten_with_a_jump == beaten,
+		"a beaten block still records the jump its blockers made",
+	)
+	_check(
+		drawn_at_reach == 0,
+		"a beaten block draws the ball where the ball was, not at the hands",
+	)
+	_check(
+		over_the_top > 0,
+		"and the sample contains balls provably above every hand in the wall",
+	)
+
+
+## A contact that never happened does not play a follow-through.
+##
+## FD-007's last item. `_contact_posture` can already say the body *reached* --
+## it tests whether the contact published a ball, which is B0's definition and
+## not `success` -- but a reach that misses and a reach that digs were still
+## drawn identically, because the signed phase ran the whole way through contact
+## and out the other side for both. Its own comment logged that as the half it
+## could not reach: "telling them apart wants the ball's absence to be visible in
+## the body rather than only in the ball."
+##
+## The wind-up is true of a miss and the follow-through is not, so the phase is
+## held at zero. Asserted on the selectors both sides of that decision rather
+## than on a rendered frame, because what is under test is which pose the rally
+## asks for, not how the mesh draws it.
+func _test_a_missed_contact_has_no_follow_through() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var screen: Object = MATCH_SCREEN_SCRIPT.new()
+	var touched := 0
+	var missed := 0
+	var missed_reaching := 0
+	var touched_reaching := 0
+	var families := {}
+	for side in range(2):
+		manager.match_state.serving_home = side == 0
+		for seed_value in range(957000, 957070):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for event_resource in result.events:
+				var event: Resource = event_resource
+				if int(event.event_type) in [
+					RALLY_EVENT_SCRIPT.EventType.POINT,
+					RALLY_EVENT_SCRIPT.EventType.SET_DECISION,
+				]:
+					continue
+				var posture := str(screen._contact_posture(event))
+				if screen._touched_the_ball(event):
+					touched += 1
+					if posture == "reaching":
+						touched_reaching += 1
+				else:
+					missed += 1
+					var family := str(
+						RALLY_EVENT_SCRIPT.EventType.keys()[int(event.event_type)]
+					)
+					families[family] = int(families.get(family, 0)) + 1
+					if posture == "reaching":
+						missed_reaching += 1
+	_check(
+		missed > 0 and touched > 0,
+		"the sample contains both contacts that were made and contacts that were not",
+	)
+	_check(
+		missed_reaching == missed,
+		"every contact that touched no ball is drawn reaching for it",
+	)
+	## The other direction, which is the one `success` got wrong: a shanked pass
+	## and a service error *did* touch the ball, and must keep their contact.
+	_check(
+		touched_reaching < touched,
+		"a contact that was made is not drawn as a miss",
+	)
+	## And the miss is not one family's quirk. Only the block and the dig fail by
+	## not touching the ball at all -- measured in FD-007 -- so a sample where
+	## only one of them appears would not be testing the shared rule.
+	_check(
+		families.size() >= 2,
+		"more than one contact family reaches without arriving",
 	)

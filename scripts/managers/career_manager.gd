@@ -396,6 +396,7 @@ func advance_week() -> String:
 		strength_population.append_array(career.transfer_pool)
 		strength_population.append_array(_game_manager().players)
 		SixnetLeague.ensure_bootstrapped(career, strength_population)
+	var weekly_service := _week_service(str(career.region), int(career.absolute_week))
 	for player in _game_manager().players:
 		## Weekly recovery must exceed every training load. The old 0.04 was
 		## smaller than default Team Practice's 0.05, so an idle week made a
@@ -411,8 +412,8 @@ func advance_week() -> String:
 		##
 		## This is the seam the whole accommodation design attaches to, and it
 		## could not exist until a match cost something that survived the week.
-		recover_weekly_fatigue(player, _weekly_recovery_share(player))
-		_advance_weekly_palate(player)
+		recover_weekly_fatigue(player, _weekly_recovery_share(player, weekly_service))
+		_advance_weekly_palate(player, weekly_service)
 		player.current_form *= 0.92
 		## A week spent under your own eyes. The other half of scouting
 		## confidence, and the half a scout cannot buy: `ScoutingSystem`
@@ -425,9 +426,7 @@ func advance_week() -> String:
 	## looks exactly like a chef who is learning.
 	var kitchen_chef := _chef()
 	if kitchen_chef != null:
-		var served_now: Dictionary = _week_service(
-			str(career.region), int(career.absolute_week)
-		)
+		var served_now: Dictionary = weekly_service
 		StaffFamiliar.record_week(
 			career.staff_familiarity, int(kitchen_chef.id),
 			Dictionary(served_now.get("pastes", {})).keys()
@@ -454,7 +453,9 @@ static func recover_weekly_fatigue(
 
 
 ## What share of a full week's recovery this voli actually banks.
-func _weekly_recovery_share(player: VolleyballPlayer) -> float:
+func _weekly_recovery_share(
+	player: VolleyballPlayer, served_override: Dictionary = {},
+) -> float:
 	var team: Resource = _game_manager().team
 	if team == null or player == null:
 		return 1.0
@@ -465,7 +466,7 @@ func _weekly_recovery_share(player: VolleyballPlayer) -> float:
 	## Against what the chef put on the block, not against the whole larder --
 	## see `FoodSupply.served`. Measuring the larder made a supply line a penalty
 	## for a squad that was already eating what it knew.
-	var served: Dictionary = _week_service(club_region, week)
+	var served: Dictionary = served_override if not served_override.is_empty() else _week_service(club_region, week)
 	var discomfort := FoodSupply.discomfort(player.palate_regions, served)
 	var crowding := Accommodation.crowding(
 		str(team.housing_structure), int(team.housing_occupants_per_room),
@@ -554,7 +555,9 @@ func _palate_clock() -> Dictionary:
 	return career.palate_clock if career != null else {}
 
 
-func _advance_weekly_palate(player: VolleyballPlayer) -> void:
+func _advance_weekly_palate(
+	player: VolleyballPlayer, served_override: Dictionary = {},
+) -> void:
 	var team: Resource = _game_manager().team
 	if team == null or player == null:
 		return
@@ -562,7 +565,7 @@ func _advance_weekly_palate(player: VolleyballPlayer) -> void:
 	## people and the region is the address.
 	var club_region := str(career.region) if career != null else str(player.club_region)
 	var week := int(career.absolute_week) if career != null else 1
-	var served: Dictionary = _week_service(club_region, week)
+	var served: Dictionary = served_override if not served_override.is_empty() else _week_service(club_region, week)
 	## Keyed on the **mix**, per §2 -- a voli tires of this week's blend rather
 	## than of one ingredient in it, which is what makes varying the ratio a real
 	## answer and rotating pastes entirely a stronger one.

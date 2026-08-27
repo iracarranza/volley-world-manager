@@ -524,6 +524,14 @@ func _carry_trajectory(
 	## The resolver already says. `block_contact_kind` is empty for a block the
 	## ball passed, and the attack's own flight carries on to the defender exactly
 	## as it did before this window learned to draw anything.
+	##
+	## **And for a long time it said it to nobody.** `block_contact_kind` was
+	## published on the ATTACK event and not on this one -- measured at 0 of 236
+	## block events over 300 rallies -- so this test read an absent key, found the
+	## empty string, and suppressed the carry on *every* block including the 97
+	## that touched the ball. The guard did what it was written to do to the 139
+	## misses and silently did it to the contacts as well. The key is now on the
+	## block event (236 of 236) and this reads what it was always meant to.
 	if int(event.event_type) == RallyEventModel.EventType.BLOCK \
 			and str(event.metadata.get("block_contact_kind", "")).is_empty():
 		return {}
@@ -579,6 +587,20 @@ func _contact_recovery(event: RallyEvent) -> String:
 ## up more than a degree of platform was not square, whatever the alignment term
 ## said. The resolver stays the authority on the outcome; the drawing stops
 ## claiming a squared-up pass that never happened.
+## Did this contact touch the ball at all?
+##
+## Not `success`, which is the outcome. A contact that struck the ball and put it
+## out still launched it; a dig that never arrived and a block the ball flew past
+## launched nothing. The published ball is the difference, and it is the same
+## test B0 certified the one-ball chain with.
+static func _touched_the_ball(event: RallyEvent) -> bool:
+	if event == null:
+		return false
+	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+	return not outgoing.is_empty() \
+		and float(outgoing.get("duration", 0.0)) > 0.0
+
+
 func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
@@ -601,7 +623,19 @@ func _contact_posture(event: RallyEvent) -> String:
 	## Not the whole of 13a. A reach that misses and a reach that digs still
 	## share a pose, and telling them apart wants the ball's absence to be
 	## visible in the body rather than only in the ball. Logged.
-	if not event.success:
+	##
+	## **`success` was the wrong test and is replaced here.** It is the contact's
+	## *outcome*, not whether the ball was touched, and FD-007 measured the
+	## difference: all 35 failed serves, 4 failed receptions, 3 failed sets and
+	## 14 failed attacks in a 180-rally sample still publish an outgoing ball --
+	## service errors, shanks and swings that went out, every one of them struck.
+	## Only the block and the dig fail by not touching it at all. So this drew a
+	## shanked pass and a service error in the miss pose, which is the same defect
+	## the paragraph above describes, pointing the other way.
+	##
+	## The authoritative test is the one B0 counted contacts by: did this contact
+	## publish a ball. `tools/probe_failed_contact_semantics.gd`.
+	if not _touched_the_ball(event):
 		return "reaching"
 	## **A ball taken at the edge of the range is a reach.**
 	##
@@ -781,7 +815,24 @@ func _apply_contact_poses(
 	elif draw_outgoing:
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
-			event_peak * outgoing_weight, progress, event_direction, true,
+			event_peak * outgoing_weight,
+			## **A contact that never happened has no follow-through.**
+			##
+			## `set_pose` takes a signed phase with contact at zero: the reach
+			## runs -1 to 0 and the follow-through 0 to +1. The wind-up is true
+			## of a miss -- the defender did go for it -- and the follow-through
+			## is not, because there was nothing to swing away from. Playing both
+			## halves is what left a reach-that-misses and a reach-that-digs
+			## sharing one pose, which `_contact_posture` logs as the half of
+			## FD-007 it could not reach: it can say the body reached, and only
+			## the phase can say the ball was never there.
+			##
+			## Held at zero rather than suppressed. The body stays extended where
+			## it arrived, which is what a player who missed actually does, and
+			## it costs no new animation -- this refuses to play half of an
+			## existing one rather than authoring a second.
+			0.0 if not _touched_the_ball(event) else progress,
+			event_direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
 			_platform_aim(event),

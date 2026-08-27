@@ -1,6 +1,9 @@
 class_name VolleyballPlayer
 extends Resource
 
+const AttributeRegistry := preload("res://scripts/domain/attribute_registry.gd")
+const RoleProfiles := preload("res://scripts/domain/role_profiles.gd")
+
 @export var id: int = -1
 @export var display_name: String = "Player"
 @export var position_role: String = "Outside Hitter"
@@ -220,43 +223,19 @@ var body_type: String = "Vegi"
 @export var situation_experience: Dictionary = {}
 @export var position_training_target: String = ""
 
-const ABILITY_ATTRIBUTES: Array[String] = [
-	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-	"stamina", "work_rate", "arm_speed", "serve_power", "serve_technique", "serve_placement",
-	"serve_consistency", "serve_aggression", "serve_variation", "reception", "reception_balance",
-	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
-	"set_disguise", "hand_control", "unpredictability", "attack_power", "attack_accuracy", "approach_timing",
-	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
-	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
-	"adaptability",
-]
+static var ABILITY_ATTRIBUTES = AttributeRegistry.ABILITY_ATTRIBUTES
 
-const POSITION_WEIGHTS := {
-	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making"],
-	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance", "work_rate"],
-	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation", "work_rate"],
-	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "tooling", "shot_variety", "block_timing", "serve_power"],
-	"Libero": ["reception", "reception_balance", "reception_stability", "dig_control", "ball_control", "anticipation", "lateral_speed", "decision_making", "work_rate"],
-}
+static var POSITION_WEIGHTS = RoleProfiles.POSITION_WEIGHTS
 
 ## Tactical step-count scaling for the attack run-up. This is a system demand,
 ## not a physical limit: a middle with elite acceleration still runs a compact
 ## approach because quick-tempo offence needs them at the net early. Outsides and
 ## opposites get the full four-step runway.
-const POSITION_APPROACH_STEP_MODIFIER := {
-	"Middle Blocker": 0.68,
-	"Setter": 0.75,
-	"Outside Hitter": 1.0,
-	"Opposite": 1.0,
-	"Libero": 1.0,
-}
+static var POSITION_APPROACH_STEP_MODIFIER = RoleProfiles.POSITION_APPROACH_STEP_MODIFIER
 
 ## Quick-tempo footwork punishes sloppiness harder than a slow high-ball
 ## approach, so compact-approach roles also carry a tighter tolerance band.
-const POSITION_APPROACH_TOLERANCE_MODIFIER := {
-	"Middle Blocker": 0.80,
-	"Setter": 0.85,
-}
+static var POSITION_APPROACH_TOLERANCE_MODIFIER = RoleProfiles.POSITION_APPROACH_TOLERANCE_MODIFIER
 
 const SYSTEM_FIT_APPROACH_DISTANCE := &"attack_approach_distance"
 const SYSTEM_FIT_SET_RELEASE := &"set_release_interval"

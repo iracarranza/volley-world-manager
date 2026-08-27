@@ -12,8 +12,80 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-23 on the M6/M7 first-draft pass at
-`413eee5`: **2,139 checks pass, 0 fail**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-24 on the FD-009/FD-007 closure at
+`8f96dc6`: **2,178 checks pass, 0 fail**. Treat any test failure as a regression.
+
+**Four checks written, four gained, and the predecessor was recorded** -- so the
+delta is attributable and says no sampling population moved. That is the right
+answer for this pass twice over: FD-009 changed only which event the stamping
+loop treats as a contact, and FD-007 changed only which half of an existing
+animation plays. The balance probe agrees, byte-identical on all nine figures.
+
+Before it, 2,174 at `10bfbdd`, on the §5 platform-height closure.
+
+**Two readings there, and they said different things.** 2,163 to 2,170 came from a run
+that authored *no* checks -- the gate was appended after `test_runner.gd` was
+loaded -- so the whole of that seven is sampling gates drawing more, which is
+what a real behaviour change looks like. 2,170 to 2,174 is then exactly the four
+that gate adds, so publishing the wall's reaches on the block event moved no
+population at all, which is what a pure metadata addition has to look like. Two
+deltas, two different meanings, and the only reason either can be read is that
+both predecessors were written down.
+
+**A note on the second one, because the point survives being right.** 2,174 was
+written into this line as a prediction while that run was still going, and then
+removed. It turned out to be the correct number. Removing it was still right: a
+figure is worth the commit it was *measured* on, and an unmeasured guess that
+happens to land is not evidence -- it is a guess that got lucky, and the next one
+will not.
+
+**The interesting number in the entry above: seven more checks from writing none.**
+2,163 was the predecessor and the run that measured 2,170 loaded `test_runner.gd`
+before the gate was appended, so nothing was authored into it -- the whole delta
+is sampling gates drawing more, which is what a real behaviour change looks like.
+The platform resolver now reads the ball's height instead of the passer's body,
+and rallies resolve differently as a result. The balance probe says how much and
+which way: every **gated** band holds (dig 0.416, stuff 0.106, serve error
+0.181), and the advisory figures moved -- kill 0.610 to 0.630, block touch 0.818
+to 0.830, and **swing balance 0.932 to 0.888**, which is a home/opponent symmetry
+indicator moving away from 1.00 and is recorded as an observation to watch rather
+than acted on. See `docs/review/CONTACT_HEIGHT_CHAIN.md`.
+
+Before it, 2,163 at `b28c099`, on the §5 contact-height chain pass.
+
+**Seven checks were written and the count moved by seven, and that meant
+something, because the predecessor was written down.** 2,156 was measured
+at `0ea8402` and recorded here on the same pass, so the delta is attributable:
+the count moved by exactly what was authored and no sampling population changed
+size. The balance probe agrees independently -- contacts per rally, kill, dig,
+stuff, serve error, ace, reception quality and block touch all byte-identical --
+which is what a pass that moves the *record* rather than the rally has to look
+like. Read the entry below for what happens when the predecessor is not written
+down, one pass earlier.
+
+Before it, 2,156 at `0ea8402`, on the block realised-contact pass.
+
+**Seventeen checks were written and the delta cannot be computed, because the
+pass in between never wrote its number down.** This line said 2,139 at `413eee5`
+and the M8 side-out certification came after it without updating it, so the true
+predecessor is either 2,139 -- in which case seventeen written and seventeen
+gained means no sampling population moved -- or the 2,141 that pass measured and
+left in a transcript, in which case two gates drew fewer and the population
+moved. Those two readings say opposite things and there is no way to choose
+between them now. **Which is the whole failure this section keeps warning about,
+committed again, one pass later, by the pass that wrote the warning.** The number
+is only worth the commit it was measured on, and a commit nobody recorded is not
+one.
+
+What is not ambiguous: the FAIL line is zero, and the population question the
+count could not answer was measured directly. Contacts per rally 4.827 to 4.807,
+dig 0.407 to 0.412, block touch 0.822 to 0.818, stuff and serve error unchanged,
+every governed band holding -- so rallies *do* resolve differently, and the
+probes say so whatever the count does. See
+`docs/review/BLOCK_REALISED_CONTACT.md`.
+
+The entry below is the older baseline and its own warning, kept because the
+warning is the durable part.
 
 **And that number cannot be attributed, which is the point of saying so.** Two
 checks were written this pass (`_test_one_ball_chain_by_launch_identity`), and

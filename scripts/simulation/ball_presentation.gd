@@ -67,12 +67,57 @@ static func display_trajectory(
 	## reaching the case it had not reached. Where it is absent, on a set, a pass
 	## or a dig, none of which are struck, the two contact heights remain the
 	## better answer.
+	##
+	## **Except where the far end is now stated rather than guessed at.** The
+	## paragraph above is a workaround for a reach that had no business being the
+	## ball's height, and the block event says the ball's height directly now:
+	## `ball_height_at_net_meters` is read off the resolver's own flight by
+	## `BallFlightModel.height_at_distance`, which is the same flight this launch
+	## came from and one integration closer to it. A re-derivation that disagrees
+	## with the authority it was standing in for is a second opinion, so where the
+	## next contact states the height, that height wins. Everywhere else -- every
+	## family whose contact height is still a *body* measurement rather than a
+	## ball one -- the derivation stands, and that remainder is what is left of
+	## FD-006.
 	if display.has("launch_vertical_mps"):
-		end_height = maxf(
-			start_height + float(display.launch_vertical_mps) * duration
-				- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * duration * duration,
-			FLOOR_CONTACT_HEIGHT_METERS,
-		)
+		## Across the flight's own duration, not the drawn one. See
+		## `terminate_trajectory`: a segment shorter than 0.08 s is stretched so it
+		## can be seen, and integrating the launch across the stretched time moves
+		## the ball to a height it never reached.
+		var flown := maxf(float(display.get(
+			"physical_duration_seconds", duration
+		)), 0.001)
+		if next_contact == null:
+			## **Nothing plays this ball, so it lands.**
+			##
+			## The branch below reports where the ball *is* once the published
+			## flight time is spent, which for a ball still falling is not where it
+			## stops. Measured across 180 rallies, 56 of 119 terminal legs were
+			## drawn halting above the floor -- mean 0.58 m, worst **2.36 m on a
+			## serve**. Playback then holds it there for `settle_seconds` and
+			## `hold_at_rest()` puts it down, which is a hang and a snap: the
+			## reported "the ball teleports down".
+			##
+			## So the flight is carried to the floor instead of stopping short of
+			## it. The time is solved from the launch rather than chosen, and the
+			## outro does not grow to match: `MatchScreen.settle_seconds` already
+			## lengthened the last window by exactly this fall, and now returns
+			## zero for it because the ball has already arrived.
+			var gravity := BallFlightModel.DEFAULT_GRAVITY_MPS2
+			var vertical := float(display.launch_vertical_mps)
+			var drop := maxf(start_height - FLOOR_CONTACT_HEIGHT_METERS, 0.0)
+			var falling := (vertical + sqrt(maxf(
+				vertical * vertical + 2.0 * gravity * drop, 0.0
+			))) / maxf(gravity, 0.001)
+			end_height = FLOOR_CONTACT_HEIGHT_METERS
+			duration = maxf(falling, maxf(flown, 0.08))
+			display["duration"] = duration
+		elif not _next_contact_states_ball_height(next_contact):
+			end_height = maxf(
+				start_height + float(display.launch_vertical_mps) * flown
+					- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * flown * flown,
+				FLOOR_CONTACT_HEIGHT_METERS,
+			)
 	display["start_height_meters"] = start_height
 	display["end_height_meters"] = end_height
 	## Reported, not chosen.
@@ -98,9 +143,52 @@ static func display_trajectory(
 ## 2.06 m middle blocks, and both numbers are already on the profile. The action
 ## decides *which* reach applies -- standing, jumping, or somewhere between --
 ## and the body decides what that reach is.
+## Does this contact state where the **ball** was, rather than where a body was?
+##
+## Only the block does, and only because the resolver reads the swing's own
+## flight at the tape to decide whether the wall could touch it. Every other
+## family's `contact_height` is a reach or a hip -- a fact about the player,
+## standing in for a fact about the ball because nothing publishes the latter.
+## That substitution is `CONTACT_AND_BALL_FLIGHT.md` §5's open item and the whole
+## of what remains in FD-006 once the block is out of it.
+## **A touched block only.** `ball_height_at_net_meters` is true of a beaten
+## block too, but that leg does not *end* there -- the ball carries past the
+## hands to the floor or to a digger, and the trajectory being drawn is the whole
+## of it. Accepting the net height for a miss ended 60 of 151 attack legs hanging
+## at the tape, worst 3.612 m above the floor, which is the ball-teleports-down
+## defect in a new place. The test is whether this contact is where the drawn leg
+## stops, and for the block that is exactly whether a hand met the ball.
+static func _next_contact_states_ball_height(next_contact: RallyEvent) -> bool:
+	if next_contact == null:
+		return false
+	return next_contact.metadata.get("block_contact_height_meters", null) != null
+
+
 static func contact_height(event: RallyEvent, profiles: Dictionary) -> float:
 	if event == null or event.actor_id < 0:
 		return FLOOR_CONTACT_HEIGHT_METERS
+	## **The ball's own height, when the rally said where the ball was.**
+	##
+	## Everything below this line is a *body* measurement -- a reach, a platform,
+	## a hip -- standing in for a fact about the ball, which is what §5 calls the
+	## realised segment and what FD-006 counted. `ball_contact_height_meters` is
+	## the incoming flight's far end, copied forward by
+	## `RallySimulator._stamp_realised_contact_heights` from flights that resolve
+	## their own heights, so where it is present the body has nothing to add.
+	##
+	## The block publishes its own instead, proved by intersection rather than
+	## inherited, and it is preferred for the same reason: it is the one this
+	## contact actually happened at.
+	var block_proven: Variant = event.metadata.get(
+		"block_contact_height_meters", null
+	)
+	if block_proven != null:
+		return maxf(float(block_proven), FLOOR_CONTACT_HEIGHT_METERS)
+	var realised: Variant = event.metadata.get(
+		"ball_contact_height_meters", null
+	)
+	if realised != null:
+		return maxf(float(realised), FLOOR_CONTACT_HEIGHT_METERS)
 	var profile: Dictionary = profiles.get(int(event.actor_id), {})
 	var height_meters := float(profile.get("height_cm", 188.0)) / 100.0
 	var wingspan_meters := float(profile.get("wingspan_cm", 191.0)) / 100.0
@@ -154,6 +242,29 @@ static func contact_height(event: RallyEvent, profiles: Dictionary) -> float:
 				float(event.metadata.get("jump_multiplier", 1.0)),
 			)
 		RallyEventModel.EventType.BLOCK:
+			## **The height the ball was at, not the height the hands reached.**
+			##
+			## This drew every block at the top of the blocker's jump, which is a
+			## statement about the body and not about the ball -- so a swing that
+			## cleared a wall by half a metre was drawn arriving in the hands it
+			## had just beaten, and one buried well under them was drawn at their
+			## fingertips. Nothing could disagree with it because nothing else
+			## had an opinion: the resolver proved the height inside
+			## `_block_contact` and published neither it nor the crossing.
+			##
+			## Both are published now. `block_contact_height_meters` is the
+			## proven intersection when a hand met the ball;
+			## `ball_height_at_net_meters` is where the ball was at the tape
+			## whether it was met or not, which is the honest number for a
+			## beaten block. The reach stays as the last resort for a rally with
+			## no geometry on it -- the legacy contest, which proves neither.
+			var proven: Variant = event.metadata.get(
+				"block_contact_height_meters", null
+			)
+			if proven == null:
+				proven = event.metadata.get("ball_height_at_net_meters", null)
+			if proven != null:
+				return maxf(float(proven), FLOOR_CONTACT_HEIGHT_METERS)
 			return GeometricAttackPromotion.block_contact_from_reach(jumping_reach)
 	return float(event.metadata.get("contact_height_meters", 1.0))
 
@@ -226,7 +337,18 @@ static func terminate_trajectory(display: Dictionary, touched: Vector2) -> void:
 	## hitter to the block over most of a second and then sat there. The ball is
 	## the same ball travelling at the same speed; it simply stops sooner.
 	if display.has("duration"):
-		display["duration"] = maxf(float(display["duration"]) * share, 0.08)
+		var cut := float(display["duration"]) * share
+		display["duration"] = maxf(cut, 0.08)
+		## The same cut, without the drawing floor above.
+		##
+		## 0.08 s is the shortest segment a viewer can follow, so a shorter one is
+		## stretched to it -- but a stretch is a concession about *time*, and the
+		## ball must not move because of it. A struck ball's far end is derived
+		## from its launch across a duration, and derived across the stretched one
+		## it lands somewhere the ball never was: measured at attack-to-block, a
+		## 20 ms spike drawn over 80 ms fell 1.25 m instead of 0.32 m, and arrived
+		## a metre and a quarter below the hands that were about to touch it.
+		display["physical_duration_seconds"] = maxf(cut, 0.001)
 
 
 ## How fast the ball actually left the contact, in metres per second.
