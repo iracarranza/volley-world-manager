@@ -14,6 +14,18 @@ jobs:
           ref: chatgpt/modularity-efficiency-refactor
           fetch-depth: 0
       - run: git fetch origin claude/m8-visual-continuity
+      - name: Make constant parser ignore comments
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/repair_modularity_refactor_final.py')
+          s = p.read_text()
+          old = '''            else:\n                if ch in ('\"', "'"):\n                    quote = ch\n                elif ch in pairs:\n'''
+          new = '''            else:\n                if ch == "#":\n                    newline = source.find("\\n", i)\n                    if newline < 0:\n                        raise RuntimeError(f"unterminated constant comment: {name}")\n                    i = newline\n                elif ch in ('\"', "'"):\n                    quote = ch\n                elif ch in pairs:\n'''
+          if old not in s:
+              raise SystemExit('parser patch anchor missing')
+          p.write_text(s.replace(old, new, 1))
+          PY
       - run: python3 tools/repair_modularity_refactor_final.py
       - run: git diff --check
       - run: |
