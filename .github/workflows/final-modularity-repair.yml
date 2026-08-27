@@ -1,0 +1,24 @@
+name: Final modularity repair
+on:
+  push:
+    branches: [chatgpt/modularity-efficiency-refactor]
+permissions:
+  contents: write
+jobs:
+  repair:
+    if: ${{ github.event.head_commit.message == 'Run final modularity repair' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/modularity-efficiency-refactor
+          fetch-depth: 0
+      - run: git fetch origin claude/m8-visual-continuity
+      - run: python3 tools/repair_modularity_refactor_final.py
+      - run: git diff --check
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts tools/validate_domain_registries.gd docs
+          git commit -m "Finalize modularity and efficiency refactor"
+          git push origin HEAD:chatgpt/modularity-efficiency-refactor
