@@ -2,6 +2,9 @@ extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const RALLY_COMMENTARY_ROUTER_SCRIPT := preload(
+	"res://scripts/simulation/rally_commentary_router.gd"
+)
 const RALLY_MOVEMENT_SYSTEM_SCRIPT := preload(
 	"res://scripts/simulation/rally_movement_system.gd"
 )
@@ -193,6 +196,10 @@ var failures: int = 0
 
 
 func _initialize() -> void:
+	if "--commentary-only" in OS.get_cmdline_user_args():
+		_test_commentary_routing_contract()
+		_finish_test_run()
+		return
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
@@ -244,6 +251,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
+	_test_commentary_routing_contract()
 	_test_ambient_cogniticons_are_dimmer_not_smaller()
 	_test_blade_cogniticons_fill_from_the_bottom()
 	_test_cogniticon_motion_envelopes()
@@ -389,6 +397,10 @@ func _initialize() -> void:
 	_test_errant_attacks_land_outside_the_court()
 	_test_world_population()
 	_test_world_aging()
+	_finish_test_run()
+
+
+func _finish_test_run() -> void:
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -402,6 +414,155 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+## Commentary is a presentation stream over resolved contacts, not another
+## spelling of the simulator trace. These fixtures gate the boundaries found in
+## the broadcast corpus: one physical event speaks once, analysis states its
+## inference basis, unsupported terms stay silent, and percentages remain UI
+## diagnostics.
+func _test_commentary_routing_contract() -> void:
+	var stuffed := RallyResult.new()
+	stuffed.home_team_won = true
+	stuffed.reception_quality = 0.67
+	stuffed.set_quality = 0.72
+	stuffed.attack_quality = 0.58
+	var stuffed_attack := _commentary_event(
+		0, RALLY_EVENT_SCRIPT.EventType.ATTACK, "Away Hitter", true,
+		0.58, {"side": "away", "attack_direction": "cross-court"}
+	)
+	stuffed_attack.detail = "attack quality 58% against a closing wall"
+	var stuff_block := _commentary_event(
+		1, RALLY_EVENT_SCRIPT.EventType.BLOCK, "Home Middle", true,
+		0.91, {"side": "home", "outcome": "stuff"}
+	)
+	var stuff_point := _commentary_event(
+		2, RALLY_EVENT_SCRIPT.EventType.POINT, "Home Middle", true
+	)
+	stuffed.events.assign([stuffed_attack, stuff_block, stuff_point])
+	RALLY_COMMENTARY_ROUTER_SCRIPT.route(stuffed)
+	_check(
+		stuffed_attack.commentary_silent
+			and not stuff_block.commentary_silent
+			and stuff_point.commentary_silent
+			and stuffed_attack.dedupe_group == stuff_block.dedupe_group,
+		"attack, stuff and point records produce one call for one physical ending",
+	)
+	_check(
+		"%" not in stuffed_attack.commentary_headline
+			and "%" not in stuff_block.commentary_headline
+			and not stuffed.commentary_diagnostics.is_empty()
+			and "%" in stuffed.commentary_diagnostics[-1],
+		"simulation percentages stay in diagnostics and never leak into commentary",
+	)
+
+	var shaped := RallyResult.new()
+	shaped.home_team_won = true
+	var funnel_block := _commentary_event(
+		0, RALLY_EVENT_SCRIPT.EventType.BLOCK, "Home Middle", true,
+		0.72, {
+			"side": "home", "outcome": "funnel", "block_intent": "Funnel",
+		}
+	)
+	var funnel_dig := _commentary_event(
+		1, RALLY_EVENT_SCRIPT.EventType.DIG, "Home Libero", true,
+		0.74, {"side": "home", "arrival_margin": 0.11}
+	)
+	var funnel_point := _commentary_event(
+		2, RALLY_EVENT_SCRIPT.EventType.POINT, "Home Hitter", true
+	)
+	shaped.events.assign([funnel_block, funnel_dig, funnel_point])
+	RALLY_COMMENTARY_ROUTER_SCRIPT.route(shaped)
+	var funnel_evidence: Dictionary = funnel_block.analyst_evidence[0] \
+		if not funnel_block.analyst_evidence.is_empty() else {}
+	_check(
+		str(funnel_evidence.get("key", "")) == "funnel"
+			and not str(funnel_evidence.get("inference_basis", "")).is_empty()
+			and not shaped.commentary_analysis.is_empty(),
+		"intentional funnel analysis is post-point evidence with an explicit inference basis",
+	)
+
+	var whiff := RallyResult.new()
+	whiff.home_team_won = false
+	var whiff_attack := _commentary_event(
+		0, RALLY_EVENT_SCRIPT.EventType.ATTACK, "Home Hitter", false,
+		0.08, {"side": "home", "set_path_whiff": true}
+	)
+	var whiff_point := _commentary_event(
+		1, RALLY_EVENT_SCRIPT.EventType.POINT, "Away Team", true
+	)
+	whiff.events.assign([whiff_attack, whiff_point])
+	RALLY_COMMENTARY_ROUTER_SCRIPT.route(whiff)
+	_check(
+		str(whiff_attack.event_subtype) == "error_whiff_unvalidated"
+			and whiff_attack.commentary_silent
+			and whiff_attack.commentary_headline.is_empty(),
+		"the unresolved true-whiff case remains classified but deliberately unvoiced",
+	)
+
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var routed_contacts := 0
+	var diagnostics_present := false
+	var raw_trace_leaks := 0
+	var forbidden_terms := [
+		"platform dime", "got tooled", "soft block", "sprawl dig",
+		"cross-court bullet", "beaten by tempo",
+	]
+	var forbidden_uses := 0
+	for seed_value in range(41900, 41912):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		if not rally.commentary_diagnostics.is_empty():
+			diagnostics_present = true
+		var combined := "%s %s" % [
+			str(rally.commentary_headline), str(rally.commentary_analysis),
+		]
+		for event_resource in rally.events:
+			var event: Resource = event_resource
+			if str(event.physical_event_id).is_empty() \
+					or str(event.event_subtype).is_empty() \
+					or str(event.commentary_status).is_empty():
+				continue
+			routed_contacts += 1
+			combined += " %s %s" % [
+				str(event.commentary_headline),
+				str(event.metadata.get("action_outcome", "")),
+			]
+			if not event.commentary_headline.is_empty() \
+					and event.commentary_headline == event.detail:
+				raw_trace_leaks += 1
+		for forbidden in forbidden_terms:
+			if str(forbidden).to_lower() in combined.to_lower():
+				forbidden_uses += 1
+	manager.free()
+	_check(
+		routed_contacts > 0 and diagnostics_present and raw_trace_leaks == 0,
+		"resolved rallies carry structured commentary fields without reusing raw trace detail",
+	)
+	_check(
+		forbidden_uses == 0,
+		"production commentary and action labels exclude corpus-unvalidated terminology",
+	)
+
+
+func _commentary_event(
+	sequence: int,
+	event_type: int,
+	actor_name: String,
+	success: bool,
+	quality: float = 0.5,
+	metadata: Dictionary = {},
+) -> Resource:
+	var event: Resource = RALLY_EVENT_SCRIPT.new()
+	event.sequence = sequence
+	event.event_type = event_type
+	event.actor_name = actor_name
+	event.success = success
+	event.quality = quality
+	event.metadata = metadata.duplicate(true)
+	return event
 
 
 ## Gate: a club wears its region, and the shirt is legible on the floor.

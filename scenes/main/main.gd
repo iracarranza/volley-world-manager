@@ -1621,10 +1621,14 @@ func _play_rally(
 		last_displayed_event = event
 		var playback_headline := _playback_event_headline(event)
 		var playback_detail := _playback_event_detail(event)
-		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
-			float(event.metadata.get("event_time", 0.0)),
-			event.type_name(), playback_headline, playback_detail,
-		])
+		var playback_caption := "t=%.2fs · %s" % [
+			float(event.metadata.get("event_time", 0.0)), event.type_name(),
+		]
+		if not playback_headline.is_empty():
+			playback_caption += " · %s" % playback_headline
+		if not playback_detail.is_empty():
+			playback_caption += "\n%s" % playback_detail
+		_set_playback_caption(playback_caption)
 		if event.event_type == RallyEvent.EventType.SET_DECISION:
 			continue
 		var outgoing_trajectory: Dictionary = event.metadata.get(
@@ -1841,7 +1845,8 @@ func _set_playback_caption(value: String) -> void:
 
 
 func _append_playback_history(event: Resource) -> void:
-	if event == null:
+	if event == null or bool(event.commentary_silent) \
+			or _playback_event_headline(event).is_empty():
 		return
 	var summary := "• %.2fs · %s — %s" % [
 		float(event.metadata.get("event_time", 0.0)),
@@ -1856,62 +1861,16 @@ func _append_playback_history(event: Resource) -> void:
 	dashboard_playback_history_label.scroll_to_line(0)
 
 
-## The name the vocabulary gave this contact, when it gave it one.
-##
-## Prefixed onto the headline rather than replacing it, because the two answer
-## different questions: the name is *what a viewer saw* ("Tool off the block")
-## and the headline is *who did what to whom*. A viewer wants both and the name
-## first, which is the order a commentator says them in.
-##
-## Only for contacts that survived the notability budget. `action_outcome` is on
-## every event and most of them read "Swing continued", which is the silence the
-## budget exists to protect.
-func _named_action_prefix(event: Resource) -> String:
-	if event == null or not bool(event.metadata.get("named_action", false)):
-		return ""
-	var outcome := str(event.metadata.get("action_outcome", ""))
-	return "" if outcome.is_empty() else "%s — " % outcome
-
-
 func _playback_event_headline(event: Resource) -> String:
-	return _named_action_prefix(event) + _plain_event_headline(event)
-
-
-func _plain_event_headline(event: Resource) -> String:
-	if event == null:
+	if event == null or bool(event.commentary_silent):
 		return ""
-	if int(event.event_type) != RallyEvent.EventType.BLOCK:
-		return str(event.headline)
-	var outcome := str(event.metadata.get("outcome", ""))
-	var actor_name := str(event.actor_name)
-	match outcome:
-		"stuff":
-			return "%s stuffs the attack" % actor_name
-		"touch", "funnel":
-			return "%s gets a block touch" % actor_name
-		"miss":
-			return "%s misses the block" % actor_name
-		_:
-			return str(event.headline)
+	return str(event.commentary_headline)
 
 
 func _playback_event_detail(event: Resource) -> String:
 	if event == null:
 		return ""
-	if int(event.event_type) != RallyEvent.EventType.BLOCK:
-		return str(event.detail)
-	var outcome := str(event.metadata.get("outcome", ""))
-	match outcome:
-		"stuff":
-			return "The block shuts the play down at the net."
-		"touch":
-			return "The block touches the ball and slows the attack enough for floor defense."
-		"funnel":
-			return "The block redirects the ball into the saved defensive shape."
-		"miss":
-			return "The block never gets a piece of the ball."
-		_:
-			return str(event.detail)
+	return str(event.commentary_detail)
 
 
 func _reset_tactical_positions(show_status: bool = true) -> void:
@@ -2178,11 +2137,11 @@ func _show_rally_result(result: Resource) -> void:
 	## now and this call site has no names to fill them with.
 	rally_result_title.text = "%s · %s" % [
 		"HOME POINT" if result.home_team_won else "OPPONENT POINT",
-		result.headline,
+		result.commentary_headline,
 	]
-	rally_result_explanation.text = result.explanation
+	rally_result_explanation.text = result.commentary_analysis
 	dashboard_event_label.text = rally_result_title.text
-	dashboard_explanation_label.text = result.explanation
+	dashboard_explanation_label.text = result.commentary_analysis
 	var factor_lines: Array[String] = []
 	## The rally's named moments, first, because they are the part a viewer
 	## actually watched. Everything below them is measurement.
@@ -2202,13 +2161,8 @@ func _show_rally_result(result: Resource) -> void:
 		named_moments.append("%s (%s)" % [outcome, str(event.actor_name)])
 	if not named_moments.is_empty():
 		factor_lines.append("★ %s" % " · ".join(named_moments))
-	for factor in result.key_factors:
-		factor_lines.append("• %s" % factor)
-	factor_lines.append("Reception %d%% · Set %d%% · Attack %d%%" % [
-		roundi(result.reception_quality * 100.0),
-		roundi(result.set_quality * 100.0),
-		roundi(result.attack_quality * 100.0),
-	])
+	for diagnostic in result.commentary_diagnostics:
+		factor_lines.append("• %s" % diagnostic)
 	var analysis: Dictionary = result.analysis
 	var attack_types: Array = analysis.get("attack_types", [])
 	var directions: Array = analysis.get("directions", [])
@@ -2225,8 +2179,10 @@ func _show_rally_result(result: Resource) -> void:
 	if block_read >= 0.0:
 		factor_lines.append("Average blocker read %d%%" % roundi(block_read * 100.0))
 	rally_result_factors.text = "\n".join(factor_lines)
-	dashboard_explanation_label.text = result.explanation + "\n\n" \
-		+ "\n".join(factor_lines)
+	dashboard_explanation_label.text = result.commentary_analysis
+	if not factor_lines.is_empty():
+		dashboard_explanation_label.text += "\n\nDiagnostics\n%s" % \
+			"\n".join(factor_lines)
 	_set_status("Rally resolved from seed %d." % (rally_seed - 1))
 
 

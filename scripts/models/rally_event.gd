@@ -43,6 +43,19 @@ enum EventType {
 @export var headline: String = ""
 @export var detail: String = ""
 @export var metadata: Dictionary = {}
+## Commentary is selected after the rally has resolved. Physics owns
+## `headline`/`detail`; the router owns these fields, so a percentage or an
+## internal assignment explanation cannot become speech merely because it was
+## useful while resolving the contact.
+@export var physical_event_id: StringName = &""
+@export var event_subtype: StringName = &""
+@export var commentary_status: StringName = &"ui_diagnostic"
+@export var commentary_headline: String = ""
+@export var commentary_detail: String = ""
+@export var commentary_silent: bool = true
+@export var dedupe_group: StringName = &""
+@export var analyst_evidence: Array[Dictionary] = []
+@export var diagnostics: Dictionary = {}
 
 
 func type_name() -> String:
@@ -63,4 +76,13 @@ func to_dict() -> Dictionary:
 		"headline": headline,
 		"detail": detail,
 		"metadata": metadata.duplicate(true),
+		"physical_event_id": physical_event_id,
+		"event_subtype": event_subtype,
+		"commentary_status": commentary_status,
+		"commentary_headline": commentary_headline,
+		"commentary_detail": commentary_detail,
+		"commentary_silent": commentary_silent,
+		"dedupe_group": dedupe_group,
+		"analyst_evidence": analyst_evidence.duplicate(true),
+		"diagnostics": diagnostics.duplicate(true),
 	}

@@ -138,8 +138,8 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.reset_player_poses()
 	event_label.text = "POINT COMPLETE"
-	caption_label.text = rally_result.terminal_outcome.replace("_", " ").to_upper()
-	detail_label.text = rally_result.explanation
+	caption_label.text = rally_result.commentary_headline
+	detail_label.text = rally_result.commentary_analysis
 	progress_bar.value = 100.0
 
 
@@ -2027,18 +2027,12 @@ func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> 
 		event_index + 1, event_count, event.type_name().to_upper(),
 		float(event.metadata.get("event_time", 0.0)),
 	]
-	## The vocabulary's name leads the caption when this contact earned one, the
-	## same way it does on the tactical board. Both playback paths name the same
-	## moments because both read the same budgeted tag.
-	var named := ""
-	if bool(event.metadata.get("named_action", false)):
-		var outcome := str(event.metadata.get("action_outcome", ""))
-		if not outcome.is_empty():
-			named = "%s — " % outcome
-	caption_label.text = named + (
-		event.headline if not event.headline.is_empty() else event.type_name()
-	)
-	detail_label.text = event.detail
+	## The router may deliberately choose silence. The event label above remains
+	## available as playback diagnostics; raw simulator headline/detail never
+	## substitute for commentary.
+	caption_label.text = "" if event.commentary_silent \
+		else event.commentary_headline
+	detail_label.text = event.commentary_detail
 
 
 func _build_player_names(events: Array[Resource]) -> void:

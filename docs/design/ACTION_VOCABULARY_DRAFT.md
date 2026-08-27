@@ -1,12 +1,11 @@
 # The action vocabulary and rally spectacle (draft)
 
 Date: 2026-08-03
-Status updated 2026-08-09: the vocabulary below remains a **design draft**.
-`scripts/simulation/rally_action_vocabulary.gd` is now a first unintegrated
-classifier scaffold, but it is not called, calibrated, notability-budgeted or
-consumed by captions, cognition, statistics or spectacle. The spectacle score
-and the flow rebalance described in the second half **are implemented**
-(`scripts/models/match_state.gd`).
+Status updated 2026-08-26: the classifier and its notability budget are
+integrated. Commentary presentation now passes through
+`rally_commentary_router.gd`; raw action labels remain diagnostics and cannot
+become speech automatically. The terms below were reconciled against
+`commentary_terminology_whitelist.md` after the broadcast-corpus pass.
 
 The first classifier was added as cognition groundwork after the 2026-08-06
 review at `1ee4c96`. Its presence withdraws that review's literal claim that no
@@ -24,9 +23,8 @@ something happened and can read a percentage, but cannot *name* what they saw.
 The distinctions exist in the simulator; they are discarded at the point of
 presentation.
 
-The goal is a closed set of named actions, so that a viewer watching a rally
-can say "he got tooled" or "she dug that off her shoelaces" rather than "the
-block resolved at 0.61".
+The goal is a closed set of named actions that identifies what happened without
+presenting internal quantities such as "the block resolved at 0.61".
 
 ## The rule that generates the vocabulary
 
@@ -69,7 +67,7 @@ attempt, and naming it would punish aggression the design wants to encourage.
 
 | name | trigger | reads as |
 | --- | --- | --- |
-| **Platform dime** | quality high **and** `arrival_margin` small or negative | passed a ball they had no business reaching |
+| **Dime pass** | quality high **and** `arrival_margin` small or negative | excellent reception under movement pressure |
 | **Scramble pass** | quality mid-low, `arrival_margin` clearly negative, rally continues | kept it alive, offence compromised |
 | **Shank** | quality very low, `arrival_margin` comfortable | blunder: an easy ball butchered |
 
@@ -77,20 +75,20 @@ attempt, and naming it would punish aggression the design wants to encourage.
 
 | name | trigger | reads as |
 | --- | --- | --- |
-| **Dime** | set quality high **and** resulting opponent block `primary_close` low | the killer-ball equivalent: the set is what isolated the hitter |
+| **Perfect set** | set quality high **and** resulting opponent assist close low | the set isolated the hitter; `dime` is not validated for sets |
 | **Save set** | set quality acceptable off a reception below the transition-ball threshold | made something out of nothing |
-| **Telegraphed** | set quality fine but opponent block forms at full strength on the pin | blunder of choice rather than execution -- the set was clean and still wrong |
+| **Predictable set** | set quality fine but opponent block forms at full strength on the pin | choice was read despite clean execution |
 
-`Dime` is the most important entry in this table. It is the one name that
-credits a player for a point they did not score, which is the whole reason
-setters are interesting.
+`Perfect set` credits a player for a point they did not score without extending
+the corpus-validated reception term `dime` to a set.
 
 ## Attack
 
 | name | trigger | reads as |
 | --- | --- | --- |
-| **Tool off the block** | attack succeeds **and** block outcome was `touch`/`funnel` **and** ball lands in | the marquee attacking moment; currently invisible |
-| **Cross-court bullet** | kill, `direction == "cross-court"`, high attack quality | |
+| **Tool off the block** | attack succeeds **and** block outcome was `tool` | the hitter deliberately uses the block |
+| **Off the block** | attack succeeds after a non-tool block touch | describes result without inferring intent |
+| **Hard cross-court attack** | kill, `direction == "cross-court"`, high attack quality | `cross-court bullet` is not corpus-validated |
 | **Line shot** | kill, `direction == "line"` | |
 | **Seam kill** | kill, `direction == "seam"` | |
 | **Back-row bomb** | kill from a back-row contact depth | |
@@ -110,22 +108,21 @@ current model throws away the most.
 | name | trigger | reads as |
 | --- | --- | --- |
 | **Roof** | `stuff` outcome | terminal, rare, the signature block moment |
-| **Soft block** | `touch` outcome **and** the defence subsequently digs it | *named, positive, non-terminal* -- the blocker created the dig |
+| **Block touch** | `touch` outcome **and** the defence subsequently digs it | named, positive, non-terminal; intent is not inferred from touch alone |
 | **Funnel** | `funnel` outcome and defence converts | block did its job by directing, not stopping |
-| **Got tooled** | block contacts, attack lands in | the loser's half of "tool off the block" |
-| **Beaten by tempo** | block fails to form, `primary_close` low, quick attack | names a *reason* rather than a failure |
+| **Tool off the block** | resolved `tool` outcome | neutral event label; passive phrase `got tooled` is not validated |
+| **Late block** | block fails to form and assist close is low | describes the physical result; tempo causation remains analyst inference |
 
-**Soft block** is the entry that delivers what you asked for two messages ago --
-a wider window for the block to matter without terminating the rally. It costs
-no calibration change. The event already happens constantly; it is simply never
-named, so a blocker who deflects twenty balls into easy digs currently reads as
-having done nothing all match.
+`Block touch` gives the blocker credit without treating the manager instruction
+`soft block` as validated broadcast language. A subsequent dig can support
+analyst discussion that the touch slowed the ball; it does not prove the touch
+was intentionally directed.
 
 ## Defense
 
 | name | trigger | reads as |
 | --- | --- | --- |
-| **Sprawl dig** | dig succeeds with `arrival_margin` clearly negative | the slide-tackle equivalent -- the single most legible action in the sport |
+| **Diving save** | dig succeeds with `arrival_margin` clearly negative | difficult defensive contact; `sprawl dig` is not corpus-validated |
 | **Overhead dig** | dig succeeds on a high, hard ball at short range | |
 | **Cover** | attack-coverage contact succeeds off a block touch | credits the player who kept a blocked ball alive |
 | **Missed the easy one** | dig fails with `arrival_margin` comfortably positive | blunder |

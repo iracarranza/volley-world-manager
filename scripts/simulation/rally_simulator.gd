@@ -40,6 +40,9 @@ const ShadowReceptionSystemModel := preload("res://scripts/simulation/shadow_rec
 const RallyShadowComparisonModel := preload("res://scripts/simulation/rally_shadow_comparison.gd")
 const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout_policy.gd")
 const RallyActionVocabularyModel := preload("res://scripts/simulation/rally_action_vocabulary.gd")
+const RallyCommentaryRouterModel := preload(
+	"res://scripts/simulation/rally_commentary_router.gd"
+)
 const CognitionCompilerModel := preload("res://scripts/simulation/cognition_compiler.gd")
 const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
 const PlatformContactModel := preload(
@@ -13705,6 +13708,7 @@ func _finish(
 	## reacting to rather than re-deriving it, which is the whole reason the
 	## vocabulary is a shared tag and not a caption string.
 	RallyActionVocabularyModel.annotate(result)
+	RallyCommentaryRouterModel.route(result)
 	result.cognition_cues.assign(CognitionCompilerModel.compile(result))
 	return result
 

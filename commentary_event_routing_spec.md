@@ -1,36 +1,33 @@
-# Commentary event routing research specification
+# Commentary event routing specification
 
-This is a read-only implementation map and a technical specification derived
-from the broadcast corpus. It deliberately does not contain commentator copy,
-production-code changes, or UI changes.
+Derived from the broadcast corpus and implemented on 2026-08-26. This document
+describes the boundary between simulation facts, selected commentary, analyst
+inference, and tactical diagnostics.
 
 ## Outcome
 
-The simulation already exposes most facts needed for broadcast-natural routing.
-The central problem is separation: physical events, analyst evidence,
-diagnostics, and rendered prose currently share the same path. A future
-implementation should route facts first, allow silence, and ensure that one
-physical event does not speak through several independent layers.
+`RallyCommentaryRouter` now routes facts first, permits explicit silence, and
+deduplicates representations of one physical event. Both playback surfaces
+consume only the selected commentary fields. Raw simulator headline/detail and
+numeric diagnostics remain available for debugging and tactical UI.
 
 ## Current code-path map
 
 | Location | Current responsibility | Research implication |
 |---|---|---|
-| `scripts/models/rally_event.gd:22` | Defines serve, reception, set decision, set, attack, block, dig, point, and attack-coverage events. | The physical event spine is suitable, but `headline`/`detail` at lines 43–45 mix facts with presentation. |
-| `scripts/models/rally_result.gd:6` | Stores terminal result, active play, whether it was followed, key factors, analysis, headline, and explanation. | It already carries tactical evidence, but factors/result prose can duplicate contact-level narration. |
+| `scripts/models/rally_event.gd` | Defines physical events plus subtype, commentary status, selected text, analyst evidence, diagnostics, and dedupe identity. | `headline`/`detail` remain simulator traces; `commentary_*` fields are the presentation contract. |
+| `scripts/models/rally_result.gd` | Stores the terminal result plus selected point summary, one analyst line, and diagnostic lines. | Result presentation is separated from the authoritative simulation summary. |
 | `scripts/simulation/rally_simulator.gd:2656` | Computes `set_path_whiff`; later publishes set path, tempo, approach, attack type/direction, and timing metadata. | Whiff, emergency-tip, timing-mismatch, and attack-subtype routing can be fact-driven even though whiff wording remains a corpus gap. |
 | `scripts/simulation/rally_simulator.gd:3209` and `:5742` | Resolves block outcomes including stuff, touch, tool, recycle, miss, and funnel. | Physical block outcome can drive PBP; block intent, defensive target, and causal success should remain separate analyst evidence. |
 | `scripts/simulation/rally_simulator.gd:2068` | Records whether the selected play was followed. | This can support analyst routing only when the observable route/effect also exists; S11/S12 show the broadcast analogue. |
-| `scripts/simulation/rally_simulator.gd:14047` | Writes event headline/detail strings during simulation. | Future commentary should consume structured facts instead of treating simulator-authored prose as the event contract. |
-| `scripts/data/rally_explanations.gd:1` | Centralizes outcome/factor text. | It can remain a diagnostic/result resource, but factor strings should not automatically become independent spoken lines. |
-| `scenes/main/main.gd:1565` | Iterates every rally event and renders a caption before skipping `SET_DECISION` animation at line 1628. | The present path effectively requires speech for every event; routing must happen before caption display. |
-| `scenes/main/main.gd:1869` | Prepends named-action text and rewrites block headlines/details. | This creates another narration owner and can convert internal outcomes into claims not selected by a commentary router. |
-| `scenes/main/main.gd:2175` | Shows result headline/explanation, named moments, every key factor, quality percentages, movement timing, and block-read values. | Result and diagnostic layers can repeat the same rally fact; they need dedupe groups and explicit UI-only routing. |
+| `scripts/simulation/rally_commentary_router.gd` | Normalizes subtypes, selects PBP/analyst/silence, records inference bases, and deduplicates physical groups. | This is the only owner of event-level commentary selection. |
+| `scripts/data/rally_commentary_lines.gd` | Holds the evidence-constrained presentation templates consumed by the router. | Templates cannot be reached without a supported structured route. |
+| `scripts/data/rally_explanations.gd` | Centralizes neutral outcome and factor diagnostics. | These strings no longer become commentary automatically. |
+| `scenes/main/main.gd` and `scenes/screens/match_screen.gd` | Render selected commentary and keep event/measurement text in diagnostic surfaces. | Neither renderer reconstructs commentary from block outcomes or raw trace prose. |
 
 ## Required fact contract
 
-A future router should receive structured records. Field names below describe a
-contract, not a requested production edit.
+The router receives the following structured records.
 
 | Field | Purpose |
 |---|---|
@@ -107,7 +104,7 @@ Silence is a valid selected result, not missing data. It should be favored when:
 - a named-action/result layer already owns the same fact;
 - only diagnostic measurements distinguish the event.
 
-## Acceptance checks for a future implementation
+## Acceptance checks
 
 - Every spoken candidate traces to one structured physical fact or one explicit
   analyst inference basis.
@@ -122,3 +119,8 @@ Silence is a valid selected result, not missing data. It should be favored when:
   and analyst inference.
 - Whiff, setter-`dime`, formal assignment abandonment, and intentional directed
   block-touch tests remain research-gated rather than borrowing nearby wording.
+
+These checks are covered by `_test_commentary_routing_contract` in
+`tests/test_runner.gd`, including a fast `--commentary-only` test mode. The
+whiff fixture explicitly expects silence while preserving its diagnostic
+subtype.
