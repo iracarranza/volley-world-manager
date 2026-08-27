@@ -5,27 +5,11 @@ extends RefCounted
 ## Formulas remain in their owning gameplay systems; this registry gives every
 ## generator, role, region, scout, trainer and UI one attribute vocabulary.
 
-const ABILITY_ATTRIBUTES: Array[String] = [
-	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-	"stamina", "work_rate", "arm_speed", "serve_power", "serve_technique", "serve_placement",
-	"serve_consistency", "serve_aggression", "serve_variation", "reception", "reception_balance",
-	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
-	"set_disguise", "hand_control", "unpredictability", "attack_power", "attack_accuracy", "approach_timing",
-	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
-	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
-	"adaptability",
-]
+const ABILITY_ATTRIBUTES := AttributeRegistry.ABILITY_ATTRIBUTES
 
-const PHYSICAL_ATTRIBUTES: Array[String] = [
-	"acceleration", "lateral_speed", "transition_speed", "jump_reach",
-	"explosiveness", "stamina", "arm_speed", "serve_power", "attack_power",
-]
+const PHYSICAL_ATTRIBUTES := AttributeRegistry.PHYSICAL_ATTRIBUTES
 
-const MENTAL_ATTRIBUTES: Array[String] = [
-	"court_vision", "anticipation", "decision_making", "composure",
-	"tactical_discipline", "improvisation", "adaptability", "unpredictability",
-	"work_rate",
-]
+const MENTAL_ATTRIBUTES := AttributeRegistry.MENTAL_ATTRIBUTES
 
 static func all_ids() -> Array[String]:
     var result: Array[String] = []
