@@ -1,0 +1,48 @@
+name: Fix registry aliases
+on:
+  push:
+    branches: [chatgpt/modularity-efficiency-refactor]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: ${{ github.event.head_commit.message == 'Run registry alias compatibility fix' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/modularity-efficiency-refactor
+          fetch-depth: 0
+      - name: Convert compatibility aliases to static data
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          targets = [
+              Path('scripts/models/volleyball_player.gd'),
+              Path('scripts/systems/player_generator.gd'),
+          ]
+          for p in targets:
+              s = p.read_text()
+              lines = []
+              for line in s.splitlines():
+                  if line.startswith('const ') and any(token in line for token in (
+                      '= AttributeRegistry.', '= RoleProfiles.', '= RegionProfiles.', '= BodyTypeGameplay.'
+                  )):
+                      line = 'static var ' + line[len('const '):]
+                  lines.append(line)
+              p.write_text('\n'.join(lines) + '\n')
+          PY
+      - name: Install Godot
+        run: |
+          curl -LfsS -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+      - name: Validate registry contract
+        run: godot --headless --path . --script tools/validate_domain_registries.gd
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/models/volleyball_player.gd scripts/systems/player_generator.gd
+          git commit -m "Use static compatibility aliases for domain registries"
+          git push origin HEAD:chatgpt/modularity-efficiency-refactor
