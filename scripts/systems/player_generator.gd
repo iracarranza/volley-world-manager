@@ -9,7 +9,7 @@ const BodyTypeGameplay := preload("res://scripts/domain/body_type_gameplay.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 
-const POSITIONS := RoleProfiles.POSITIONS
+const POSITIONS = RoleProfiles.POSITIONS
 
 ## Per-region physique offsets applied before individual random variation.
 ## These are roster-generation ranges for gameplay variety, not anatomical claims.
@@ -37,9 +37,9 @@ const POSITIONS := RoleProfiles.POSITIONS
 ##
 ## A'ace leans slightly positive across all three: assembled, well-resourced
 ## athletes rather than a developed body type of its own.
-const REGION_HEIGHT_BIAS := RegionProfiles.REGION_HEIGHT_BIAS
-const REGION_MASS_BIAS := RegionProfiles.REGION_MASS_BIAS
-const REGION_WINGSPAN_BIAS := RegionProfiles.REGION_WINGSPAN_BIAS
+const REGION_HEIGHT_BIAS = RegionProfiles.REGION_HEIGHT_BIAS
+const REGION_MASS_BIAS = RegionProfiles.REGION_MASS_BIAS
+const REGION_WINGSPAN_BIAS = RegionProfiles.REGION_WINGSPAN_BIAS
 
 ## Attributes that receive a +8 specialty bonus for players from each region.
 ##
@@ -63,7 +63,7 @@ const REGION_WINGSPAN_BIAS := RegionProfiles.REGION_WINGSPAN_BIAS
 ## assembled star talent across a few glamour positions bought in with money,
 ## not a systemic developmental identity the way every other region's
 ## specialty represents an actual local training tradition.
-const REGION_SPECIALTY := RegionProfiles.REGION_SPECIALTY
+const REGION_SPECIALTY = RegionProfiles.REGION_SPECIALTY
 
 ## Secondary role attributes receive a +5 bonus: the supporting skills a role
 ## leans on without being judged by them. The *primary* tier is deliberately not
@@ -71,10 +71,10 @@ const REGION_SPECIALTY := RegionProfiles.REGION_SPECIALTY
 ## already the single source of truth for what each role is scored on. Keeping a
 ## second copy here let generation and `current_ability_score()` disagree about
 ## what a role is for. Everything in neither tier falls to tertiary (-8).
-const ROLE_SECONDARY := RoleProfiles.ROLE_SECONDARY
+const ROLE_SECONDARY = RoleProfiles.ROLE_SECONDARY
 
 ## Height variation band per role, in centimetres.
-const ROLE_HEIGHT_SPREAD := RoleProfiles.ROLE_HEIGHT_SPREAD
+const ROLE_HEIGHT_SPREAD = RoleProfiles.ROLE_HEIGHT_SPREAD
 
 
 ## `overlay` is this region's Sixnet influence-drift shape for the current
@@ -267,10 +267,10 @@ static func redevelop_to_age(
 ## Attributes that fade with age rather than keep developing. Power and
 ## turnover peak in the early twenties and go backwards afterwards; technique
 ## and reading do not.
-const PHYSICAL_ATTRIBUTES := AttributeRegistry.PHYSICAL_ATTRIBUTES
+const PHYSICAL_ATTRIBUTES = AttributeRegistry.PHYSICAL_ATTRIBUTES
 
 ## Attributes that keep improving for as long as a player keeps playing.
-const MENTAL_ATTRIBUTES := AttributeRegistry.MENTAL_ATTRIBUTES
+const MENTAL_ATTRIBUTES = AttributeRegistry.MENTAL_ATTRIBUTES
 
 ## Age at which physical qualities stop improving and begin to fade.
 const PHYSICAL_PEAK_AGE: int = 24
@@ -388,10 +388,10 @@ static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
 ## this must never support. A flat draw keeps morphology orthogonal to origin,
 ## so a Tãul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
 ## traditions and the *tradition* is what differs.
-const BODY_TYPES := BodyTypeGameplay.BODY_TYPES
+const BODY_TYPES = BodyTypeGameplay.BODY_TYPES
 
 ## Body-metric deltas, applied after the regional bias so the two compose.
-const BODY_TYPE_METRICS := BodyTypeGameplay.BODY_TYPE_METRICS
+const BODY_TYPE_METRICS = BodyTypeGameplay.BODY_TYPE_METRICS
 
 ## Attribute deltas, applied to the *ceiling* rather than only to the generated
 ## value. If a body type shifted starting values alone, training would converge
@@ -410,7 +410,7 @@ const BODY_TYPE_METRICS := BodyTypeGameplay.BODY_TYPE_METRICS
 ## `GameManager.stamina_fatigue_scale()` reads stamina directly, so a Feli
 ## measurably tires faster inside a single match. First-set terror, fifth-set
 ## liability, with no new mechanism.
-const BODY_TYPE_ATTRIBUTES := BodyTypeGameplay.BODY_TYPE_ATTRIBUTES
+const BODY_TYPE_ATTRIBUTES = BodyTypeGameplay.BODY_TYPE_ATTRIBUTES
 
 
 static func _player_channel_rng(
@@ -419,7 +419,7 @@ static func _player_channel_rng(
 	region_name: String,
 	channel: String,
 ) -> RandomNumberGenerator:
-	## Stable private stream: adding/tuning one generated temperament must not
+	## Stable private stream: adding/tuning one temperament channel must not
 	## advance the shared roster RNG and silently reroll unrelated attributes.
 	var result := RandomNumberGenerator.new()
 	result.seed = hash("%d|%s|%d|%s" % [
@@ -442,11 +442,11 @@ static func assign_body_type(player: VolleyballPlayer, rng: RandomNumberGenerato
 ## The regional leans follow the identities the world already has: Ĭspayk swings
 ## first and asks later, Taktikã is the region built on not being moved, and
 ## Xérvu's whole game is a high-risk serve that either wins the set or loses it.
-const REGION_EGO_BIAS := RegionProfiles.REGION_EGO_BIAS
+const REGION_EGO_BIAS = RegionProfiles.REGION_EGO_BIAS
 
 ## Terminal roles attract players who want the ball; the roles that keep a rally
 ## alive attract players who would rather it went somewhere else.
-const POSITION_EGO_BIAS := RoleProfiles.POSITION_EGO_BIAS
+const POSITION_EGO_BIAS = RoleProfiles.POSITION_EGO_BIAS
 
 
 ## How much the rest of the side plays up around this player.
@@ -460,7 +460,7 @@ const POSITION_EGO_BIAS := RoleProfiles.POSITION_EGO_BIAS
 ## judged on terminal contacts carry less. Deliberately a milder spread than
 ## ego, because a squad of twelve wildly varying leaders reads as noise rather
 ## than as a captaincy question.
-const POSITION_LEADERSHIP_BIAS := RoleProfiles.POSITION_LEADERSHIP_BIAS
+const POSITION_LEADERSHIP_BIAS = RoleProfiles.POSITION_LEADERSHIP_BIAS
 
 
 static func assign_leadership(
@@ -513,12 +513,12 @@ static func assign_ego(
 ## yourself genuinely are the same tradition -- but Taktikã is the region built
 ## on not being moved, which is high ego and *low* aggression, and Blôc du Larg
 ## defends rather than closes, which is the reverse of its ego lean.
-const REGION_AGGRESSION_BIAS := RegionProfiles.REGION_AGGRESSION_BIAS
+const REGION_AGGRESSION_BIAS = RegionProfiles.REGION_AGGRESSION_BIAS
 
 ## Terminal roles want the terminal ball. Steeper than the ego lean, because
 ## wanting to end the rally is much more nearly the job description of an
 ## opposite than backing yourself is.
-const POSITION_AGGRESSION_BIAS := RoleProfiles.POSITION_AGGRESSION_BIAS
+const POSITION_AGGRESSION_BIAS = RoleProfiles.POSITION_AGGRESSION_BIAS
 
 
 static func assign_aggression(
@@ -792,4 +792,178 @@ static func _band_size(band: String) -> int:
 ## make you pass. Bloc cannot improvise and Spëddigh is nothing but improvisation
 ## of tempo. Landavol is the only region with no weakness, which is the same
 ## statement as having no specialty and is what makes it the reference.
-const REGION_CEILING_PENALTY := RegionProfiles.REGION_CEILING_PENALTY
+const REGION_CEILING_PENALTY = RegionProfiles.REGION_CEILING_PENALTY
+
+
+static func _tier_bonus(
+	property_name: String,
+	primary_list: Array,
+	secondary_list: Array,
+	specialty_list: Array,
+	specialty_bonus: int = SPECIALTY_BONUS,
+) -> int:
+	var bonus := TERTIARY_TIER_PENALTY
+	if property_name in primary_list:
+		bonus = PRIMARY_TIER_BONUS
+	elif property_name in secondary_list:
+		bonus = SECONDARY_TIER_BONUS
+	return bonus + (specialty_bonus if property_name in specialty_list else 0)
+
+
+## Builds this player's per-attribute ceilings and the current values that sit
+## below them, then derives `potential` from the ceilings themselves.
+##
+## Potential is no longer rolled and then approximated. It is the ability score
+## this player *would* display with every attribute at its own ceiling, computed
+## with the same weighting `current_ability_score()` uses. That makes the bound
+## exact by construction rather than by correction: current ability is the same
+## function of strictly smaller numbers, so it cannot exceed potential, and the
+## offset hack this replaces is gone.
+##
+## Each ceiling is the player's general talent shifted by what their role
+## demands, what their region produces, and an innate per-attribute deviation
+## that is usually small and occasionally extreme. That last term is what allows
+## a teenager with a freakish leap and nothing else, or a veteran with one
+## glaring hole.
+## `talent_override` (>= 0) supplies the player's general level directly
+## instead of rolling it, which is what lets the world-population system ask
+## for a player of a *specific* calibre rather than accepting whatever the
+## dice produce. The roll is skipped entirely rather than rolled-and-ignored,
+## so the population path has its own rng stream; `generate_roster` never
+## passes it and its stream is untouched.
+static func _apply_attributes(
+	player: VolleyballPlayer,
+	region_name: String,
+	rng: RandomNumberGenerator,
+	academy: bool,
+	overlay: Dictionary = {},
+	talent_override: float = -1.0,
+) -> void:
+	var primary_list: Array = Array(
+		VolleyballPlayer.POSITION_WEIGHTS.get(player.position_role, [])
+	)
+	var secondary_list: Array = Array(ROLE_SECONDARY.get(player.position_role, []))
+	## `specialty_add` extends this region's own specialty list rather than
+	## replacing it -- influence drift broadens what a region is good at, it
+	## never takes away what it already had.
+	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, [])) \
+		+ Array(overlay.get("specialty_add", []))
+	## The budget divided by however many attributes are sharing it, so a region's
+	## total never changes when its list is re-cut -- only the sharpness does.
+	var specialty_bonus := int(round(
+		SPECIALTY_BUDGET / maxf(float(specialty_list.size()), 1.0)
+	)) + int(overlay.get("specialty_bonus_delta", 0.0)) if not specialty_list.is_empty() \
+		else 0
+	var talent := talent_override if talent_override >= 0.0 else float(_talent_level(rng, academy))
+
+	var ceiling_penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
+	var specialty_compensation := _penalty_compensation(region_name, specialty_list)
+	var ceilings := {}
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		ceilings[property_name] = clampf(
+			talent
+			+ float(_tier_bonus(
+				property_name, primary_list, secondary_list, specialty_list, specialty_bonus
+			))
+			+ float(ceiling_penalty.get(property_name, 0))
+			+ (specialty_compensation if property_name in specialty_list else 0.0)
+			+ region_rating_bonus(region_name, property_name)
+			+ _innate_deviation(rng),
+			1.0, 99.0,
+		)
+
+	## Potential is what those ceilings are worth, scored exactly as current
+	## ability will be scored.
+	player.potential = _weighted_score(ceilings, primary_list)
+
+	## **A region decides a voli's shape; it must not decide their grade.**
+	##
+	## When a caller asks for a specific potential -- and the world's yearly
+	## intake always does, drawing one from the tier it is short of -- that number
+	## is a *budget decision* about how much talent the world contains, not a
+	## suggestion. It was being treated as a suggestion: `talent_override` set the
+	## baseline and then every regional table moved the ceilings on top of it, so
+	## the achieved potential drifted off the requested one by however much that
+	## region's specialty, penalty and rating tables happened to sum to. A
+	## prospect requested as elite could arrive generational.
+	##
+	## Over twenty seasons that is a leak with a direction, and the world-aging
+	## gate caught it: eight elite players against a budget of seven. It survived
+	## three separate fixes that each corrected a real imbalance in those tables
+	## -- weaknesses that subtracted rather than reshaped, rating bands of
+	## unequal size, a specialty bonus that was per-attribute rather than a
+	## budget -- because none of them addressed the actual defect, which is that
+	## *any* regional shaping at all was allowed to move the total.
+	##
+	## Scaling the ceilings so the derived potential lands on the requested one
+	## fixes the class rather than the three instances: whatever a region's tables
+	## sum to now, and whatever they are edited to later, a voli asked for a given
+	## potential arrives with it. The shape survives the scaling because every
+	## ceiling moves by the same ratio.
+	if talent_override >= 0.0 and player.potential > 0:
+		var correction := talent_override / float(player.potential)
+		for property_name in ceilings:
+			ceilings[property_name] = clampf(
+				float(ceilings[property_name]) * correction, 1.0, 99.0
+			)
+		player.potential = _weighted_score(ceilings, primary_list)
+
+	## Kept individually, not only as the aggregate above -- a potential
+	## attribute wheel reads this rather than approximating a shape from one
+	## number. Rounded to match every other attribute's integer scale.
+	## Morphology moves the ceiling, not merely the starting value -- see
+	## BODY_TYPE_ATTRIBUTES. Applied here so `potential` above is still scored
+	## on the untouched roll and only the per-attribute headroom shifts.
+	for property_name in ceilings:
+		var morph_delta := body_type_attribute_delta(player.body_type, property_name)
+		if not is_zero_approx(morph_delta):
+			ceilings[property_name] = clampf(
+				float(ceilings[property_name]) + morph_delta, 1.0, 99.0)
+
+	player.attribute_ceilings.clear()
+	for property_name in ceilings:
+		player.attribute_ceilings[property_name] = roundi(float(ceilings[property_name]))
+
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		var ceiling := float(ceilings[property_name])
+		var reserve := _attribute_reserve(property_name, player.age, rng) \
+			* _generational_reserve_scale(player.potential, player.age)
+		player.set(property_name, clampi(
+			roundi(ceiling - reserve), 1, roundi(ceiling)
+		))
+	## Status is generated after ability so reputation reflects what the player
+	## has actually established, not hidden potential. Satisfaction is club
+	## context rather than talent and begins in a narrow neutral band.
+	player.reputation = clampi(roundi(
+		float(player.current_ability_score()) * 0.80
+		+ float(player.professional_experience) * 1.50 - 20.0
+	), 1, 100)
+	player.satisfaction = rng.randf_range(0.62, 0.82)
+	player.match_confidence = 0.0
+
+
+## The role-weighted ability score of an attribute set. Mirrors
+## `VolleyballPlayer.current_ability_score()`; if that weighting changes, this
+## must follow, and the regression check comparing a fully-developed player's
+## score against their potential is what catches it.
+static func _weighted_score(values: Dictionary, primary_list: Array) -> int:
+	var scored: Array = primary_list if not primary_list.is_empty() \
+		else VolleyballPlayer.ABILITY_ATTRIBUTES
+	var role_total := 0.0
+	for property_name in scored:
+		role_total += float(values.get(str(property_name), 0.0))
+	var role_score := role_total / maxf(float(scored.size()), 1.0)
+	var complete_total := 0.0
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		complete_total += float(values.get(property_name, 0.0))
+	var complete_score := complete_total \
+		/ float(VolleyballPlayer.ABILITY_ATTRIBUTES.size())
+	return clampi(roundi(role_score * 0.75 + complete_score * 0.25), 1, 100)
+
+
+## `generate_market()` used to live here, rolling 120 fresh players from
+## nowhere every time a career needed a transfer list. It is gone rather than
+## deprecated: `WorldPopulation.draw_market()` replaces it by taking a slice
+## out of the world that already exists, which is the whole point of having
+## a population -- a market of players invented on the spot has no history,
+## no origin, and no relationship to how scarce talent actually is.

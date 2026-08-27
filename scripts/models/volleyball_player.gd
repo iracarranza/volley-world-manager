@@ -223,19 +223,19 @@ var body_type: String = "Vegi"
 @export var situation_experience: Dictionary = {}
 @export var position_training_target: String = ""
 
-const ABILITY_ATTRIBUTES := AttributeRegistry.ABILITY_ATTRIBUTES
+const ABILITY_ATTRIBUTES = AttributeRegistry.ABILITY_ATTRIBUTES
 
-const POSITION_WEIGHTS := RoleProfiles.POSITION_WEIGHTS
+const POSITION_WEIGHTS = RoleProfiles.POSITION_WEIGHTS
 
 ## Tactical step-count scaling for the attack run-up. This is a system demand,
 ## not a physical limit: a middle with elite acceleration still runs a compact
 ## approach because quick-tempo offence needs them at the net early. Outsides and
 ## opposites get the full four-step runway.
-const POSITION_APPROACH_STEP_MODIFIER := RoleProfiles.POSITION_APPROACH_STEP_MODIFIER
+const POSITION_APPROACH_STEP_MODIFIER = RoleProfiles.POSITION_APPROACH_STEP_MODIFIER
 
 ## Quick-tempo footwork punishes sloppiness harder than a slow high-ball
 ## approach, so compact-approach roles also carry a tighter tolerance band.
-const POSITION_APPROACH_TOLERANCE_MODIFIER := RoleProfiles.POSITION_APPROACH_TOLERANCE_MODIFIER
+const POSITION_APPROACH_TOLERANCE_MODIFIER = RoleProfiles.POSITION_APPROACH_TOLERANCE_MODIFIER
 
 const SYSTEM_FIT_APPROACH_DISTANCE := &"attack_approach_distance"
 const SYSTEM_FIT_SET_RELEASE := &"set_release_interval"

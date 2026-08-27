@@ -1,7 +1,8 @@
 class_name RoleProfiles
 extends RefCounted
 
-## Canonical role profile data shared by player scoring and generation.
+## Canonical role profile data shared by player scoring and generation. Situation
+## capability remains in capability systems rather than becoming a role permission.
 
 const POSITION_WEIGHTS := {
 	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making"],
@@ -22,21 +23,6 @@ const POSITION_APPROACH_STEP_MODIFIER := {
 const POSITION_APPROACH_TOLERANCE_MODIFIER := {
 	"Middle Blocker": 0.80,
 	"Setter": 0.85,
-}
-
-const POSITION_EGO_BIAS := {
-	"Opposite": 9.0, "Outside Hitter": 5.0, "Middle Blocker": 0.0,
-	"Setter": -4.0, "Libero": -8.0,
-}
-
-const POSITION_LEADERSHIP_BIAS := {
-	"Setter": 8.0, "Libero": 5.0, "Middle Blocker": 0.0,
-	"Outside Hitter": -1.0, "Opposite": -3.0,
-}
-
-const POSITION_AGGRESSION_BIAS := {
-	"Opposite": 12.0, "Outside Hitter": 6.0, "Middle Blocker": 2.0,
-	"Setter": -7.0, "Libero": -13.0,
 }
 
 const POSITIONS: Array[Dictionary] = [
@@ -72,6 +58,21 @@ const ROLE_HEIGHT_SPREAD := {
 	"Middle Blocker": 8.0,
 	"Opposite": 7.5,
 	"Libero": 6.0,
+}
+
+const POSITION_EGO_BIAS := {
+	"Opposite": 9.0, "Outside Hitter": 5.0, "Middle Blocker": 0.0,
+	"Setter": -4.0, "Libero": -8.0,
+}
+
+const POSITION_LEADERSHIP_BIAS := {
+	"Setter": 8.0, "Libero": 5.0, "Middle Blocker": 0.0,
+	"Outside Hitter": -1.0, "Opposite": -3.0,
+}
+
+const POSITION_AGGRESSION_BIAS := {
+	"Opposite": 12.0, "Outside Hitter": 6.0, "Middle Blocker": 2.0,
+	"Setter": -7.0, "Libero": -13.0,
 }
 
 static func primary_attributes(role_name: String) -> Array:

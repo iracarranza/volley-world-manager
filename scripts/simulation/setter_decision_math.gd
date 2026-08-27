@@ -1,7 +1,7 @@
 class_name SetterDecisionMath
 extends RefCounted
 
-## Pure setter-option geometry extracted without changing formulas or RNG.
+## Pure setter-option geometry extracted without changing formulas or RNG order.
 
 static func rescue_height_meters(
 	travel_time: float, ordinary_flight_time: float

@@ -1,7 +1,8 @@
 class_name BodyTypeGameplay
 extends RefCounted
 
-## Gameplay-side body definitions; rendering remains in body_type_models.gd.
+## Gameplay-side body definitions. Presentation remains in BodyTypeModels; the
+## shared body key is validated in CI.
 
 const BODY_TYPES: Array[String] = ["Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
 

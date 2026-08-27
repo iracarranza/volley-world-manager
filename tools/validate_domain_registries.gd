@@ -8,23 +8,23 @@ const BodyPresentation := preload("res://scripts/data/body_type_models.gd")
 
 func _initialize() -> void:
 	var errors: Array[String] = []
-	var known := Attributes.all_ids()
+	var known := Attributes.all_player_traits()
 	for region_name in Regions.REGION_SPECIALTY:
 		for attribute in Array(Regions.REGION_SPECIALTY[region_name]):
 			if str(attribute) not in known:
-				errors.append("region %s references unknown attribute %s" % [region_name, attribute])
+				errors.append("region %s references unknown player trait %s" % [region_name, attribute])
 	for role_name in Roles.POSITION_WEIGHTS:
 		for attribute in Array(Roles.POSITION_WEIGHTS[role_name]):
 			if str(attribute) not in known:
-				errors.append("role %s primary references unknown attribute %s" % [role_name, attribute])
+				errors.append("role %s primary references unknown player trait %s" % [role_name, attribute])
 	for role_name in Roles.ROLE_SECONDARY:
 		for attribute in Array(Roles.ROLE_SECONDARY[role_name]):
 			if str(attribute) not in known:
-				errors.append("role %s secondary references unknown attribute %s" % [role_name, attribute])
+				errors.append("role %s secondary references unknown player trait %s" % [role_name, attribute])
 	for body_name in Bodies.BODY_TYPE_ATTRIBUTES:
 		for attribute in Dictionary(Bodies.BODY_TYPE_ATTRIBUTES[body_name]):
 			if str(attribute) not in known:
-				errors.append("body %s references unknown attribute %s" % [body_name, attribute])
+				errors.append("body %s references unknown player trait %s" % [body_name, attribute])
 	for body_name in Bodies.BODY_TYPES:
 		if str(body_name) not in BodyPresentation.MODELLED:
 			errors.append("gameplay body %s has no presentation model" % body_name)
@@ -32,8 +32,9 @@ func _initialize() -> void:
 		if str(body_name) not in Bodies.BODY_TYPES:
 			errors.append("presentation body %s has no gameplay definition" % body_name)
 	if errors.is_empty():
-		print("DOMAIN REGISTRY CONTRACT: PASS (%d attributes, %d regions, %d roles, %d bodies)" % [
-			known.size(), Regions.REGION_SPECIALTY.size(), Roles.POSITION_WEIGHTS.size(), Bodies.BODY_TYPES.size(),
+		print("DOMAIN REGISTRY CONTRACT: PASS (%d abilities, %d regions, %d roles, %d bodies)" % [
+			Attributes.all_ids().size(), Regions.REGION_SPECIALTY.size(),
+			Roles.POSITION_WEIGHTS.size(), Bodies.BODY_TYPES.size(),
 		])
 		quit(0)
 		return
