@@ -1902,6 +1902,12 @@ func _configure_3d_match_view() -> void:
 		"home_name": GameManager.team.team_name if GameManager.team != null else "HOME",
 		"away_name": GameManager.opponent_team.team_name \
 			if GameManager.opponent_team != null else "AWAY",
+		"away_region": str(GameManager.opponent_team.region) \
+			if GameManager.opponent_team != null else "Landavol",
+		## The current prototype fixture is played at the selected opponent's
+		## venue, so changing the opponent changes the room shown in broadcast.
+		"venue_region": str(GameManager.opponent_team.region) \
+			if GameManager.opponent_team != null else "Landavol",
 		"home_score": int(GameManager.match_state.home_score),
 		"away_score": int(GameManager.match_state.opponent_score),
 		"home_sets": int(GameManager.match_state.home_sets),

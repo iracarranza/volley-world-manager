@@ -167,6 +167,44 @@ func reset_free_view() -> void:
 	mode_changed.emit(&"free", -1)
 
 
+## Serializable presentation state, intentionally separate from the rally.
+## MatchScreen snapshots it before rebuilding actors and restores it afterward.
+func capture_state() -> Dictionary:
+	return {
+		"free_enabled": free_enabled,
+		"follow_player_id": follow_player_id,
+		"preset": _court.camera_preset if _court != null else 0,
+		"orbit_target": orbit_target,
+		"orbit_yaw": orbit_yaw,
+		"orbit_elevation": orbit_elevation,
+		"orbit_distance": orbit_distance,
+	}
+
+
+func restore_state(state: Dictionary) -> void:
+	if _court == null or state.is_empty():
+		return
+	if not bool(state.get("free_enabled", false)):
+		select_preset(int(state.get("preset", _court.camera_preset)))
+		return
+	orbit_target = Vector3(state.get("orbit_target", orbit_target))
+	orbit_yaw = float(state.get("orbit_yaw", orbit_yaw))
+	orbit_elevation = clampf(
+		float(state.get("orbit_elevation", orbit_elevation)),
+		MIN_ELEVATION, MAX_ELEVATION,
+	)
+	orbit_distance = clampf(
+		float(state.get("orbit_distance", orbit_distance)), MIN_DISTANCE, MAX_DISTANCE
+	)
+	free_enabled = true
+	_dragging = false
+	var wanted_follow := int(state.get("follow_player_id", -1))
+	follow_player_id = wanted_follow if _court.actor_for(wanted_follow) != null else -1
+	_court.set_camera_follow_target(follow_player_id)
+	_apply_free_camera()
+	mode_changed.emit(&"follow" if follow_player_id >= 0 else &"free", follow_player_id)
+
+
 func orbit(pixel_delta: Vector2) -> void:
 	orbit_yaw -= pixel_delta.x * DRAG_RADIANS_PER_PIXEL
 	orbit_elevation = clampf(
@@ -258,6 +296,7 @@ func _capture_current_view(target: Vector3) -> void:
 func _apply_free_camera() -> void:
 	if not free_enabled or _court == null or _court.camera_3d == null:
 		return
+	_constrain_to_venue()
 	var horizontal := cos(orbit_elevation) * orbit_distance
 	var offset := Vector3(
 		sin(orbit_yaw) * horizontal,
@@ -266,6 +305,31 @@ func _apply_free_camera() -> void:
 	)
 	_court.camera_3d.global_position = orbit_target + offset
 	_court.camera_3d.look_at(orbit_target, Vector3.UP)
+
+
+## An orbit is useful only while the lens remains inside an enclosed arena.
+## Without this, rotating toward a long wall or zooming out can put the camera
+## behind the venue shell, producing an all-black court view that persistence
+## then correctly—but disastrously—keeps across replay and re-entry.
+func _constrain_to_venue() -> void:
+	var limits := _court.free_camera_limits()
+	if not bool(limits.get("enclosed", false)):
+		return
+	var horizontal_factor := maxf(cos(orbit_elevation), 0.001)
+	var maximum := MAX_DISTANCE
+	var side_factor := absf(sin(orbit_yaw)) * horizontal_factor
+	if side_factor > 0.001:
+		maximum = minf(maximum, float(limits.get("half_width", 15.35)) / side_factor)
+	var end_factor := absf(cos(orbit_yaw)) * horizontal_factor
+	if end_factor > 0.001:
+		maximum = minf(maximum, float(limits.get("half_length", 22.65)) / end_factor)
+	var rise_factor := sin(orbit_elevation)
+	if rise_factor > 0.001:
+		maximum = minf(
+			maximum,
+			(float(limits.get("ceiling", 13.35)) - orbit_target.y) / rise_factor,
+		)
+	orbit_distance = clampf(orbit_distance, MIN_DISTANCE, maxf(MIN_DISTANCE, maximum))
 
 
 func _cycle_follow() -> void:

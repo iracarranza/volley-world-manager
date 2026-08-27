@@ -20,7 +20,10 @@ extends Node
 ## Run:
 ##   xvfb-run -a godot --path . res://tools/venue_probe.tscn
 
-const COURT := preload("res://scenes/components/match_court_3d.tscn")
+## Loaded only by the screenshot runner. MatchCourt3D also uses this script's
+## reviewed venue construction at runtime, so preloading the court here would
+## create a circular resource dependency.
+const COURT_PATH := "res://scenes/components/match_court_3d.tscn"
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 
 ## Which region each venue id belongs to.
@@ -118,6 +121,9 @@ var _fill: OmniLight3D
 var _extras: Node3D
 var _open_air := false
 var _tight := false
+## MatchCourt3D instances this authoring script as a child so its lifetime is
+## owned and freed with the court. Runtime mode suppresses the capture runner.
+var runtime_only := false
 ## Set by `_arena()` and read by `_roof_lights()`, because a lamp bolted to the
 ## roof has to know where the roof is. It was a literal 12.4 under a literal
 ## 14.0 and the two were never connected, so the first small hall put its lamps
@@ -126,10 +132,64 @@ var _roof_h := 14.0
 
 
 func _ready() -> void:
+	if runtime_only:
+		return
 	get_window().size = Vector2i(1280, 720)
 	for venue in _venues():
 		await _shoot(Dictionary(venue))
 	get_tree().quit()
+
+
+## Put the reviewed venue into an already-running match court.
+##
+## This deliberately omits probe volis, screenshots and camera framing. The
+## live MatchScreen owns its players and camera; this builder owns only the room.
+func apply_runtime(court: Node3D, region_name: String) -> Dictionary:
+	var wanted := region_name.strip_edges().replace("’", "'")
+	var venue: Dictionary = {}
+	for candidate_raw in _venues():
+		var candidate := Dictionary(candidate_raw)
+		var venue_id := str(candidate.get("id", ""))
+		var candidate_region := str(VENUE_REGION.get(venue_id, ""))
+		if candidate_region.to_lower() == wanted.to_lower():
+			venue = candidate
+			break
+	if venue.is_empty():
+		for candidate_raw in _venues():
+			var candidate := Dictionary(candidate_raw)
+			if str(candidate.get("id", "")) == "landavol":
+				venue = candidate
+				break
+	if venue.is_empty() or court == null:
+		return {}
+
+	_court = court
+	_key = _court.get_node("KeyLight") as DirectionalLight3D
+	_fill = _court.get_node("FillLight") as OmniLight3D
+	var holder := _court.get_node("WorldEnvironment") as WorldEnvironment
+	_env = holder.environment.duplicate(true) as Environment
+	holder.environment = _env
+	_extras = Node3D.new()
+	_extras.name = "VenueExtras"
+	_court.add_child(_extras)
+	_open_air = bool(venue.get("open_air", false))
+	_tight = bool(venue.get("tight", false))
+	var venue_id := str(venue.get("id", "landavol"))
+	_arena()
+	_roof_lights(venue_id)
+	_fixtures(venue_id)
+	_floor_for(venue_id)
+	var build: Callable = venue.get("build", func(): pass)
+	build.call()
+	if _open_air:
+		_venue_camera()
+	return {
+		"id": venue_id,
+		"label": str(venue.get("label", "")),
+		"region": str(VENUE_REGION.get(venue_id, "Landavol")),
+		"open_air": _open_air,
+		"tight": _tight,
+	}
 
 
 ## Eight rooms. Each entry is a light change, an atmosphere change, and a hook
@@ -362,7 +422,8 @@ func _venues() -> Array:
 
 
 func _shoot(venue: Dictionary) -> void:
-	_court = COURT.instantiate()
+	var court_scene := load(COURT_PATH) as PackedScene
+	_court = court_scene.instantiate()
 	add_child(_court)
 	await get_tree().process_frame
 	_key = _court.get_node("KeyLight") as DirectionalLight3D

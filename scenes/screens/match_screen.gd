@@ -114,6 +114,7 @@ func load_and_play_rally(
 ) -> void:
 	if rally_result == null or rally_result.events.is_empty():
 		return
+	var saved_camera_state := dynamic_camera.capture_state()
 	playback_generation += 1
 	var generation := playback_generation
 	active_result = rally_result
@@ -157,7 +158,7 @@ func load_and_play_rally(
 		player_physical_profiles,
 	)
 	_populate_follow_players()
-	_camera_selected(camera_option.selected)
+	dynamic_camera.restore_state(saved_camera_state)
 	match_court_3d.ball_actor.reset_flight()
 	playback_start_mismatches.clear()
 	playback_leg_overspeed.clear()
@@ -2262,7 +2263,7 @@ func _skip() -> void:
 
 func _replay() -> void:
 	if active_result != null:
-		load_and_play_rally(active_result, playback_speed)
+		load_and_play_rally(active_result, playback_speed, true)
 
 
 func _cycle_camera() -> void:
@@ -2291,6 +2292,9 @@ func _apply_broadcast_context() -> void:
 		int(broadcast_context.get("away_sets", 0)),
 		bool(broadcast_context.get("serving_home", true)),
 	)
+	match_court_3d.configure_venue(str(
+		broadcast_context.get("venue_region", broadcast_context.get("away_region", "Landavol"))
+	))
 
 
 func _populate_camera_presets() -> void:
