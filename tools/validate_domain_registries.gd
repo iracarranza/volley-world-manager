@@ -9,9 +9,9 @@ const BodyPresentation := preload("res://scripts/data/body_type_models.gd")
 func _initialize() -> void:
 	var errors: Array[String] = []
 	var known: Array = Attributes.ABILITY_ATTRIBUTES.duplicate()
-	for trait in Attributes.NON_ABILITY_TRAITS:
-		if trait not in known:
-			known.append(trait)
+	for trait_id in Attributes.NON_ABILITY_TRAITS:
+		if trait_id not in known:
+			known.append(trait_id)
 	for region_name in Regions.REGION_SPECIALTY:
 		for attribute in Array(Regions.REGION_SPECIALTY[region_name]):
 			if str(attribute) not in known:
