@@ -10,12 +10,12 @@ emission_enabled = true
 emission = Color(1, 0.54, 0.08, 1)
 emission_energy_multiplier = 2.0
 
-[sub_resource type="TorusMesh" id="RingMesh"]
+[sub_resource type="SphereMesh" id="RingMesh"]
 material = SubResource("SurgeMaterial")
-inner_radius = 0.34
-outer_radius = 0.372
-rings = 24
-ring_segments = 8
+radius = 0.42
+height = 0.18
+radial_segments = 16
+rings = 8
 
 [sub_resource type="SphereMesh" id="CoreMesh"]
 material = SubResource("SurgeMaterial")
@@ -24,12 +24,12 @@ height = 0.84
 radial_segments = 16
 rings = 8
 
-[sub_resource type="CylinderMesh" id="StreamMesh"]
+[sub_resource type="SphereMesh" id="StreamMesh"]
 material = SubResource("SurgeMaterial")
-top_radius = 0.012
-bottom_radius = 0.021
-height = 0.82
-radial_segments = 6
+radius = 0.075
+height = 0.62
+radial_segments = 10
+rings = 6
 
 [node name="SignatureSurge3D" type="Node3D"]
 script = ExtResource("1_surge")

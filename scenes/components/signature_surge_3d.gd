@@ -6,11 +6,11 @@ extends Node3D
 ## Simulation supplies move/charge/result/phase. This node only visualises those
 ## facts. The common gather says "signature action is charging"; release geometry
 ## then says *which action* without relying on colour alone:
-## - block_crush: downward compression/claw;
-## - high_hands: upward deflection fan;
-## - foresight: compact focus reticle;
-## - heroics: low rescue/sweep ripple;
-## - monster_block: broad vertical wall.
+## - block_crush: arm-led compression and downward rupture;
+## - high_hands: restrained hand-led upward peel;
+## - foresight: quiet pre-contact directional drift (never a prediction line);
+## - heroics: whole-body ignition and turbulent pursuit wake;
+## - monster_block: hand-plane pressure pulse which immediately dissipates.
 
 const MOVE_COLOURS := {
 	"block_crush": Color(1.00, 0.20, 0.045, 1.0),
@@ -64,8 +64,6 @@ static func profile_for(move: String) -> Dictionary:
 	return {
 		"move": key,
 		"colour": Color(MOVE_COLOURS.get(key, Color(1.0, 0.84, 0.20, 1.0))),
-		"precision": key in ["high_hands", "foresight"],
-		"impact": key in ["block_crush", "heroics", "monster_block"],
 		"shape": {
 			"block_crush": "compression",
 			"high_hands": "deflection",
@@ -89,7 +87,7 @@ func set_cue(move: String, charge: float, succeeded: bool, phase: float) -> void
 
 	var profile := profile_for(_move)
 	var colour := Color(profile.colour)
-	var precision := bool(profile.precision)
+	var precision := _move in ["high_hands", "foresight"]
 	var gather := smoothstep(-0.88, -0.08, phase)
 	var release := smoothstep(-0.04, 0.18, phase)
 	var release_peak := release * (1.0 - smoothstep(0.34, 0.82, phase))
@@ -194,23 +192,22 @@ func _release_spec(index: int, strength: float) -> Dictionary:
 				"width": 0.82,
 			}
 		"foresight":
-			## Pushed camera-side and widened. The first version sat on the
-			## anchor and was mostly hidden behind the actor's own torso, so the
-			## reticle read as two bars rather than a focus.
-			var direction := Vector3(cos(angle), 0.10, sin(angle) * 0.34).normalized()
+			## A soft drift follows the already-authored body commitment. It does
+			## not point at, mark, or promise a future ball destination.
+			var direction := Vector3(-0.58, 0.12 + lane * 0.018, sin(angle) * 0.22).normalized()
 			return {
-				"position": Vector3(0.0, contact_anchor_meters, 0.22) + direction * 0.30,
+				"position": Vector3(0.18, contact_anchor_meters * 0.62, 0.08) + direction * (0.20 + float(index) * 0.035),
 				"direction": direction,
-				"length": lerpf(0.30, 0.46, strength),
-				"width": 0.72,
+				"length": lerpf(0.22, 0.38, strength),
+				"width": 0.62,
 			}
 		"heroics":
 			var side := -1.0 if index % 2 == 0 else 1.0
 			var direction := Vector3(-0.82 + float(index / 2) * 0.13, 0.02, side * 0.34).normalized()
 			return {
-				"position": Vector3(0.0, maxf(0.24, contact_anchor_meters * 0.50), 0.0) + direction * 0.42,
+				"position": Vector3(0.12, maxf(0.28, contact_anchor_meters * 0.48), 0.0) + direction * (0.32 + float(index) * 0.055),
 				"direction": direction,
-				"length": lerpf(0.46, 0.76, strength),
+				"length": lerpf(0.38, 0.86, strength),
 				"width": 0.82,
 			}
 		"monster_block":
@@ -254,8 +251,8 @@ func _draw_burst(
 			burst.rotation = Vector3(PI * 0.5, 0.0, PI * 0.22)
 			burst.scale = Vector3.ONE * lerpf(0.24, 0.78, release)
 		"foresight":
-			burst.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-			burst.scale = Vector3.ONE * lerpf(0.18, 0.56, release)
+			burst.position.y = contact_anchor_meters * 0.58
+			burst.scale = Vector3(lerpf(0.14, 0.44, release), lerpf(0.20, 0.72, release), 0.30)
 		"heroics":
 			burst.position.y = maxf(0.22, contact_anchor_meters * 0.34)
 			burst.scale = Vector3(lerpf(0.32, 1.18, release), 0.58, lerpf(0.22, 0.62, release))
@@ -296,16 +293,16 @@ func _draw_contact_shape(
 				ring.position.y += 0.05 + float(index) * 0.07
 				ring.scale = Vector3.ONE * lerpf(0.20 + float(index) * 0.04, 0.66 + float(index) * 0.09, release)
 			"foresight":
-				## Three concentric reticle rings sit just camera-side of the
-				## setting hands. They used to sit behind the torso, where the
-				## actor occluded all but two bars of them.
+				## Offset translucent fields breathe around the torso's early drift;
+				## there is intentionally no closed reticle or destination marker.
 				ring.position = Vector3(
-					0.0, contact_anchor_meters + 0.03, 0.24 + float(index) * 0.035
+					0.12 - float(index) * 0.12,
+					contact_anchor_meters * (0.42 + float(index) * 0.12),
+					0.10 + float(index) * 0.025
 				)
-				ring.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-				var s := lerpf(0.20 + float(index) * 0.06, 0.48 + float(index) * 0.14, release)
-				ring.scale = Vector3.ONE * s
-				alpha = release_peak * fade * strength * (0.92 - float(index) * 0.14)
+				var s := lerpf(0.16 + float(index) * 0.04, 0.42 + float(index) * 0.10, release)
+				ring.scale = Vector3(s * 1.25, s * 1.7, s * 0.72)
+				alpha = release_peak * fade * strength * (0.42 - float(index) * 0.07)
 			"heroics":
 				## Rescue energy travels along the floor rather than exploding around
 				## the torso: three staggered, flattened ripples behind the dig.
@@ -344,11 +341,11 @@ func _make_contact_ring(name_: String) -> MeshInstance3D:
 	var ring := MeshInstance3D.new()
 	ring.name = name_
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mesh := TorusMesh.new()
-	mesh.inner_radius = 0.22
-	mesh.outer_radius = 0.242
-	mesh.rings = 24
-	mesh.ring_segments = 7
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.34
+	mesh.height = 0.16
+	mesh.radial_segments = 16
+	mesh.rings = 8
 	ring.mesh = mesh
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

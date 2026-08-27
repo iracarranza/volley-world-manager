@@ -7,16 +7,21 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
 
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
-@onready var caption_label: Label = %CaptionLabel
-@onready var detail_label: Label = %DetailLabel
-@onready var event_label: Label = %EventLabel
-@onready var progress_bar: ProgressBar = %ProgressBar
-@onready var pause_button: Button = %PauseButton
-@onready var replay_button: Button = %ReplayButton
-@onready var skip_button: Button = %SkipButton
-@onready var camera_button: Button = %CameraButton
-@onready var close_button: Button = %CloseButton
-@onready var speed_option: OptionButton = %SpeedOption
+@onready var broadcast_overlay: BroadcastOverlay = %BroadcastOverlay
+@onready var dynamic_camera: DynamicCourtCamera = %DynamicCourtCamera
+@onready var court_input_surface: SubViewportContainer = %SubViewportContainer
+@onready var caption_label: Label = broadcast_overlay.lower_title
+@onready var detail_label: Label = broadcast_overlay.commentary_label
+@onready var event_label: Label = broadcast_overlay.phase_label
+@onready var progress_bar: ProgressBar = broadcast_overlay.progress_bar
+@onready var pause_button: Button = broadcast_overlay.pause_button
+@onready var replay_button: Button = broadcast_overlay.replay_button
+@onready var skip_button: Button = broadcast_overlay.skip_button
+@onready var close_button: Button = broadcast_overlay.close_button
+@onready var speed_option: OptionButton = broadcast_overlay.speed_option
+@onready var camera_option: OptionButton = broadcast_overlay.camera_option
+@onready var free_camera_button: Button = broadcast_overlay.free_camera_button
+@onready var follow_option: OptionButton = broadcast_overlay.follow_option
 
 var playback_speed: float = 1.0
 var active_result: RallyResult
@@ -57,16 +62,30 @@ var player_physical_profiles: Dictionary = {}
 ## and doing that per posed player per frame to get an answer that cannot have
 ## changed is the kind of work a replay cannot afford.
 var platform_surfaces: Dictionary = {}
+## Presentation-only body destinations for visible limb contacts, keyed by the
+## contact event. Each is measured from that player's real posed rig before
+## playback begins; gameplay's published body position remains untouched.
+var contact_body_targets: Dictionary = {}
+var broadcast_context: Dictionary = {}
 
 
 func _ready() -> void:
 	pause_button.pressed.connect(_toggle_pause)
 	replay_button.pressed.connect(_replay)
 	skip_button.pressed.connect(_skip)
-	camera_button.pressed.connect(_cycle_camera)
 	close_button.pressed.connect(_close)
 	speed_option.item_selected.connect(_speed_changed)
+	camera_option.item_selected.connect(_camera_selected)
+	free_camera_button.toggled.connect(_free_camera_toggled)
+	follow_option.item_selected.connect(_follow_selected)
+	broadcast_overlay.zoom_out_button.pressed.connect(func() -> void: _zoom_camera(-1.0))
+	broadcast_overlay.zoom_in_button.pressed.connect(func() -> void: _zoom_camera(1.0))
+	dynamic_camera.mode_changed.connect(_camera_mode_changed)
+	court_input_surface.gui_input.connect(_court_gui_input)
 	_populate_speeds()
+	_populate_camera_presets()
+	_populate_follow_players()
+	_apply_broadcast_context()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -88,7 +107,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0) -> void:
+func load_and_play_rally(
+	rally_result: RallyResult,
+	requested_speed: float = 1.0,
+	replay_mode: bool = false,
+) -> void:
 	if rally_result == null or rally_result.events.is_empty():
 		return
 	playback_generation += 1
@@ -99,9 +122,11 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	playback_paused = false
 	skip_requested = false
 	playback_active = true
-	pause_button.text = "Pause"
+	pause_button.text = "PAUSE"
 	replay_button.disabled = true
 	skip_button.disabled = false
+	broadcast_overlay.set_replay_state(replay_mode)
+	broadcast_overlay.set_live_rally(true, "SERVE")
 	visible = true
 	move_to_front()
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -112,6 +137,7 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	## could never be hit -- but they would hold every event of every rally played
 	## this session alive for as long as the screen is open.
 	platform_surfaces.clear()
+	contact_body_targets.clear()
 	var home_positions: Dictionary = rally_result.initial_home_positions
 	var opponent_positions: Dictionary = rally_result.initial_opponent_positions
 	if home_positions.is_empty() and opponent_positions.is_empty():
@@ -122,6 +148,16 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 		home_positions, opponent_positions, player_names, player_handedness,
 		player_physical_profiles,
 	)
+	_cache_contact_body_targets(rally_result.events)
+	## The measurement pass poses the real actors so it can read their actual
+	## forearms. Rebuild them from the same inputs so playback starts from the
+	## untouched receive formation and ready facing.
+	match_court_3d.setup_players(
+		home_positions, opponent_positions, player_names, player_handedness,
+		player_physical_profiles,
+	)
+	_populate_follow_players()
+	_camera_selected(camera_option.selected)
 	match_court_3d.ball_actor.reset_flight()
 	playback_start_mismatches.clear()
 	playback_leg_overspeed.clear()
@@ -134,12 +170,14 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	replay_button.disabled = false
 	skip_button.disabled = true
 	pause_button.disabled = false
-	pause_button.text = "Pause"
+	pause_button.text = "PAUSE"
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.reset_player_poses()
-	event_label.text = "POINT COMPLETE"
-	caption_label.text = rally_result.commentary_headline
-	detail_label.text = rally_result.commentary_analysis
+	broadcast_overlay.set_live_rally(false, "POINT COMPLETE")
+	broadcast_overlay.show_lower_third(
+		"POINT COMPLETE", rally_result.commentary_headline
+	)
+	broadcast_overlay.set_commentary(rally_result.commentary_analysis, 1, false)
 	progress_bar.value = 100.0
 
 
@@ -663,6 +701,19 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 	if event == null:
 		return {}
 	var context := {}
+	if event.success and int(event.event_type) in [
+		RallyEventModel.EventType.SERVE,
+		RallyEventModel.EventType.RECEPTION,
+		RallyEventModel.EventType.DIG,
+		RallyEventModel.EventType.ATTACK_COVERAGE,
+		RallyEventModel.EventType.SET,
+		RallyEventModel.EventType.ATTACK,
+		RallyEventModel.EventType.BLOCK,
+	]:
+		if event.event_type != RallyEventModel.EventType.BLOCK \
+				or not str(event.metadata.get("block_contact_kind", "")).is_empty():
+			context["contact_anchor_height_meters"] = \
+				BallPresentation.contact_height(event, player_physical_profiles)
 	if event.event_type in [
 		RallyEventModel.EventType.SERVE, RallyEventModel.EventType.ATTACK,
 	]:
@@ -854,6 +905,9 @@ func _apply_contact_poses(
 			_contact_posture(next_contact), _contact_recovery(next_contact),
 			_action_context(next_contact, next_actor),
 		)
+	_apply_pre_release_attack(
+		after_next, next_contact, event, progress, window_seconds
+	)
 	_apply_early_block(
 		after_next, next_contact, event, progress, window_seconds
 	)
@@ -897,10 +951,9 @@ static func _incoming_pose_phase(event: RallyEvent, progress: float) -> float:
 	## original full-window wind-up instead of manufacturing a takeoff at 98%.
 	if timing.is_empty():
 		return p - 1.0
-	var release_progress := clampf(float(timing.get(
-		"achieved_release_progress", timing.get("observed_release_progress", 0.0)
-	)), 0.0, 1.0)
-	var start_phase := lerpf(-1.0, SpikeBiomechanics.PLANT_END, release_progress)
+	var start_phase := _attack_release_phase(event)
+	if float(timing.get("takeoff_offset_seconds", 0.0)) < 0.0:
+		return lerpf(start_phase, 0.0, p)
 	var takeoff := _attack_takeoff_fraction(event)
 	if takeoff > 0.0001 and p < takeoff:
 		return lerpf(start_phase, SpikeBiomechanics.PLANT_END, p / takeoff)
@@ -910,11 +963,100 @@ static func _incoming_pose_phase(event: RallyEvent, progress: float) -> float:
 	)
 
 
+## Pose at setter release on the delivered physical clock. A negative takeoff
+## offset means the hitter is already airborne; beginning them at PLANT_END in
+## that case would still compress the published takeoff-to-contact interval.
+static func _attack_release_phase(event: RallyEvent) -> float:
+	if event == null: return -1.0
+	var timing: Dictionary = event.metadata.get("tempo_coordination", {})
+	var release_progress := clampf(float(timing.get(
+		"achieved_release_progress", timing.get("observed_release_progress", 0.0)
+	)), 0.0, 1.0)
+	var phase := lerpf(-1.0, SpikeBiomechanics.PLANT_END, release_progress)
+	var takeoff_offset := float(timing.get("takeoff_offset_seconds", 0.0))
+	if takeoff_offset < 0.0:
+		var takeoff_to_contact := maxf(float(timing.get(
+			"takeoff_to_contact_seconds", 0.22
+		)), 0.001)
+		phase = lerpf(
+			SpikeBiomechanics.PLANT_END, 0.0,
+			clampf(-takeoff_offset / takeoff_to_contact, 0.0, 1.0),
+		)
+	return phase
+
+
+## Draw the preparation the simulator resolved before setter release. T0-T2
+## hitters have already begun (and T1 has completed the close into its plant)
+## while the preceding pass is still travelling. Playback previously ignored
+## that interval, then normalized everything left into the 0.18-0.25 s set
+## flight. T3 deliberately begins after release and stays on the existing path.
+func _apply_pre_release_attack(
+	attack: RallyEvent,
+	set_event: RallyEvent,
+	window_event: RallyEvent,
+	progress: float,
+	window_seconds: float,
+) -> void:
+	if attack == null or set_event == null \
+			or attack.event_type != RallyEventModel.EventType.ATTACK \
+			or set_event.event_type != RallyEventModel.EventType.SET:
+		return
+	var timing: Dictionary = attack.metadata.get("tempo_coordination", {})
+	var release_progress := clampf(float(timing.get(
+		"achieved_release_progress", 0.0
+	)), 0.0, 1.0)
+	if release_progress <= 0.0001:
+		return
+	var preparation: Dictionary = attack.metadata.get(
+		"transition_preparation", {}
+	)
+	var release_time := _event_physical_time(set_event)
+	var preparation_window := maxf(float(preparation.get(
+		"preparation_time_seconds", 0.0
+	)), 0.0)
+	var approach_begins := float(preparation.get(
+		"release_time", release_time - preparation_window
+	))
+	var moment := _window_physical_time(window_event, progress, window_seconds)
+	if moment < approach_begins or release_time <= approach_begins:
+		return
+	var completion := clampf(inverse_lerp(
+		approach_begins, release_time, moment
+	), 0.0, 1.0)
+	var release_phase := _attack_release_phase(attack)
+	var phase := lerpf(-1.0, release_phase, completion)
+	var phase_lift := smoothstep(
+		0.0, 1.0, inverse_lerp(SpikeBiomechanics.PLANT_END, 0.0, phase)
+	) if phase > SpikeBiomechanics.PLANT_END else 0.0
+	var actor_id := int(attack.actor_id)
+	match_court_3d.set_player_pose(
+		actor_id, RallyEventModel.EventType.ATTACK,
+		_event_elevation(attack, actor_id) * phase_lift, phase,
+		attack.end_position - attack.start_position, true,
+		_contact_posture(attack), _contact_recovery(attack), {},
+		_action_context(attack, actor_id),
+	)
+
+
 static func _incoming_attack_lift(event: RallyEvent, progress: float) -> float:
 	if event == null or Dictionary(event.metadata.get(
 		"tempo_coordination", {}
 	)).is_empty():
 		return smoothstep(0.48, 1.0, clampf(progress, 0.0, 1.0))
+	var timing: Dictionary = event.metadata.get("tempo_coordination", {})
+	var takeoff_offset := float(timing.get("takeoff_offset_seconds", 0.0))
+	if takeoff_offset < 0.0:
+		var flight := maxf(float(timing.get(
+			"delivered_flight_seconds", 0.0
+		)), 0.0001)
+		var takeoff_to_contact := maxf(float(timing.get(
+			"takeoff_to_contact_seconds", flight
+		)), 0.0001)
+		return smoothstep(0.0, 1.0, clampf(
+			(-takeoff_offset + clampf(progress, 0.0, 1.0) * flight)
+				/ takeoff_to_contact,
+			0.0, 1.0,
+		))
 	var takeoff := _attack_takeoff_fraction(event)
 	return smoothstep(takeoff, 1.0, clampf(progress, 0.0, 1.0))
 
@@ -1180,6 +1322,8 @@ func _build_movement_plan(
 	## made a legal tight set look like the hitter was clipping through the net.
 	if next_contact.metadata.has("body_contact_position"):
 		action_target = Vector2(next_contact.metadata["body_contact_position"])
+	if contact_body_targets.has(next_contact):
+		action_target = Vector2(contact_body_targets[next_contact])
 	## A failed first contact is a ball the defender did not reach. The resolver
 	## publishes the point their body reached separately; walking them all the way
 	## to the untouched ball visually converts a miss into a last-frame teleport.
@@ -1242,6 +1386,25 @@ func _build_movement_plan(
 			plan, staged_id,
 			Vector2(event.metadata.get("staged_next_position", action_target)), true
 		)
+	## The next SET owns the hitter's resolved pre-release preparation. For T0-T2
+	## that movement belongs in this incoming pass window, not compressed into the
+	## short outgoing set flight. T3 has zero release progress and intentionally
+	## starts after the ball leaves the setter.
+	if next_contact.event_type == RallyEventModel.EventType.SET:
+		var timing: Dictionary = next_contact.metadata.get(
+			"tempo_coordination", {}
+		)
+		if float(timing.get("achieved_release_progress", 0.0)) > 0.0001:
+			var prepared_id := int(next_contact.metadata.get(
+				"staged_next_actor_id", -1
+			))
+			if prepared_id >= 0:
+				_set_plan_target(
+					plan, prepared_id,
+					Vector2(next_contact.metadata.get(
+						"staged_next_position", action_target
+					)), true,
+				)
 	var next_actor_id := int(next_contact.actor_id)
 	if next_actor_id >= 0:
 		var actor_home := _event_is_home(next_contact)
@@ -1735,8 +1898,10 @@ func _committed_ground(next_contact: RallyEvent) -> Dictionary:
 				Dictionary(next_contact.metadata[key])[raw_player_id]
 			)
 	if int(next_contact.actor_id) >= 0:
-		ground[int(next_contact.actor_id)] = Vector2(next_contact.metadata.get(
-			"body_contact_position", next_contact.start_position
+		ground[int(next_contact.actor_id)] = Vector2(contact_body_targets.get(
+			next_contact, next_contact.metadata.get(
+				"body_contact_position", next_contact.start_position
+			)
 		))
 	return ground
 
@@ -2023,16 +2188,23 @@ func _next_contact_event(events: Array[Resource], start_index: int) -> RallyEven
 
 
 func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> void:
-	event_label.text = "%02d / %02d   %s   t=%.2fs" % [
-		event_index + 1, event_count, event.type_name().to_upper(),
-		float(event.metadata.get("event_time", 0.0)),
+	event_label.text = event.type_name().to_upper()
+	broadcast_overlay.lower_kicker.text = "%02d / %02d · t=%.2fs" % [
+		event_index + 1, event_count, float(event.metadata.get("event_time", 0.0)),
 	]
 	## The router may deliberately choose silence. The event label above remains
 	## available as playback diagnostics; raw simulator headline/detail never
 	## substitute for commentary.
+	var selected_commentary := "" if event.commentary_silent \
+		else event.commentary_headline
+	if not event.commentary_detail.is_empty():
+		selected_commentary += "\n%s" % event.commentary_detail
 	caption_label.text = "" if event.commentary_silent \
 		else event.commentary_headline
-	detail_label.text = event.commentary_detail
+	broadcast_overlay.set_commentary(
+		selected_commentary, event_index % 2,
+		bool(event.metadata.get("named_action", false)),
+	)
 
 
 func _build_player_names(events: Array[Resource]) -> void:
@@ -2080,7 +2252,7 @@ func _toggle_pause() -> void:
 	if not playback_active:
 		return
 	playback_paused = not playback_paused
-	pause_button.text = "Resume" if playback_paused else "Pause"
+	pause_button.text = "RESUME" if playback_paused else "PAUSE"
 
 
 func _skip() -> void:
@@ -2094,7 +2266,116 @@ func _replay() -> void:
 
 
 func _cycle_camera() -> void:
-	camera_button.text = match_court_3d.cycle_camera()
+	if camera_option.item_count == 0:
+		return
+	var next := (camera_option.selected + 1) % camera_option.item_count
+	camera_option.select(next)
+	_camera_selected(next)
+
+
+func configure_broadcast(context: Dictionary) -> void:
+	broadcast_context = context.duplicate(true)
+	if is_node_ready():
+		_apply_broadcast_context()
+
+
+func _apply_broadcast_context() -> void:
+	if broadcast_overlay == null:
+		return
+	broadcast_overlay.configure_score(
+		str(broadcast_context.get("home_name", "HOME")),
+		str(broadcast_context.get("away_name", "AWAY")),
+		int(broadcast_context.get("home_score", 0)),
+		int(broadcast_context.get("away_score", 0)),
+		int(broadcast_context.get("home_sets", 0)),
+		int(broadcast_context.get("away_sets", 0)),
+		bool(broadcast_context.get("serving_home", true)),
+	)
+
+
+func _populate_camera_presets() -> void:
+	camera_option.clear()
+	for name in match_court_3d.camera_preset_names():
+		camera_option.add_item(name)
+	camera_option.select(clampi(match_court_3d.camera_preset, 0, camera_option.item_count - 1))
+	broadcast_overlay.set_camera_status(
+		"CAM · %s" % camera_option.get_item_text(camera_option.selected), false
+	)
+
+
+func _camera_selected(index: int) -> void:
+	if index < 0 or index >= camera_option.item_count:
+		return
+	var name := dynamic_camera.select_preset(index)
+	broadcast_overlay.set_camera_status("CAM · %s" % name, false)
+	_select_follow_player(-1)
+
+
+func _free_camera_toggled(enabled: bool) -> void:
+	if enabled:
+		dynamic_camera.enable_free(true)
+	else:
+		_camera_selected(camera_option.selected)
+
+
+func _populate_follow_players() -> void:
+	if follow_option == null:
+		return
+	var wanted := dynamic_camera.follow_player_id if dynamic_camera != null else -1
+	follow_option.clear()
+	follow_option.add_item("FOLLOW · court")
+	follow_option.set_item_metadata(0, -1)
+	for entry in dynamic_camera.player_entries():
+		follow_option.add_item(str(entry.label))
+		follow_option.set_item_metadata(follow_option.item_count - 1, int(entry.id))
+	_select_follow_player(wanted)
+
+
+func _follow_selected(index: int) -> void:
+	if index < 0 or index >= follow_option.item_count:
+		return
+	dynamic_camera.follow(int(follow_option.get_item_metadata(index)))
+
+
+func _select_follow_player(player_id: int) -> void:
+	for index in range(follow_option.item_count):
+		if int(follow_option.get_item_metadata(index)) == player_id:
+			follow_option.select(index)
+			return
+	if follow_option.item_count > 0:
+		follow_option.select(0)
+
+
+func _camera_mode_changed(mode: StringName, player_id: int) -> void:
+	match mode:
+		&"preset":
+			camera_option.select(match_court_3d.camera_preset)
+			broadcast_overlay.set_camera_status(
+				"CAM · %s" % camera_option.get_item_text(camera_option.selected), false
+			)
+			_select_follow_player(-1)
+		&"follow":
+			broadcast_overlay.set_camera_status(
+				"FOLLOW · %s · drag to orbit · wheel to zoom" \
+					% dynamic_camera.followed_player_label(), true
+			)
+			_select_follow_player(player_id)
+		_:
+			broadcast_overlay.set_camera_status(
+				"FREE · drag court to orbit · wheel to zoom · Home resets", true
+			)
+			_select_follow_player(-1)
+
+
+func _court_gui_input(event: InputEvent) -> void:
+	if dynamic_camera.handle_court_input(event):
+		court_input_surface.accept_event()
+
+
+func _zoom_camera(steps: float) -> void:
+	if not dynamic_camera.free_enabled:
+		dynamic_camera.enable_free(true)
+	dynamic_camera.zoom_steps(steps)
 
 
 func _close() -> void:
@@ -2156,6 +2437,56 @@ func _platform_aim(event: RallyEvent) -> Dictionary:
 	var actor := match_court_3d.actor_for(int(event.actor_id))
 	var body_yaw := rad_to_deg(actor.facing_yaw) if actor != null else 0.0
 	return PlatformAim.relative(solved, body_yaw)
+
+
+## Measure where each successful contact puts this particular actor's relevant
+## limb anchor, then move the body destination by the opposite offset. This runs
+## once before playback, against the real scene actor and event pose. It follows
+## silhouette, height, arm scale, handedness, posture, facing and jump elevation
+## without a second table of model offsets.
+func _cache_contact_body_targets(events: Array) -> void:
+	for raw_event in events:
+		var event := raw_event as RallyEvent
+		if event == null or not event.success or int(event.event_type) not in [
+			RallyEventModel.EventType.SERVE,
+			RallyEventModel.EventType.RECEPTION,
+			RallyEventModel.EventType.DIG,
+			RallyEventModel.EventType.ATTACK_COVERAGE,
+			RallyEventModel.EventType.SET,
+			RallyEventModel.EventType.ATTACK,
+			RallyEventModel.EventType.BLOCK,
+		]:
+			continue
+		if event.event_type == RallyEventModel.EventType.BLOCK \
+				and str(event.metadata.get("block_contact_kind", "")).is_empty():
+			continue
+		var actor := match_court_3d.actor_for(int(event.actor_id))
+		if actor == null:
+			continue
+		var direction := event.end_position - event.start_position
+		if direction.length_squared() > 0.000001:
+			actor.facing_yaw = atan2(-direction.x, -direction.y)
+			actor.rotation.y = actor.facing_yaw
+		var context := _action_context(event, int(event.actor_id))
+		match_court_3d.set_player_pose(
+			int(event.actor_id), int(event.event_type),
+			_event_elevation(event, int(event.actor_id)), 0.0,
+			direction, true, _contact_posture(event), _contact_recovery(event),
+			_platform_aim(event), context,
+		)
+		var anchor := actor.contact_anchor_world_position(
+			int(event.event_type), context
+		)
+		var offset := anchor - actor.global_position
+		var visible_contact: Variant = BallPresentation.visual_contact_position(
+			event, player_physical_profiles
+		)
+		var contact_position := Vector2(visible_contact) \
+			if visible_contact is Vector2 else Vector2(event.start_position)
+		contact_body_targets[event] = contact_position - Vector2(
+			offset.x / maxf(match_court_3d.court_width, 0.001),
+			offset.z / maxf(match_court_3d.court_length, 0.001),
+		)
 
 
 ## The surface the two flights require, from the flights as they are **drawn**.

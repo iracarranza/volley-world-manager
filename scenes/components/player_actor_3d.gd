@@ -473,6 +473,136 @@ func configure(
 	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 
+## The centre of the forearm surface that a reception or dig is visibly played
+## from, read from the posed rig itself. Body types do not share arm proportions
+## (the modelled spread is about twenty centimetres), so callers must not replace
+## this with a universal reach constant.
+func platform_contact_world_position() -> Vector3:
+	_ensure_node_bindings()
+	return (_hand_world_position(left_arm) + _hand_world_position(right_arm)) * 0.5
+
+
+## The ball-centre anchor for a contact, read after the real action pose has
+## written every shoulder and elbow. There is deliberately no reach table here:
+## silhouette, height, wingspan, handedness, posture, facing and phase have
+## already changed these node transforms by the time this is called.
+func contact_anchor_world_position(
+	event_type: int, action_context: Dictionary = {}
+) -> Vector3:
+	_ensure_node_bindings()
+	var left_hand := _hand_world_position(left_arm)
+	var right_hand := _hand_world_position(right_arm)
+	match event_type:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
+			return (left_hand + right_hand) * 0.5
+		RallyEventModel.EventType.SET:
+			if str(action_context.get("set_posture_reason", "")) \
+					== "under the hands":
+				return (left_hand + right_hand) * 0.5
+			return (left_hand + right_hand) * 0.5
+		RallyEventModel.EventType.SERVE, RallyEventModel.EventType.ATTACK:
+			return left_hand if dominant_hand == "Left" else right_hand
+		RallyEventModel.EventType.BLOCK:
+			if block_arms == &"left":
+				return left_hand
+			if block_arms == &"right":
+				return right_hand
+			return (left_hand + right_hand) * 0.5
+	return global_position
+
+
+func _hand_world_position(arm: Node3D) -> Vector3:
+	if arm == null:
+		return global_position
+	var elbow := arm.get_node_or_null("Elbow") as Node3D
+	if elbow == null:
+		return arm.global_position
+	var forearm_length := arm_bone_lengths.y * arm_length_scale
+	return elbow.global_transform * Vector3(0.0, -forearm_length, 0.0)
+
+
+## Raise or lower the joined forearms until their real rendered surface reaches
+## the ball's authoritative contact height. This is solved against node
+## transforms, not a silhouette table: the six models have different shoulders,
+## arms and scale, and the numerical slope automatically includes all of them.
+func fit_platform_contact_height(target_height_meters: float) -> void:
+	fit_contact_anchor_height(
+		RallyEventModel.EventType.RECEPTION, target_height_meters, {}
+	)
+
+
+## Fit the relevant posed limb endpoints to the simulator's contact height.
+## This solves the rig already on screen; it does not alter the ball, event
+## time, jump height or body destination. Horizontal placement is measured only
+## after this fit, because changing an arm angle changes both height and reach.
+func fit_contact_anchor_height(
+	event_type: int,
+	target_height_meters: float,
+	action_context: Dictionary = {},
+) -> void:
+	_ensure_node_bindings()
+	var arms: Array[Node3D] = []
+	match event_type:
+		RallyEventModel.EventType.SERVE, RallyEventModel.EventType.ATTACK:
+			arms.append(left_arm if dominant_hand == "Left" else right_arm)
+		RallyEventModel.EventType.BLOCK:
+			if block_arms != &"right":
+				arms.append(left_arm)
+			if block_arms != &"left":
+				arms.append(right_arm)
+		_:
+			arms.assign([left_arm, right_arm])
+	if arms.is_empty():
+		return
+	var platform_contact := event_type in [
+		RallyEventModel.EventType.RECEPTION,
+		RallyEventModel.EventType.DIG,
+		RallyEventModel.EventType.ATTACK_COVERAGE,
+	] or event_type == RallyEventModel.EventType.SET \
+		and str(action_context.get("set_posture_reason", "")) == "under the hands"
+	var joints: Array[Node3D] = []
+	for arm in arms:
+		joints.append(arm)
+		if not platform_contact:
+			var elbow := arm.get_node_or_null("Elbow") as Node3D
+			if elbow != null:
+				joints.append(elbow)
+	for _iteration in 8:
+		var current := contact_anchor_world_position(event_type, action_context)
+		var error := target_height_meters - current.y
+		if absf(error) < 0.001:
+			return
+		const PROBE_DEGREES: float = 0.5
+		var slopes: Array[float] = []
+		var slope_squared := 0.0
+		for joint in joints:
+			var before := joint.rotation_degrees
+			joint.rotation_degrees.x += PROBE_DEGREES
+			var slope := (
+				contact_anchor_world_position(event_type, action_context).y - current.y
+			) / PROBE_DEGREES
+			joint.rotation_degrees = before
+			slopes.append(slope)
+			slope_squared += slope * slope
+		if slope_squared < 0.00000001:
+			return
+		for index in range(joints.size()):
+			var correction := clampf(
+				error * slopes[index] / slope_squared, -18.0, 18.0
+			)
+			joints[index].rotation_degrees.x += correction
+	## A few authored silhouettes have a shorter drawable arm chain than the
+	## simulation reach carried by the same physical profile. Once the relevant
+	## joints have reached their closest pose, translate the posed body by the
+	## exact residual. This is still derived body placement around a fixed ball,
+	## not a second contact height; it is most often the airborne part of a jump
+	## and remains measurable on grounded sets in the anchor probe.
+	var residual := target_height_meters - contact_anchor_world_position(
+		event_type, action_context
+	).y
+	body_pivot.position.y += residual
+
+
 ## Every mesh in the rig, and the subset the arms are made of.
 ##
 ## Exposed so a caller can paint the whole body one colour and the arms another

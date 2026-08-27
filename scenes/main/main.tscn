@@ -328,6 +328,140 @@ theme_override_colors/font_color = Color(0.65, 0.72, 0.82, 1)
 text = "Purple: pass/target · Green: intended preparation · Cyan: actual response · Yellow: ownership handoff"
 autowrap_mode = 2
 
+[node name="RallyQueryPresetRow" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RallyQueryPromptLabel" type="Label" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryPresetRow"]
+layout_mode = 2
+text = "Find rallies where"
+
+[node name="RallyQueryPresetOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryPresetRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Start from a common deterministic rally search."
+
+[node name="ApplyRallyQueryPresetButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryPresetRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Apply Preset"
+
+[node name="RallyQueryBuilderRow" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RallyQueryFieldOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryBuilderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+tooltip_text = "Choose the rally fact to filter."
+
+[node name="RallyQueryOperatorOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryBuilderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(94, 0)
+layout_mode = 2
+tooltip_text = "Choose how the fact is compared."
+
+[node name="RallyQueryValueOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryBuilderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Choose a known value or Custom… to type one."
+
+[node name="RallyQueryValueEdit" type="LineEdit" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryBuilderRow"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Value"
+
+[node name="AddRallyQueryClauseButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryBuilderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Add AND"
+
+[node name="RallyQueryClauseList" type="ItemList" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 78)
+layout_mode = 2
+tooltip_text = "All conditions are combined with AND. Select one to remove it."
+
+[node name="RallyQueryClauseActions" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RemoveRallyQueryClauseButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryClauseActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Remove Selected"
+
+[node name="ClearRallyQueryButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryClauseActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Clear"
+
+[node name="RallyQueryAdvancedToggle" type="CheckButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryClauseActions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 10
+text = "Advanced text"
+
+[node name="RallyQueryAdvancedRow" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RallyQueryEdit" type="LineEdit" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryAdvancedRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Advanced AND clauses separated by semicolons. This uses the same RallyQuery predicates as the guided builder and CLI."
+placeholder_text = "set[1].duration<0.18;attack[1].quick=true"
+
+[node name="RallyQuerySearchRow" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RallyQueryServingOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQuerySearchRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(122, 0)
+layout_mode = 2
+tooltip_text = "Choose the serving side explicitly; no debug path forces opponent serve."
+
+[node name="SearchRalliesButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQuerySearchRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Search 250"
+
+[node name="RallyQueryResultRow" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RallyQueryResultOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryResultRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Deterministic matches: seed, serving side, terminal result, contacts and matching summary."
+
+[node name="OpenRally3DButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/RallyQueryResultRow"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Open Exact Rally in 3D"
+
+[node name="RallyQueryReport" type="Label" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.72, 0.82, 1)
+text = "Rally query: enter human-readable clauses separated by semicolons."
+autowrap_mode = 2
+selectable = true
+
 [node name="ShadowReceptionLabel" type="Label" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent" unique_id=404857191]
 unique_name_in_owner = true
 visible = false

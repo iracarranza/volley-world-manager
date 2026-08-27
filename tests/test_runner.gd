@@ -7609,7 +7609,10 @@ func _test_ball_kinematics_force_derived() -> void:
 					end_height,
 				) or not is_equal_approx(
 					float(display.apex_height_meters),
-					BallFlightModel.apex_between(start_height, end_height, drawn),
+					BallFlightModel.apex_between(
+						start_height, end_height, drawn,
+						BallPresentation.trajectory_gravity(display),
+					),
 				) or str(display.get("height_contract", "")) != "gravity_true":
 				invariant_held = false
 	_check(

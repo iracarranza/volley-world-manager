@@ -7,6 +7,7 @@ const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+const RallyQueryModel := preload("res://scripts/simulation/rally_query.gd")
 const ENABLE_3D_MATCH_PLAYBACK: bool = false
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -49,6 +50,24 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var shadow_debug_fixture_option: OptionButton = %ShadowDebugFixtureOption
 @onready var run_shadow_debug_button: Button = %RunShadowDebugButton
 @onready var shadow_overlay_legend: Label = %ShadowOverlayLegend
+@onready var rally_query_serving_option: OptionButton = %RallyQueryServingOption
+@onready var rally_query_preset_option: OptionButton = %RallyQueryPresetOption
+@onready var apply_rally_query_preset_button: Button = %ApplyRallyQueryPresetButton
+@onready var rally_query_field_option: OptionButton = %RallyQueryFieldOption
+@onready var rally_query_operator_option: OptionButton = %RallyQueryOperatorOption
+@onready var rally_query_value_option: OptionButton = %RallyQueryValueOption
+@onready var rally_query_value_edit: LineEdit = %RallyQueryValueEdit
+@onready var add_rally_query_clause_button: Button = %AddRallyQueryClauseButton
+@onready var rally_query_clause_list: ItemList = %RallyQueryClauseList
+@onready var remove_rally_query_clause_button: Button = %RemoveRallyQueryClauseButton
+@onready var clear_rally_query_button: Button = %ClearRallyQueryButton
+@onready var rally_query_advanced_toggle: CheckButton = %RallyQueryAdvancedToggle
+@onready var rally_query_advanced_row: HBoxContainer = %RallyQueryAdvancedRow
+@onready var rally_query_edit: LineEdit = %RallyQueryEdit
+@onready var search_rallies_button: Button = %SearchRalliesButton
+@onready var rally_query_result_option: OptionButton = %RallyQueryResultOption
+@onready var open_rally_3d_button: Button = %OpenRally3DButton
+@onready var rally_query_report: Label = %RallyQueryReport
 @onready var status_label: Label = %StatusLabel
 @onready var assignment_popup: PopupPanel = %AssignmentPopup
 @onready var popup_assignment_label: Label = %PopupAssignmentLabel
@@ -149,6 +168,9 @@ var match_preview_phase: int = 0
 var last_rally_result: Resource
 var shadow_overlay_layers: int = TacticalCourt.SHADOW_LAYER_DEFAULT
 var visualization_layers: int = TacticalCourt.VISUAL_ALL
+var rally_query_results: Array[Dictionary] = []
+var rally_query_fields: Array[Dictionary] = []
+var guided_rally_query_clauses: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -182,6 +204,19 @@ func _ready() -> void:
 	replay_rally_button.pressed.connect(_replay_last_rally)
 	replay_3d_button.pressed.connect(_replay_last_rally_3d)
 	run_shadow_debug_button.pressed.connect(_run_shadow_debug_fixture)
+	apply_rally_query_preset_button.pressed.connect(_apply_selected_rally_query_preset)
+	rally_query_field_option.item_selected.connect(_rally_query_field_selected)
+	rally_query_operator_option.item_selected.connect(_rally_query_operator_selected)
+	rally_query_value_option.item_selected.connect(_rally_query_value_selected)
+	add_rally_query_clause_button.pressed.connect(_add_guided_rally_query_clause)
+	rally_query_value_edit.text_submitted.connect(
+		func(_text: String) -> void: _add_guided_rally_query_clause()
+	)
+	remove_rally_query_clause_button.pressed.connect(_remove_guided_rally_query_clause)
+	clear_rally_query_button.pressed.connect(_clear_guided_rally_query)
+	rally_query_advanced_toggle.toggled.connect(_toggle_advanced_rally_query)
+	search_rallies_button.pressed.connect(_search_debug_rallies)
+	open_rally_3d_button.pressed.connect(_open_debug_rally_3d)
 	debug_popup_button.pressed.connect(_open_debug_popup)
 	skip_playback_button.pressed.connect(_skip_rally_playback)
 	reset_positions_button.pressed.connect(_reset_tactical_positions)
@@ -372,6 +407,8 @@ func _setup_shadow_debug_controls() -> void:
 	shadow_debug_fixture_option.clear()
 	for fixture in [
 		["Normal reception", "normal"],
+		["Explicit Jump Topspin server", "jump_topspin"],
+		["Explicit Jump Float server", "jump_float"],
 		["Off-center setter path", "off_center"],
 		["Setter takes first contact", "setter_first_contact"],
 	]:
@@ -379,6 +416,15 @@ func _setup_shadow_debug_controls() -> void:
 		shadow_debug_fixture_option.set_item_metadata(
 			shadow_debug_fixture_option.item_count - 1, fixture[1]
 		)
+	rally_query_serving_option.clear()
+	for side in [["Home serving", "home"], ["Opponent serving", "opponent"], ["Alternate", "alternate"]]:
+		rally_query_serving_option.add_item(str(side[0]))
+		rally_query_serving_option.set_item_metadata(
+			rally_query_serving_option.item_count - 1, side[1]
+		)
+	_setup_guided_rally_query()
+	rally_query_result_option.clear()
+	open_rally_3d_button.disabled = true
 	var popup := shadow_overlay_menu.get_popup()
 	popup.clear()
 	for layer in [
@@ -394,6 +440,178 @@ func _setup_shadow_debug_controls() -> void:
 	popup.id_pressed.connect(_shadow_overlay_layer_toggled)
 	_refresh_shadow_overlay_menu()
 	_apply_shadow_overlay_layers()
+
+
+func _setup_guided_rally_query() -> void:
+	rally_query_fields = RallyQueryModel.guided_fields()
+	rally_query_preset_option.clear()
+	for preset in RallyQueryModel.guided_presets():
+		rally_query_preset_option.add_item(str(preset.get("label", "Preset")))
+		rally_query_preset_option.set_item_metadata(
+			rally_query_preset_option.item_count - 1, str(preset.get("query", ""))
+		)
+	rally_query_field_option.clear()
+	for field_index in range(rally_query_fields.size()):
+		rally_query_field_option.add_item(str(rally_query_fields[field_index].label))
+		rally_query_field_option.set_item_metadata(
+			rally_query_field_option.item_count - 1, field_index
+		)
+	rally_query_advanced_toggle.button_pressed = false
+	rally_query_advanced_row.visible = false
+	_rally_query_field_selected(0)
+	guided_rally_query_clauses = RallyQueryModel.clauses_from_text(
+		"sequence contains SERVE > RECEPTION > SET > ATTACK"
+	)
+	_refresh_guided_rally_query()
+
+
+func _rally_query_field_selected(index: int) -> void:
+	if index < 0 or index >= rally_query_field_option.item_count:
+		return
+	var field_index := int(rally_query_field_option.get_item_metadata(index))
+	if field_index < 0 or field_index >= rally_query_fields.size():
+		return
+	var field: Dictionary = rally_query_fields[field_index]
+	rally_query_operator_option.clear()
+	for operation in field.get("operations", ["eq"]):
+		rally_query_operator_option.add_item(_rally_query_operator_label(str(operation)))
+		rally_query_operator_option.set_item_metadata(
+			rally_query_operator_option.item_count - 1, operation
+		)
+	_populate_rally_query_values(field)
+
+
+func _rally_query_operator_selected(_index: int) -> void:
+	## Operations do not change predicate semantics, but keeping this callback
+	## explicit makes it safe to add operator-specific prompts later.
+	_rally_query_value_selected(rally_query_value_option.selected)
+
+
+func _populate_rally_query_values(field: Dictionary) -> void:
+	rally_query_value_option.clear()
+	var values: Array = field.get("values", [])
+	for value in values:
+		rally_query_value_option.add_item(str(value))
+		rally_query_value_option.set_item_metadata(
+			rally_query_value_option.item_count - 1, value
+		)
+	if not values.is_empty():
+		rally_query_value_option.add_item("Custom…")
+		rally_query_value_option.set_item_metadata(
+			rally_query_value_option.item_count - 1, &"__custom__"
+		)
+		rally_query_value_option.visible = true
+		rally_query_value_edit.visible = false
+	else:
+		rally_query_value_option.visible = false
+		rally_query_value_edit.visible = true
+		rally_query_value_edit.text = ""
+
+
+func _rally_query_value_selected(index: int) -> void:
+	if index < 0 or index >= rally_query_value_option.item_count:
+		return
+	var custom := str(rally_query_value_option.get_item_metadata(index)) == "__custom__"
+	rally_query_value_edit.visible = custom
+	if custom:
+		rally_query_value_edit.grab_focus()
+
+
+func _add_guided_rally_query_clause() -> void:
+	if rally_query_field_option.selected < 0 or rally_query_operator_option.selected < 0:
+		return
+	var field_index := int(rally_query_field_option.get_item_metadata(
+		rally_query_field_option.selected
+	))
+	var field: Dictionary = rally_query_fields[field_index]
+	var operation := str(rally_query_operator_option.get_item_metadata(
+		rally_query_operator_option.selected
+	))
+	var value: Variant = rally_query_value_edit.text.strip_edges() \
+		if rally_query_value_edit.visible else rally_query_value_option.get_item_metadata(
+			rally_query_value_option.selected
+		)
+	if operation != "present" and str(value).strip_edges().is_empty():
+		rally_query_report.text = "Choose or type a value before adding the condition."
+		return
+	guided_rally_query_clauses.append(RallyQueryModel.clause(
+		str(field.selector), operation, value
+	))
+	_refresh_guided_rally_query()
+
+
+func _remove_guided_rally_query_clause() -> void:
+	var selected := rally_query_clause_list.get_selected_items()
+	if selected.is_empty():
+		return
+	guided_rally_query_clauses.remove_at(int(selected[0]))
+	_refresh_guided_rally_query()
+
+
+func _clear_guided_rally_query() -> void:
+	guided_rally_query_clauses.clear()
+	_refresh_guided_rally_query()
+
+
+func _apply_selected_rally_query_preset() -> void:
+	if rally_query_preset_option.selected < 0:
+		return
+	var query := str(rally_query_preset_option.get_item_metadata(
+		rally_query_preset_option.selected
+	))
+	if query.is_empty():
+		rally_query_report.text = "Choose a preset, or build conditions below."
+		return
+	guided_rally_query_clauses = RallyQueryModel.clauses_from_text(query)
+	_refresh_guided_rally_query()
+
+
+func _refresh_guided_rally_query() -> void:
+	rally_query_clause_list.clear()
+	for query_clause in guided_rally_query_clauses:
+		rally_query_clause_list.add_item(
+			"AND  " + _guided_rally_query_clause_label(query_clause)
+		)
+	rally_query_edit.text = RallyQueryModel.clauses_to_text(
+		guided_rally_query_clauses
+	)
+	if not guided_rally_query_clauses.is_empty():
+		rally_query_clause_list.select(guided_rally_query_clauses.size() - 1)
+	rally_query_report.text = "%d AND condition%s ready." % [
+		guided_rally_query_clauses.size(),
+		"" if guided_rally_query_clauses.size() == 1 else "s",
+	]
+
+
+func _toggle_advanced_rally_query(enabled: bool) -> void:
+	rally_query_advanced_row.visible = enabled
+	if enabled:
+		rally_query_edit.grab_focus()
+
+
+static func _rally_query_operator_label(operation: String) -> String:
+	return {
+		"eq": "is", "neq": "is not", "lt": "below", "lte": "at most",
+		"gt": "above", "gte": "at least", "contains": "contains",
+		"has": "has", "absent": "doesn't have", "present": "is present",
+	}.get(operation, operation)
+
+
+func _guided_rally_query_clause_label(query_clause: Dictionary) -> String:
+	var selector := str(query_clause.get("selector", ""))
+	var field_label := selector
+	for field in rally_query_fields:
+		if str(field.get("selector", "")) == selector:
+			field_label = str(field.get("label", selector))
+			break
+	var value: Variant = query_clause.get("value", "")
+	if selector.ends_with("tempo") and str(value).is_valid_int():
+		value = "T%d" % int(value)
+	var operation := str(query_clause.get("op", "eq"))
+	return "%s %s%s" % [
+		field_label, _rally_query_operator_label(operation),
+		"" if operation == "present" else " " + str(value),
+	]
 
 
 func _setup_visualization_controls() -> void:
@@ -485,13 +703,19 @@ func _run_shadow_debug_fixture() -> void:
 	))
 	var plan: Resource = GameManager.current_defensive_plan()
 	var saved_plan: Dictionary = plan.to_dict().duplicate(true)
+	var saved_serve_styles := _serve_style_snapshot()
 	var saved_serving_home := bool(GameManager.match_state.serving_home)
 	_apply_shadow_debug_fixture(fixture_key, plan)
-	GameManager.match_state.serving_home = false
+	var selected_serving := str(rally_query_serving_option.get_item_metadata(
+		rally_query_serving_option.selected
+	))
+	GameManager.match_state.serving_home = selected_serving != "opponent" \
+		if selected_serving != "alternate" else seed_value % 2 == 0
 	run_shadow_debug_button.disabled = true
 	var result: Resource = GameManager.resolve_active_rally(seed_value, true)
 	GameManager.match_state.serving_home = saved_serving_home
 	plan.load_dict(saved_plan)
+	_restore_serve_styles(saved_serve_styles)
 	_refresh_defensive_plan()
 	last_rally_result = result
 	await _play_rally(result, false, true)
@@ -509,7 +733,115 @@ func _run_shadow_debug_fixture() -> void:
 	)
 
 
+## Search uses the same pure predicates as the CLI. Resolution itself is a
+## preview and does not record a point; the full match snapshot and tactical
+## plan are nevertheless restored so a future resolver gaining a cache cannot
+## turn a diagnostic search into career state.
+func _search_debug_rallies() -> void:
+	if rally_playback_active: return
+	var query_text := rally_query_edit.text.strip_edges() \
+		if rally_query_advanced_toggle.button_pressed \
+		else RallyQueryModel.clauses_to_text(guided_rally_query_clauses)
+	var clauses := RallyQueryModel.clauses_from_text(query_text)
+	if clauses.is_empty():
+		rally_query_report.text = "Add at least one condition or enter an advanced query."
+		return
+	var serving := str(rally_query_serving_option.get_item_metadata(
+		rally_query_serving_option.selected
+	))
+	var start_seed := int(shadow_debug_seed_edit.text) \
+		if shadow_debug_seed_edit.text.is_valid_int() else rally_seed
+	var match_snapshot: Dictionary = GameManager.match_state.to_dict().duplicate(true)
+	var plan: Resource = GameManager.current_defensive_plan()
+	var plan_snapshot: Dictionary = plan.to_dict().duplicate(true) if plan != null else {}
+	var serve_style_snapshot := _serve_style_snapshot()
+	var fixture_key := str(shadow_debug_fixture_option.get_item_metadata(
+		shadow_debug_fixture_option.selected
+	))
+	_apply_shadow_debug_fixture(fixture_key, plan)
+	var clause_hits: Array[int] = []
+	clause_hits.resize(clauses.size())
+	clause_hits.fill(0)
+	rally_query_results.clear()
+	rally_query_result_option.clear()
+	search_rallies_button.disabled = true
+	for seed_value in range(start_seed, start_seed + 250):
+		var serving_home := seed_value % 2 == 0
+		if serving == "home": serving_home = true
+		elif serving == "opponent": serving_home = false
+		GameManager.match_state.serving_home = serving_home
+		var result: Resource = GameManager.resolve_active_rally(seed_value)
+		var evaluation := RallyQueryModel.evaluate(result, serving_home, clauses)
+		for clause_index in range(evaluation["clauses"].size()):
+			if bool(evaluation["clauses"][clause_index]["passed"]):
+				clause_hits[clause_index] += 1
+		if bool(evaluation["matches"]) and rally_query_results.size() < 25:
+			var entry := {
+				"seed": seed_value, "serving_home": serving_home,
+				"result": result, "evaluation": evaluation,
+			}
+			rally_query_results.append(entry)
+			rally_query_result_option.add_item(
+				RallyQueryModel.result_summary(seed_value, evaluation)
+			)
+	GameManager.match_state.load_dict(match_snapshot)
+	if plan != null: plan.load_dict(plan_snapshot)
+	_restore_serve_styles(serve_style_snapshot)
+	_refresh_defensive_plan()
+	search_rallies_button.disabled = false
+	open_rally_3d_button.disabled = rally_query_results.is_empty()
+	var rates: Array[String] = []
+	for clause_index in range(clauses.size()):
+		rates.append("%s: %.1f%%" % [
+			_guided_rally_query_clause_label(clauses[clause_index]),
+			100.0 * float(clause_hits[clause_index]) / 250.0,
+		])
+	var command := RallyQueryModel.reproduction_command(
+		start_seed, start_seed + 250, serving, query_text
+	)
+	rally_query_report.text = "%d combined matches. Individual hit rates — %s\nCopy: %s" % [
+		rally_query_results.size(), " · ".join(rates), command,
+	]
+
+
+func _open_debug_rally_3d() -> void:
+	if rally_playback_active or rally_query_results.is_empty(): return
+	var selected := clampi(
+		rally_query_result_option.selected, 0, rally_query_results.size() - 1
+	)
+	var entry: Dictionary = rally_query_results[selected]
+	last_rally_result = entry["result"]
+	var saved_serving_home := bool(GameManager.match_state.serving_home)
+	GameManager.match_state.serving_home = bool(entry["serving_home"])
+	_configure_3d_match_view()
+	GameManager.match_state.serving_home = saved_serving_home
+	debug_popup.hide()
+	var selected_speed := float(_selected_metadata(playback_speed_option))
+	await match_screen.load_and_play_rally(last_rally_result, selected_speed, true)
+
+
+func _serve_style_snapshot() -> Array[Dictionary]:
+	var snapshot: Array[Dictionary] = []
+	for player in GameManager.players:
+		snapshot.append({"player": player, "style": player.primary_serve_style})
+	for player in GameManager.opponent_team.players:
+		snapshot.append({"player": player, "style": player.primary_serve_style})
+	return snapshot
+
+
+func _restore_serve_styles(snapshot: Array[Dictionary]) -> void:
+	for entry in snapshot:
+		var player: Resource = entry.get("player")
+		if player != null:
+			player.primary_serve_style = str(entry.get("style", "Standing"))
+
+
 func _apply_shadow_debug_fixture(fixture_key: String, plan: Resource) -> void:
+	if fixture_key in ["jump_topspin", "jump_float"]:
+		var style := "Jump Topspin" if fixture_key == "jump_topspin" else "Jump Float"
+		for player in GameManager.players: player.primary_serve_style = style
+		for player in GameManager.opponent_team.players: player.primary_serve_style = style
+		return
 	if plan == null:
 		return
 	var lineup := GameManager.current_lineup()
@@ -1559,7 +1891,23 @@ func _replay_last_rally_3d() -> void:
 	if rally_playback_active or last_rally_result == null:
 		return
 	var selected_speed := float(_selected_metadata(playback_speed_option))
-	await match_screen.load_and_play_rally(last_rally_result, selected_speed)
+	_configure_3d_match_view()
+	await match_screen.load_and_play_rally(last_rally_result, selected_speed, true)
+
+
+func _configure_3d_match_view() -> void:
+	if match_screen == null or GameManager.match_state == null:
+		return
+	match_screen.configure_broadcast({
+		"home_name": GameManager.team.team_name if GameManager.team != null else "HOME",
+		"away_name": GameManager.opponent_team.team_name \
+			if GameManager.opponent_team != null else "AWAY",
+		"home_score": int(GameManager.match_state.home_score),
+		"away_score": int(GameManager.match_state.opponent_score),
+		"home_sets": int(GameManager.match_state.home_sets),
+		"away_sets": int(GameManager.match_state.opponent_sets),
+		"serving_home": bool(GameManager.match_state.serving_home),
+	})
 
 
 func _play_rally(
@@ -2457,7 +2805,8 @@ func _update_status_color() -> void:
 func _on_rally_completed(rally_result: RallyResult) -> void:
 	if match_screen == null:
 		return
-	await match_screen.load_and_play_rally(rally_result)
+	_configure_3d_match_view()
+	await match_screen.load_and_play_rally(rally_result, 1.0, false)
 
 
 ## Walks both courts' copy of the rally's physical clock across one leg.

@@ -493,6 +493,48 @@ func _arena() -> void:
 	deck.name = "Mezzanine"
 
 
+## The playable rectangle opens into a real free zone before spectators begin.
+## This presentation-only perimeter makes that sequence legible from every lens:
+## court -> runoff -> working lane -> raised audience.  It deliberately carries
+## no collision and owns no venue/gameplay facts.
+func _venue_perimeter() -> void:
+	var rail_colour := Color(0.16, 0.18, 0.21)
+	var media_colour := Color(0.27, 0.29, 0.32)
+	## A low officials/media rail outside the full competition free zone. Broad
+	## centre gaps preserve the scorer/referee and service routes.
+	for side in [-1.0, 1.0]:
+		for segment in [-1.0, 1.0]:
+			var rail := _box(
+				Vector3(0.16, 0.72, 12.0),
+				Vector3(side * (FREE_ZONE_SIDE + 0.18), 0.36, segment * 10.1),
+				rail_colour, 0.0, 0.88
+			)
+			rail.name = "MediaRailSide%d_%d" % [int(side), int(segment)]
+			## Camera/press bench is behind the rail, never in the runoff.
+			var bench := _box(
+				Vector3(0.72, 0.74, 7.2),
+				Vector3(side * (FREE_ZONE_SIDE + 0.72), 0.38, segment * 11.7),
+				media_colour, 0.05, 0.82
+			)
+			bench.name = "MediaBenchSide%d_%d" % [int(side), int(segment)]
+	for end in [-1.0, 1.0]:
+		for segment in [-1.0, 1.0]:
+			var end_rail := _box(
+				Vector3(7.0, 0.72, 0.16),
+				Vector3(segment * 5.8, 0.36, end * (FREE_ZONE_END + 0.18)),
+				rail_colour, 0.0, 0.88
+			)
+			end_rail.name = "MediaRailEnd%d_%d" % [int(end), int(segment)]
+	## Raised officials' platform aligns with the net but remains beyond the
+	## sideline runoff and working rail.
+	var officials := _box(
+		Vector3(1.7, 1.05, 3.4),
+		Vector3(FREE_ZONE_SIDE + 1.35, 0.53, 0.0),
+		Color(0.38, 0.34, 0.28), 0.0, 0.90
+	)
+	officials.name = "OfficialsPlatform"
+
+
 ## A real sky, with a horizon in it.
 ##
 ## A flat background colour has no horizon, and a horizon is the one line that
@@ -782,6 +824,7 @@ func _walls(wall_h: float, end_inset: float) -> void:
 ## old energy -- it stands in for a roof lantern now rather than for the sun --
 ## and the fixtures do the work.
 func _roof_lights(id: String) -> void:
+	_venue_perimeter()
 	if _open_air:
 		return
 	var spec: Dictionary = ROOF_LIGHTS.get(id, ROOF_LIGHTS["landavol"])
