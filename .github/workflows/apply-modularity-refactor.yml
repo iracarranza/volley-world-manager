@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply guarded refactor
-        run: python3 tools/apply_modularity_refactor.py
+        run: python3 tools/apply_modularity_refactor_v2.py
 
       - name: Verify generated files are non-empty
         shell: bash
