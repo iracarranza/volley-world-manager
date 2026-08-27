@@ -9,7 +9,7 @@ const BodyTypeGameplay := preload("res://scripts/domain/body_type_gameplay.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 
-const POSITIONS = RoleProfiles.POSITIONS
+static var POSITIONS = RoleProfiles.POSITIONS
 
 ## Per-region physique offsets applied before individual random variation.
 ## These are roster-generation ranges for gameplay variety, not anatomical claims.
@@ -37,9 +37,9 @@ const POSITIONS = RoleProfiles.POSITIONS
 ##
 ## A'ace leans slightly positive across all three: assembled, well-resourced
 ## athletes rather than a developed body type of its own.
-const REGION_HEIGHT_BIAS = RegionProfiles.REGION_HEIGHT_BIAS
-const REGION_MASS_BIAS = RegionProfiles.REGION_MASS_BIAS
-const REGION_WINGSPAN_BIAS = RegionProfiles.REGION_WINGSPAN_BIAS
+static var REGION_HEIGHT_BIAS = RegionProfiles.REGION_HEIGHT_BIAS
+static var REGION_MASS_BIAS = RegionProfiles.REGION_MASS_BIAS
+static var REGION_WINGSPAN_BIAS = RegionProfiles.REGION_WINGSPAN_BIAS
 
 ## Attributes that receive a +8 specialty bonus for players from each region.
 ##
@@ -63,7 +63,7 @@ const REGION_WINGSPAN_BIAS = RegionProfiles.REGION_WINGSPAN_BIAS
 ## assembled star talent across a few glamour positions bought in with money,
 ## not a systemic developmental identity the way every other region's
 ## specialty represents an actual local training tradition.
-const REGION_SPECIALTY = RegionProfiles.REGION_SPECIALTY
+static var REGION_SPECIALTY = RegionProfiles.REGION_SPECIALTY
 
 ## Secondary role attributes receive a +5 bonus: the supporting skills a role
 ## leans on without being judged by them. The *primary* tier is deliberately not
@@ -71,10 +71,10 @@ const REGION_SPECIALTY = RegionProfiles.REGION_SPECIALTY
 ## already the single source of truth for what each role is scored on. Keeping a
 ## second copy here let generation and `current_ability_score()` disagree about
 ## what a role is for. Everything in neither tier falls to tertiary (-8).
-const ROLE_SECONDARY = RoleProfiles.ROLE_SECONDARY
+static var ROLE_SECONDARY = RoleProfiles.ROLE_SECONDARY
 
 ## Height variation band per role, in centimetres.
-const ROLE_HEIGHT_SPREAD = RoleProfiles.ROLE_HEIGHT_SPREAD
+static var ROLE_HEIGHT_SPREAD = RoleProfiles.ROLE_HEIGHT_SPREAD
 
 
 ## `overlay` is this region's Sixnet influence-drift shape for the current
@@ -267,10 +267,10 @@ static func redevelop_to_age(
 ## Attributes that fade with age rather than keep developing. Power and
 ## turnover peak in the early twenties and go backwards afterwards; technique
 ## and reading do not.
-const PHYSICAL_ATTRIBUTES = AttributeRegistry.PHYSICAL_ATTRIBUTES
+static var PHYSICAL_ATTRIBUTES = AttributeRegistry.PHYSICAL_ATTRIBUTES
 
 ## Attributes that keep improving for as long as a player keeps playing.
-const MENTAL_ATTRIBUTES = AttributeRegistry.MENTAL_ATTRIBUTES
+static var MENTAL_ATTRIBUTES = AttributeRegistry.MENTAL_ATTRIBUTES
 
 ## Age at which physical qualities stop improving and begin to fade.
 const PHYSICAL_PEAK_AGE: int = 24
@@ -388,10 +388,10 @@ static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
 ## this must never support. A flat draw keeps morphology orthogonal to origin,
 ## so a Tãul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
 ## traditions and the *tradition* is what differs.
-const BODY_TYPES = BodyTypeGameplay.BODY_TYPES
+static var BODY_TYPES = BodyTypeGameplay.BODY_TYPES
 
 ## Body-metric deltas, applied after the regional bias so the two compose.
-const BODY_TYPE_METRICS = BodyTypeGameplay.BODY_TYPE_METRICS
+static var BODY_TYPE_METRICS = BodyTypeGameplay.BODY_TYPE_METRICS
 
 ## Attribute deltas, applied to the *ceiling* rather than only to the generated
 ## value. If a body type shifted starting values alone, training would converge
@@ -410,7 +410,7 @@ const BODY_TYPE_METRICS = BodyTypeGameplay.BODY_TYPE_METRICS
 ## `GameManager.stamina_fatigue_scale()` reads stamina directly, so a Feli
 ## measurably tires faster inside a single match. First-set terror, fifth-set
 ## liability, with no new mechanism.
-const BODY_TYPE_ATTRIBUTES = BodyTypeGameplay.BODY_TYPE_ATTRIBUTES
+static var BODY_TYPE_ATTRIBUTES = BodyTypeGameplay.BODY_TYPE_ATTRIBUTES
 
 
 static func _player_channel_rng(
@@ -442,11 +442,11 @@ static func assign_body_type(player: VolleyballPlayer, rng: RandomNumberGenerato
 ## The regional leans follow the identities the world already has: Ĭspayk swings
 ## first and asks later, Taktikã is the region built on not being moved, and
 ## Xérvu's whole game is a high-risk serve that either wins the set or loses it.
-const REGION_EGO_BIAS = RegionProfiles.REGION_EGO_BIAS
+static var REGION_EGO_BIAS = RegionProfiles.REGION_EGO_BIAS
 
 ## Terminal roles attract players who want the ball; the roles that keep a rally
 ## alive attract players who would rather it went somewhere else.
-const POSITION_EGO_BIAS = RoleProfiles.POSITION_EGO_BIAS
+static var POSITION_EGO_BIAS = RoleProfiles.POSITION_EGO_BIAS
 
 
 ## How much the rest of the side plays up around this player.
@@ -460,7 +460,7 @@ const POSITION_EGO_BIAS = RoleProfiles.POSITION_EGO_BIAS
 ## judged on terminal contacts carry less. Deliberately a milder spread than
 ## ego, because a squad of twelve wildly varying leaders reads as noise rather
 ## than as a captaincy question.
-const POSITION_LEADERSHIP_BIAS = RoleProfiles.POSITION_LEADERSHIP_BIAS
+static var POSITION_LEADERSHIP_BIAS = RoleProfiles.POSITION_LEADERSHIP_BIAS
 
 
 static func assign_leadership(
@@ -513,12 +513,12 @@ static func assign_ego(
 ## yourself genuinely are the same tradition -- but Taktikã is the region built
 ## on not being moved, which is high ego and *low* aggression, and Blôc du Larg
 ## defends rather than closes, which is the reverse of its ego lean.
-const REGION_AGGRESSION_BIAS = RegionProfiles.REGION_AGGRESSION_BIAS
+static var REGION_AGGRESSION_BIAS = RegionProfiles.REGION_AGGRESSION_BIAS
 
 ## Terminal roles want the terminal ball. Steeper than the ego lean, because
 ## wanting to end the rally is much more nearly the job description of an
 ## opposite than backing yourself is.
-const POSITION_AGGRESSION_BIAS = RoleProfiles.POSITION_AGGRESSION_BIAS
+static var POSITION_AGGRESSION_BIAS = RoleProfiles.POSITION_AGGRESSION_BIAS
 
 
 static func assign_aggression(
@@ -792,7 +792,7 @@ static func _band_size(band: String) -> int:
 ## make you pass. Bloc cannot improvise and Spëddigh is nothing but improvisation
 ## of tempo. Landavol is the only region with no weakness, which is the same
 ## statement as having no specialty and is what makes it the reference.
-const REGION_CEILING_PENALTY = RegionProfiles.REGION_CEILING_PENALTY
+static var REGION_CEILING_PENALTY = RegionProfiles.REGION_CEILING_PENALTY
 
 
 static func _tier_bonus(
