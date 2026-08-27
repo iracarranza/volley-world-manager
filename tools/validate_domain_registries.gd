@@ -8,7 +8,10 @@ const BodyPresentation := preload("res://scripts/data/body_type_models.gd")
 
 func _initialize() -> void:
 	var errors: Array[String] = []
-	var known := Attributes.all_player_traits()
+	var known: Array = Attributes.ABILITY_ATTRIBUTES.duplicate()
+	for trait in Attributes.NON_ABILITY_TRAITS:
+		if trait not in known:
+			known.append(trait)
 	for region_name in Regions.REGION_SPECIALTY:
 		for attribute in Array(Regions.REGION_SPECIALTY[region_name]):
 			if str(attribute) not in known:
@@ -33,7 +36,7 @@ func _initialize() -> void:
 			errors.append("presentation body %s has no gameplay definition" % body_name)
 	if errors.is_empty():
 		print("DOMAIN REGISTRY CONTRACT: PASS (%d abilities, %d regions, %d roles, %d bodies)" % [
-			Attributes.all_ids().size(), Regions.REGION_SPECIALTY.size(),
+			Attributes.ABILITY_ATTRIBUTES.size(), Regions.REGION_SPECIALTY.size(),
 			Roles.POSITION_WEIGHTS.size(), Bodies.BODY_TYPES.size(),
 		])
 		quit(0)
