@@ -60,6 +60,53 @@ func _run() -> void:
 		print("FAIL: advanced text row did not open")
 		failures += 1
 
+	## Search itself is a diagnostic preview, not 250 hidden match contacts. Seed
+	## every learning store with recognizable state, run a query broad enough to
+	## match every candidate, then prove both the per-seed result and live roster
+	## are exactly what an isolated resolution produces.
+	var manager: Node = get_root().get_node("GameManager")
+	var original_learning: Array[Dictionary] = main.call("_rally_learning_snapshot")
+	var sentinel_player = manager.players[0]
+	sentinel_player.situation_experience["query_probe:sentinel"] = 4.25
+	sentinel_player.set_meta(&"placement_memory", {
+		"Left Pin": Vector2(0.17, -0.11),
+	})
+	var sentinel_learning: Array[Dictionary] = main.call("_rally_learning_snapshot")
+	var learning_before := _learning_digest()
+	advanced.button_pressed = true
+	advanced_edit.text = "contacts>=0"
+	main.call("_search_debug_rallies")
+	var retained: Array = main.get("rally_query_results")
+	var report := str(main.get_node("%RallyQueryReport").text)
+	if retained.size() != 25:
+		print("FAIL: broad search retained %d replays, expected 25" % retained.size())
+		failures += 1
+	if not report.begins_with("250 combined matches."):
+		print("FAIL: broad search did not report all 250 matches: %s" % report)
+		failures += 1
+	if _learning_digest() != learning_before:
+		print("FAIL: rally search mutated live familiarity or placement memory")
+		failures += 1
+	if retained.size() == 25:
+		var retained_entry: Dictionary = retained[24]
+		var saved_serving_home := bool(manager.match_state.serving_home)
+		manager.match_state.serving_home = bool(retained_entry["serving_home"])
+		var isolated: Resource = manager.resolve_active_rally(int(retained_entry["seed"]))
+		if _result_fingerprint(isolated) != _result_fingerprint(retained_entry["result"]):
+			print("FAIL: a retained query rally depended on earlier preview seeds")
+			failures += 1
+		manager.match_state.serving_home = saved_serving_home
+		## The isolated repeat learns too; restore the same sentinel baseline before
+		## checking and before giving the original process state back below.
+		main.call("_restore_rally_learning", sentinel_learning)
+
+	## Verify the sentinel baseline, then return the autoload to the state it had
+	## before this probe.
+	if _learning_digest() != learning_before:
+		print("FAIL: isolated replay cleanup did not restore the query baseline")
+		failures += 1
+	main.call("_restore_rally_learning", original_learning)
+
 	print("%s: guided RallyQuery scene controls (%d presets, %d fields)" % [
 		"PASS" if failures == 0 else "FAIL (%d)" % failures,
 		presets.item_count, fields.item_count,
@@ -72,3 +119,33 @@ func _run() -> void:
 func _failure(label: String, actual: int, expected: int) -> int:
 	print("FAIL: %s count %d, expected at least/exactly %d" % [label, actual, expected])
 	return 1
+
+
+func _learning_digest() -> String:
+	var records: Array[Dictionary] = []
+	var manager: Node = get_root().get_node("GameManager")
+	var players: Array = manager.players.duplicate()
+	if manager.opponent_team != null:
+		players.append_array(manager.opponent_team.players)
+	for player in players:
+		records.append({
+			"id": int(player.id),
+			"situation_experience": player.situation_experience.duplicate(true),
+			"has_placement_memory": player.has_meta(&"placement_memory"),
+			"placement_memory": Dictionary(
+				player.get_meta(&"placement_memory", {})
+			).duplicate(true),
+		})
+	return var_to_str(records)
+
+
+func _result_fingerprint(result: Resource) -> String:
+	var events: Array[Dictionary] = []
+	for event in result.events:
+		events.append(event.to_dict())
+	return var_to_str({
+		"events": events,
+		"home_team_won": result.home_team_won,
+		"terminal_outcome": result.terminal_outcome,
+		"decisive_actor_id": result.decisive_actor_id,
+	})

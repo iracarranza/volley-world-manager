@@ -48,9 +48,14 @@ var _base_camera_far: float = 80.0
 ## a 2.2 m near rake -- which is where a broadcast camera sits in a real hall,
 ## in the stand rather than beside the court.
 const CAMERA_PRESETS: Array[Dictionary] = [
-	{"name": "Broadcast", "position": Vector3(15.5, 9.0, 9.5), "fov": 46.0},
-	{"name": "End line", "position": Vector3(0.0, 8.0, 24.5), "fov": 44.0},
-	{"name": "High tactical", "position": Vector3(0.0, 26.0, 0.2), "fov": 42.0},
+	{"name": "Broadcast", "position": Vector3(15.0, 9.0, 9.5), "fov": 46.0},
+	## The compact Spëddigh shell is the limiting enclosed venue: its usable end
+	## depth is 20.05 m and its ceiling is 10.85 m. Presets live inside that
+	## common envelope so selecting one can never put the lens behind an opaque
+	## wall or above the roof. The tactical FOV widens to retain the whole court
+	## from the physically available height.
+	{"name": "End line", "position": Vector3(0.0, 8.0, 19.4), "fov": 50.0},
+	{"name": "High tactical", "position": Vector3(0.0, 10.25, 0.2), "fov": 92.0},
 ]
 
 

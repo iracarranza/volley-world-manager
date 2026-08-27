@@ -206,6 +206,11 @@ var has_world_position: bool = false
 ## simulator's own speed would be right about the player and wrong about the
 ## figure on screen.
 var ground_speed_mps: float = 0.0
+## The live horizontal direction of the body, in the same court-plane axes as
+## tactical contact directions. SignatureSurge3D uses it only to place causal
+## residue behind an action; it never feeds back into movement or simulation.
+var action_movement_direction: Vector2 = Vector2.ZERO
+var _signature_movement_frame: int = -1
 ## Whether this voli was off the floor on a previous frame, and what they were
 ## doing when they left it. A landing is *observed* rather than announced: the
 ## actor already sees elevation and event type every frame, so no caller has to
@@ -788,6 +793,12 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		).length()
 		if travelled > 0.0001:
 			_heading_travel_accumulator += world_delta
+			action_movement_direction = Vector2(
+				world_delta.x, world_delta.z
+			).normalized()
+			_signature_movement_frame = Engine.get_process_frames()
+			if signature_surge != null:
+				signature_surge.action_direction = action_movement_direction
 		else:
 			_heading_travel_accumulator = Vector3.ZERO
 		## Speed, smoothed, before anything reads it.
@@ -832,6 +843,8 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			_plant_active[_PLANT_RIGHT] = false
 			ground_speed_mps = 0.0
 			_heading_travel_accumulator = Vector3.ZERO
+			action_movement_direction = Vector2.ZERO
+			_signature_movement_frame = -1
 			has_world_position = true
 			tactical_position = position
 			## Still moved. Skipping this is a body that never arrives where it
@@ -2687,6 +2700,16 @@ func set_pose(
 		## front of the hips. `body_pivot.position.y` already carries the jump, so
 		## the anchor rises with it rather than being a constant.
 		signature_surge.contact_anchor_meters = _signature_anchor_height(event_type)
+		## The gallery can assign this directly; live playback cannot. Prefer the
+		## body's displacement from the movement plan in this frame, falling back
+		## to the resolved action/contact direction when the body is planted. This
+		## keeps leftward and along-court trails on the side the action actually
+		## came from instead of every cue inheriting SignatureSurge3D's +X default.
+		var signature_direction := action_movement_direction \
+			if _signature_movement_frame == Engine.get_process_frames() \
+			else contact_direction
+		if signature_direction.length_squared() > 0.0001:
+			signature_surge.action_direction = signature_direction.normalized()
 		signature_surge.set_cue(
 			signature_move, signature_charge,
 			bool(action_context.get("signature_succeeded", false)), phase,

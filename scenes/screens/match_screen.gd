@@ -1493,13 +1493,12 @@ func _build_movement_plan(
 	## member of a wall can begin that along-net journey while still airborne.
 	## During the incoming ATTACK flight, `_run_rally` supplies the physical BLOCK
 	## event separately even when movement is already aimed at the later DIG.
-	var held_block := airborne_block_event
-	if held_block == null and event.event_type == RallyEventModel.EventType.BLOCK:
-		held_block = event
-	elif held_block == null \
-			and next_contact.event_type == RallyEventModel.EventType.BLOCK:
-		held_block = next_contact
-	_hold_airborne_blocker(plan, held_block)
+	## The fourth argument is the proof that this particular playback window is
+	## already inside a block jump. A BLOCK being the next contact is not enough:
+	## during its approach the wall still has to close into the resolver's slots.
+	## Falling back to `event`/`next_contact` froze that legal pre-takeoff travel
+	## and made an ordinary attack-to-block plan fail to reach `start_position`.
+	_hold_airborne_blocker(plan, airborne_block_event)
 	_separate_plan(plan, next_actor_id)
 	_pace_plan(plan, window_seconds, next_actor_id)
 	## After pacing, not before: `_set_plan_target` writes a fresh entry with no

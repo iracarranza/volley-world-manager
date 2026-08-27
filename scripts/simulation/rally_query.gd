@@ -229,7 +229,14 @@ static func normalize(result: Resource, serving_home: bool) -> Dictionary:
 	var sequence: Array[String] = []
 	for index in range(result.events.size()):
 		var event: Resource = result.events[index]
-		if int(event.event_type) == RallyEventModel.EventType.SET_DECISION:
+		## Neither record is a physical ball contact. SET_DECISION is a resolver
+		## choice and POINT is the synthetic terminal summary appended after the
+		## last real touch; including either makes contact predicates disagree
+		## with the sequence they claim to query.
+		if int(event.event_type) in [
+			RallyEventModel.EventType.SET_DECISION,
+			RallyEventModel.EventType.POINT,
+		]:
 			continue
 		var type_name := _event_type_name(int(event.event_type))
 		var occurrence := int(by_type.get(type_name, 0)) + 1

@@ -758,14 +758,22 @@ func _search_debug_rallies() -> void:
 	var fixture_key := str(shadow_debug_fixture_option.get_item_metadata(
 		shadow_debug_fixture_option.selected
 	))
+	## Rally resolution learns within a match. A diagnostic search is not part of
+	## that match, so every candidate must begin from the same learning baseline
+	## and the live roster must receive that baseline back when the search ends.
+	## Restoring only once after all 250 candidates would still make seed N depend
+	## on seeds 0..N-1 and would make search order an undocumented gameplay input.
+	var learning_snapshot := _rally_learning_snapshot()
 	_apply_shadow_debug_fixture(fixture_key, plan)
 	var clause_hits: Array[int] = []
 	clause_hits.resize(clauses.size())
 	clause_hits.fill(0)
+	var total_matches := 0
 	rally_query_results.clear()
 	rally_query_result_option.clear()
 	search_rallies_button.disabled = true
 	for seed_value in range(start_seed, start_seed + 250):
+		_restore_rally_learning(learning_snapshot)
 		var serving_home := seed_value % 2 == 0
 		if serving == "home": serving_home = true
 		elif serving == "opponent": serving_home = false
@@ -775,6 +783,8 @@ func _search_debug_rallies() -> void:
 		for clause_index in range(evaluation["clauses"].size()):
 			if bool(evaluation["clauses"][clause_index]["passed"]):
 				clause_hits[clause_index] += 1
+		if bool(evaluation["matches"]):
+			total_matches += 1
 		if bool(evaluation["matches"]) and rally_query_results.size() < 25:
 			var entry := {
 				"seed": seed_value, "serving_home": serving_home,
@@ -787,6 +797,7 @@ func _search_debug_rallies() -> void:
 	GameManager.match_state.load_dict(match_snapshot)
 	if plan != null: plan.load_dict(plan_snapshot)
 	_restore_serve_styles(serve_style_snapshot)
+	_restore_rally_learning(learning_snapshot)
 	_refresh_defensive_plan()
 	search_rallies_button.disabled = false
 	open_rally_3d_button.disabled = rally_query_results.is_empty()
@@ -800,7 +811,7 @@ func _search_debug_rallies() -> void:
 		start_seed, start_seed + 250, serving, query_text
 	)
 	rally_query_report.text = "%d combined matches. Individual hit rates — %s\nCopy: %s" % [
-		rally_query_results.size(), " · ".join(rates), command,
+		total_matches, " · ".join(rates), command,
 	]
 
 
@@ -827,6 +838,50 @@ func _serve_style_snapshot() -> Array[Dictionary]:
 	for player in GameManager.opponent_team.players:
 		snapshot.append({"player": player, "style": player.primary_serve_style})
 	return snapshot
+
+
+## Every player-owned value the rally resolver is allowed to learn into.
+##
+## `situation_experience` is save-backed familiarity. `placement_memory` is a
+## match-scoped metadata dictionary used by HitterPlacementModel. Keeping the
+## player object in the snapshot preserves all roster/lineup references while
+## restoring the mutable learning payloads in place.
+func _rally_learning_snapshot() -> Array[Dictionary]:
+	var snapshot: Array[Dictionary] = []
+	var candidates: Array = GameManager.players.duplicate()
+	if GameManager.opponent_team != null:
+		candidates.append_array(GameManager.opponent_team.players)
+	for player in candidates:
+		if player == null:
+			continue
+		var had_placement_memory: bool = bool(player.has_meta(&"placement_memory"))
+		var placement_memory: Dictionary = Dictionary(
+			player.get_meta(&"placement_memory", {})
+		).duplicate(true) if had_placement_memory else {}
+		snapshot.append({
+			"player": player,
+			"situation_experience": player.situation_experience.duplicate(true),
+			"had_placement_memory": had_placement_memory,
+			"placement_memory": placement_memory,
+		})
+	return snapshot
+
+
+func _restore_rally_learning(snapshot: Array[Dictionary]) -> void:
+	for entry in snapshot:
+		var player: Object = entry.get("player")
+		if player == null:
+			continue
+		player.situation_experience = Dictionary(
+			entry.get("situation_experience", {})
+		).duplicate(true)
+		if bool(entry.get("had_placement_memory", false)):
+			player.set_meta(
+				&"placement_memory",
+				Dictionary(entry.get("placement_memory", {})).duplicate(true),
+			)
+		elif player.has_meta(&"placement_memory"):
+			player.remove_meta(&"placement_memory")
 
 
 func _restore_serve_styles(snapshot: Array[Dictionary]) -> void:

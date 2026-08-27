@@ -36,6 +36,17 @@ func _ready() -> void:
 			screen.match_court_3d.get_node_or_null("VenueExtras") != null,
 			"%s adds venue geometry to the live court" % region,
 		)
+		var venue_limits := screen.match_court_3d.free_camera_limits()
+		if bool(venue_limits.get("enclosed", false)):
+			for preset_index in range(screen.match_court_3d.CAMERA_PRESETS.size()):
+				var preset_name := screen.match_court_3d.set_camera_preset(preset_index)
+				var preset_position := screen.match_court_3d.camera_3d.global_position
+				_check(
+					absf(preset_position.x) <= float(venue_limits["half_width"]) + 0.001
+						and absf(preset_position.z) <= float(venue_limits["half_length"]) + 0.001
+						and preset_position.y <= float(venue_limits["ceiling"]) + 0.001,
+					"%s %s camera remains inside the venue shell" % [region, preset_name],
+				)
 
 	screen.configure_broadcast({
 		"home_name": "HOME", "away_name": "A'ACE",

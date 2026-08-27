@@ -2,6 +2,7 @@ extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const RALLY_QUERY_SCRIPT := preload("res://scripts/simulation/rally_query.gd")
 const RALLY_COMMENTARY_ROUTER_SCRIPT := preload(
 	"res://scripts/simulation/rally_commentary_router.gd"
 )
@@ -204,6 +205,11 @@ func _initialize() -> void:
 		_test_double_block_position_contract()
 		_finish_test_run()
 		return
+	if "--review-fixes-only" in OS.get_cmdline_user_args():
+		_test_rally_query_normalizes_physical_contacts()
+		_test_3d_playback_contract()
+		_finish_test_run()
+		return
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
@@ -247,6 +253,7 @@ func _initialize() -> void:
 	_test_event_physical_time_is_derived()
 	_test_playback_samples_resolved_movement()
 	_test_double_block_position_contract()
+	_test_rally_query_normalizes_physical_contacts()
 	_test_3d_playback_contract()
 	_test_block_visualization_geometry()
 	_test_gate_fifty_continuous_reachability_timeline()
@@ -419,6 +426,39 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+## Query contact predicates describe physical touches, not resolver bookkeeping.
+## A normal serve-reception-set-attack point therefore has four contacts even
+## though RallyResult also carries a synthetic POINT terminal record.
+func _test_rally_query_normalizes_physical_contacts() -> void:
+	var result := RallyResult.new()
+	for event_type in [
+		RALLY_EVENT_SCRIPT.EventType.SERVE,
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.SET_DECISION,
+		RALLY_EVENT_SCRIPT.EventType.SET,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK,
+		RALLY_EVENT_SCRIPT.EventType.POINT,
+	]:
+		var event := RALLY_EVENT_SCRIPT.new()
+		event.event_type = event_type
+		event.metadata = {"side": "home"}
+		result.events.append(event)
+	result.terminal_outcome = "kill"
+	var clauses: Array[Dictionary] = RALLY_QUERY_SCRIPT.clauses_from_text(
+		"contacts=4;sequence contains SERVE > RECEPTION > SET > ATTACK"
+	)
+	var evaluation := RALLY_QUERY_SCRIPT.evaluate(result, true, clauses)
+	var facts: Dictionary = evaluation["facts"]
+	_check(
+		int(facts["contacts"]) == 4
+			and Array(facts["events"]).size() == 4
+			and Array(facts["sequence"]) == ["SERVE", "RECEPTION", "SET", "ATTACK"]
+			and bool(evaluation["matches"])
+			and RALLY_QUERY_SCRIPT.result_summary(77, evaluation).contains("4 contacts"),
+		"rally queries exclude SET_DECISION and synthetic POINT records from physical contacts",
+	)
 
 
 ## Commentary is a presentation stream over resolved contacts, not another
@@ -8172,6 +8212,26 @@ func _test_3d_playback_contract() -> void:
 			and not screen.match_court_3d.home_player_ids.has(101),
 		"3D playback spawns exactly the players in the authoritative rally snapshots",
 	)
+	## Every preset must be a point inside the tightest enclosed shell. This is
+	## stricter than testing A'ace alone: a preset valid in compact Spëddigh is
+	## valid in every larger reviewed indoor venue.
+	screen.match_court_3d.venue_region = "Spëddigh"
+	screen.match_court_3d.venue_open_air = false
+	screen.match_court_3d.venue_tight = true
+	var camera_limits := screen.match_court_3d.free_camera_limits()
+	var invalid_camera_presets: Array[String] = []
+	for preset in screen.match_court_3d.CAMERA_PRESETS:
+		var preset_name := str(preset["name"])
+		var camera_position := Vector3(preset["position"])
+		if absf(camera_position.x) > float(camera_limits["half_width"]) + 0.001 \
+				or absf(camera_position.z) > float(camera_limits["half_length"]) + 0.001 \
+				or camera_position.y > float(camera_limits["ceiling"]) + 0.001:
+			invalid_camera_presets.append(preset_name)
+	_check(
+		invalid_camera_presets.is_empty(),
+		"all camera presets remain inside the compact enclosed venue shell: %s"
+			% ", ".join(invalid_camera_presets),
+	)
 	var left_actor := screen.match_court_3d.player_actors[1] as PlayerActor3D
 	var right_actor := screen.match_court_3d.player_actors[2] as PlayerActor3D
 	var left_start := left_actor.position
@@ -8213,6 +8273,9 @@ func _test_3d_playback_contract() -> void:
 		9911, true, "Heading Probe", "Right",
 		{"height_cm": 190.0, "wingspan_cm": 194.0, "body_type": "Feli"},
 	)
+	## This synchronous SceneTree test runs before @onready bindings; production
+	## receives this reference normally when the actor enters its first frame.
+	heading_actor.signature_surge = heading_actor.get_node("SignatureSurge3D")
 	heading_actor.set_tactical_position(Vector2.ZERO, Vector3.ZERO)
 	for frame_index in range(1, 5):
 		heading_actor.set_tactical_position(
@@ -8221,6 +8284,19 @@ func _test_3d_playback_contract() -> void:
 	_check(
 		absf(heading_actor.travel_heading_offset) > 0.25,
 		"sub-centimetre frames accumulate into a refresh-independent travel heading",
+	)
+	_check(
+		absf(heading_actor.signature_surge.action_direction.x) < 0.001
+			and heading_actor.signature_surge.action_direction.y > 0.999,
+		"live along-court movement feeds its actual direction into signature VFX",
+	)
+	heading_actor.set_tactical_position(
+		Vector2.ZERO, heading_actor.position + Vector3(-0.03, 0.0, 0.0)
+	)
+	_check(
+		heading_actor.signature_surge.action_direction.x < -0.999
+			and absf(heading_actor.signature_surge.action_direction.y) < 0.001,
+		"live leftward movement reverses the signature VFX trail",
 	)
 	heading_actor.free()
 	left_actor.set_pose(
@@ -8376,6 +8452,20 @@ func _test_3d_playback_contract() -> void:
 			and Vector2(movement_plan[101]["target"]).is_equal_approx(block.start_position)
 			and movement_plan.has(102),
 		"3D transitions move the next contact actor and the reacting unit together",
+	)
+	## The same block is held only when the caller explicitly identifies this as
+	## an already-airborne window. Merely being the next contact above must retain
+	## the approach; the explicit form holds both wall members at their current x
+	## while preserving the resolver's depth target.
+	var airborne_plan := screen._build_movement_plan(attack, block, 0.20, block)
+	var primary_here := Vector2(screen.match_court_3d.live_positions[101])
+	var assist_here := Vector2(screen.match_court_3d.live_positions[102])
+	_check(
+		is_equal_approx(Vector2(airborne_plan[101]["target"]).x, primary_here.x)
+			and is_equal_approx(Vector2(airborne_plan[102]["target"]).x, assist_here.x)
+			and is_equal_approx(Vector2(airborne_plan[101]["target"]).y, block.start_position.y)
+			and is_equal_approx(Vector2(airborne_plan[102]["target"]).y, 0.47),
+		"only an explicitly airborne block holds both wall members laterally",
 	)
 	## And the other half of the same rule, which has moved once and is stated
 	## here in its current form rather than deleted.
