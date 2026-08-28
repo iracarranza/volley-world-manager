@@ -1,0 +1,39 @@
+name: Render historical desk
+
+on:
+  push:
+    branches:
+      - chatgpt/historical-desk-capture
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+      - name: Import
+        run: godot --headless --path . --editor --quit
+      - name: Render historical DeskScreen
+        run: |
+          xvfb-run -a godot --path . --rendering-method gl_compatibility --resolution 1280x720 res://tools/render_historical_desk.tscn
+          test -f artifacts/historical-desk/desk_historical.png
+      - name: Upload historical desk
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-desk-render
+          path: artifacts/historical-desk/desk_historical.png
+          if-no-files-found: error
+          retention-days: 14
