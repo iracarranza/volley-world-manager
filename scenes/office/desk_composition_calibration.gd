@@ -15,7 +15,7 @@ func _apply() -> void:
 	desk_camera.fov = 53.5
 	desk_camera.look_at(Vector3(1.05, 0.84, -1.53), Vector3.UP)
 
-	# Wall objects independently registered to historical crop.
+	# Wall registration locked after iteration 8.
 	_place(office, "WindowGlass", Vector3(0.62, 1.58, -1.936), Vector3(0.95, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
 	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.27, -0.08, 0.0), true)
@@ -42,11 +42,12 @@ func _apply() -> void:
 	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(1.13, 1.44, -1.77), 0.10, 0.19, 0.17, Color("20252b"), Vector3(0, 0, -20), false)
 	_detail_frustum(office, "DeskLampGlow", Vector3(1.17, 1.355, -1.765), 0.105, 0.135, 0.012, Color("f3c78c"), Vector3(0, 0, -20), true)
 
-	_place(office, "Journal", Vector3(1.34, 0.858, -1.50), Vector3(0.61, 0.050, 0.36), -4.0)
-	_place(office, "JournalPageEdge", Vector3(1.34, 0.887, -1.335), Vector3(0.56, 0.011, 0.028), -4.0)
-	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.48), Vector3(0.43, 0.030, 0.37), 7.0)
-	_place(office, "ClipboardClip", Vector3(0.67, 0.887, -1.62), Vector3(0.12, 0.030, 0.050), 7.0)
-	_place(office, "ScoutingBoard", Vector3(0.37, 0.842, -1.30), Vector3(0.48, 0.030, 0.31), 10.0)
+	# Local prop registration against historical DeskScreen. Phone/machine stay fixed.
+	_place(office, "Journal", Vector3(1.23, 0.858, -1.45), Vector3(0.62, 0.050, 0.40), -4.0)
+	_place(office, "JournalPageEdge", Vector3(1.23, 0.887, -1.265), Vector3(0.57, 0.011, 0.028), -4.0)
+	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.38), Vector3(0.43, 0.030, 0.39), 7.0)
+	_place(office, "ClipboardClip", Vector3(0.67, 0.887, -1.53), Vector3(0.12, 0.030, 0.050), 7.0)
+	_place(office, "ScoutingBoard", Vector3(0.43, 0.842, -1.30), Vector3(0.48, 0.030, 0.31), 10.0)
 
 	_place(office, "PhoneBase", Vector3(1.70, 0.88, -1.62), Vector3(0.30, 0.14, 0.19), -5.0)
 	_place(office, "PhoneHandset", Vector3(1.70, 0.985, -1.62), Vector3(0.32, 0.065, 0.08), -5.0)
@@ -54,15 +55,18 @@ func _apply() -> void:
 	var machine_light := office.find_child("MachineLight", true, false) as Node3D
 	if machine_light != null: machine_light.position = Vector3(1.58, 0.93, -1.28)
 
-	_place(office, "HousingFolder", Vector3(0.88, 0.835, -1.25), Vector3(0.38, 0.026, 0.23), -5.0)
-	_place(office, "MealPad", Vector3(1.28, 0.837, -1.19), Vector3(0.32, 0.020, 0.20), 8.0)
+	# Housing moves back-left under Training, matching the historical green folder.
+	_place(office, "HousingFolder", Vector3(0.47, 0.835, -1.60), Vector3(0.40, 0.026, 0.24), -5.0)
+	_set_material(office.find_child("HousingFolder", true, false), Color("344b3e"), 0.94)
+	# Meal sheet occupies lower-right foreground.
+	_place(office, "MealPad", Vector3(1.19, 0.837, -1.08), Vector3(0.34, 0.020, 0.24), 8.0)
 
 	var mug := office.find_child("Mug", true, false) as Node3D
 	if mug != null:
-		mug.position = Vector3(1.52, 0.92, -1.29)
+		mug.position = Vector3(1.42, 0.92, -1.40)
 		mug.scale = Vector3(1.0, 1.0, 1.0)
 		_set_material(mug, Color("61706a"), 0.90)
-	_detail_frustum(office, "MugCoffee", Vector3(1.52, 0.981, -1.29), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
+	_detail_frustum(office, "MugCoffee", Vector3(1.42, 0.981, -1.40), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
 
 	var book_positions := [Vector3(0.34, 0.84, -1.70), Vector3(0.54, 0.84, -1.71), Vector3(0.57, 0.882, -1.70), Vector3(0.60, 0.920, -1.69)]
 	var book_sizes := [Vector3(0.20, 0.042, 0.14), Vector3(0.25, 0.048, 0.16), Vector3(0.21, 0.048, 0.13), Vector3(0.18, 0.042, 0.12)]
@@ -85,12 +89,12 @@ func _apply() -> void:
 	_add_working_details(office)
 
 func _add_working_details(office: Node3D) -> void:
-	_detail_frustum(office, "JournalEmblem", Vector3(1.17, 0.889, -1.58), 0.050, 0.050, 0.005, Color("758995"), Vector3.ZERO, false)
+	_detail_frustum(office, "JournalEmblem", Vector3(1.06, 0.889, -1.54), 0.050, 0.050, 0.005, Color("758995"), Vector3.ZERO, false)
 	for i in 3:
-		_detail_box(office, "JournalLine%02d" % i, Vector3(1.39, 0.890, -1.595 + float(i) * 0.035), Vector3(0.20 - float(i) * 0.025, 0.005, 0.006), Color("71818a"), -4.0)
+		_detail_box(office, "JournalLine%02d" % i, Vector3(1.28, 0.890, -1.555 + float(i) * 0.035), Vector3(0.20 - float(i) * 0.025, 0.005, 0.006), Color("71818a"), -4.0)
 	for i in 5:
-		_detail_box(office, "TrainingRule%02d" % i, Vector3(0.70, 0.880, -1.54 + float(i) * 0.055), Vector3(0.28, 0.004, 0.005), Color("62696b"), 7.0)
-	var slip_positions := [Vector3(0.25, 0.861, -1.34), Vector3(0.43, 0.861, -1.31), Vector3(0.28, 0.861, -1.21), Vector3(0.47, 0.861, -1.19)]
+		_detail_box(office, "TrainingRule%02d" % i, Vector3(0.70, 0.880, -1.45 + float(i) * 0.055), Vector3(0.28, 0.004, 0.005), Color("62696b"), 7.0)
+	var slip_positions := [Vector3(0.31, 0.861, -1.34), Vector3(0.49, 0.861, -1.31), Vector3(0.34, 0.861, -1.21), Vector3(0.53, 0.861, -1.19)]
 	for i in 4:
 		_detail_box(office, "ScoutingSlip%02d" % i, slip_positions[i], Vector3(0.13, 0.008, 0.075), Color("aaa69c"), 10.0)
 		_detail_frustum(office, "ScoutingPin%02d" % i, slip_positions[i] + Vector3(-0.045, 0.008, -0.020), 0.010, 0.010, 0.006, Color("713f3d") if i % 2 == 0 else Color("4c755b"), Vector3.ZERO, false)
