@@ -18,13 +18,22 @@ func _apply() -> void:
 	_set_material(office.find_child("DeskTop", true, false), Color("3a2923"), 0.88)
 	_set_material(office.find_child("DeskWall", true, false), Color("302e2e"), 0.97)
 
-	# Window registration is frozen.
-	_place(office, "WindowGlass", Vector3(0.62, 1.58, -1.936), Vector3(0.95, 0.88, 0.025), 0.0)
-	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
-	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.27, -0.08, 0.0), true)
+	# Window footprint measured against historical Desk: narrower, centered slightly left,
+	# and deep navy rather than cyan. Vertical registration remains unchanged.
+	var window_z := -1.944
+	_place(office, "WindowGlass", Vector3(0.58, 1.58, window_z + 0.008), Vector3(0.70, 0.88, 0.025), 0.0)
+	_place(office, "WindowTop", Vector3(0.58, 2.00, window_z), Vector3(0.82, 0.07, 0.07), 0.0)
+	_place(office, "WindowBottom", Vector3(0.58, 1.16, window_z), Vector3(0.82, 0.08, 0.08), 0.0)
+	_place(office, "WindowLeft", Vector3(0.195, 1.58, window_z), Vector3(0.07, 0.90, 0.07), 0.0)
+	_place(office, "WindowRight", Vector3(0.965, 1.58, window_z), Vector3(0.07, 0.90, 0.07), 0.0)
+	_place(office, "WindowMullionV", Vector3(0.58, 1.58, window_z - 0.01), Vector3(0.045, 0.78, 0.045), 0.0)
+	_place(office, "WindowMullionH", Vector3(0.58, 1.58, window_z - 0.01), Vector3(0.70, 0.045, 0.045), 0.0)
+	_set_material(office.find_child("WindowGlass", true, false), Color("18243d"), 0.34)
+	for i in 5:
+		var blind := office.find_child("Blind%02d" % i, true, false) as Node3D
+		if blind != null: blind.visible = false
 
-	# Calendar footprint solved in iteration 15. Details sit toward the camera and the
-	# whole object is lowered to recover the historical 30px wall margin.
+	# Calendar footprint solved in iteration 15; detail depth solved in iteration 16.
 	var wall_z := -1.943
 	var detail_z := wall_z + 0.031
 	_place(office, "CalendarBacking", Vector3(1.465, 1.14, wall_z), Vector3(0.59, 0.43, 0.045), 0.0)
