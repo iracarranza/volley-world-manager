@@ -9,17 +9,18 @@ func _apply() -> void:
 	var office := get_parent().get_node_or_null("CanonicalOfficeLowPoly") as Node3D
 	if office == null: return
 
-	# Final macro registration. After this pass the camera is locked; remaining
-	# differences are solved with physically coherent prop placement/modeling.
+	# Camera locked after iteration 6.
 	var desk_camera := office.get_node("Cameras/Desk") as Camera3D
 	desk_camera.position = Vector3(1.05, 1.75, -0.65)
 	desk_camera.fov = 53.5
 	desk_camera.look_at(Vector3(1.05, 0.84, -1.53), Vector3.UP)
 
-	_place(office, "WindowGlass", Vector3(0.22, 1.70, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
+	# Wall objects are independently registered to the historical crop. The window
+	# should begin well inside the left edge and remain readable above the desk.
+	_place(office, "WindowGlass", Vector3(0.48, 1.58, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(1.24, 1.0, 1.0))
-	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(-0.13, 0.06, 0.0), true)
-	var delta := Vector3(-0.18, -0.07, 0.0)
+	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.13, -0.08, 0.0), true)
+	var delta := Vector3(-0.18, -0.20, 0.0)
 	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
