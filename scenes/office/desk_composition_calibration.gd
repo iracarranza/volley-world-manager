@@ -9,13 +9,12 @@ func _apply() -> void:
 	var office := get_parent().get_node_or_null("CanonicalOfficeLowPoly") as Node3D
 	if office == null: return
 
-	# Macro registration: historical DeskScreen gives roughly 230 px of wall before
-	# the work surface. The previous view left ~380 px of wall, so interpolate toward
-	# the earlier tabletop-heavy camera without returning to its top-down extreme.
+	# Final macro registration. After this pass the camera is locked; remaining
+	# differences are solved with physically coherent prop placement/modeling.
 	var desk_camera := office.get_node("Cameras/Desk") as Camera3D
-	desk_camera.position = Vector3(1.05, 1.71, -0.60)
-	desk_camera.fov = 54.0
-	desk_camera.look_at(Vector3(1.05, 0.90, -1.55), Vector3.UP)
+	desk_camera.position = Vector3(1.05, 1.75, -0.65)
+	desk_camera.fov = 53.5
+	desk_camera.look_at(Vector3(1.05, 0.84, -1.53), Vector3.UP)
 
 	_place(office, "WindowGlass", Vector3(0.22, 1.70, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(1.24, 1.0, 1.0))
