@@ -17,8 +17,8 @@ environment = SubResource("Environment_office_low_poly")
 
 [node name="WindowLight" type="DirectionalLight3D" parent="."]
 rotation_degrees = Vector3(-52, -25, 0)
-light_color = Color(0.62, 0.69, 0.78, 1)
-light_energy = 0.30
+light_color = Color(0.55, 0.62, 0.72, 1)
+light_energy = 0.22
 shadow_enabled = true
 
 [node name="WarmRoomFill" type="OmniLight3D" parent="."]
