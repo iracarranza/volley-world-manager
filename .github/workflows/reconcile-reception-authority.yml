@@ -16,7 +16,7 @@ jobs:
   reconcile:
     if: ${{ !contains(github.event.head_commit.message, '[reconciled]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Check out full history
         uses: actions/checkout@v4
@@ -24,44 +24,112 @@ jobs:
           fetch-depth: 0
           ref: integration/reconcile-reception-authority
 
-      - name: Build semantic patch and apply what still matches
-        id: patch
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply dfd7574 production semantics onto current main
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           git diff dfd7574f2128dec4cbe7badfb2447dd7e7c85a87^ dfd7574f2128dec4cbe7badfb2447dd7e7c85a87 -- \
             scripts/managers/game_manager.gd \
             scripts/simulation/rally_simulator.gd \
             tests/test_runner.gd > /tmp/reception-authority.patch
-          git apply --reject --whitespace=nowarn /tmp/reception-authority.patch 2>&1 | tee /tmp/apply.log
-          code=${PIPESTATUS[0]}
-          mkdir -p /tmp/reconcile-diagnostics
-          cp /tmp/reception-authority.patch /tmp/reconcile-diagnostics/source.patch
-          cp /tmp/apply.log /tmp/reconcile-diagnostics/apply.log
-          git status --short > /tmp/reconcile-diagnostics/status.txt
-          git diff > /tmp/reconcile-diagnostics/applied.diff
-          find scripts tests -name '*.rej' -print | while read -r f; do
-            mkdir -p "/tmp/reconcile-diagnostics/$(dirname "$f")"
-            cp "$f" "/tmp/reconcile-diagnostics/$f"
-          done
-          echo "apply_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+          set +e
+          git apply --reject --whitespace=nowarn /tmp/reception-authority.patch
+          apply_code=$?
+          set -e
+          # Current main changed only the test-runner header/dispatch around two
+          # rejected hunks. The production GameManager and RallySimulator hunks,
+          # plus the test body, apply cleanly. Re-home the two test hooks against
+          # the current runner instead of replacing newer test structure.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_runner.gd')
+          s = p.read_text()
+          marker = 'const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")\n'
+          addition = marker + 'const TEAM_SCRIPT := preload("res://scripts/models/team.gd")\n' + 'const MATCH_STATE_SCRIPT := preload("res://scripts/models/match_state.gd")\n'
+          if 'const TEAM_SCRIPT := preload("res://scripts/models/team.gd")' not in s:
+              assert marker in s, 'GAME_MANAGER_SCRIPT preload anchor missing'
+              s = s.replace(marker, addition, 1)
+          if '--serve-reception-only' not in s:
+              anchor = '\t_test_court_coordinates()\n'
+              assert anchor in s, 'initialize court-test anchor missing'
+              branch = ('\tif "--serve-reception-only" in OS.get_cmdline_user_args():\n'
+                        '\t\t_test_career_opponent_reception_authority()\n'
+                        '\t\t_finish_test_run()\n'
+                        '\t\treturn\n')
+              s = s.replace(anchor, branch + anchor, 1)
+          call = '\t_test_career_opponent_reception_authority()\n'
+          if s.count(call) < 2:
+              anchor = '\t_test_roster_serve_receive_roles_and_lanes()\n'
+              assert anchor in s, 'serve-receive test dispatch anchor missing'
+              s = s.replace(anchor, anchor + call, 1)
+          p.write_text(s)
+          PY
+          rm -f tests/test_runner.gd.rej
+          # Any rejection outside the two known test-dispatch hunks is a stop.
+          if find scripts tests -name '*.rej' -print -quit | grep -q .; then
+            find scripts tests -name '*.rej' -print
+            exit 1
+          fi
+          git add scripts/managers/game_manager.gd scripts/simulation/rally_simulator.gd tests/test_runner.gd
+          git diff --cached --check
+          git diff --cached --stat
+          # The reject pass is expected to return nonzero because current main's
+          # test header/dispatcher moved. The explicit checks above establish that
+          # no production hunk rejected.
+          echo "initial git-apply exit: $apply_code"
 
-      - name: Upload reconciliation diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: reception-reconciliation-diagnostics
-          path: /tmp/reconcile-diagnostics
-
-      - name: Stop after diagnostic reject pass
-        if: ${{ steps.patch.outputs.apply_code != '0' }}
-        run: exit 1
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+          godot --version
 
       - name: Import project
         run: godot --headless --path . --editor --quit
 
-      - name: Run focused reception authority probe
-        run: godot --headless --path . --script tools/run_serve_reception_authority_probe.gd
+      - name: Run focused reception-authority test
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/test_runner.gd -- --serve-reception-only 2>&1 | tee /tmp/focused-test.log
+
+      - name: Run serve-reception authority probe
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tools/run_serve_reception_authority_probe.gd 2>&1 | tee /tmp/reception-probe.log
 
       - name: Run full suite
-        run: godot --headless --path . --script tests/test_runner.gd
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/test_runner.gd 2>&1 | tee /tmp/full-suite.log
+
+      - name: Remove one-shot workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/reconcile-reception-authority.yml
+          git add -A
+          git diff --cached --check
+          git commit -m "Reconcile reception authority onto current main [reconciled]"
+          git push origin HEAD:integration/reconcile-reception-authority
+
+      - name: Upload evidence on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reception-reconciliation-failure-evidence
+          path: |
+            /tmp/focused-test.log
+            /tmp/reception-probe.log
+            /tmp/full-suite.log
+          if-no-files-found: ignore
