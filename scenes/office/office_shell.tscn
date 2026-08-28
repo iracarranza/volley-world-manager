@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scenes/office/office_shell.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/office/canonical_office_low_poly.tscn" id="2"]
+[ext_resource type="Script" path="res://scenes/office/desk_composition_calibration.gd" id="3"]
 
 [node name="OfficeShell" type="SubViewportContainer"]
 unique_name_in_owner = true
@@ -23,3 +24,6 @@ render_target_update_mode = 3
 
 [node name="CanonicalOfficeLowPoly" parent="OfficeViewport" instance=ExtResource("2")]
 unique_name_in_owner = true
+
+[node name="DeskCompositionCalibration" type="Node" parent="OfficeViewport"]
+script = ExtResource("3")
