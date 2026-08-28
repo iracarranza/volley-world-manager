@@ -33,6 +33,17 @@ func _apply() -> void:
 		var blind := office.find_child("Blind%02d" % i, true, false) as Node3D
 		if blind != null: blind.visible = false
 
+	# Sparse night points recover the historical window's readable night texture.
+	var star_positions := [
+		Vector3(0.34, 1.78, window_z + 0.030),
+		Vector3(0.47, 1.88, window_z + 0.030),
+		Vector3(0.63, 1.73, window_z + 0.030),
+		Vector3(0.77, 1.84, window_z + 0.030),
+		Vector3(0.87, 1.69, window_z + 0.030),
+	]
+	for i in star_positions.size():
+		_detail_frustum(office, "WindowStar%02d" % i, star_positions[i], 0.006, 0.006, 0.004, Color("c9c6ad"), Vector3(90, 0, 0), true)
+
 	# Calendar footprint solved in iteration 15; detail depth solved in iteration 16.
 	var wall_z := -1.943
 	var detail_z := wall_z + 0.031
@@ -125,6 +136,15 @@ func _add_working_details(office: Node3D) -> void:
 			_detail_box(office, "PhoneKey%d%d" % [row, col], Vector3(1.645 + float(col) * 0.035, 0.953, -1.575 + float(row) * 0.027), Vector3(0.018, 0.006, 0.014), Color("777f83"), -5.0)
 	for i in 4:
 		_detail_box(office, "MachineSpeaker%02d" % i, Vector3(1.68 + float(i) * 0.028, 0.936, -1.34), Vector3(0.014, 0.006, 0.055), Color("161a1e"), 4.0)
+
+	# Calendar header identity and sparse marked days: detail only, no footprint changes.
+	var calendar_face_z := -1.888
+	_detail_frustum(office, "CalendarHeaderEmblem", Vector3(1.285, 1.315, calendar_face_z), 0.040, 0.040, 0.006, Color("8d8a82"), Vector3(90, 0, 0), false)
+	_detail_box_rot(office, "CalendarHeaderLineA", Vector3(1.50, 1.329, calendar_face_z), Vector3(0.18, 0.008, 0.006), Color("8d8a82"), Vector3.ZERO)
+	_detail_box_rot(office, "CalendarHeaderLineB", Vector3(1.48, 1.302, calendar_face_z), Vector3(0.14, 0.007, 0.006), Color("6f6d68"), Vector3.ZERO)
+	var extra_marks := [Vector3(1.565, 1.155, calendar_face_z), Vector3(1.460, 1.205, calendar_face_z), Vector3(1.670, 1.050, calendar_face_z)]
+	for i in extra_marks.size():
+		_detail_frustum(office, "CalendarExtraMark%02d" % i, extra_marks[i], 0.014, 0.014, 0.006, Color("8c403d"), Vector3(90, 0, 0), false)
 
 func _detail_box(parent: Node3D, name_: String, pos: Vector3, size: Vector3, color: Color, yaw: float) -> void:
 	_detail_box_rot(parent, name_, pos, size, color, Vector3(0, yaw, 0))
