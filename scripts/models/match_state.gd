@@ -265,7 +265,7 @@ func to_dict() -> Dictionary:
 		"substitution_pairs": substitution_pairs.duplicate(true),
 		"substitution_history": substitution_history.duplicate(true),
 		"rally_history": rally_history.duplicate(true),
-		"serve_history": serve_history.duplicate(true),
+		"serve_history": _serve_history_to_dict(),
 		"match_flow": match_flow,
 		"last_flow_shift": last_flow_shift,
 		"statistics": statistics.to_dict(),
@@ -288,7 +288,7 @@ func load_dict(data: Dictionary) -> void:
 	substitution_pairs = data.get("substitution_pairs", {}).duplicate(true)
 	substitution_history.assign(data.get("substitution_history", []))
 	rally_history.assign(data.get("rally_history", []))
-	serve_history = data.get("serve_history", {}).duplicate(true)
+	serve_history = _serve_history_from_dict(data.get("serve_history", {}))
 	match_flow = clampf(float(data.get("match_flow", 0.0)), -1.0, 1.0)
 	last_flow_shift = clampf(float(data.get("last_flow_shift", 0.0)), -1.0, 1.0)
 	statistics = MatchStatisticsModel.new()
@@ -297,3 +297,57 @@ func load_dict(data: Dictionary) -> void:
 		"format_name": "Best of 5", "best_of_sets": 5,
 		"regular_set_target": 25, "deciding_set_target": 15, "win_by": 2,
 	}))
+
+
+## JSON has no Vector2 type. Passing `serve_history` straight to
+## `JSON.stringify()` wrote points as strings such as `"(0.164, 0.11)"`; the
+## next rally then called `Vector2(string)` and failed before resolving its
+## serve. New saves use explicit coordinate arrays and the reader accepts both
+## those and the already-written string form so an in-progress match resumes.
+func _serve_history_to_dict() -> Dictionary:
+	var encoded := {}
+	for raw_key in serve_history:
+		var key := str(raw_key)
+		var source: Dictionary = serve_history[raw_key]
+		var row := source.duplicate(true)
+		for point_key in ["aim_point", "landing_point"]:
+			var point: Variant = source.get(point_key)
+			if point is Vector2:
+				row[point_key] = [float(point.x), float(point.y)]
+		encoded[key] = row
+	return encoded
+
+
+func _serve_history_from_dict(raw_history: Variant) -> Dictionary:
+	var decoded := {}
+	if not (raw_history is Dictionary):
+		return decoded
+	for raw_key in raw_history:
+		var source: Variant = raw_history[raw_key]
+		if not (source is Dictionary):
+			continue
+		var row: Dictionary = Dictionary(source).duplicate(true)
+		for point_key in ["aim_point", "landing_point"]:
+			var point: Variant = _saved_vector2(row.get(point_key))
+			if point != null:
+				row[point_key] = Vector2(point)
+		decoded[str(raw_key)] = row
+	return decoded
+
+
+static func _saved_vector2(value: Variant) -> Variant:
+	if value is Vector2:
+		return value
+	if value is Array and value.size() >= 2:
+		return Vector2(float(value[0]), float(value[1]))
+	if value is String:
+		var components := str(value).strip_edges() \
+			.trim_prefix("(").trim_suffix(")").split(",")
+		if components.size() >= 2 \
+				and str(components[0]).strip_edges().is_valid_float() \
+				and str(components[1]).strip_edges().is_valid_float():
+			return Vector2(
+				float(str(components[0]).strip_edges()),
+				float(str(components[1]).strip_edges()),
+			)
+	return null
