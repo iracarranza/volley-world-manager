@@ -36,7 +36,7 @@ omni_range = 2.4
 shadow_enabled = false
 
 [node name="DeskLampLight" type="OmniLight3D" parent="."]
-position = Vector3(1.13, 1.34, -1.70)
+position = Vector3(0.69, 1.28, -1.70)
 light_color = Color(1.0, 0.80, 0.60, 1)
 light_energy = 0.29
 omni_range = 1.22
