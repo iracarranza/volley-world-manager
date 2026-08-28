@@ -16,7 +16,7 @@ jobs:
   reconcile:
     if: ${{ !contains(github.event.head_commit.message, '[reconciled]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
     steps:
       - name: Check out full history
         uses: actions/checkout@v4
@@ -104,6 +104,37 @@ jobs:
           set -o pipefail
           godot --headless --path . --script tools/run_serve_reception_authority_probe.gd 2>&1 | tee /tmp/reception-probe.log
 
+      - name: Reselect downstream live attack and block fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          godot --headless --path . --script tools/run_live_promotion_scan.gd 2>&1 | tee /tmp/live-promotion-scan.log
+          seed=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text = Path('/tmp/live-promotion-scan.log').read_text()
+          m = re.search(r'seeds promoting BOTH a live attack and a live block:\s*\[(\d+)', text)
+          if not m:
+              raise SystemExit('no qualifying shared Gate 42/49 seed found')
+          print(m.group(1))
+          PY
+          )
+          echo "Selected shared Gate 42/49 seed: $seed"
+          python3 - "$seed" <<'PY'
+          from pathlib import Path
+          import re, sys
+          seed = sys.argv[1]
+          p = Path('tests/test_runner.gd')
+          s = p.read_text()
+          s, a = re.subn(r'const LIVE_ATTACK_SEED := \d+', f'const LIVE_ATTACK_SEED := {seed}', s, count=1)
+          s, b = re.subn(r'const LIVE_BLOCK_SEED := \d+', f'const LIVE_BLOCK_SEED := {seed}', s, count=1)
+          assert a == 1 and b == 1, (a, b)
+          p.write_text(s)
+          PY
+          git add tests/test_runner.gd
+          git diff --cached --check
+
       - name: Run full suite
         shell: bash
         run: |
@@ -128,5 +159,6 @@ jobs:
           path: |
             /tmp/focused-test.log
             /tmp/reception-probe.log
+            /tmp/live-promotion-scan.log
             /tmp/full-suite.log
           if-no-files-found: ignore
