@@ -74,11 +74,13 @@ func _apply() -> void:
 	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(0.82, 1.24, -1.77), 0.08, 0.15, 0.15, Color("20252b"), Vector3(0, 0, -6), false)
 	_detail_frustum(office, "DeskLampGlow", Vector3(0.82, 1.165, -1.765), 0.082, 0.115, 0.010, Color("e7c28f"), Vector3(0, 0, -6), true)
 
-	_place(office, "Journal", Vector3(1.23, 0.858, -1.45), Vector3(0.62, 0.050, 0.40), -4.0)
+	# Promote the Journal into the readable left-center foreground without reopening the camera.
+	# Clipboard remains secondary and shifts slightly toward the outer work zone.
+	_place(office, "Journal", Vector3(0.97, 0.858, -1.42), Vector3(0.62, 0.050, 0.40), -4.0)
 	_set_material(office.find_child("Journal", true, false), Color("203f54"), 0.93)
-	_place(office, "JournalPageEdge", Vector3(1.23, 0.887, -1.265), Vector3(0.57, 0.011, 0.028), -4.0)
-	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.38), Vector3(0.43, 0.030, 0.39), 7.0)
-	_place(office, "ClipboardClip", Vector3(0.67, 0.887, -1.53), Vector3(0.12, 0.030, 0.050), 7.0)
+	_place(office, "JournalPageEdge", Vector3(0.97, 0.887, -1.235), Vector3(0.57, 0.011, 0.028), -4.0)
+	_place(office, "TrainingClipboard", Vector3(0.79, 0.862, -1.47), Vector3(0.40, 0.030, 0.36), 7.0)
+	_place(office, "ClipboardClip", Vector3(0.76, 0.887, -1.61), Vector3(0.12, 0.030, 0.050), 7.0)
 	_place(office, "ScoutingBoard", Vector3(0.43, 0.842, -1.30), Vector3(0.48, 0.030, 0.31), 10.0)
 
 	_place(office, "PhoneBase", Vector3(1.70, 0.88, -1.62), Vector3(0.30, 0.14, 0.19), -5.0)
@@ -122,11 +124,11 @@ func _apply() -> void:
 	_add_working_details(office)
 
 func _add_working_details(office: Node3D) -> void:
-	_detail_frustum(office, "JournalEmblem", Vector3(1.06, 0.889, -1.54), 0.050, 0.050, 0.005, Color("758995"), Vector3.ZERO, false)
+	_detail_frustum(office, "JournalEmblem", Vector3(0.80, 0.889, -1.51), 0.050, 0.050, 0.005, Color("758995"), Vector3.ZERO, false)
 	for i in 3:
-		_detail_box(office, "JournalLine%02d" % i, Vector3(1.28, 0.890, -1.555 + float(i) * 0.035), Vector3(0.20 - float(i) * 0.025, 0.005, 0.006), Color("71818a"), -4.0)
+		_detail_box(office, "JournalLine%02d" % i, Vector3(1.02, 0.890, -1.525 + float(i) * 0.035), Vector3(0.20 - float(i) * 0.025, 0.005, 0.006), Color("71818a"), -4.0)
 	for i in 5:
-		_detail_box(office, "TrainingRule%02d" % i, Vector3(0.70, 0.880, -1.45 + float(i) * 0.055), Vector3(0.28, 0.004, 0.005), Color("62696b"), 7.0)
+		_detail_box(office, "TrainingRule%02d" % i, Vector3(0.79, 0.880, -1.54 + float(i) * 0.050), Vector3(0.25, 0.004, 0.005), Color("62696b"), 7.0)
 	var slip_positions := [Vector3(0.31, 0.861, -1.34), Vector3(0.49, 0.861, -1.31), Vector3(0.34, 0.861, -1.21), Vector3(0.53, 0.861, -1.19)]
 	for i in 4:
 		_detail_box(office, "ScoutingSlip%02d" % i, slip_positions[i], Vector3(0.13, 0.008, 0.075), Color("aaa69c"), 10.0)
