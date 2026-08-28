@@ -41,10 +41,6 @@ jobs:
           git apply --reject --whitespace=nowarn /tmp/reception-authority.patch
           apply_code=$?
           set -e
-          # Current main changed only the test-runner header/dispatch around two
-          # rejected hunks. The production GameManager and RallySimulator hunks,
-          # plus the test body, apply cleanly. Re-home the two test hooks against
-          # the current runner instead of replacing newer test structure.
           python3 - <<'PY'
           from pathlib import Path
           p = Path('tests/test_runner.gd')
@@ -59,7 +55,12 @@ jobs:
               assert anchor in s, 'initialize court-test anchor missing'
               branch = ('\tif "--serve-reception-only" in OS.get_cmdline_user_args():\n'
                         '\t\t_test_career_opponent_reception_authority()\n'
-                        '\t\t_finish_test_run()\n'
+                        '\t\tif failures == 0:\n'
+                        '\t\t\tprint("PASS: %d focused reception-authority checks" % checks)\n'
+                        '\t\t\tquit(0)\n'
+                        '\t\telse:\n'
+                        '\t\t\tpush_error("FAIL: %d of %d focused reception-authority checks failed" % [failures, checks])\n'
+                        '\t\t\tquit(1)\n'
                         '\t\treturn\n')
               s = s.replace(anchor, branch + anchor, 1)
           call = '\t_test_career_opponent_reception_authority()\n'
@@ -70,7 +71,6 @@ jobs:
           p.write_text(s)
           PY
           rm -f tests/test_runner.gd.rej
-          # Any rejection outside the two known test-dispatch hunks is a stop.
           if find scripts tests -name '*.rej' -print -quit | grep -q .; then
             find scripts tests -name '*.rej' -print
             exit 1
@@ -78,9 +78,6 @@ jobs:
           git add scripts/managers/game_manager.gd scripts/simulation/rally_simulator.gd tests/test_runner.gd
           git diff --cached --check
           git diff --cached --stat
-          # The reject pass is expected to return nonzero because current main's
-          # test header/dispatcher moved. The explicit checks above establish that
-          # no production hunk rejected.
           echo "initial git-apply exit: $apply_code"
 
       - name: Install Godot 4.7.2
