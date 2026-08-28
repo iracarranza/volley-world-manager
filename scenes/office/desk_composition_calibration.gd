@@ -15,26 +15,30 @@ func _apply() -> void:
 	desk_camera.fov = 53.5
 	desk_camera.look_at(Vector3(1.05, 0.84, -1.53), Vector3.UP)
 
-	# Canonical dark-room palette: the historical Desk is brown/charcoal rather than orange.
 	_set_material(office.find_child("DeskTop", true, false), Color("3a2923"), 0.88)
 	_set_material(office.find_child("DeskWall", true, false), Color("302e2e"), 0.97)
 
-	# Window registration is frozen. Calendar gets one evidence-based width/position correction.
+	# Window registration is frozen.
 	_place(office, "WindowGlass", Vector3(0.62, 1.58, -1.936), Vector3(0.95, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
 	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.27, -0.08, 0.0), true)
-	var delta := Vector3(-0.02, -0.38, 0.0)
-	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
-	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
-	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
-	_scale_named(office, ["CalendarBacking", "CalendarHeader"], Vector3(1.42, 1.0, 1.0))
-	for i in 6: _scale_named(office, ["CalendarRow%02d" % i], Vector3(1.42, 1.0, 1.0))
+
+	# Calendar is explicit rather than accumulated from relative transforms.
+	# Measured from iteration 14: target historical footprint ~284x131 px.
+	var wall_z := -1.943
+	_place(office, "CalendarBacking", Vector3(1.465, 1.24, wall_z), Vector3(0.59, 0.43, 0.045), 0.0)
+	_place(office, "CalendarHeader", Vector3(1.465, 1.415, wall_z - 0.028), Vector3(0.59, 0.075, 0.025), 0.0)
+	for i in 6:
+		_place(office, "CalendarRow%02d" % i, Vector3(1.465, 1.315 - float(i) * 0.052, wall_z - 0.03), Vector3(0.52, 0.010, 0.018), 0.0)
+	for i in 5:
+		_place(office, "CalendarCol%02d" % i, Vector3(1.255 + float(i) * 0.105, 1.185, wall_z - 0.03), Vector3(0.009, 0.255, 0.018), 0.0)
+	var calendar_mark := office.find_child("CalendarMark", true, false) as Node3D
+	if calendar_mark != null: calendar_mark.position = Vector3(1.36, 1.255, wall_z - 0.05)
 	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
 	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
 	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
 	for i in 5: _set_material(office.find_child("CalendarCol%02d" % i, true, false), Color("777269"), 0.96)
 
-	# Articulated lamp proportions tightened to historical silhouette.
 	var lamp_base := office.find_child("LampBase", true, false) as Node3D
 	var lamp_stem := office.find_child("LampStem", true, false) as Node3D
 	var lamp_shade := office.find_child("LampShade", true, false) as Node3D
