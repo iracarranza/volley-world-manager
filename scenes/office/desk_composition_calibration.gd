@@ -18,14 +18,16 @@ func _apply() -> void:
 	_place(office, "WindowGlass", Vector3(0.22, 1.70, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(1.24, 1.0, 1.0))
 	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(-0.13, 0.06, 0.0), true)
-	# Historical calendar sits fully inside the upper-right wall band rather than clipping top.
 	var delta := Vector3(-0.18, -0.07, 0.0)
 	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
+	# Keep calendar a dark wall object like the historical Desk rather than a lamp-lit white sheet.
+	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
+	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
+	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
+	for i in 5: _set_material(office.find_child("CalendarCol%02d" % i, true, false), Color("777269"), 0.96)
 
-	# Lamp has a dedicated back-centre patch. The broad historical shade silhouette
-	# is restored without allowing the base to intersect papers/books.
 	var lamp_base := office.find_child("LampBase", true, false) as Node3D
 	var lamp_stem := office.find_child("LampStem", true, false) as Node3D
 	var lamp_shade := office.find_child("LampShade", true, false) as Node3D
@@ -36,39 +38,34 @@ func _apply() -> void:
 		lamp_stem.position = Vector3(1.02, 1.17, -1.78)
 		lamp_stem.scale = Vector3(1.15, 1.38, 1.15)
 		lamp_stem.rotation_degrees = Vector3(0, 0, -20)
-	if lamp_shade != null:
-		lamp_shade.position = Vector3(1.13, 1.45, -1.77)
-		lamp_shade.scale = Vector3(1.42, 1.28, 1.28)
+	# Replace the temporary box shade with a recognizable low-poly tapered shade.
+	if lamp_shade != null: lamp_shade.visible = false
+	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(1.13, 1.44, -1.77), 0.10, 0.19, 0.17, Color("20252b"), Vector3(0, 0, -20), false)
+	_detail_frustum(office, "DeskLampGlow", Vector3(1.17, 1.355, -1.765), 0.105, 0.135, 0.012, Color("f3c78c"), Vector3(0, 0, -20), true)
 
-	# Restore historical density through valid vertical layering. Flat documents may
-	# overlap in plan when the upper object is physically above the lower one.
-	# Journal is the dominant working object. Its pale geometry is now only a thin
-	# page-block edge; the dark blue cover remains visible over the full top surface.
+	# Stable historical-density layout.
 	_place(office, "Journal", Vector3(1.34, 0.858, -1.50), Vector3(0.61, 0.050, 0.36), -4.0)
 	_place(office, "JournalPageEdge", Vector3(1.34, 0.887, -1.335), Vector3(0.56, 0.011, 0.028), -4.0)
 	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.48), Vector3(0.43, 0.030, 0.37), 7.0)
 	_place(office, "ClipboardClip", Vector3(0.67, 0.887, -1.62), Vector3(0.12, 0.030, 0.050), 7.0)
 	_place(office, "ScoutingBoard", Vector3(0.37, 0.842, -1.30), Vector3(0.48, 0.030, 0.31), 10.0)
 
-	# Communications form one compact cluster at the right edge rather than isolated boxes.
 	_place(office, "PhoneBase", Vector3(1.70, 0.88, -1.62), Vector3(0.30, 0.14, 0.19), -5.0)
 	_place(office, "PhoneHandset", Vector3(1.70, 0.985, -1.62), Vector3(0.32, 0.065, 0.08), -5.0)
 	_place(office, "AnsweringMachine", Vector3(1.69, 0.87, -1.34), Vector3(0.30, 0.12, 0.17), 4.0)
 	var machine_light := office.find_child("MachineLight", true, false) as Node3D
 	if machine_light != null: machine_light.position = Vector3(1.58, 0.93, -1.28)
 
-	# Housing/meal papers sit beneath the main working objects, giving historical
-	# paper density without mesh intersections.
 	_place(office, "HousingFolder", Vector3(0.88, 0.835, -1.25), Vector3(0.38, 0.026, 0.23), -5.0)
 	_place(office, "MealPad", Vector3(1.28, 0.837, -1.19), Vector3(0.32, 0.020, 0.20), 8.0)
 
-	# Mug is close to the journal/communications cluster but has genuine clearance.
 	var mug := office.find_child("Mug", true, false) as Node3D
 	if mug != null:
 		mug.position = Vector3(1.52, 0.92, -1.29)
 		mug.scale = Vector3(1.0, 1.0, 1.0)
+		_set_material(mug, Color("61706a"), 0.90)
+	_detail_frustum(office, "MugCoffee", Vector3(1.52, 0.981, -1.29), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
 
-	# Back-left books form a loose stack. Keep them out of the lamp-base footprint.
 	var book_positions := [Vector3(0.34, 0.84, -1.70), Vector3(0.54, 0.84, -1.71), Vector3(0.57, 0.882, -1.70), Vector3(0.60, 0.920, -1.69)]
 	var book_sizes := [Vector3(0.20, 0.042, 0.14), Vector3(0.25, 0.048, 0.16), Vector3(0.21, 0.048, 0.13), Vector3(0.18, 0.042, 0.12)]
 	var book_yaws := [6.0, -5.0, 10.0, -9.0]
@@ -86,6 +83,48 @@ func _apply() -> void:
 		if pencil != null:
 			pencil.position.x -= 0.17
 			pencil.position.z = -1.77
+
+	_add_working_details(office)
+
+func _add_working_details(office: Node3D) -> void:
+	# Journal identity: quiet volleyball mark + written lines, physically just above cover.
+	_detail_frustum(office, "JournalEmblem", Vector3(1.17, 0.889, -1.58), 0.050, 0.050, 0.005, Color("758995"), Vector3.ZERO, false)
+	for i in 3:
+		_detail_box(office, "JournalLine%02d" % i, Vector3(1.39, 0.890, -1.595 + float(i) * 0.035), Vector3(0.20 - float(i) * 0.025, 0.005, 0.006), Color("71818a"), -4.0)
+	# Training clipboard: ruled working sheet, not a blank UI rectangle.
+	for i in 5:
+		_detail_box(office, "TrainingRule%02d" % i, Vector3(0.70, 0.880, -1.54 + float(i) * 0.055), Vector3(0.28, 0.004, 0.005), Color("62696b"), 7.0)
+	# Scouting board: pinned slips create the same dense board read as historical DeskScreen.
+	var slip_positions := [Vector3(0.25, 0.861, -1.34), Vector3(0.43, 0.861, -1.31), Vector3(0.28, 0.861, -1.21), Vector3(0.47, 0.861, -1.19)]
+	for i in 4:
+		_detail_box(office, "ScoutingSlip%02d" % i, slip_positions[i], Vector3(0.13, 0.008, 0.075), Color("aaa69c"), 10.0)
+		_detail_frustum(office, "ScoutingPin%02d" % i, slip_positions[i] + Vector3(-0.045, 0.008, -0.020), 0.010, 0.010, 0.006, Color("713f3d") if i % 2 == 0 else Color("4c755b"), Vector3.ZERO, false)
+
+func _detail_box(parent: Node3D, name_: String, pos: Vector3, size: Vector3, color: Color, yaw: float) -> void:
+	var n := MeshInstance3D.new(); n.name = name_
+	var mesh := BoxMesh.new(); mesh.size = size; n.mesh = mesh
+	n.position = pos; n.rotation_degrees = Vector3(0, yaw, 0)
+	n.material_override = _new_material(color, 0.92, false)
+	parent.add_child(n)
+
+func _detail_frustum(parent: Node3D, name_: String, pos: Vector3, top_radius: float, bottom_radius: float, height: float, color: Color, rot: Vector3, emissive: bool) -> void:
+	var n := MeshInstance3D.new(); n.name = name_
+	var mesh := CylinderMesh.new(); mesh.top_radius = top_radius; mesh.bottom_radius = bottom_radius; mesh.height = height; mesh.radial_segments = 12; n.mesh = mesh
+	n.position = pos; n.rotation_degrees = rot
+	n.material_override = _new_material(color, 0.78, emissive)
+	parent.add_child(n)
+
+func _new_material(color: Color, roughness: float, emissive: bool) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new(); m.albedo_color = color; m.roughness = roughness
+	if emissive:
+		m.emission_enabled = true
+		m.emission = color
+		m.emission_energy_multiplier = 1.6
+	return m
+
+func _set_material(node: Node, color: Color, roughness: float) -> void:
+	if node is MeshInstance3D:
+		(node as MeshInstance3D).material_override = _new_material(color, roughness, false)
 
 func _place(office: Node3D, node_name: String, pos: Vector3, size: Vector3, yaw: float) -> void:
 	var node := office.find_child(node_name, true, false) as Node3D
