@@ -9,11 +9,13 @@ func _apply() -> void:
 	var office := get_parent().get_node_or_null("CanonicalOfficeLowPoly") as Node3D
 	if office == null: return
 
-	# Camera is registered; object/detail passes must not chase composition by moving it.
+	# Macro registration: historical DeskScreen gives roughly 230 px of wall before
+	# the work surface. The previous view left ~380 px of wall, so interpolate toward
+	# the earlier tabletop-heavy camera without returning to its top-down extreme.
 	var desk_camera := office.get_node("Cameras/Desk") as Camera3D
-	desk_camera.position = Vector3(1.05, 1.62, -0.50)
-	desk_camera.fov = 55.0
-	desk_camera.look_at(Vector3(1.05, 1.02, -1.58), Vector3.UP)
+	desk_camera.position = Vector3(1.05, 1.71, -0.60)
+	desk_camera.fov = 54.0
+	desk_camera.look_at(Vector3(1.05, 0.90, -1.55), Vector3.UP)
 
 	_place(office, "WindowGlass", Vector3(0.22, 1.70, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(1.24, 1.0, 1.0))
@@ -22,7 +24,6 @@ func _apply() -> void:
 	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
-	# Keep calendar a dark wall object like the historical Desk rather than a lamp-lit white sheet.
 	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
 	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
 	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
@@ -38,12 +39,10 @@ func _apply() -> void:
 		lamp_stem.position = Vector3(1.02, 1.17, -1.78)
 		lamp_stem.scale = Vector3(1.15, 1.38, 1.15)
 		lamp_stem.rotation_degrees = Vector3(0, 0, -20)
-	# Replace the temporary box shade with a recognizable low-poly tapered shade.
 	if lamp_shade != null: lamp_shade.visible = false
 	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(1.13, 1.44, -1.77), 0.10, 0.19, 0.17, Color("20252b"), Vector3(0, 0, -20), false)
 	_detail_frustum(office, "DeskLampGlow", Vector3(1.17, 1.355, -1.765), 0.105, 0.135, 0.012, Color("f3c78c"), Vector3(0, 0, -20), true)
 
-	# Stable historical-density layout.
 	_place(office, "Journal", Vector3(1.34, 0.858, -1.50), Vector3(0.61, 0.050, 0.36), -4.0)
 	_place(office, "JournalPageEdge", Vector3(1.34, 0.887, -1.335), Vector3(0.56, 0.011, 0.028), -4.0)
 	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.48), Vector3(0.43, 0.030, 0.37), 7.0)
@@ -87,14 +86,11 @@ func _apply() -> void:
 	_add_working_details(office)
 
 func _add_working_details(office: Node3D) -> void:
-	# Journal identity: quiet volleyball mark + written lines, physically just above cover.
 	_detail_frustum(office, "JournalEmblem", Vector3(1.17, 0.889, -1.58), 0.050, 0.050, 0.005, Color("758995"), Vector3.ZERO, false)
 	for i in 3:
 		_detail_box(office, "JournalLine%02d" % i, Vector3(1.39, 0.890, -1.595 + float(i) * 0.035), Vector3(0.20 - float(i) * 0.025, 0.005, 0.006), Color("71818a"), -4.0)
-	# Training clipboard: ruled working sheet, not a blank UI rectangle.
 	for i in 5:
 		_detail_box(office, "TrainingRule%02d" % i, Vector3(0.70, 0.880, -1.54 + float(i) * 0.055), Vector3(0.28, 0.004, 0.005), Color("62696b"), 7.0)
-	# Scouting board: pinned slips create the same dense board read as historical DeskScreen.
 	var slip_positions := [Vector3(0.25, 0.861, -1.34), Vector3(0.43, 0.861, -1.31), Vector3(0.28, 0.861, -1.21), Vector3(0.47, 0.861, -1.19)]
 	for i in 4:
 		_detail_box(office, "ScoutingSlip%02d" % i, slip_positions[i], Vector3(0.13, 0.008, 0.075), Color("aaa69c"), 10.0)
