@@ -1,0 +1,66 @@
+name: Reconcile Reception Authority
+
+on:
+  push:
+    branches:
+      - integration/reconcile-reception-authority
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-reception-authority
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: ${{ !contains(github.event.head_commit.message, '[reconciled]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: integration/reconcile-reception-authority
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply only unresolved dfd7574 hunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff dfd7574f2128dec4cbe7badfb2447dd7e7c85a87^ dfd7574f2128dec4cbe7badfb2447dd7e7c85a87 -- \
+            scripts/managers/game_manager.gd \
+            scripts/simulation/rally_simulator.gd \
+            tests/test_runner.gd > /tmp/reception-authority.patch
+          git apply --3way --index /tmp/reception-authority.patch
+          git diff --cached --check
+
+      - name: Import project
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --editor --quit
+
+      - name: Run focused reception authority probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --script tools/run_serve_reception_authority_probe.gd
+
+      - name: Run full suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --script tests/test_runner.gd
+
+      - name: Commit reconciled production changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m "Reconcile reception authority onto current main [reconciled]"
+          git push origin HEAD:integration/reconcile-reception-authority
