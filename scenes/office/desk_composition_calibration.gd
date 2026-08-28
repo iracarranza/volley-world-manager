@@ -23,17 +23,18 @@ func _apply() -> void:
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
 	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.27, -0.08, 0.0), true)
 
-	# Calendar is explicit rather than accumulated from relative transforms.
-	# Measured from iteration 14: target historical footprint ~284x131 px.
+	# Calendar footprint solved in iteration 15. Details sit toward the camera and the
+	# whole object is lowered to recover the historical 30px wall margin.
 	var wall_z := -1.943
-	_place(office, "CalendarBacking", Vector3(1.465, 1.24, wall_z), Vector3(0.59, 0.43, 0.045), 0.0)
-	_place(office, "CalendarHeader", Vector3(1.465, 1.415, wall_z - 0.028), Vector3(0.59, 0.075, 0.025), 0.0)
+	var detail_z := wall_z + 0.031
+	_place(office, "CalendarBacking", Vector3(1.465, 1.14, wall_z), Vector3(0.59, 0.43, 0.045), 0.0)
+	_place(office, "CalendarHeader", Vector3(1.465, 1.315, detail_z), Vector3(0.59, 0.075, 0.025), 0.0)
 	for i in 6:
-		_place(office, "CalendarRow%02d" % i, Vector3(1.465, 1.315 - float(i) * 0.052, wall_z - 0.03), Vector3(0.52, 0.010, 0.018), 0.0)
+		_place(office, "CalendarRow%02d" % i, Vector3(1.465, 1.215 - float(i) * 0.052, detail_z + 0.002), Vector3(0.52, 0.010, 0.018), 0.0)
 	for i in 5:
-		_place(office, "CalendarCol%02d" % i, Vector3(1.255 + float(i) * 0.105, 1.185, wall_z - 0.03), Vector3(0.009, 0.255, 0.018), 0.0)
+		_place(office, "CalendarCol%02d" % i, Vector3(1.255 + float(i) * 0.105, 1.085, detail_z + 0.002), Vector3(0.009, 0.255, 0.018), 0.0)
 	var calendar_mark := office.find_child("CalendarMark", true, false) as Node3D
-	if calendar_mark != null: calendar_mark.position = Vector3(1.36, 1.255, wall_z - 0.05)
+	if calendar_mark != null: calendar_mark.position = Vector3(1.36, 1.155, detail_z + 0.018)
 	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
 	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
 	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
