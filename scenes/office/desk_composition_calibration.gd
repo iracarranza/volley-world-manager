@@ -24,25 +24,26 @@ func _apply() -> void:
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
 	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
-	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
+	_set_material(office.find_child("CalendarHeader", true, false), Color("262722a"), 0.94)
 	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
 	for i in 5: _set_material(office.find_child("CalendarCol%02d" % i, true, false), Color("777269"), 0.96)
 
+	# Articulated lamp: base and upright stay on the right; arm reaches left to a
+	# low-poly shade, matching the historical silhouette without intersecting books.
 	var lamp_base := office.find_child("LampBase", true, false) as Node3D
 	var lamp_stem := office.find_child("LampStem", true, false) as Node3D
 	var lamp_shade := office.find_child("LampShade", true, false) as Node3D
 	if lamp_base != null:
 		lamp_base.position = Vector3(1.02, 0.88, -1.78)
 		lamp_base.scale = Vector3(1.18, 1.12, 1.18)
-	if lamp_stem != null:
-		lamp_stem.position = Vector3(1.02, 1.17, -1.78)
-		lamp_stem.scale = Vector3(1.15, 1.38, 1.15)
-		lamp_stem.rotation_degrees = Vector3(0, 0, -20)
+	if lamp_stem != null: lamp_stem.visible = false
 	if lamp_shade != null: lamp_shade.visible = false
-	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(1.13, 1.44, -1.77), 0.10, 0.19, 0.17, Color("20252b"), Vector3(0, 0, -20), false)
-	_detail_frustum(office, "DeskLampGlow", Vector3(1.17, 1.355, -1.765), 0.105, 0.135, 0.012, Color("f3c78c"), Vector3(0, 0, -20), true)
+	_detail_box_rot(office, "DeskLampUpright", Vector3(1.02, 1.15, -1.78), Vector3(0.035, 0.45, 0.035), Color("343b42"), Vector3.ZERO)
+	_detail_frustum(office, "DeskLampJoint", Vector3(1.02, 1.36, -1.78), 0.045, 0.045, 0.035, Color("343b42"), Vector3(90, 0, 0), false)
+	_detail_box_rot(office, "DeskLampArm", Vector3(0.86, 1.39, -1.78), Vector3(0.34, 0.032, 0.032), Color("343b42"), Vector3(0, 0, -11))
+	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(0.69, 1.34, -1.77), 0.10, 0.19, 0.17, Color("20252b"), Vector3(0, 0, -8), false)
+	_detail_frustum(office, "DeskLampGlow", Vector3(0.69, 1.255, -1.765), 0.105, 0.135, 0.012, Color("f3c78c"), Vector3(0, 0, -8), true)
 
-	# Local prop registration against historical DeskScreen. Phone/machine stay fixed.
 	_place(office, "Journal", Vector3(1.23, 0.858, -1.45), Vector3(0.62, 0.050, 0.40), -4.0)
 	_place(office, "JournalPageEdge", Vector3(1.23, 0.887, -1.265), Vector3(0.57, 0.011, 0.028), -4.0)
 	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.38), Vector3(0.43, 0.030, 0.39), 7.0)
@@ -55,18 +56,18 @@ func _apply() -> void:
 	var machine_light := office.find_child("MachineLight", true, false) as Node3D
 	if machine_light != null: machine_light.position = Vector3(1.58, 0.93, -1.28)
 
-	# Housing moves back-left under Training, matching the historical green folder.
 	_place(office, "HousingFolder", Vector3(0.47, 0.835, -1.60), Vector3(0.40, 0.026, 0.24), -5.0)
 	_set_material(office.find_child("HousingFolder", true, false), Color("344b3e"), 0.94)
-	# Meal sheet occupies lower-right foreground.
-	_place(office, "MealPad", Vector3(1.19, 0.837, -1.08), Vector3(0.34, 0.020, 0.24), 8.0)
+	# Pull lower-right sheet fully onto the physical desk while preserving foreground read.
+	_place(office, "MealPad", Vector3(1.20, 0.837, -1.16), Vector3(0.30, 0.020, 0.19), 8.0)
 
+	# Mug sits beside, not on, the Journal.
 	var mug := office.find_child("Mug", true, false) as Node3D
 	if mug != null:
-		mug.position = Vector3(1.42, 0.92, -1.40)
+		mug.position = Vector3(1.51, 0.92, -1.43)
 		mug.scale = Vector3(1.0, 1.0, 1.0)
 		_set_material(mug, Color("61706a"), 0.90)
-	_detail_frustum(office, "MugCoffee", Vector3(1.42, 0.981, -1.40), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
+	_detail_frustum(office, "MugCoffee", Vector3(1.51, 0.981, -1.43), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
 
 	var book_positions := [Vector3(0.34, 0.84, -1.70), Vector3(0.54, 0.84, -1.71), Vector3(0.57, 0.882, -1.70), Vector3(0.60, 0.920, -1.69)]
 	var book_sizes := [Vector3(0.20, 0.042, 0.14), Vector3(0.25, 0.048, 0.16), Vector3(0.21, 0.048, 0.13), Vector3(0.18, 0.042, 0.12)]
@@ -100,9 +101,12 @@ func _add_working_details(office: Node3D) -> void:
 		_detail_frustum(office, "ScoutingPin%02d" % i, slip_positions[i] + Vector3(-0.045, 0.008, -0.020), 0.010, 0.010, 0.006, Color("713f3d") if i % 2 == 0 else Color("4c755b"), Vector3.ZERO, false)
 
 func _detail_box(parent: Node3D, name_: String, pos: Vector3, size: Vector3, color: Color, yaw: float) -> void:
+	_detail_box_rot(parent, name_, pos, size, color, Vector3(0, yaw, 0))
+
+func _detail_box_rot(parent: Node3D, name_: String, pos: Vector3, size: Vector3, color: Color, rot: Vector3) -> void:
 	var n := MeshInstance3D.new(); n.name = name_
 	var mesh := BoxMesh.new(); mesh.size = size; n.mesh = mesh
-	n.position = pos; n.rotation_degrees = Vector3(0, yaw, 0)
+	n.position = pos; n.rotation_degrees = rot
 	n.material_override = _new_material(color, 0.92, false)
 	parent.add_child(n)
 
