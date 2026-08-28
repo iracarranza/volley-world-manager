@@ -9,8 +9,7 @@ func _apply() -> void:
 	var office := get_parent().get_node_or_null("CanonicalOfficeLowPoly") as Node3D
 	if office == null: return
 
-	# Camera is now registered closely enough; object passes must not chase composition
-	# by changing the view unless the desk/wall split itself regresses.
+	# Camera is registered; object/detail passes must not chase composition by moving it.
 	var desk_camera := office.get_node("Cameras/Desk") as Camera3D
 	desk_camera.position = Vector3(1.05, 1.62, -0.50)
 	desk_camera.fov = 55.0
@@ -19,7 +18,8 @@ func _apply() -> void:
 	_place(office, "WindowGlass", Vector3(0.22, 1.70, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(1.24, 1.0, 1.0))
 	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(-0.13, 0.06, 0.0), true)
-	var delta := Vector3(-0.08, 0.01, 0.0)
+	# Historical calendar sits fully inside the upper-right wall band rather than clipping top.
+	var delta := Vector3(-0.18, -0.07, 0.0)
 	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
@@ -42,12 +42,12 @@ func _apply() -> void:
 
 	# Restore historical density through valid vertical layering. Flat documents may
 	# overlap in plan when the upper object is physically above the lower one.
-	# Journal is again the dominant working object, as in the historical DeskScreen.
+	# Journal is the dominant working object. Its pale geometry is now only a thin
+	# page-block edge; the dark blue cover remains visible over the full top surface.
 	_place(office, "Journal", Vector3(1.34, 0.858, -1.50), Vector3(0.61, 0.050, 0.36), -4.0)
-	_place(office, "JournalPageEdge", Vector3(1.34, 0.886, -1.50), Vector3(0.58, 0.011, 0.332), -4.0)
+	_place(office, "JournalPageEdge", Vector3(1.34, 0.887, -1.335), Vector3(0.56, 0.011, 0.028), -4.0)
 	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.48), Vector3(0.43, 0.030, 0.37), 7.0)
 	_place(office, "ClipboardClip", Vector3(0.67, 0.887, -1.62), Vector3(0.12, 0.030, 0.050), 7.0)
-	# Large scouting board sits diagonally at lower-left but remains inside desktop.
 	_place(office, "ScoutingBoard", Vector3(0.37, 0.842, -1.30), Vector3(0.48, 0.030, 0.31), 10.0)
 
 	# Communications form one compact cluster at the right edge rather than isolated boxes.
@@ -81,7 +81,6 @@ func _apply() -> void:
 
 	var cup := office.find_child("PencilCup", true, false) as Node3D
 	if cup != null: cup.position = Vector3(0.27, 0.92, -1.77)
-	# Keep authored pencils centered on the moved cup; previous pass left them behind.
 	for i in 3:
 		var pencil := office.find_child("Pencil%02d" % i, true, false) as Node3D
 		if pencil != null:
