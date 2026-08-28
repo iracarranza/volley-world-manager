@@ -15,12 +15,11 @@ func _apply() -> void:
 	desk_camera.fov = 53.5
 	desk_camera.look_at(Vector3(1.05, 0.84, -1.53), Vector3.UP)
 
-	# Wall objects are independently registered to the historical crop. The window
-	# should begin well inside the left edge and remain readable above the desk.
-	_place(office, "WindowGlass", Vector3(0.48, 1.58, -1.936), Vector3(1.34, 0.88, 0.025), 0.0)
-	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(1.24, 1.0, 1.0))
-	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.13, -0.08, 0.0), true)
-	var delta := Vector3(-0.18, -0.20, 0.0)
+	# Wall objects independently registered to historical crop.
+	_place(office, "WindowGlass", Vector3(0.62, 1.58, -1.936), Vector3(0.95, 0.88, 0.025), 0.0)
+	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
+	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.27, -0.08, 0.0), true)
+	var delta := Vector3(-0.18, -0.30, 0.0)
 	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
