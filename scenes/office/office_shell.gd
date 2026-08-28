@@ -26,11 +26,9 @@ var _manager_chair: Node3D = null
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Promote the accepted Desk review composition into live camera authority.
-	var desk := _camera(&"Desk")
-	desk.position = Vector3(1.05, 1.48, -0.62)
-	desk.fov = 58.0
-	desk.look_at(Vector3(1.05, 1.10, -1.62), Vector3.UP)
+	# Desk composition is authored by the office scene plus its calibration layer.
+	# Do not overwrite it here: doing so made render-tool Desk and live Desk use
+	# different cameras and defeated screenshot calibration.
 	_manager_chair = office.find_child("ManagerChair", true, false) as Node3D
 	_main_menu_transform = _camera(&"MainMenu").transform
 	_main_menu_fov = _camera(&"MainMenu").fov
@@ -78,9 +76,6 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	if not name in CAMERA_NAMES:
 		push_warning("Unknown office camera: %s" % name)
 		return
-	# A second request no longer tears down the blend camera underneath the first
-	# tween. Desk hotspots can be clicked twice even while global navigation is
-	# disabled, so serialize those repeats and let the first transition settle.
 	while _blend_camera != null:
 		await get_tree().process_frame
 	if _active_name == name:
@@ -97,8 +92,6 @@ func play_to(name: StringName, duration := 1.35) -> void:
 	_blend_camera.fov = source.fov
 	cameras.add_child(_blend_camera)
 	_blend_camera.current = true
-	# The chair remains part of the room during the journey; it disappears only
-	# when the eye settles into the seated Desk POV.
 	if _manager_chair != null:
 		_manager_chair.visible = true
 	var tween := create_tween().set_parallel(true)
@@ -114,10 +107,6 @@ func play_to(name: StringName, duration := 1.35) -> void:
 
 
 func _set_navigation_enabled(enabled: bool) -> void:
-	# Camera focus is itself navigation. While the room is physically moving,
-	# accepting a second workspace choice would allow an older coroutine to land
-	# after a newer route and overwrite it. Disable only the global peer controls;
-	# their visual state remains visible and the current route remains legible.
 	var app := get_parent()
 	if app == null:
 		return
@@ -136,18 +125,14 @@ func _set_camera_specific_visibility(name: StringName) -> void:
 func focus_calendar() -> void:
 	await play_to(&"Calendar", 0.72)
 
-
 func focus_door() -> void:
 	await play_to(&"Door", 0.62)
-
 
 func focus_interview() -> void:
 	await play_to(&"Interview", 0.82)
 
-
 func focus_office_wide() -> void:
 	await play_to(&"OfficeWide", 0.78)
-
 
 func focus_desk() -> void:
 	await play_to(&"Desk", 0.72)
@@ -194,7 +179,6 @@ func _history_event_count(career: Variant) -> int:
 func _camera(name: StringName) -> Camera3D:
 	return cameras.get_node(str(name)) as Camera3D
 
-
 func _current_camera() -> Camera3D:
 	if _blend_camera != null:
 		return _blend_camera
@@ -202,7 +186,6 @@ func _current_camera() -> Camera3D:
 		if child is Camera3D and (child as Camera3D).current:
 			return child as Camera3D
 	return _camera(_active_name)
-
 
 func _clear_blend_camera() -> void:
 	if _blend_camera != null and is_instance_valid(_blend_camera):
