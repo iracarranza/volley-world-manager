@@ -48,6 +48,7 @@ func _apply() -> void:
 	_detail_frustum(office, "DeskLampGlow", Vector3(0.82, 1.165, -1.765), 0.082, 0.115, 0.010, Color("e7c28f"), Vector3(0, 0, -6), true)
 
 	_place(office, "Journal", Vector3(1.23, 0.858, -1.45), Vector3(0.62, 0.050, 0.40), -4.0)
+	_set_material(office.find_child("Journal", true, false), Color("203f54"), 0.93)
 	_place(office, "JournalPageEdge", Vector3(1.23, 0.887, -1.265), Vector3(0.57, 0.011, 0.028), -4.0)
 	_place(office, "TrainingClipboard", Vector3(0.70, 0.862, -1.38), Vector3(0.43, 0.030, 0.39), 7.0)
 	_place(office, "ClipboardClip", Vector3(0.67, 0.887, -1.53), Vector3(0.12, 0.030, 0.050), 7.0)
@@ -62,7 +63,8 @@ func _apply() -> void:
 	# Housing rises to the historical back-left layer and narrows so it remains legible.
 	_place(office, "HousingFolder", Vector3(0.46, 0.835, -1.69), Vector3(0.31, 0.026, 0.24), -5.0)
 	_set_material(office.find_child("HousingFolder", true, false), Color("344b3e"), 0.94)
-	_place(office, "MealPad", Vector3(1.20, 0.837, -1.16), Vector3(0.30, 0.020, 0.19), 8.0)
+	# Keep the foreground meal sheet wholly inside the physical desk lip.
+	_place(office, "MealPad", Vector3(1.20, 0.837, -1.205), Vector3(0.28, 0.020, 0.18), 8.0)
 
 	var mug := office.find_child("Mug", true, false) as Node3D
 	if mug != null:
@@ -70,6 +72,10 @@ func _apply() -> void:
 		mug.scale = Vector3(1.0, 1.0, 1.0)
 		_set_material(mug, Color("61706a"), 0.90)
 	_detail_frustum(office, "MugCoffee", Vector3(1.51, 0.981, -1.43), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
+	# Low-poly squared handle: visible silhouette without intersecting the journal.
+	_detail_box(office, "MugHandleTop", Vector3(1.568, 0.955, -1.43), Vector3(0.045, 0.012, 0.012), Color("61706a"), 0.0)
+	_detail_box(office, "MugHandleSide", Vector3(1.590, 0.925, -1.43), Vector3(0.012, 0.070, 0.012), Color("61706a"), 0.0)
+	_detail_box(office, "MugHandleBottom", Vector3(1.568, 0.895, -1.43), Vector3(0.045, 0.012, 0.012), Color("61706a"), 0.0)
 
 	var book_positions := [Vector3(0.34, 0.84, -1.70), Vector3(0.54, 0.84, -1.71), Vector3(0.57, 0.882, -1.70), Vector3(0.60, 0.920, -1.69)]
 	var book_sizes := [Vector3(0.20, 0.042, 0.14), Vector3(0.25, 0.048, 0.16), Vector3(0.21, 0.048, 0.13), Vector3(0.18, 0.042, 0.12)]
@@ -101,6 +107,12 @@ func _add_working_details(office: Node3D) -> void:
 	for i in 4:
 		_detail_box(office, "ScoutingSlip%02d" % i, slip_positions[i], Vector3(0.13, 0.008, 0.075), Color("aaa69c"), 10.0)
 		_detail_frustum(office, "ScoutingPin%02d" % i, slip_positions[i] + Vector3(-0.045, 0.008, -0.020), 0.010, 0.010, 0.006, Color("713f3d") if i % 2 == 0 else Color("4c755b"), Vector3.ZERO, false)
+	# Phone keypad and answering-machine speaker restore recognizable electronics.
+	for row in 3:
+		for col in 3:
+			_detail_box(office, "PhoneKey%d%d" % [row, col], Vector3(1.645 + float(col) * 0.035, 0.953, -1.575 + float(row) * 0.027), Vector3(0.018, 0.006, 0.014), Color("777f83"), -5.0)
+	for i in 4:
+		_detail_box(office, "MachineSpeaker%02d" % i, Vector3(1.68 + float(i) * 0.028, 0.936, -1.34), Vector3(0.014, 0.006, 0.055), Color("161a1e"), 4.0)
 
 func _detail_box(parent: Node3D, name_: String, pos: Vector3, size: Vector3, color: Color, yaw: float) -> void:
 	_detail_box_rot(parent, name_, pos, size, color, Vector3(0, yaw, 0))
