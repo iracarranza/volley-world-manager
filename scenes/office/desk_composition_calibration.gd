@@ -19,14 +19,16 @@ func _apply() -> void:
 	_set_material(office.find_child("DeskTop", true, false), Color("3a2923"), 0.88)
 	_set_material(office.find_child("DeskWall", true, false), Color("302e2e"), 0.97)
 
-	# Wall registration locked after iteration 8.
+	# Window registration is frozen. Calendar gets one evidence-based width/position correction.
 	_place(office, "WindowGlass", Vector3(0.62, 1.58, -1.936), Vector3(0.95, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
 	_move_named(office, ["WindowGlass", "WindowTop", "WindowBottom", "WindowLeft", "WindowRight", "WindowMullionV", "WindowMullionH"], Vector3(0.27, -0.08, 0.0), true)
-	var delta := Vector3(-0.18, -0.30, 0.0)
+	var delta := Vector3(-0.02, -0.38, 0.0)
 	_move_named(office, ["CalendarBacking", "CalendarHeader", "CalendarMark"], delta, false)
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
+	_scale_named(office, ["CalendarBacking", "CalendarHeader"], Vector3(1.42, 1.0, 1.0))
+	for i in 6: _scale_named(office, ["CalendarRow%02d" % i], Vector3(1.42, 1.0, 1.0))
 	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
 	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
 	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
@@ -60,10 +62,8 @@ func _apply() -> void:
 	var machine_light := office.find_child("MachineLight", true, false) as Node3D
 	if machine_light != null: machine_light.position = Vector3(1.58, 0.93, -1.28)
 
-	# Housing rises to the historical back-left layer and narrows so it remains legible.
 	_place(office, "HousingFolder", Vector3(0.46, 0.835, -1.69), Vector3(0.31, 0.026, 0.24), -5.0)
 	_set_material(office.find_child("HousingFolder", true, false), Color("344b3e"), 0.94)
-	# Keep the foreground meal sheet wholly inside the physical desk lip.
 	_place(office, "MealPad", Vector3(1.20, 0.837, -1.205), Vector3(0.28, 0.020, 0.18), 8.0)
 
 	var mug := office.find_child("Mug", true, false) as Node3D
@@ -72,7 +72,6 @@ func _apply() -> void:
 		mug.scale = Vector3(1.0, 1.0, 1.0)
 		_set_material(mug, Color("61706a"), 0.90)
 	_detail_frustum(office, "MugCoffee", Vector3(1.51, 0.981, -1.43), 0.047, 0.047, 0.006, Color("4b2d1d"), Vector3.ZERO, false)
-	# Low-poly squared handle: visible silhouette without intersecting the journal.
 	_detail_box(office, "MugHandleTop", Vector3(1.568, 0.955, -1.43), Vector3(0.045, 0.012, 0.012), Color("61706a"), 0.0)
 	_detail_box(office, "MugHandleSide", Vector3(1.590, 0.925, -1.43), Vector3(0.012, 0.070, 0.012), Color("61706a"), 0.0)
 	_detail_box(office, "MugHandleBottom", Vector3(1.568, 0.895, -1.43), Vector3(0.045, 0.012, 0.012), Color("61706a"), 0.0)
@@ -107,7 +106,6 @@ func _add_working_details(office: Node3D) -> void:
 	for i in 4:
 		_detail_box(office, "ScoutingSlip%02d" % i, slip_positions[i], Vector3(0.13, 0.008, 0.075), Color("aaa69c"), 10.0)
 		_detail_frustum(office, "ScoutingPin%02d" % i, slip_positions[i] + Vector3(-0.045, 0.008, -0.020), 0.010, 0.010, 0.006, Color("713f3d") if i % 2 == 0 else Color("4c755b"), Vector3.ZERO, false)
-	# Phone keypad and answering-machine speaker restore recognizable electronics.
 	for row in 3:
 		for col in 3:
 			_detail_box(office, "PhoneKey%d%d" % [row, col], Vector3(1.645 + float(col) * 0.035, 0.953, -1.575 + float(row) * 0.027), Vector3(0.018, 0.006, 0.014), Color("777f83"), -5.0)
