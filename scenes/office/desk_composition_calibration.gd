@@ -15,6 +15,10 @@ func _apply() -> void:
 	desk_camera.fov = 53.5
 	desk_camera.look_at(Vector3(1.05, 0.84, -1.53), Vector3.UP)
 
+	# Canonical dark-room palette: the historical Desk is brown/charcoal rather than orange.
+	_set_material(office.find_child("DeskTop", true, false), Color("3a2923"), 0.88)
+	_set_material(office.find_child("DeskWall", true, false), Color("302e2e"), 0.97)
+
 	# Wall registration locked after iteration 8.
 	_place(office, "WindowGlass", Vector3(0.62, 1.58, -1.936), Vector3(0.95, 0.88, 0.025), 0.0)
 	_scale_named(office, ["WindowTop", "WindowBottom", "WindowMullionH"], Vector3(0.92, 1.0, 1.0))
@@ -24,12 +28,11 @@ func _apply() -> void:
 	for i in 6: _move_named(office, ["CalendarRow%02d" % i], delta, false)
 	for i in 5: _move_named(office, ["CalendarCol%02d" % i], delta, false)
 	_set_material(office.find_child("CalendarBacking", true, false), Color("4d4a43"), 0.96)
-	_set_material(office.find_child("CalendarHeader", true, false), Color("262722a"), 0.94)
+	_set_material(office.find_child("CalendarHeader", true, false), Color("26272a"), 0.94)
 	for i in 6: _set_material(office.find_child("CalendarRow%02d" % i, true, false), Color("777269"), 0.96)
 	for i in 5: _set_material(office.find_child("CalendarCol%02d" % i, true, false), Color("777269"), 0.96)
 
-	# Articulated lamp: base and upright stay on the right; arm reaches left to a
-	# low-poly shade, matching the historical silhouette without intersecting books.
+	# Articulated lamp proportions tightened to historical silhouette.
 	var lamp_base := office.find_child("LampBase", true, false) as Node3D
 	var lamp_stem := office.find_child("LampStem", true, false) as Node3D
 	var lamp_shade := office.find_child("LampShade", true, false) as Node3D
@@ -39,10 +42,10 @@ func _apply() -> void:
 	if lamp_stem != null: lamp_stem.visible = false
 	if lamp_shade != null: lamp_shade.visible = false
 	_detail_box_rot(office, "DeskLampUpright", Vector3(1.02, 1.15, -1.78), Vector3(0.035, 0.45, 0.035), Color("343b42"), Vector3.ZERO)
-	_detail_frustum(office, "DeskLampJoint", Vector3(1.02, 1.36, -1.78), 0.045, 0.045, 0.035, Color("343b42"), Vector3(90, 0, 0), false)
-	_detail_box_rot(office, "DeskLampArm", Vector3(0.86, 1.39, -1.78), Vector3(0.34, 0.032, 0.032), Color("343b42"), Vector3(0, 0, -11))
-	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(0.69, 1.34, -1.77), 0.10, 0.19, 0.17, Color("20252b"), Vector3(0, 0, -8), false)
-	_detail_frustum(office, "DeskLampGlow", Vector3(0.69, 1.255, -1.765), 0.105, 0.135, 0.012, Color("f3c78c"), Vector3(0, 0, -8), true)
+	_detail_frustum(office, "DeskLampJoint", Vector3(1.02, 1.36, -1.78), 0.040, 0.040, 0.032, Color("343b42"), Vector3(90, 0, 0), false)
+	_detail_box_rot(office, "DeskLampArm", Vector3(0.92, 1.33, -1.78), Vector3(0.24, 0.030, 0.030), Color("343b42"), Vector3(0, 0, -10))
+	_detail_frustum(office, "DeskLampShadeDetailed", Vector3(0.82, 1.24, -1.77), 0.08, 0.15, 0.15, Color("20252b"), Vector3(0, 0, -6), false)
+	_detail_frustum(office, "DeskLampGlow", Vector3(0.82, 1.165, -1.765), 0.082, 0.115, 0.010, Color("e7c28f"), Vector3(0, 0, -6), true)
 
 	_place(office, "Journal", Vector3(1.23, 0.858, -1.45), Vector3(0.62, 0.050, 0.40), -4.0)
 	_place(office, "JournalPageEdge", Vector3(1.23, 0.887, -1.265), Vector3(0.57, 0.011, 0.028), -4.0)
@@ -56,12 +59,11 @@ func _apply() -> void:
 	var machine_light := office.find_child("MachineLight", true, false) as Node3D
 	if machine_light != null: machine_light.position = Vector3(1.58, 0.93, -1.28)
 
-	_place(office, "HousingFolder", Vector3(0.47, 0.835, -1.60), Vector3(0.40, 0.026, 0.24), -5.0)
+	# Housing rises to the historical back-left layer and narrows so it remains legible.
+	_place(office, "HousingFolder", Vector3(0.46, 0.835, -1.69), Vector3(0.31, 0.026, 0.24), -5.0)
 	_set_material(office.find_child("HousingFolder", true, false), Color("344b3e"), 0.94)
-	# Pull lower-right sheet fully onto the physical desk while preserving foreground read.
 	_place(office, "MealPad", Vector3(1.20, 0.837, -1.16), Vector3(0.30, 0.020, 0.19), 8.0)
 
-	# Mug sits beside, not on, the Journal.
 	var mug := office.find_child("Mug", true, false) as Node3D
 	if mug != null:
 		mug.position = Vector3(1.51, 0.92, -1.43)
@@ -122,7 +124,7 @@ func _new_material(color: Color, roughness: float, emissive: bool) -> StandardMa
 	if emissive:
 		m.emission_enabled = true
 		m.emission = color
-		m.emission_energy_multiplier = 1.6
+		m.emission_energy_multiplier = 1.35
 	return m
 
 func _set_material(node: Node, color: Color, roughness: float) -> void:
