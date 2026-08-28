@@ -24,43 +24,44 @@ jobs:
           fetch-depth: 0
           ref: integration/reconcile-reception-authority
 
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Apply only unresolved dfd7574 hunks
+      - name: Build semantic patch and apply what still matches
+        id: patch
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           git diff dfd7574f2128dec4cbe7badfb2447dd7e7c85a87^ dfd7574f2128dec4cbe7badfb2447dd7e7c85a87 -- \
             scripts/managers/game_manager.gd \
             scripts/simulation/rally_simulator.gd \
             tests/test_runner.gd > /tmp/reception-authority.patch
-          git apply --3way --index /tmp/reception-authority.patch
-          git diff --cached --check
+          git apply --reject --whitespace=nowarn /tmp/reception-authority.patch 2>&1 | tee /tmp/apply.log
+          code=${PIPESTATUS[0]}
+          mkdir -p /tmp/reconcile-diagnostics
+          cp /tmp/reception-authority.patch /tmp/reconcile-diagnostics/source.patch
+          cp /tmp/apply.log /tmp/reconcile-diagnostics/apply.log
+          git status --short > /tmp/reconcile-diagnostics/status.txt
+          git diff > /tmp/reconcile-diagnostics/applied.diff
+          find scripts tests -name '*.rej' -print | while read -r f; do
+            mkdir -p "/tmp/reconcile-diagnostics/$(dirname "$f")"
+            cp "$f" "/tmp/reconcile-diagnostics/$f"
+          done
+          echo "apply_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload reconciliation diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: reception-reconciliation-diagnostics
+          path: /tmp/reconcile-diagnostics
+
+      - name: Stop after diagnostic reject pass
+        if: ${{ steps.patch.outputs.apply_code != '0' }}
+        run: exit 1
 
       - name: Import project
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path . --editor --quit
+        run: godot --headless --path . --editor --quit
 
       - name: Run focused reception authority probe
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path . --script tools/run_serve_reception_authority_probe.gd
+        run: godot --headless --path . --script tools/run_serve_reception_authority_probe.gd
 
       - name: Run full suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path . --script tests/test_runner.gd
-
-      - name: Commit reconciled production changes
-        shell: bash
-        run: |
-          set -euo pipefail
-          git commit -m "Reconcile reception authority onto current main [reconciled]"
-          git push origin HEAD:integration/reconcile-reception-authority
+        run: godot --headless --path . --script tests/test_runner.gd
