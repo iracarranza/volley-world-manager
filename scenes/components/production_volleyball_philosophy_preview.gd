@@ -1,0 +1,96 @@
+class_name ProductionVolleyballPhilosophyPreview
+extends VolleyballPhilosophyPreview
+
+const MATCH_SCREEN_SCENE := preload("res://scenes/screens/match_screen.tscn")
+const VIGNETTE_FACTORY := preload(
+	"res://scripts/simulation/volleyball_vignette_rally_factory.gd"
+)
+
+var _match_screen: MatchScreen = null
+var _production_ready := false
+var _production_result: Resource = null
+var _production_vignette := ""
+var _replay_wait := 0.0
+var _queued_vignette := "good_ball_read"
+
+
+func _ready() -> void:
+	await super._ready()
+	## The old authored court remains the temporary Q2-Q6 renderer. Q1 gets an
+	## actual MatchScreen, stripped only of its chrome; its RallyResult,
+	## MatchCourt3D, movement plans, poses and BallActor3D are production.
+	_court.visible = false
+	_match_screen = MATCH_SCREEN_SCENE.instantiate() as MatchScreen
+	_viewport.add_child(_match_screen)
+	_match_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var inner_viewport := _match_screen.get_node_or_null(
+		"SubViewportContainer/SubViewport"
+	) as SubViewport
+	if inner_viewport != null:
+		inner_viewport.size = Vector2i(760, 300)
+	var hud := _match_screen.get_node_or_null("HUD") as Control
+	if hud != null:
+		hud.visible = false
+	var top := _match_screen.get_node_or_null("VignetteTop") as CanvasItem
+	if top != null:
+		top.visible = false
+	var backdrop := _match_screen.get_node_or_null("Backdrop") as CanvasItem
+	if backdrop != null:
+		backdrop.visible = false
+	_match_screen.match_court_3d.camera_3d.position = Vector3(11.8, 8.5, 9.6)
+	_match_screen.match_court_3d.camera_3d.fov = 42.0
+	_match_screen.match_court_3d.camera_3d.look_at(
+		Vector3(-0.4, 0.75, 0.8), Vector3.UP
+	)
+	_production_ready = true
+	set_vignette(_queued_vignette)
+
+
+func set_vignette(vignette_id: String) -> void:
+	_queued_vignette = vignette_id
+	if not _production_ready:
+		return
+	if vignette_id.begins_with("good_ball_"):
+		_court.visible = false
+		_match_screen.visible = true
+		var mode := vignette_id.trim_prefix("good_ball_")
+		if mode != _production_vignette or _production_result == null:
+			_production_vignette = mode
+			_production_result = VIGNETTE_FACTORY.q1(mode)
+		_replay_wait = 0.0
+		_start_production_playback()
+		return
+	_match_screen.playback_generation += 1
+	_match_screen.visible = false
+	_court.visible = true
+	_production_vignette = ""
+	_production_result = null
+	super.set_vignette(vignette_id)
+
+
+func set_montage_vignettes(vignette_ids: Array[String]) -> void:
+	## Until Q2-Q6 move through the same resolver seam, keep the inherited montage
+	## rather than pretending the whole review is simulation-authoritative.
+	super.set_montage_vignettes(vignette_ids)
+
+
+func _process(delta: float) -> void:
+	if not _production_ready or not visible:
+		return
+	if _production_vignette.is_empty():
+		super._process(delta)
+		return
+	if _match_screen.playback_active:
+		return
+	_replay_wait += delta
+	if _replay_wait >= 0.65:
+		_replay_wait = 0.0
+		_start_production_playback()
+
+
+func _start_production_playback() -> void:
+	if _match_screen == null or _production_result == null:
+		return
+	if _match_screen.playback_active:
+		_match_screen.playback_generation += 1
+	_match_screen.load_and_play_rally(_production_result, 1.0)
