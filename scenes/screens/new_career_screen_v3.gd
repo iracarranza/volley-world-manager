@@ -183,7 +183,12 @@ func _render_volleyball_question() -> void:
 	question_hint.text = str(selected.consequence)
 	_volleyball_progress.text = "%d / %d" % [_volleyball_page_index + 1, VOLLEYBALL_PAGES.size()]
 	previous_button.text = "Previous" if _volleyball_page_index == 0 else "Previous question"
-	next_button.text = "Confirm choice"
+	## The player has just watched the answer happen. Keep the response in the
+	## conversational creation voice instead of exposing a form-submit verb.
+	if _volleyball_page_index < VOLLEYBALL_PAGES.size() - 1:
+		next_button.text = "That looks good."
+	else:
+		next_button.text = "Show me my volleyball."
 	_set_preview(str(selected.vignette))
 
 	for child in _volleyball_choice_row.get_children():
@@ -223,12 +228,13 @@ func _render_volleyball_review() -> void:
 	_volleyball_progress.text = "6 choices"
 	previous_button.text = "Previous question"
 	next_button.text = "Yup, that's my volleyball."
-	_set_preview("volleyball_montage")
 	for child in _volleyball_review.get_children():
 		child.free()
+	var montage_vignettes: Array[String] = []
 	for page in VOLLEYBALL_PAGES:
 		var key := str(page.key)
 		var selected_index := clampi(int(volleyball_answers.get(key, 1)), 0, 2)
+		montage_vignettes.append(str(page.choices[selected_index].vignette))
 		var key_label := Label.new()
 		key_label.text = _volleyball_summary_label(key)
 		key_label.add_theme_font_size_override("font_size", 12)
@@ -237,6 +243,9 @@ func _render_volleyball_review() -> void:
 		value_label.text = str(page.choices[selected_index].label)
 		value_label.add_theme_font_size_override("font_size", 15)
 		_volleyball_review.add_child(value_label)
+	if _volleyball_preview != null:
+		_volleyball_preview.set_montage_vignettes(montage_vignettes)
+	_set_preview("volleyball_montage")
 
 
 func _volleyball_summary_label(key: String) -> String:
