@@ -3268,6 +3268,18 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
 		fore_mesh.scale.y = arm_length_scale
 		fore_mesh.position.y = -fore_length * 0.5 * arm_length_scale
+		## **Cosmetics on a bone are part of that bone.** This scaled `Mesh`,
+		## `Elbow` and the forearm and stopped, so an Avi with a non-unit arm ratio
+		## grew a limb out from under its own wing -- the fans stayed the length
+		## they were authored while the arm they grow from did not. Only sibling
+		## cosmetics of the two arm bones are touched; everything else on the body
+		## is scaled by its own rule or by none.
+		for bone in [arm, elbow]:
+			for child in bone.get_children():
+				var fan := child as MeshInstance3D
+				if fan == null or not fan.has_meta("cosmetic"):
+					continue
+				fan.scale.y = arm_length_scale
 	identity_label.position.y = (
 		float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M)) + 0.26
 	) * body_height_scale
@@ -3489,6 +3501,13 @@ func _ink_node(node: Node) -> void:
 	## The shadow and the focus ring are marks on the floor, not parts of a body.
 	if mesh_instance == shadow or mesh_instance == focus_ring:
 		return
+	## **A part that is already a line does not get a line round it.** A whisker is
+	## four millimetres thick and the hull is thirty, so inking one produces a
+	## black rod eight times its own width -- the same failure the nose hit at a
+	## quarter of a muzzle, and the mouth hit seven times over. Where a cosmetic is
+	## drawn *as* the stroke, the stroke is the geometry.
+	if str(mesh_instance.get_meta("ink", "")) == "none":
+		return
 	var existing := mesh_instance.get_node_or_null("Ink") as MeshInstance3D
 	var twin := existing if existing != null else MeshInstance3D.new()
 	if existing == null:
@@ -3500,8 +3519,17 @@ func _ink_node(node: Node) -> void:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.cull_mode = BaseMaterial3D.CULL_FRONT
 	material.grow = true
-	material.grow_amount = ink_metres \
-		if str(mesh_instance.name) in INK_BODY_PARTS else crown_ink_metres
+	## **Name first, then an explicit exception.** The name rule is right by
+	## default and the comment above says why: the body is a closed set and the
+	## cosmetics are not, so an unlisted part should take the heavier crown line
+	## unasked. It is wrong for exactly one thing so far -- the Avi wing fans,
+	## which are the largest cosmetic in the game rather than the smallest, and
+	## which read as separate objects precisely because a 30 mm contour announced
+	## them as such. An opt-in meta keeps the default and admits the exception.
+	var heavy := str(mesh_instance.name) not in INK_BODY_PARTS
+	if mesh_instance.has_meta("ink"):
+		heavy = str(mesh_instance.get_meta("ink")) != "body"
+	material.grow_amount = crown_ink_metres if heavy else ink_metres
 	twin.material_override = material
 
 
@@ -3559,6 +3587,11 @@ func _build_cosmetics() -> void:
 			instance.set_meta("color_key", str(part.get("color", "skin")))
 		if part.has("alpha"):
 			instance.set_meta("alpha", float(part.alpha))
+		## Which pen this cosmetic is drawn with, when the default is wrong for it.
+		## Absent means the name rule in `_ink_node` decides, which is what keeps
+		## a new ear or tail on the crown weight without anybody remembering.
+		if part.has("ink"):
+			instance.set_meta("ink", str(part.ink))
 		parent.add_child(instance)
 
 
@@ -3601,6 +3634,8 @@ func _build_face() -> void:
 		instance.position = part.get("position", Vector3.ZERO)
 		instance.rotation_degrees = part.get("rotation", Vector3.ZERO)
 		instance.set_meta("face", true)
+		if part.has("ink"):
+			instance.set_meta("ink", str(part.ink))
 		face.add_child(instance)
 
 
@@ -3638,6 +3673,27 @@ func _mouth_override() -> Dictionary:
 					"radius": part_radius,
 					"half_height": float(part.get("height", part_radius * 2.0)) * 0.5,
 					"scale": clampf(part_radius / maxf(head_radius, 0.001), 0.2, 1.0),
+					## **A wedge's front is a plane, so the mouth stops wrapping.**
+					## `FaceExpressions` projects onto an ellipsoid, which is right
+					## for a sphere muzzle and wrong for a snout with a flat pad:
+					## the stroke would bow away from a face that does not curve.
+					## The pad's own half-extents and its depth are published here
+					## so the seating is read off the muzzle rather than assumed.
+					"flat": str(part.get("shape", "sphere")) == "wedge",
+					"taper_width": clampf(
+						float(part.get("taper_width", 1.0)), 0.05, 1.0
+					),
+					"taper_height": clampf(
+						float(part.get("taper_height", 1.0)), 0.05, 1.0
+					),
+					"reach": float(part.get(
+						"depth", part_radius * 2.0
+					)) * 0.5,
+					## Read off the body spec rather than inferred from having a
+					## muzzle: a bear and a monkey have snouts and do not read as
+					## whiskered, so this is a per-type statement and not a
+					## consequence of geometry.
+					"whiskers": bool(silhouette.get("whiskers", false)),
 				}
 			"Beak":
 				return {"omit": true}

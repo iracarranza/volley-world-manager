@@ -3725,6 +3725,20 @@ ink for the bake only, which is one constant. Render both before choosing --
 guessing between two plausible causes is what this session has repeatedly had to
 undo.
 
+**A third source was found since, and it was the face.** The mouth was seven
+`BoxMesh` segments, so `_ink_node` gave it **seven independent 30 mm hulls**
+overlapping each other across a stroke a few millimetres thick -- exactly the
+"two outlines at slightly different offsets" failure this entry describes, six
+times over, on the smallest feature of the body. It has been repaired for its own
+reasons (see `docs/review/VOLI_MUZZLE_AND_WING.md`): the mouth is now one swept
+mesh with one outline, and a face went from 14 mesh instances to 2.
+
+That does **not** close the entry -- the die cut and the twelve-step quantiser
+are untouched and are still the two causes above. But it does mean the next
+render of this problem is looking at a cleaner face than the one that motivated
+it, so re-measure before choosing between the two candidates rather than carrying
+the old observation forward.
+
 ## Die cut versus thicker ink: settled, the cut stays and gains a keyline
 
 **Decided: the die cut, plus a thinner dark line around it.** What follows is the
