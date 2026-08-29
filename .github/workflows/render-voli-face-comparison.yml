@@ -9,6 +9,7 @@ on:
       - 'tools/render_voli_expression_pass2.gd'
       - 'tools/render_voli_expression_pass2_refined.gd'
       - 'tools/render_voli_body_design_passes.gd'
+      - 'tools/render_voli_body_redesign_pass2.gd'
       - 'scenes/components/player_actor_3d.gd'
       - 'scenes/components/player_actor_3d.tscn'
       - 'scripts/data/face_expressions.gd'
@@ -81,6 +82,15 @@ jobs:
             --script tools/render_voli_body_design_passes.gd
           ls -lh artifacts/voli-body-design-pass/
 
+      - name: Render integrated Voli body redesign pass
+        run: |
+          xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            --path . \
+            --rendering-method gl_compatibility \
+            --resolution 1920x1080 \
+            --script tools/render_voli_body_redesign_pass2.gd
+          ls -lh artifacts/voli-body-redesign-pass2/
+
       - name: Upload Voli face render packet
         uses: actions/upload-artifact@v4
         with:
@@ -90,5 +100,6 @@ jobs:
             artifacts/voli-expression-pass2/*.png
             artifacts/voli-expression-pass2-refined/*.png
             artifacts/voli-body-design-pass/*.png
+            artifacts/voli-body-redesign-pass2/*.png
           if-no-files-found: error
           retention-days: 14
