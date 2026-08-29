@@ -6,13 +6,13 @@ const VIGNETTE_FACTORY := preload(
 	"res://scripts/simulation/volleyball_vignette_rally_factory.gd"
 )
 
-## Character creation is a teaching surface, so preserve the production rally
-## clock/contacts while presenting the same action more legibly than the full
-## match camera. These are presentation-only exaggerations.
+## Preserve the readable Q1 presentation established in 2275b6e while letting
+## the real MatchScreen/RallyResult own movement, contacts and ball flight.
+## Character creation may exaggerate tactical evidence, but it should not alter
+## the production ball's physical presentation just to make it readable.
 const PREVIEW_CAMERA_POSITION := Vector3(9.1, 8.2, 8.9)
-const PREVIEW_CAMERA_TARGET := Vector3(-0.25, 0.80, 0.65)
+const PREVIEW_CAMERA_TARGET := Vector3(-0.25, 0.85, 1.15)
 const PREVIEW_CAMERA_FOV := 37.0
-const PREVIEW_BALL_SCALE := 1.90
 
 var _match_screen: MatchScreen = null
 var _production_ready := false
@@ -99,7 +99,7 @@ func _start_production_playback() -> void:
 		_match_screen.playback_generation += 1
 	_match_screen.load_and_play_rally(_production_result, 1.0)
 	## load_and_play_rally rebuilds/resets production presentation state. Restore
-	## only vignette framing and ball readability; never author ball coordinates.
+	## only the approved vignette framing and visibility; never author ball motion.
 	_apply_preview_presentation()
 
 
@@ -111,5 +111,7 @@ func _apply_preview_presentation() -> void:
 	court.camera_3d.fov = PREVIEW_CAMERA_FOV
 	court.camera_3d.look_at(PREVIEW_CAMERA_TARGET, Vector3.UP)
 	if court.ball_actor != null:
-		court.ball_actor.scale = Vector3.ONE * PREVIEW_BALL_SCALE
+		## 2275b6e's ball fix was visibility, not scale. Keep the production ball
+		## at its normal size and ensure reset_flight cannot leave it hidden.
+		court.ball_actor.scale = Vector3.ONE
 		court.ball_actor.visible = true
