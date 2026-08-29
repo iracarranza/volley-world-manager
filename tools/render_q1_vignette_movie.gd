@@ -1,8 +1,9 @@
 extends SceneTree
 
 ## Movie Maker harness for reviewing the actual 02 VOLLEYBALL Q1 preview in motion.
-## Q1 now plays a real resolved RallyResult through MatchScreen, so the capture
-## window is deliberately longer than the old authored 5.2-second puppet loop.
+## Q1 plays a real resolved RallyResult through MatchScreen. Rendering is also a
+## contract gate: a clip is not evidence if the selected deterministic rally did
+## not satisfy the approved Q1 cast/first-ball/back-row/wall conditions.
 
 const SIZE := Vector2i(1280, 720)
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
@@ -45,6 +46,20 @@ func _run() -> void:
 		"set_vignette",
 		["good_ball_quick", "good_ball_read", "good_ball_hitter"][int(CHOICES[mode])]
 	)
+	await process_frame
+
+	var resolved: Resource = preview.get("_production_result") as Resource
+	var score := int(resolved.get_meta("vignette_acceptance_score", -1)) \
+		if resolved != null else -1
+	if score < 100:
+		push_error(
+			"Q1 %s failed approved vignette contract: acceptance %d/100" % [mode, score]
+		)
+		quit(4)
+		return
+	print("Q1 %s movie contract accepted: %d/100, seed %d" % [
+		mode, score, int(resolved.get_meta("vignette_seed", -1)),
+	])
 
 	## Fixed-fps capture watches a complete production rally and the beginning of
 	## its deterministic replay. There is no independent preview clock to sync.
