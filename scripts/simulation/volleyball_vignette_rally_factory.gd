@@ -21,9 +21,9 @@ const H6_OPPOSITE := 4
 const A1_LEFT_FRONT := 104
 const A2_MIDDLE := 103
 const A3_RIGHT_FRONT := 102
-const A4_BACK := 105
+const A4_LEFT_BACK := 105
 const A5_MIDDLE_BACK := 106
-const A6_BACK := 101
+const A6_RIGHT_BACK := 101
 
 const BASE_SEED := 8300
 const SEED_SEARCH := 720
@@ -50,6 +50,12 @@ static func q1(mode: String) -> Resource:
 			false, false, fixture.principles,
 			"Q1 Home", {}, 0.0, false, false,
 		)
+		## Threat availability and the pre-release information state are the two
+		## authored halves of the vignette contract. They are expressed as phase
+		## targets on the resolved rally, so MatchScreen still owns how far a body
+		## actually travels in the available physical window. Contacts, ball flight,
+		## block outcome, legality and continuation remain untouched.
+		_apply_script_phase_state(result, key)
 		var score := _q1_score(result, key, fixture.opponent_lineup)
 		if score > best_score:
 			best = result
@@ -80,7 +86,7 @@ static func _fixture(mode: String) -> Dictionary:
 	var opponent_lineup := _opponent_lineup()
 	opponent.rotations.clear()
 	opponent.rotations[1] = opponent_lineup
-	opponent.setter_id = A6_BACK
+	opponent.setter_id = A6_RIGHT_BACK
 	opponent.select_rotation(1)
 	opponent.tendencies["serve_target"] = "Short Middle"
 
@@ -130,14 +136,18 @@ static func _home_lineup() -> RotationLineup:
 static func _opponent_lineup() -> RotationLineup:
 	var lineup := RotationLineup.new()
 	lineup.rotation_number = 1
-	lineup.setter_id = A6_BACK
-	lineup.designated_setter_ids = [A6_BACK]
-	lineup.assign_slot(4, A1_LEFT_FRONT)
+	lineup.setter_id = A6_RIGHT_BACK
+	lineup.designated_setter_ids = [A6_RIGHT_BACK]
+	## CourtConstants mirrors Y but deliberately keeps global X. Because Away
+	## faces toward increasing Y, its volleyball left/right is the inverse of the
+	## Home side on screen. Put the named roles at their actual physical sides:
+	## A3 (right-front) is across H1, and A6 (right-back) is behind A3.
+	lineup.assign_slot(4, A3_RIGHT_FRONT)
 	lineup.assign_slot(3, A2_MIDDLE)
-	lineup.assign_slot(2, A3_RIGHT_FRONT)
-	lineup.assign_slot(5, A4_BACK)
+	lineup.assign_slot(2, A1_LEFT_FRONT)
+	lineup.assign_slot(5, A6_RIGHT_BACK)
 	lineup.assign_slot(6, A5_MIDDLE_BACK)
-	lineup.assign_slot(1, A6_BACK)
+	lineup.assign_slot(1, A4_LEFT_BACK)
 	return lineup
 
 
@@ -181,7 +191,9 @@ static func _tune_cast(players: Array[VolleyballPlayer], opponent: OpponentTeam)
 		middle.jump_reach = 90
 
 	## The opening is a genuinely good first ball, not a lucky ace/shank lottery.
-	var server := opponent.player_by_id(A6_BACK) as VolleyballPlayer
+	## The opponent serves from slot 1; after the physical left/right correction
+	## that is A4, not A6.
+	var server := opponent.player_by_id(A4_LEFT_BACK) as VolleyballPlayer
 	if server != null:
 		server.serve_power = 36
 		server.serve_accuracy = 95
@@ -200,7 +212,7 @@ static func _tune_cast(players: Array[VolleyballPlayer], opponent: OpponentTeam)
 		blocker.jump_reach = 74
 		blocker.anticipation = 80
 		blocker.tactical_discipline = 82
-	for defender_id in [A4_BACK, A5_MIDDLE_BACK, A6_BACK]:
+	for defender_id in [A4_LEFT_BACK, A5_MIDDLE_BACK, A6_RIGHT_BACK]:
 		var defender := opponent.player_by_id(defender_id) as VolleyballPlayer
 		if defender != null:
 			defender.anticipation = 82
@@ -243,25 +255,28 @@ static func _opponent_plan(
 	match mode:
 		"quick":
 			plan.block_strategy = "Read Block"
-			## Wings stay honest while middle-back steps into the fast central ball.
-			plan.set_defender_position(A4_BACK, Vector2(0.20, 0.85))
+			## A4/A6 hold their physical wings while middle-back takes the sharper
+			## central read. These coordinates are authored on the home-oriented
+			## defensive board and mirrored only in Y by the resolver.
+			plan.set_defender_position(A4_LEFT_BACK, Vector2(0.80, 0.85))
 			plan.set_defender_position(A5_MIDDLE_BACK, Vector2(0.50, 0.77))
-			plan.set_defender_position(A6_BACK, Vector2(0.80, 0.85))
+			plan.set_defender_position(A6_RIGHT_BACK, Vector2(0.20, 0.85))
 		"read":
 			plan.block_strategy = "Commit Middle"
 			## A subtle central squeeze follows the credible quick. When the set
 			## releases left, these are starting obligations, not teleports.
-			plan.set_defender_position(A4_BACK, Vector2(0.27, 0.82))
+			plan.set_defender_position(A4_LEFT_BACK, Vector2(0.73, 0.82))
 			plan.set_defender_position(A5_MIDDLE_BACK, Vector2(0.48, 0.78))
-			plan.set_defender_position(A6_BACK, Vector2(0.72, 0.82))
+			plan.set_defender_position(A6_RIGHT_BACK, Vector2(0.27, 0.82))
 		_:
 			plan.block_strategy = "Commit Pin"
 			plan.block_intent = "Seal"
-			## Coherent pin defense: line, deep middle, crosscourt. The resolver
-			## remains free to stop a body short if the flight does not buy the time.
-			plan.set_defender_position(A6_BACK, Vector2(0.18, 0.82))
+			## Coherent pin defense behind A3+A2: A6 shades the line, A5 owns deep
+			## middle, A4 holds crosscourt. The resolver remains free to stop a
+			## body short if the flight does not buy the time.
+			plan.set_defender_position(A6_RIGHT_BACK, Vector2(0.18, 0.82))
 			plan.set_defender_position(A5_MIDDLE_BACK, Vector2(0.50, 0.91))
-			plan.set_defender_position(A4_BACK, Vector2(0.80, 0.82))
+			plan.set_defender_position(A4_LEFT_BACK, Vector2(0.80, 0.82))
 	return plan
 
 
@@ -299,6 +314,79 @@ static func _assignment(
 	assignment.priority = priority
 	assignment.is_decoy = decoy
 	return assignment
+
+
+## Add only the authored state the design explicitly permits: which threats stay
+## credible before release, and what information the blockers have committed to
+## before H3 chooses. Movement between those targets is still paced by the real
+## MatchScreen plan; no ball/contact/outcome data is rewritten here.
+static func _apply_script_phase_state(result: Resource, mode: String) -> void:
+	if result == null:
+		return
+	var set_event := _first_event(result, RallyEventModel.EventType.SET, "home")
+	if set_event == null:
+		return
+	var home_targets: Dictionary = Dictionary(
+		set_event.metadata.get("home_phase_targets", {})
+	).duplicate(true)
+	var home_intents: Dictionary = Dictionary(
+		set_event.metadata.get("home_phase_intents", {})
+	).duplicate(true)
+	var selected := H2_MIDDLE if mode == "quick" else H1_OUTSIDE
+	var threat_targets := {
+		H1_OUTSIDE: Vector2(0.16, 0.61),
+		H2_MIDDLE: Vector2(0.43, 0.585),
+		## H4 releases forward-left and then becomes the first coverage layer.
+		H4_OUTSIDE: Vector2(0.27, 0.73),
+		## The passer does not become the setter; H5 steps into attack coverage.
+		H5_LIBERO: Vector2(0.48, 0.74),
+		## A real back-row threat stays behind the attack line while loading its
+		## runway. This is the authored "available threat"; legality/contact still
+		## belong to the resolver if that player is ever actually selected.
+		H6_OPPOSITE: Vector2(0.66, 0.70),
+	}
+	for raw_id in threat_targets:
+		var player_id := int(raw_id)
+		if player_id == selected:
+			continue
+		home_targets[player_id] = threat_targets[raw_id]
+		home_intents[player_id] = {
+			"intent": &"credible_threat" if player_id in [H1_OUTSIDE, H2_MIDDLE, H6_OPPOSITE] \
+				else &"attack_coverage",
+			"scripted_vignette": true,
+		}
+	set_event.metadata["home_phase_targets"] = home_targets
+	set_event.metadata["home_phase_intents"] = home_intents
+
+	## The Read answer only works if the commitment exists before H3 releases.
+	## Quick keeps all three neutral; Hitter keeps a sound pin wall square. These
+	## are information-state targets, not the post-set wall the resolver computes.
+	var opponent_targets: Dictionary = Dictionary(
+		set_event.metadata.get("opponent_phase_targets", {})
+	).duplicate(true)
+	var opponent_intents: Dictionary = Dictionary(
+		set_event.metadata.get("opponent_phase_intents", {})
+	).duplicate(true)
+	var pre_release := {
+		A1_LEFT_FRONT: Vector2(0.80, 0.445),
+		A2_MIDDLE: Vector2(0.50, 0.445),
+		A3_RIGHT_FRONT: Vector2(0.20, 0.445),
+	}
+	if mode == "read":
+		## A2 consumes the quick; A3 compresses enough that the outside release
+		## asks both of them to repair. A1 stays honest on H6's side.
+		pre_release[A2_MIDDLE] = Vector2(0.40, 0.445)
+		pre_release[A3_RIGHT_FRONT] = Vector2(0.27, 0.445)
+	for raw_id in pre_release:
+		var player_id := int(raw_id)
+		opponent_targets[player_id] = pre_release[raw_id]
+		opponent_intents[player_id] = {
+			"intent": &"pre_release_commit" if mode == "read" and player_id in [A2_MIDDLE, A3_RIGHT_FRONT] \
+				else &"hold_block_base",
+			"scripted_vignette": true,
+		}
+	set_event.metadata["opponent_phase_targets"] = opponent_targets
+	set_event.metadata["opponent_phase_intents"] = opponent_intents
 
 
 static func _home_player(
@@ -341,22 +429,28 @@ static func _q1_score(
 			or (mode != "quick" and str(attack.metadata.get("lane", "")) == "Left Pin"):
 		score += 15
 
-	## This is the non-negotiable back-row gate. Playback invents no movement;
-	## all three defenders must have positions published by the resolver on the
-	## same attack event that publishes the block.
+	## The Away back row is part of the vignette, not scenery. Require the actual
+	## resolver to publish an intention and a reached target for A4/A5/A6 on the
+	## same attack that publishes the wall. Then require the three targets to read
+	## as three distinct defensive jobs rather than a stack around the ball.
 	var targets: Dictionary = attack.metadata.get("opponent_phase_targets", {})
 	var intents: Dictionary = attack.metadata.get("opponent_phase_intents", {})
-	var back_ids := [
-		opponent_lineup.player_at_slot(5),
-		opponent_lineup.player_at_slot(6),
-		opponent_lineup.player_at_slot(1),
-	]
+	var back_ids := [A4_LEFT_BACK, A5_MIDDLE_BACK, A6_RIGHT_BACK]
 	var back_row_complete := true
 	for player_id in back_ids:
 		if not targets.has(player_id) or not intents.has(player_id):
 			back_row_complete = false
 	if back_row_complete:
-		score += 25
+		score += 10
+		var a4 := Vector2(targets[A4_LEFT_BACK])
+		var a5 := Vector2(targets[A5_MIDDLE_BACK])
+		var a6 := Vector2(targets[A6_RIGHT_BACK])
+		var distinct := a4.distance_to(a5) > 0.08 \
+			and a5.distance_to(a6) > 0.08 \
+			and a4.distance_to(a6) > 0.14
+		var named_sides := a4.x > a5.x and a6.x < a5.x
+		if distinct and named_sides:
+			score += 15
 
 	var wall_size := int(attack.metadata.get("wall_size", 0))
 	if mode == "quick":
