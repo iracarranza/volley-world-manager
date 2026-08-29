@@ -127,20 +127,47 @@ func _seed_opponent() -> void:
 	## first time a home attribute changed and nothing would say so; copying at
 	## construction cannot. When Port Azure becomes a club with a character of its
 	## own, that is a design act layered on top of this, not a return to blanks.
+	## Mirror roles, not prototype ids.
+	##
+	## The vertical-slice roster happens to be ordered S/OH/MB/OP/OH/L/MB at
+	## ids 1--7. Generated career rosters are ordered S/OH/OH/MB/MB/OP/L (and
+	## can carry additional depth), so copying ids 1--7 gave the opponent's
+	## nominal middle the second outside's reception attributes, its second
+	## outside a middle's, and its libero the opposite's. The receive selector
+	## then quite reasonably found that two of its three named passers could not
+	## pass, while `best_defender()` quite unreasonably appeared to be a middle.
+	## That is the exact 17-ace run preserved in the affected career save.
+	##
+	## A blueprint therefore names the source role and occurrence. Array order is
+	## stable for a generated roster and for the vertical slice, so the mirror is
+	## deterministic without assuming anything about player ids.
+	var sources_by_role := {}
+	for source_player in players:
+		if source_player == null:
+			continue
+		var source_role := str(source_player.position_role)
+		if not sources_by_role.has(source_role):
+			sources_by_role[source_role] = []
+		Array(sources_by_role[source_role]).append(source_player)
 	var opponent_blueprints := [
-		[101, "Ari", "Setter", "S", 1],
-		[102, "Vale", "Outside Hitter", "OH1", 2],
-		[103, "Oren", "Middle Blocker", "M1", 3],
-		[104, "Pax", "Opposite", "OP", 4],
-		[105, "Lio", "Outside Hitter", "OH2", 5],
-		[106, "Emi", "Libero", "L", 6],
-		[107, "Noa", "Middle Blocker", "M2", 7],
+		[101, "Ari", "Setter", "S", "Setter", 0, 1],
+		[102, "Vale", "Outside Hitter", "OH1", "Outside Hitter", 0, 2],
+		[103, "Oren", "Middle Blocker", "M1", "Middle Blocker", 0, 3],
+		[104, "Pax", "Opposite", "OP", "Opposite", 0, 4],
+		[105, "Lio", "Outside Hitter", "OH2", "Outside Hitter", 1, 5],
+		[106, "Emi", "Libero", "L", "Libero", 0, 6],
+		[107, "Noa", "Middle Blocker", "M2", "Middle Blocker", 1, 7],
 	]
 	var opponent_players: Array[Resource] = []
 	for blueprint in opponent_blueprints:
+		var role_sources: Array = sources_by_role.get(str(blueprint[4]), [])
+		var source_index := int(blueprint[5])
+		var source: VolleyballPlayer = role_sources[source_index] as VolleyballPlayer \
+			if source_index >= 0 and source_index < role_sources.size() \
+			else _player_by_id(int(blueprint[6]))
 		opponent_players.append(_mirror_player(
 			int(blueprint[0]), str(blueprint[1]), str(blueprint[2]),
-			str(blueprint[3]), _player_by_id(int(blueprint[4])),
+			str(blueprint[3]), source,
 		))
 	opponent_team.players = opponent_players
 	var opponent_base_ids: Array[int] = [101, 102, 103, 104, 105, 107]
@@ -962,13 +989,17 @@ func to_dict() -> Dictionary:
 
 
 func from_dict(data: Dictionary) -> void:
-	_seed_opponent()
 	players.clear()
 	for player_data in data.get("players", []):
 		var player := VolleyballPlayer.from_dict(player_data)
 		AttributeProfiles.assign_serve_style(player)
 		players.append(player)
 	team = TeamScript.from_dict(data.get("team", {}))
+	## The opponent is a role-for-role mirror of the managed roster. Seeding it
+	## before loading `players` mirrored whichever prototype happened to be in
+	## memory (normally the vertical slice), so a reloaded career silently faced
+	## a different physical team from the one it started against.
+	_seed_opponent()
 	if team.player_ids.is_empty():
 		for player in players:
 			team.player_ids.append(player.id)
