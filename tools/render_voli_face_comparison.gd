@@ -230,8 +230,14 @@ func _build_portrait_world(viewport: SubViewport, expression: String, variant: S
 	actor.identity_label.visible = false
 	_apply_face_variant(actor, variant)
 
+	## `global_position` is not reliable in the same frame a generated silhouette
+	## has just rewritten its local transforms. The first render proved that in the
+	## most useful possible way: the camera inherited the stale pre-propagation
+	## value and photographed the voli's feet. The head and BodyPivot locals are
+	## the authored truth at this point, and their sum is the portrait target.
+	var body_pivot := actor.get_node("BodyPivot") as Node3D
 	var head := actor.get_node("BodyPivot/Head") as Node3D
-	var target_y := head.global_position.y - 0.015
+	var target_y := body_pivot.position.y + head.position.y - 0.015
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.size = 0.62
