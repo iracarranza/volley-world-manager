@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cwaoqb62d8pjc" path="res://scenes/screens/new_career_screen.gd" id="1"]
 [ext_resource type="Script" uid="uid://bk18pfym1p674" path="res://scenes/components/ui_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Script" path="res://scenes/components/voli_turntable_input.gd" id="3_turntable"]
 
 [sub_resource type="StyleBoxFlat" id="RailPanel"]
 bg_color = Color(0.025, 0.06, 0.11, 0.96)
@@ -178,6 +179,9 @@ theme_override_styles/panel = SubResource("PreviewPanel")
 unique_name_in_owner = true
 layout_mode = 2
 stretch = true
+mouse_default_cursor_shape = 6
+script = ExtResource("3_turntable")
+disable_owner_process = true
 
 [node name="PreviewViewport" type="SubViewport" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep/PreviewFrame/VoliPreview"]
 unique_name_in_owner = true
