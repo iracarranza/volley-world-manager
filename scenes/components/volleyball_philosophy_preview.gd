@@ -43,18 +43,12 @@ func _ready() -> void:
 	_viewport.add_child(_court)
 	await get_tree().process_frame
 	_court.setup_players(HOME_BASE, AWAY_BASE)
-	## Names and focus rings are match affordances, not part of this teaching
-	## comparison. Removing them leaves the same bodies/kits/poses without twelve
-	## labels competing with the ball and block shape in a 300 px viewport.
 	for actor_value in _court.player_actors.values():
 		var actor := actor_value as PlayerActor3D
 		if actor == null:
 			continue
 		actor.identity_label.visible = false
 		actor.focus_ring.visible = false
-	## Keep the tactical angle but bring the court materially closer. The first
-	## pass devoted too much of the 300 px preview to empty arena floor, making
-	## block gaps and receiver movement technically present but visually tiny.
 	_court.camera_3d.position = Vector3(11.8, 10.5, 11.3)
 	_court.camera_3d.fov = 40.0
 	_court.camera_3d.look_at(Vector3(0.0, 0.6, 0.0), Vector3.UP)
@@ -84,6 +78,8 @@ func _process(delta: float) -> void:
 
 
 func _loop_seconds() -> float:
+	if _vignette_id.begins_with("good_ball_"):
+		return 5.8
 	if _vignette_id == "serve_aggressive":
 		return 5.0
 	if _vignette_id == "volleyball_montage":
@@ -131,6 +127,13 @@ func _reset_players() -> void:
 		_court.set_player_position(int(raw_id), HOME_BASE[raw_id])
 	for raw_id in AWAY_BASE:
 		_court.set_player_position(int(raw_id), AWAY_BASE[raw_id])
+	for actor_value in _court.player_actors.values():
+		var actor := actor_value as PlayerActor3D
+		if actor == null:
+			continue
+		actor.position.y = 0.0
+		actor.ready_stance = "defending"
+		actor.block_arms = &"two"
 
 
 func _ball(tactical: Vector2, height: float) -> void:
@@ -149,53 +152,166 @@ func _move(player_id: int, target: Vector2, t: float, begin: float, end: float) 
 	_court.set_player_position(player_id, base.lerp(target, fraction))
 
 
-## Q1. All three begin from the same good pass. The visible difference is what
-## creates the advantage: time, information, or a hitter solving a formed wall.
+## Piecewise path helper for authored choreography. Each frame starts from the
+## canonical base state; this reconstructs the player's entire route at time t
+## rather than accumulating arbitrary teleports between beats.
+func _path(player_id: int, points: Array, times: Array, t: float) -> void:
+	if points.is_empty() or points.size() != times.size():
+		return
+	if t <= float(times[0]):
+		_court.set_player_position(player_id, Vector2(points[0]))
+		return
+	for i in range(points.size() - 1):
+		var a_t := float(times[i])
+		var b_t := float(times[i + 1])
+		if t <= b_t:
+			var f := smoothstep(a_t, b_t, t)
+			_court.set_player_position(player_id, Vector2(points[i]).lerp(Vector2(points[i + 1]), f))
+			return
+	_court.set_player_position(player_id, Vector2(points[-1]))
+
+
+func _stance(player_id: int, stance: String) -> void:
+	var actor := _court.player_actors.get(player_id) as PlayerActor3D
+	if actor != null:
+		actor.ready_stance = stance
+
+
+func _jump(player_id: int, t: float, begin: float, end: float, height: float) -> void:
+	if t < begin or t > end:
+		return
+	var actor := _court.player_actors.get(player_id) as PlayerActor3D
+	if actor == null:
+		return
+	var phase := clampf((t - begin) / maxf(end - begin, 0.001), 0.0, 1.0)
+	actor.position.y = sin(phase * PI) * height
+
+
+func _q1_shared_opening(t: float) -> void:
+	## H5 owns the clean reception. H3 is the setter. H1/H2/H6 release as three
+	## real threats while H4 and H5 begin the coverage transition. Away starts
+	## from the same neutral read-block and floor-defense picture in every clip.
+	var receive := Vector2(0.50, 0.82)
+	var setter := Vector2(0.66, 0.57)
+	_path(5, [HOME_BASE[5], receive, Vector2(0.48, 0.74)], [0.00, 0.06, 0.18], t)
+	_path(3, [HOME_BASE[3], setter], [0.00, 0.10], t)
+	_path(4, [HOME_BASE[4], Vector2(0.19, 0.76), Vector2(0.28, 0.70)], [0.00, 0.12, 0.24], t)
+	_path(1, [HOME_BASE[1], Vector2(0.12, 0.61), Vector2(0.18, 0.54)], [0.00, 0.10, 0.23], t)
+	_path(2, [HOME_BASE[2], Vector2(0.48, 0.54)], [0.00, 0.16], t)
+	_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.76, 0.69)], [0.00, 0.15, 0.28], t)
+	for id in [101, 102, 103]:
+		_stance(id, "blocking")
+	for id in [104, 105, 106]:
+		_stance(id, "defending")
+	if t <= 0.11:
+		_arc(receive, setter, t / 0.11, 1.9)
+
+
+## Q1. These are three choreographed answers to the same good-ball problem.
+## Quick spends the pass on time; Read preserves the decision until the block
+## declares; Hitters accepts a formed wall and asks the attacker to solve it.
 func _good_ball(t: float, mode: String) -> void:
-	var receive := Vector2(0.22, 0.80)
-	var setter := Vector2(0.52, 0.62)
-	_move(5, setter, t, 0.0, 0.18)
-	if t < 0.20:
-		_arc(receive, setter, t / 0.20, 1.8)
+	var setter := Vector2(0.66, 0.57)
+	_q1_shared_opening(t)
+	if t <= 0.11:
 		return
 
 	if mode == "quick":
-		## Middle is already available; the block starts moving only after the set.
-		_move(2, Vector2(0.50, 0.53), t, 0.12, 0.30)
-		_move(102, Vector2(0.48, 0.45), t, 0.34, 0.54)
-		_move(103, Vector2(0.60, 0.45), t, 0.40, 0.60)
-		if t < 0.39:
-			_arc(setter, Vector2(0.50, 0.54), (t - 0.20) / 0.19, 1.7)
+		## H2 goes first. H1 and H6 stay credible, but A2 is still travelling when
+		## the quick is already in the hitter's window; A3 cannot complete the wall.
+		_path(2, [HOME_BASE[2], Vector2(0.48, 0.54), Vector2(0.50, 0.515)], [0.00, 0.16, 0.25], t)
+		_path(1, [HOME_BASE[1], Vector2(0.12, 0.61), Vector2(0.18, 0.54), Vector2(0.22, 0.56)], [0.00, 0.10, 0.25, 0.52], t)
+		_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.72, 0.66)], [0.00, 0.15, 0.31], t)
+		_path(102, [AWAY_BASE[102], Vector2(0.47, 0.445)], [0.00, 0.30], t)
+		_path(103, [AWAY_BASE[103], Vector2(0.66, 0.445)], [0.00, 0.38], t)
+		_path(104, [AWAY_BASE[104], Vector2(0.25, 0.20)], [0.00, 0.48], t)
+		_path(105, [AWAY_BASE[105], Vector2(0.50, 0.20)], [0.00, 0.48], t)
+		_path(106, [AWAY_BASE[106], Vector2(0.71, 0.21)], [0.00, 0.48], t)
+		_stance(102, "blocking")
+		_stance(103, "blocking")
+		if t < 0.23:
+			_arc(setter, Vector2(0.50, 0.515), (t - 0.11) / 0.12, 1.6)
+		elif t < 0.34:
+			_jump(2, t, 0.18, 0.34, 0.72)
+			_jump(102, t, 0.23, 0.39, 0.58)
+			_arc(Vector2(0.50, 0.515), Vector2(0.48, 0.28), (t - 0.23) / 0.11, 1.85)
+		elif t < 0.52:
+			_jump(102, t, 0.23, 0.39, 0.58)
+			_jump(103, t, 0.33, 0.49, 0.48)
+			_arc(Vector2(0.48, 0.28), Vector2(0.49, 0.17), (t - 0.34) / 0.18, 0.8)
 		else:
-			_arc(Vector2(0.50, 0.54), Vector2(0.50, 0.19), (t - 0.39) / 0.39, 2.0)
+			## Coverage closes around the landing while Away finishes the late close.
+			_path(3, [HOME_BASE[3], setter, Vector2(0.60, 0.63)], [0.00, 0.10, 0.62], t)
+			_path(4, [HOME_BASE[4], Vector2(0.19, 0.76), Vector2(0.34, 0.68)], [0.00, 0.12, 0.62], t)
+			_path(5, [HOME_BASE[5], Vector2(0.50, 0.82), Vector2(0.48, 0.68)], [0.00, 0.06, 0.62], t)
+			_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.68, 0.69)], [0.00, 0.15, 0.62], t)
+			_ball(Vector2(0.49, 0.17), 0.35)
 		return
 
 	if mode == "read":
-		## Keep three threats credible while the away wall declares itself on the
-		## left. Only then does the setter release to the opposite pin.
-		_move(1, Vector2(0.22, 0.53), t, 0.12, 0.30)
-		_move(2, Vector2(0.50, 0.53), t, 0.12, 0.30)
-		_move(3, Vector2(0.80, 0.53), t, 0.12, 0.30)
-		_move(101, Vector2(0.20, 0.45), t, 0.22, 0.42)
-		_move(102, Vector2(0.28, 0.45), t, 0.22, 0.42)
-		if t < 0.42:
-			_ball(setter, 1.05)
-		elif t < 0.62:
-			_arc(setter, Vector2(0.80, 0.54), (t - 0.42) / 0.20, 2.3)
+		## The same three Home threats remain live. H2's quick forces A2 inward;
+		## A3 compresses to stay connected. Only after that information exists does
+		## H3 release to H1, leaving A2 in a realistic late-repair race.
+		_path(1, [HOME_BASE[1], Vector2(0.12, 0.61), Vector2(0.18, 0.535)], [0.00, 0.10, 0.31], t)
+		_path(2, [HOME_BASE[2], Vector2(0.48, 0.535), Vector2(0.46, 0.515)], [0.00, 0.18, 0.31], t)
+		_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.72, 0.66)], [0.00, 0.16, 0.35], t)
+		_path(102, [AWAY_BASE[102], Vector2(0.43, 0.445), Vector2(0.34, 0.445), Vector2(0.28, 0.445)], [0.00, 0.20, 0.31, 0.38], t)
+		_path(103, [AWAY_BASE[103], Vector2(0.70, 0.445), Vector2(0.58, 0.445), Vector2(0.33, 0.445)], [0.00, 0.24, 0.34, 0.58], t)
+		_path(104, [AWAY_BASE[104], Vector2(0.28, 0.20), Vector2(0.20, 0.22)], [0.00, 0.32, 0.64], t)
+		_path(105, [AWAY_BASE[105], Vector2(0.46, 0.20), Vector2(0.40, 0.22)], [0.00, 0.32, 0.64], t)
+		_path(106, [AWAY_BASE[106], Vector2(0.72, 0.21)], [0.00, 0.55], t)
+		if t < 0.31:
+			## The setter is deliberately quiet: ball held in the setting window while
+			## the block makes the first irreversible choice.
+			_ball(setter, 1.12)
+		elif t < 0.47:
+			_jump(2, t, 0.27, 0.43, 0.62)
+			_jump(102, t, 0.27, 0.44, 0.54)
+			_arc(setter, Vector2(0.18, 0.535), (t - 0.31) / 0.16, 2.45)
+		elif t < 0.66:
+			_jump(1, t, 0.45, 0.64, 0.76)
+			_jump(103, t, 0.48, 0.67, 0.62)
+			_jump(102, t, 0.55, 0.72, 0.46)
+			## H1 attacks the interior seam produced by A2's late repair.
+			_arc(Vector2(0.18, 0.535), Vector2(0.34, 0.20), (t - 0.47) / 0.19, 2.15)
 		else:
-			_arc(Vector2(0.80, 0.54), Vector2(0.72, 0.18), (t - 0.62) / 0.30, 2.1)
+			_path(3, [HOME_BASE[3], setter, Vector2(0.54, 0.64)], [0.00, 0.10, 0.74], t)
+			_path(4, [HOME_BASE[4], Vector2(0.19, 0.76), Vector2(0.26, 0.68)], [0.00, 0.12, 0.74], t)
+			_path(5, [HOME_BASE[5], Vector2(0.50, 0.82), Vector2(0.42, 0.69)], [0.00, 0.06, 0.74], t)
+			_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.64, 0.70)], [0.00, 0.16, 0.74], t)
+			_ball(Vector2(0.34, 0.20), 0.32)
 		return
 
-	## Trust hitters: the defense has done its job and formed a beatable double.
-	## Nothing vacates the target for free; the pin attack succeeds through a
-	## contest rather than because the preview made the defense wrong.
-	_move(1, Vector2(0.18, 0.53), t, 0.14, 0.34)
-	_move(101, Vector2(0.15, 0.45), t, 0.24, 0.46)
-	_move(102, Vector2(0.25, 0.45), t, 0.24, 0.46)
-	if t < 0.49:
-		_arc(setter, Vector2(0.18, 0.54), (t - 0.20) / 0.29, 2.7)
+	## Trust hitters. Away gets the best defensive structure of the trio: A3 owns
+	## the pin, A2 closes all the way, and the floor organizes behind them. H1's
+	## solution is an intentional high-hands tool, not another open seam.
+	_path(1, [HOME_BASE[1], Vector2(0.12, 0.61), Vector2(0.17, 0.535)], [0.00, 0.10, 0.36], t)
+	_path(2, [HOME_BASE[2], Vector2(0.49, 0.535)], [0.00, 0.28], t)
+	_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.72, 0.66)], [0.00, 0.17, 0.36], t)
+	_path(102, [AWAY_BASE[102], Vector2(0.28, 0.445), Vector2(0.24, 0.445)], [0.00, 0.38, 0.50], t)
+	_path(103, [AWAY_BASE[103], Vector2(0.20, 0.445), Vector2(0.16, 0.445)], [0.00, 0.40, 0.50], t)
+	_path(104, [AWAY_BASE[104], Vector2(0.22, 0.20)], [0.00, 0.50], t)
+	_path(105, [AWAY_BASE[105], Vector2(0.48, 0.19)], [0.00, 0.50], t)
+	_path(106, [AWAY_BASE[106], Vector2(0.74, 0.21)], [0.00, 0.50], t)
+	if t < 0.36:
+		_arc(setter, Vector2(0.17, 0.535), (t - 0.11) / 0.25, 2.65)
+	elif t < 0.55:
+		_jump(1, t, 0.34, 0.56, 0.78)
+		_jump(102, t, 0.41, 0.61, 0.68)
+		_jump(103, t, 0.40, 0.60, 0.68)
+		_arc(Vector2(0.17, 0.535), Vector2(0.15, 0.44), (t - 0.36) / 0.19, 1.7)
+	elif t < 0.63:
+		_jump(102, t, 0.41, 0.61, 0.68)
+		_jump(103, t, 0.40, 0.60, 0.68)
+		## Visible block touch: contact high on A3's outside hand, then redirect out.
+		_arc(Vector2(0.15, 0.44), Vector2(0.05, 0.32), (t - 0.55) / 0.08, 0.7)
 	else:
-		_arc(Vector2(0.18, 0.54), Vector2(0.08, 0.20), (t - 0.49) / 0.34, 2.4)
+		_path(2, [HOME_BASE[2], Vector2(0.49, 0.535), Vector2(0.34, 0.63)], [0.00, 0.28, 0.72], t)
+		_path(3, [HOME_BASE[3], setter, Vector2(0.48, 0.64)], [0.00, 0.10, 0.72], t)
+		_path(4, [HOME_BASE[4], Vector2(0.19, 0.76), Vector2(0.24, 0.68)], [0.00, 0.12, 0.72], t)
+		_path(5, [HOME_BASE[5], Vector2(0.50, 0.82), Vector2(0.42, 0.68)], [0.00, 0.06, 0.72], t)
+		_path(6, [HOME_BASE[6], Vector2(0.78, 0.73), Vector2(0.63, 0.69)], [0.00, 0.17, 0.72], t)
+		_ball(Vector2(0.04, 0.30), 0.45)
 
 
 ## Q2. Reliability, targeting and direct pressure are different intentions, not
@@ -210,7 +326,6 @@ func _serve(t: float, mode: String) -> void:
 		_arc(contact, Vector2(0.50, 0.20), t / 0.74, 2.5)
 		return
 	if mode == "target":
-		## Aim at the seam: both passers must decide whose ball it is.
 		_move(104, Vector2(0.34, 0.20), t, 0.30, 0.68)
 		_move(105, Vector2(0.38, 0.20), t, 0.30, 0.68)
 		_arc(contact, Vector2(0.36, 0.20), t / 0.70, 3.0)
@@ -219,7 +334,6 @@ func _serve(t: float, mode: String) -> void:
 		_move(106, Vector2(0.74, 0.24), t, 0.20, 0.44)
 		_arc(contact, Vector2(0.74, 0.18), t / 0.46, 4.1)
 	else:
-		## Second attempt: same aggressive intent, this time long/wide.
 		var miss_t := (t - 0.50) / 0.42
 		_court.set_player_position(6, server_start.lerp(contact, smoothstep(0.50, 0.60, t)))
 		_arc(contact, Vector2(1.08, 0.08), miss_t, 4.5)
@@ -230,8 +344,6 @@ func _serve(t: float, mode: String) -> void:
 func _defense(t: float, mode: String) -> void:
 	var away_setter := Vector2(0.50, 0.38)
 	if mode == "floor":
-		## The double takes away the hitter's preferred line and deliberately sends
-		## the attack cross-court to a defender already waiting there.
 		_move(1, Vector2(0.17, 0.54), t, 0.08, 0.28)
 		_move(2, Vector2(0.27, 0.54), t, 0.08, 0.28)
 		_move(6, Vector2(0.66, 0.77), t, 0.08, 0.28)
@@ -244,8 +356,6 @@ func _defense(t: float, mode: String) -> void:
 		return
 
 	if mode == "read":
-		## Home stays neutral through the set, then both block and floor rotate once
-		## the destination is visible.
 		if t < 0.28:
 			_arc(away_setter, Vector2(0.78, 0.44), t / 0.28, 2.4)
 		else:
@@ -256,8 +366,6 @@ func _defense(t: float, mode: String) -> void:
 			_arc(Vector2(0.78, 0.44), Vector2(0.58, 0.77), (t - 0.28) / 0.45, 2.5)
 		return
 
-	## Commit early to the expected left-side attack. The wall is already there
-	## when contact arrives, and the rebound makes the net pressure legible.
 	_move(1, Vector2(0.17, 0.54), t, 0.02, 0.22)
 	_move(2, Vector2(0.27, 0.54), t, 0.02, 0.22)
 	if t < 0.24:
@@ -295,7 +403,6 @@ func _transition(t: float, mode: String) -> void:
 		return
 
 	if mode == "opportunity":
-		## Right pin is already available while the away defense is still recovering.
 		_move(3, Vector2(0.80, 0.53), t, 0.34, 0.50)
 		_move(103, Vector2(0.70, 0.45), t, 0.46, 0.68)
 		if t < 0.58:
@@ -304,8 +411,6 @@ func _transition(t: float, mode: String) -> void:
 			_arc(Vector2(0.80, 0.54), Vector2(0.72, 0.22), (t - 0.58) / 0.28, 2.1)
 		return
 
-	## Pressure: convert the save immediately, before either side can rebuild a
-	## clean shape. The set is shorter and the attack arrives earlier.
 	_move(1, Vector2(0.24, 0.53), t, 0.30, 0.46)
 	if t < 0.50:
 		_arc(setter, Vector2(0.24, 0.54), (t - 0.39) / 0.11, 1.7)
@@ -327,8 +432,6 @@ func _broken_ball(t: float, mode: String) -> void:
 		return
 
 	if mode == "structure":
-		## High, central recovery ball buys the three attackers time to restore the
-		## familiar side-out picture before the attack is built.
 		_move(1, Vector2(0.20, 0.55), t, 0.30, 0.62)
 		_move(2, Vector2(0.50, 0.54), t, 0.30, 0.62)
 		_move(3, Vector2(0.80, 0.55), t, 0.30, 0.62)
@@ -341,8 +444,6 @@ func _broken_ball(t: float, mode: String) -> void:
 		return
 
 	if mode == "available":
-		## The right-side player is already near the broken pass, so the emergency
-		## setter uses that fact rather than first recreating the planned spacing.
 		_move(3, Vector2(0.78, 0.54), t, 0.30, 0.48)
 		if t < 0.60:
 			_arc(off_net, Vector2(0.78, 0.54), (t - 0.38) / 0.22, 2.0)
@@ -350,7 +451,6 @@ func _broken_ball(t: float, mode: String) -> void:
 			_arc(Vector2(0.78, 0.54), Vector2(0.70, 0.22), (t - 0.60) / 0.27, 2.1)
 		return
 
-	## Keep pressure: accept the awkward geometry and attack immediately from it.
 	_move(1, Vector2(0.25, 0.53), t, 0.30, 0.46)
 	if t < 0.53:
 		_arc(off_net, Vector2(0.25, 0.54), (t - 0.38) / 0.15, 2.2)
