@@ -905,6 +905,9 @@ func _apply_contact_poses(
 			_contact_posture(next_contact), _contact_recovery(next_contact),
 			_action_context(next_contact, next_actor),
 		)
+	_apply_early_approach(
+		after_next, next_contact, event, progress, window_seconds
+	)
 	_apply_early_block(
 		after_next, next_contact, event, progress, window_seconds
 	)
@@ -1132,6 +1135,95 @@ func _pose_block_wall(
 			_block_peak_from_entry(entry) * elevation,
 			phase, direction, true, "planted", "platform", {}, context,
 		)
+
+
+## Run the hitter in while the ball is still on its way to the setter.
+##
+## **The mirror of `_apply_early_block`, and it was missing.** A wall is posed a
+## contact early because a block needs lead time; an approach needs lead time
+## for the same reason and had none, so playback drew a hitter only during the
+## set flight -- the one window that, for a fast tempo, opens *after* the run-up
+## is over.
+##
+## Measured on the Q1 quick vignette before this existed: a first-tempo middle
+## got a 0.104 s drawn window with **zero grounded frames**, because
+## `achieved_release_progress` is 1.000 for a T0 by definition and
+## `_incoming_pose_phase` then opens the pose at `PLANT_END` exactly -- the end
+## of the plant. The whole approach was skipped, and skipped *in proportion to
+## how quick the attack was*. The same rally charged `runup_seconds = 0.730` and
+## drew none of it. The outside hitter in the sibling vignette got 1.135 s with
+## 0.902 s on the ground, which is why the quick read as a pop and the high ball
+## read as a swing.
+##
+## Purely additive. This only draws while the moment is before the set release,
+## so a tempo whose run-up begins after release -- every T3 -- reaches nothing
+## here and is drawn exactly as it was.
+func _apply_early_approach(
+	after_next: RallyEvent,
+	next_contact: RallyEvent,
+	window_event: RallyEvent,
+	progress: float,
+	window_seconds: float,
+) -> void:
+	if after_next == null or next_contact == null:
+		return
+	## "Two contacts ahead" is only the right anchor when the thing in between is
+	## the set the approach is timed against -- the same guard the early block
+	## states for itself.
+	if after_next.event_type != RallyEventModel.EventType.ATTACK:
+		return
+	if next_contact.event_type != RallyEventModel.EventType.SET:
+		return
+	var hitter := int(after_next.actor_id)
+	if hitter < 0 or hitter == int(next_contact.actor_id):
+		return
+	if window_event != null and hitter == int(window_event.actor_id):
+		return
+	var timing: Dictionary = after_next.metadata.get("tempo_coordination", {})
+	if timing.is_empty():
+		return
+	var runup := maxf(float(timing.get("runup_seconds", 0.0)), 0.0)
+	if runup <= 0.0001:
+		return
+	var release := _event_physical_time(next_contact)
+	var contact_time := _event_physical_time(after_next)
+	var takeoff := release + maxf(
+		float(timing.get("takeoff_offset_seconds", 0.0)), 0.0
+	)
+	## The run-up *ends* at takeoff, so where it starts is that instant minus its
+	## own duration. Both terms are the resolver's, not a second opinion formed
+	## here from positions.
+	var runup_start := takeoff - runup
+	var moment := _window_physical_time(window_event, progress, window_seconds)
+	if moment <= runup_start or moment >= release:
+		return
+	## `PLANT_END` is the takeoff instant on the signed spike timeline, which is
+	## what `_incoming_pose_phase` already assumes when it hands its own window
+	## over at that value. Anchoring both to it is what makes this window and
+	## that one one continuous approach rather than two.
+	var phase := lerpf(
+		-1.0, SpikeBiomechanics.PLANT_END,
+		clampf(inverse_lerp(runup_start, takeoff, moment), 0.0, 1.0),
+	) if moment <= takeoff else lerpf(
+		SpikeBiomechanics.PLANT_END, 0.0,
+		clampf(inverse_lerp(takeoff, contact_time, moment), 0.0, 1.0),
+	)
+	## On the floor until the feet leave it. A hitter still running has no lift,
+	## which is the whole of what "the runway is visible" means.
+	var lift := 0.0 if moment <= takeoff else smoothstep(
+		takeoff, contact_time, moment
+	)
+	match_court_3d.set_player_pose(
+		hitter, RallyEventModel.EventType.ATTACK,
+		_event_elevation(after_next, hitter) * lift, phase,
+		after_next.end_position - after_next.start_position,
+		## Doubles as `is_contact_actor` inside `set_pose`: false draws no contact
+		## pose at all, which is why the block wall passes true for a blocker who
+		## is equally not holding the ball yet.
+		true,
+		_contact_posture(after_next), _contact_recovery(after_next),
+		{}, _action_context(after_next, hitter),
+	)
 
 
 ## Put the wall up while the ball is still on its way to the hitter.
