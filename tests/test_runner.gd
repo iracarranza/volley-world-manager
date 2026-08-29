@@ -1,6 +1,8 @@
 extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
+const TEAM_SCRIPT := preload("res://scripts/models/team.gd")
+const MATCH_STATE_SCRIPT := preload("res://scripts/models/match_state.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const RALLY_MOVEMENT_SYSTEM_SCRIPT := preload(
 	"res://scripts/simulation/rally_movement_system.gd"
@@ -198,10 +200,20 @@ var failures: int = 0
 
 
 func _initialize() -> void:
+	if "--serve-reception-only" in OS.get_cmdline_user_args():
+		_test_career_opponent_reception_authority()
+		if failures == 0:
+			print("PASS: %d focused reception-authority checks" % checks)
+			quit(0)
+		else:
+			push_error("FAIL: %d of %d focused reception-authority checks failed" % [failures, checks])
+			quit(1)
+		return
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
 	_test_roster_serve_receive_roles_and_lanes()
+	_test_career_opponent_reception_authority()
 	_test_ball_trajectory_geometry()
 	_test_rally_state_foundations()
 	_test_ball_read_foundations()
@@ -4131,6 +4143,161 @@ func _test_roster_serve_receive_roles_and_lanes() -> void:
 	manager.free()
 
 
+## A generated career does not share the vertical slice's id-to-role ordering.
+## The mirrored opponent must follow roles anyway, and an unreachable reception
+## must remain assigned to one of that rotation's passers rather than borrowing
+## the best defensive rating from a front-row middle.
+func _test_career_opponent_reception_authority() -> void:
+	var resumed_state: Resource = MATCH_STATE_SCRIPT.new()
+	resumed_state.load_dict({
+		"serve_history": {
+			"home:7": {
+				"target": "Zone 5",
+				"aim_point": "(0.164, 0.11)",
+				"landing_point": "(0.111415, 0.087591)",
+			},
+		},
+	})
+	var resumed_serve: Dictionary = resumed_state.serve_context().get("home:7", {})
+	var saved_again: Dictionary = resumed_state.to_dict().get("serve_history", {})
+	_check(
+		resumed_serve.get("aim_point") is Vector2
+			and Vector2(resumed_serve.aim_point).is_equal_approx(Vector2(0.164, 0.11))
+			and Array(Dictionary(saved_again.get("home:7", {})).get(
+				"aim_point", []
+			)).size() == 2,
+		"legacy serve-history strings resume as vectors and save as coordinates",
+	)
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var by_code := {}
+	for player in manager.players:
+		by_code[str(player.position_code)] = player
+	var career_order: Array[VolleyballPlayer] = []
+	for entry in [
+		["S", 1], ["OH1", 2], ["OH2", 3], ["M1", 4],
+		["M2", 5], ["OP", 6], ["L", 7],
+	]:
+		var player := by_code[str(entry[0])] as VolleyballPlayer
+		player.id = int(entry[1])
+		career_order.append(player)
+	var career_team: Resource = TEAM_SCRIPT.new()
+	career_team.team_name = "Career Order Fixture"
+	career_team.apply_identity("Balanced")
+	var configure_error: String = manager.configure_managed_team(
+		career_team, career_order
+	)
+	_check(configure_error.is_empty(), "career-order opponent fixture configures")
+
+	var expected_sources := {
+		101: by_code["S"], 102: by_code["OH1"], 103: by_code["M1"],
+		104: by_code["OP"], 105: by_code["OH2"], 106: by_code["L"],
+		107: by_code["M2"],
+	}
+	var exact_role_mirror := true
+	for opponent_id in expected_sources:
+		var source := expected_sources[opponent_id] as VolleyballPlayer
+		var mirrored := manager.opponent_team.player_by_id(opponent_id) as VolleyballPlayer
+		exact_role_mirror = exact_role_mirror and mirrored != null \
+			and str(mirrored.position_role) == str(source.position_role) \
+			and int(mirrored.reception) == int(source.reception) \
+			and int(mirrored.ball_control) == int(source.ball_control) \
+			and int(mirrored.anticipation) == int(source.anticipation) \
+			and is_equal_approx(float(mirrored.height_cm), float(source.height_cm))
+	_check(
+		exact_role_mirror,
+		"career opponent mirrors attributes by role rather than prototype id",
+	)
+
+	var every_rotation_uses_specialists := true
+	var fallback_stays_assigned := true
+	var emergency_is_reachable := false
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	for rotation_number in range(1, 7):
+		manager.opponent_team.select_rotation(rotation_number)
+		var lineup: RotationLineup = manager.opponent_team.current_lineup()
+		var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+		]["passer_count"])
+		var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+			lineup, manager.opponent_team.players, passer_count
+		)
+		var passer_ids: Array[int] = []
+		for slot_number in passer_slots:
+			var passer_id := int(lineup.player_at_slot(slot_number))
+			passer_ids.append(passer_id)
+			var passer := manager.opponent_team.player_by_id(passer_id) as VolleyballPlayer
+			every_rotation_uses_specialists = every_rotation_uses_specialists \
+				and passer != null and passer.position_role in [
+					"Outside Hitter", "Libero",
+				]
+		var coverage: Dictionary = simulator._opponent_reception_coverage(
+			manager.opponent_team
+		)
+		var fallback := simulator._nearest_zone_player(
+			coverage.players, coverage.zones, Vector2(0.94, 0.06), true
+		) as VolleyballPlayer
+		fallback_stays_assigned = fallback_stays_assigned and fallback != null \
+			and fallback.id in passer_ids
+		var formation: Dictionary = CourtConstants.serve_receive_formation(
+			lineup.slot_for_player(lineup.active_setter_id()),
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1, true, passer_slots,
+		)
+		var origins := {}
+		for slot_number in range(1, 7):
+			var player_id := int(lineup.player_at_slot(slot_number))
+			origins[player_id] = Vector2(formation.get(
+				slot_number,
+				manager.opponent_team.court_position(player_id, "serve_receive"),
+			))
+		for slot_number in range(1, 7):
+			var emergency_id := int(lineup.player_at_slot(slot_number))
+			if emergency_id in passer_ids:
+				continue
+			var emergency_claim: Dictionary = simulator._choose_serve_reception_claim(
+				manager.opponent_team.on_court_players(), coverage.zones,
+				Vector2(origins[emergency_id]), 0.45, origins,
+			)
+			var emergency_player := emergency_claim.get("player") as VolleyballPlayer
+			if emergency_player != null and emergency_player.id == emergency_id:
+				emergency_is_reachable = bool(emergency_claim.get("emergency", false)) \
+					and bool(Dictionary(emergency_claim.get("arrival", {})).get(
+						"reachable", false
+					))
+				break
+	_check(
+		every_rotation_uses_specialists,
+		"career opponent assigns only outsides and libero to primary serve receive",
+	)
+	_check(
+		fallback_stays_assigned,
+		"a missed opponent reception remains owned by the assigned passing unit",
+	)
+	_check(
+		emergency_is_reachable,
+		"a non-passer can receive only after satisfying physical arrival",
+	)
+	simulator.rally_seed = 24680
+	var weak_control: Dictionary = simulator._reception_contact_verdict(
+		true, 0.25, "opponent", 102
+	)
+	var strong_control: Dictionary = simulator._reception_contact_verdict(
+		true, 0.85, "opponent", 102
+	)
+	var repeated: Dictionary = simulator._reception_contact_verdict(
+		true, 0.25, "opponent", 102
+	)
+	_check(
+		weak_control == repeated,
+		"serve-reception contact verdict is deterministic for a rally seed",
+	)
+	_check(
+		float(weak_control.failure_chance) > float(strong_control.failure_chance),
+		"realised platform control continuously reduces reception failure risk",
+	)
+	manager.free()
+
+
 func _test_ball_trajectory_geometry() -> void:
 	var trajectory: Resource = BALL_TRAJECTORY_SCRIPT.create(
 		"test", Vector2(0.1, 0.2), Vector2(0.5, 0.1),
@@ -5771,7 +5938,7 @@ func _test_gate_forty_two_development_live_attack() -> void:
 	## `tools/run_live_promotion_scan.gd` finds the next one in a single command
 	## instead of by bisection, and prints several so the choice is not a
 	## coincidence of one.
-	const LIVE_ATTACK_SEED := 300041
+	const LIVE_ATTACK_SEED := 300001
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -6728,7 +6895,7 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 func _test_gate_forty_nine_development_live_block() -> void:
 	## The same seed Gate 42 uses. A promoted block requires a promoted attack
 	## ahead of it, so the two fixtures necessarily share a chain and a seed.
-	const LIVE_BLOCK_SEED := 300041
+	const LIVE_BLOCK_SEED := 300001
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false

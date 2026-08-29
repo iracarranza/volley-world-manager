@@ -164,6 +164,21 @@ const MAX_EXCHANGES: int = 4
 const BLOCK_SHOULDER_OFFSET: float = 0.095
 const BLOCK_NET_DEPTH: float = 0.032
 
+## `contact_control` is continuous, so it must not be turned into a cliff that
+## makes one weak passer fail every serve and the player one point better pass
+## every serve. `contact_control` is an ordinal execution score, not itself a
+## probability, so lost control is mapped through one calibrated curve. The
+## square root keeps high-control receptions from becoming infallible while a
+## 12% ceiling prevents a low-rated passer from becoming a deterministic ace
+## machine: a 0.70 platform fails 8.8%, and 0.50 or 0.30 platforms reach 11.3%
+## and 12.0%. Perfect control remains a certain play. The final fixed censuses
+## measure 7.5% when the managed side serves and 2.8% when the opponent serves,
+## both inside the repository's broader 2--10% rally-readiness band. The draw
+## is hashed so the physical outcome is deterministic without resequencing the
+## rally RNG.
+const RECEPTION_LOST_CONTROL_RISK: float = 0.16
+const RECEPTION_FAILURE_CHANCE_CEILING: float = 0.12
+
 ## Lane a blocker covers with their arms without moving their feet.
 const BLOCK_LATERAL_REACH_METERS: float = 0.45
 ## How much of the time between the pass and the set's release a blocker can
@@ -1474,10 +1489,10 @@ func resolve(
 			reception_origins[reception_candidate.id] = Vector2(
 				live_positions[reception_candidate.id]
 			)
-	var reception_claim: Dictionary = CoverageModel.choose_claimant(
+	var reception_claim: Dictionary = _choose_serve_reception_claim(
 		_lineup_players(players, lineup),
 		defensive_plan.zones_for(DefensiveZoneModel.ZoneType.SERVE_RECEIVE),
-		serve_landing, serve_time, "reception", {}, reception_origins,
+		serve_landing, serve_time, reception_origins,
 	)
 	var receiver := reception_claim.get("player") as VolleyballPlayer
 	var receiver_arrived := receiver != null
@@ -1631,8 +1646,11 @@ func resolve(
 		)), 0.0, 1.0)
 	if not receiver_arrived:
 		result.reception_quality = minf(result.reception_quality, 0.12)
-	var reception_success: bool = receiver_arrived \
-		and float(result.reception_quality) >= RECEPTION_PLAYABLE_FLOOR
+	## Outcome is decided after the platform result below. `reception_quality`
+	## describes where/control of the pass; treating that scalar as whether the
+	## forearms touched the ball turned every poor but reachable pass into an ace
+	## before the reception model had produced its contact.
+	var reception_success := false
 	var receiver_start: Vector2 = live_positions.get(receiver.id, serve_landing)
 	var receiver_move_time := _movement_time(
 		receiver, receiver_start, serve_landing, "lateral"
@@ -1718,7 +1736,19 @@ func resolve(
 			## the four the recovery bands are written against -- recomputing
 			## from it would silently return everyone to their feet.
 			"contact_recovery": str(reception_pass.contact_recovery),
+			"contact_control": float(selected_metadata.get(
+				"contact_control", reception_pass.get("contact_control", 0.0)
+			)),
 		}
+	## A playable first contact is a physical platform outcome. The quality score
+	## still shapes that outcome and everything the setter receives, but it no
+	## longer declares an ace independently of the contact it is meant to grade.
+	var reception_verdict := _reception_contact_verdict(
+		receiver_arrived,
+		float(reception_pass.get("contact_control", result.reception_quality)),
+		"home", receiver.id,
+	)
+	reception_success = bool(reception_verdict.success)
 	var pass_trajectory: Dictionary = reception_pass.trajectory
 	## Book the cost of the contact before the rally moves on, so the transition
 	## below reads a receiver who is still getting up rather than one who is not.
@@ -1783,7 +1813,12 @@ func resolve(
 					+ arrival_bonus + support_bonus - seam_penalty
 					+ reception_noise,
 				"final_quality": result.reception_quality,
-				"success_threshold": RECEPTION_PLAYABLE_FLOOR,
+				"success_metric": "contact_control_roll",
+				"contact_control": reception_pass.get(
+					"contact_control", result.reception_quality
+				),
+				"failure_chance": reception_verdict.failure_chance,
+				"outcome_roll": reception_verdict.outcome_roll,
 				"receiver_arrived": receiver_arrived,
 			},
 			"support_count": support_count, "seam_conflict": seam_conflict,
@@ -1801,6 +1836,7 @@ func resolve(
 			"reachable_count": int(reception_claim.get("reachable_count", 0)),
 			"immediate_lock": bool(reception_claim.get("immediate_lock", false)),
 			"immediate_owner_count": int(reception_claim.get("immediate_owner_count", 0)),
+			"emergency_receive": bool(reception_claim.get("emergency", false)),
 			"nearest_teammate_meters": float(reception_claim.get(
 				"nearest_teammate_meters", -1.0
 			)),
@@ -4088,12 +4124,35 @@ func _resolve_home_serve(
 	## sound: stamps that are all equal are never out of order.
 	rally_clock = serve_time
 	var opponent_coverage := _opponent_reception_coverage(opponent_team)
-	var opponent_claim: Dictionary = CoverageModel.choose_claimant(
-		opponent_coverage.players, opponent_coverage.zones,
-		opponent_landing, serve_time, "reception",
+	var opponent_reception_origins := {}
+	for reception_candidate in opponent_team.on_court_players():
+		if opponent_live_positions.has(reception_candidate.id):
+			opponent_reception_origins[reception_candidate.id] = Vector2(
+				opponent_live_positions[reception_candidate.id]
+			)
+	var opponent_claim: Dictionary = _choose_serve_reception_claim(
+		opponent_team.on_court_players(), opponent_coverage.zones,
+		opponent_landing, serve_time, opponent_reception_origins,
 	)
 	var receiver := opponent_claim.get("player") as VolleyballPlayer
 	var receiver_arrived := receiver != null
+	var reception_claim_fallback := false
+	if receiver == null:
+		## A missed serve still belongs to somebody in the passing unit. The old
+		## fallback ignored the three assigned passers and chose `best_defender()`
+		## from all six. Once a career roster's attributes were mirrored onto the
+		## wrong roles, that was routinely a front-row middle: the event named the
+		## middle, drew them chasing a ball outside their area, and then forced the
+		## ace because `receiver_arrived` was already false. Keep the miss verdict,
+		## but publish the assigned passer nearest their own responsibility.
+		reception_claim_fallback = true
+		receiver = _nearest_zone_player(
+			opponent_coverage.players, opponent_coverage.zones,
+			opponent_landing, true,
+		)
+	## A malformed roster with no assigned passing unit still needs a legal actor
+	## for the terminal event. This is explicitly an emergency fallback, not the
+	## ordinary no-arrival path above.
 	if receiver == null:
 		receiver = opponent_team.best_defender() as VolleyballPlayer
 	var opponent_arrival: Dictionary = _read_adjusted_arrival(
@@ -4151,8 +4210,10 @@ func _resolve_home_serve(
 	if not receiver_arrived:
 		reception_quality = minf(reception_quality, 0.12)
 	result.reception_quality = reception_quality
-	var reception_success := receiver_arrived \
-		and reception_quality >= RECEPTION_PLAYABLE_FLOOR
+	## As on the home side, the platform result below owns whether an arrived
+	## passer played the ball. Raw quality owns the ball they produce, not an ace
+	## verdict made before that contact exists.
+	var reception_success := false
 	var opponent_receiver_reach := _reached_point(
 		receiver, receiver_start, opponent_landing, serve_time, "lateral", 0.0,
 		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
@@ -4192,6 +4253,12 @@ func _resolve_home_serve(
 		),
 		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
 	)
+	var opponent_reception_verdict := _reception_contact_verdict(
+		receiver_arrived,
+		float(opponent_pass.get("contact_control", reception_quality)),
+		"opponent", receiver.id,
+	)
+	reception_success = bool(opponent_reception_verdict.success)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
 	var home_serve_intents := {}
@@ -4238,10 +4305,18 @@ func _resolve_home_serve(
 					+ opponent_support_term + serve_receive_bonus
 					+ opponent_reception_noise,
 				"final_quality": reception_quality,
-				"success_threshold": RECEPTION_PLAYABLE_FLOOR,
+				"success_metric": "contact_control_roll",
+				"contact_control": opponent_pass.get(
+					"contact_control", reception_quality
+				),
+				"failure_chance": opponent_reception_verdict.failure_chance,
+				"outcome_roll": opponent_reception_verdict.outcome_roll,
 				"receiver_arrived": receiver_arrived,
 			},
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
+			"reception_claim_fallback": reception_claim_fallback,
+			"receiver_assigned": opponent_coverage.zones.has(receiver.id),
+			"emergency_receive": bool(opponent_claim.get("emergency", false)),
 			"serve_risk_pressure": serve_risk_pressure,
 			"movement_start": receiver_start,
 			"movement_target": opponent_receiver_reach,
@@ -18685,6 +18760,113 @@ func _nearest_zone_player(
 	if nearest == null and not candidates.is_empty():
 		nearest = candidates[0]
 	return nearest
+
+
+## Serve receive has two levels of responsibility.
+##
+## The named passing unit gets the first and ordinary claim. If none of those
+## players can arrive, a front-row player who is already standing under the
+## serve may still make the emergency first contact; volleyball does not require
+## a short serve to land untouched beside a middle merely because the middle was
+## preparing to attack. The ordinary passing unit must fail first, and the
+## emergency body must satisfy CoverageCalculator's physical travel/reaction
+## reach. This cannot recruit the old arbitrary `best_defender()` from anywhere
+## on court merely to put a name on a miss.
+func _choose_serve_reception_claim(
+	raw_players: Array,
+	zones: Dictionary,
+	landing_point: Vector2,
+	ball_time_seconds: float,
+	origins: Dictionary,
+) -> Dictionary:
+	var players: Array[VolleyballPlayer] = []
+	var assigned: Array[VolleyballPlayer] = []
+	for raw_player in raw_players:
+		var player := raw_player as VolleyballPlayer
+		if player == null:
+			continue
+		players.append(player)
+		var zone: Resource = zones.get(player.id) as Resource
+		if zone != null and bool(zone.enabled):
+			assigned.append(player)
+	var claim: Dictionary = CoverageModel.choose_claimant(
+		assigned, zones, landing_point, ball_time_seconds,
+		"reception", {}, origins,
+	)
+	if claim.get("player") != null:
+		claim["emergency"] = false
+		return claim
+
+	var emergency_player: VolleyballPlayer = null
+	var emergency_arrival := {}
+	var emergency_distance := INF
+	for player in players:
+		var assigned_zone: Resource = zones.get(player.id) as Resource
+		if assigned_zone != null and bool(assigned_zone.enabled):
+			continue
+		if not origins.has(player.id):
+			continue
+		var arrival: Dictionary = CoverageModel.evaluate_arrival(
+			player, null, landing_point, ball_time_seconds, "reception",
+			origins[player.id], 0.0,
+		)
+		if not bool(arrival.get("reachable", false)):
+			continue
+		var distance := float(arrival.get("distance_meters", INF))
+		var replaces := emergency_player == null or distance < emergency_distance
+		if is_equal_approx(distance, emergency_distance) and emergency_player != null:
+			var skill := int(player.reception) + int(player.ball_control)
+			var incumbent_skill := int(emergency_player.reception) \
+				+ int(emergency_player.ball_control)
+			replaces = skill > incumbent_skill \
+				or (skill == incumbent_skill and player.id < emergency_player.id)
+		if replaces:
+			emergency_player = player
+			emergency_arrival = arrival
+			emergency_distance = distance
+	if emergency_player == null:
+		claim["emergency"] = false
+		return claim
+	return {
+		"player": emergency_player,
+		"arrival": emergency_arrival,
+		"support_count": 0,
+		"seam_conflict": false,
+		"claim_margin": 1.0,
+		"nearest_id": emergency_player.id,
+		"nearest_distance_meters": emergency_distance,
+		"winner_distance_meters": emergency_distance,
+		"reachable_count": 1,
+		"immediate_lock": bool(emergency_arrival.get("immediate_control", false)),
+		"immediate_owner_count": 1 \
+			if bool(emergency_arrival.get("immediate_control", false)) else 0,
+		"nearest_teammate_meters": 1000.0,
+		"emergency": true,
+	}
+
+
+## Convert the realised platform control into a deterministic contact verdict.
+## This is a separate hashed stream: adding the verdict does not change the
+## setter, hitter, block or defence draws later in the same rally.
+func _reception_contact_verdict(
+	receiver_arrived: bool,
+	contact_control: float,
+	side: String,
+	receiver_id: int,
+) -> Dictionary:
+	var lost_control := 1.0 - clampf(contact_control, 0.0, 1.0)
+	var failure_chance := minf(
+		sqrt(lost_control) * RECEPTION_LOST_CONTROL_RISK,
+		RECEPTION_FAILURE_CHANCE_CEILING,
+	)
+	var outcome_roll := float(posmod(hash(
+		"%d|serve-reception-contact|%s|%d" % [rally_seed, side, receiver_id]
+	), 100003)) / 100003.0
+	return {
+		"success": receiver_arrived and outcome_roll >= failure_chance,
+		"failure_chance": failure_chance,
+		"outcome_roll": outcome_roll,
+	}
 
 
 func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
