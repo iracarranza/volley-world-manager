@@ -35,6 +35,12 @@ func _initialize() -> void:
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
 	root.size = CANVAS
+	## The project is authored at 1280x720 and normally stretches CanvasItems to
+	## the window. A 1920x1080 render therefore enlarged this sheet by 1.5x and
+	## clipped its last three expressions and final construction row even though
+	## the image file itself was 1920x1080. The comparison is its own render
+	## surface, so make logical pixels equal output pixels for this tool only.
+	root.content_scale_size = CANVAS
 	RenderingServer.set_default_clear_color(BG)
 
 	var canonical := _build_canonical_sheet()
