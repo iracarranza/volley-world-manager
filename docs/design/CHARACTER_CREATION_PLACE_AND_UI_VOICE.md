@@ -1,467 +1,417 @@
-# Character creation — place flow, manager origin, club jobs, and UI voice
+# Character creation — place flow, manager origin, club jobs, founding, and UI voice
 
-This is a focused addendum to `docs/design/CHARACTER_CREATION.md`, recording decisions settled after the six-question VOLLEYBALL redesign. It should be folded into the main character-creation spec when that file is next consolidated.
+This focused addendum to `docs/design/CHARACTER_CREATION.md` records decisions settled after the six-question VOLLEYBALL redesign. It should be folded into the main character-creation spec when that file is next consolidated.
 
 ## Player-owned confirmation voice
 
 The questionnaire can be conversational without returning to the earlier problem of prose telling the player what they think.
 
-The distinction is:
-
-- **Player-owned actions may speak conversationally.** The player chooses to press the button, so the line can sound like their response.
-- **World/UI description stays concrete.** It presents information and lets the player interpret it.
+- **Player-owned actions may speak conversationally.**
+- **World/UI description stays concrete.**
 - **Do not synthesize facts into authored emotional meaning on the player's behalf.**
 
-Good confirmation language includes:
+Good confirmation language includes `This feels right.`, `That looks good.`, `I like that.`, `Yeah, let's do that.`, `Yup, that's my volleyball.`, `Yup, this is me!`, `Yup, this is home.`, `I'll start here.`, `That sounds right.`, `I'm okay with that.`, `Show me the openings.`, `Let's build one.`, `I'll take the job.`, and `Let's start this club.`
 
-- `This feels right.`
-- `That looks good.`
-- `I like that.`
-- `Yeah, let's do that.`
-- `Yup, that's my volleyball.`
-- `Yup, this is me!`
-- `Yup, this is home.`
-- `I'll start here.`
-- `That sounds right.`
-- `I'm okay with that.`
-- `Show me the openings.`
-- `Let's build one.`
-
-The exact phrase may vary between pages. The variation should feel like ordinary affirmative reactions, not six different pieces of flavor writing.
-
-Avoid turning factual relationships into narrated conclusions. For example, after home and work regions are selected, prefer:
-
-```text
-Bompaçao → Spëddigh
-Distance from home: Far
-Tactical familiarity: High
-
-Shared: Targeted serving · Combination offense
-Different: Transition offense · Block commitment
-```
-
-over prose such as `Your volleyball has a lot in common with local tradition, even though you've come a long way from home.` The figures/labels already contain the useful information.
-
-The general writing rule is:
+General rule:
 
 > **The game asks plainly. The player may answer conversationally. The world reports what is true.**
 
 ## `Surprise me!`
 
-Every visual tactical question may offer a lightweight random-choice action:
-
-> **Surprise me!**
-
-It means `choose one of these answers for me`, not `use a neutral/balanced default`.
-
-When pressed:
-
-1. randomly select one of the three actual answers;
-2. reveal that answer;
-3. switch the preview to its demonstration;
-4. do **not** immediately advance;
-5. allow the player to accept it with the normal conversational confirmation or press `Surprise me!` again.
-
-`02 — VOLLEYBALL` may also offer a whole-section `Surprise me!` escape hatch. That randomizes Q1–Q6, then shows the completed-volleyball montage so the player can accept the generated identity or edit individual answers.
-
-The same interaction can be used for non-tactical creation choices where randomization is meaningful, including background and a choice among compatible starting job openings.
+Every visual tactical question may offer **Surprise me!**. It randomly selects one real answer, reveals it and shows its preview, but does not auto-advance. The player may confirm or reroll. VOLLEYBALL may also randomize all six questions before showing the completed montage. The same interaction may be used where randomization is meaningful elsewhere in creation.
 
 ---
 
 # 01 — YOU
 
-The revised YOU step should separate appearance from professional origin. It should not alter the state of whichever club the player later chooses.
-
 ## 01A — Who are you?
 
-Keep the existing manager appearance editor:
+Keep the existing appearance editor: name, body type, Vegi variety where applicable, colourway, coat/marking, face, height, arm proportion, leg proportion, handedness, and live rotating preview. Appearance remains visual only.
 
-- name;
-- body type;
-- Vegi variety where applicable;
-- colourway;
-- coat/marking;
-- face;
-- height;
-- arm proportion;
-- leg proportion;
-- handedness;
-- live rotating manager preview.
+Confirmation: **Yup, this is me!**
 
-Appearance remains visual only. The manager never enters the volleyball simulator as an athlete.
-
-Confirmation:
-
-> **Yup, this is me!**
-
-### Name generation and region order
-
-Home region is not selected until `03 — PLACE`, so 01 should not silently preselect a region merely to generate a culturally appropriate name.
-
-The name field can be entered manually in 01. After HOME is selected in 03, a regional-name suggestion can become available if the player wants one or left the field blank.
+Home region is not selected until PLACE, so 01 must not silently choose geography to generate a name. Manual naming works immediately; regional-name suggestions can become available after HOME is known.
 
 ## 01B — What did you do before this?
 
-Use four professional-origin choices:
+- **You played** — prior knowledge leans toward players and relationships from competition.
+- **You coached** — prior knowledge leans toward training, staff, development and coaching relationships.
+- **You analysed** — prior knowledge leans toward match records, tactical observations and broader but less personal team knowledge.
+- **You're new to this** — no prior competitive-volleyball career; a distinct harder outsider/journeyman start.
 
-### You played
+`You coached youth` becomes `You coached` unless a real youth structure later justifies the narrower wording. `You paid for it` is removed: founding is an institutional route in CLUB, not manager biography.
 
-You know volleyball through the people you played with and against.
-
-Its starting-information shape should lean toward player/person knowledge and relationships from competitive play.
-
-### You coached
-
-You know volleyball through training players and working with staff.
-
-Its starting-information shape should lean toward training histories, staff relationships, development context, and people encountered through coaching work.
-
-`You coached youth` should become simply `You coached` unless/until a real youth structure exists that makes the narrower description meaningful.
-
-### You analysed
-
-You know volleyball through studying teams and matches.
-
-Its starting-information shape should lean toward match records, tactical observations, and broader but less personal club/team knowledge.
-
-### You're new to this
-
-You have not worked in competitive volleyball before.
-
-This is a distinct outsider/journeyman-style start and does **not** use the professional-standing control below. It may be genuinely harder. Do not invent a compensating hidden bonus merely to make all origins mathematically equal.
-
-The UI should say the consequence plainly, for example:
-
-```text
-Professional standing     None
-Existing contacts         Very few
-Prior volleyball records  None
-Job access                Limited
-
-A harder way to begin.
-```
-
-A suitable confirmation is:
-
-> **I'm okay with that.**
-
-The human player may be new to volleyball without choosing a fictional manager who is new to professional volleyball; the newcomer route is a roleplaying/difficulty choice, not an onboarding requirement.
+Newcomer skips professional standing. It may have no professional standing, very few contacts, no prior volleyball records and limited job access. Do not compensate with a hidden bonus merely to equalize starts. Make the harder start explicit. Suitable confirmation: **I'm okay with that.**
 
 ## 01C — How established were you?
 
-For `You played`, `You coached`, and `You analysed`, expose a stepped professional-standing control:
+Played, Coached and Analysed reveal a stepped control:
 
 ```text
-HOW ESTABLISHED WERE YOU?
-
 ●──────────●──────────●
 Obscure    Known      Established
 ```
 
-This is one continuum, so a stepped slider/segmented line is preferable to three unrelated cards.
+- **Obscure** — legitimate career, few wider relationships, narrow prior information, lower-status openings, little portable reputation. This is a true journeyman-style start and does not imply low competence.
+- **Known** — default middle position: some contacts, ordinary recognition, normal vacancy range and moderate prior information.
+- **Established** — broad professional network, wider credible information, stronger openings and potentially greater institutional expectations. It does not improve manager decision-making or tactics by fiat.
 
-### Obscure
-
-A legitimate career with little wider recognition.
-
-Consequences may include:
-
-- few existing professional relationships;
-- narrow starting information outside the manager's immediate history;
-- lower-status openings willing to hire the manager;
-- prestigious openings generally unavailable;
-- little reputation carrying between regions.
-
-An obscure player/coach/analyst is not necessarily bad at what they did. Their work simply generated little professional standing.
-
-### Known
-
-The default/middle start.
-
-Consequences may include:
-
-- some existing contacts;
-- ordinary recognition inside relevant professional circles;
-- a normal range of starting vacancies;
-- a moderate amount of prior information consistent with the chosen background.
-
-### Established
-
-A substantial prior professional career.
-
-Consequences may include:
-
-- a broader professional network;
-- more clubs/managers already familiar with the manager;
-- broader credible prior information;
-- stronger clubs willing to offer or consider openings;
-- greater expectations around the appointment when such systems exist.
-
-Established must not mean `better manager decisions` or hidden tactical bonuses. It means **the world already has more evidence about the manager**.
-
-A compact consequence display can use factual labels such as:
-
-```text
-Obscure       Fewer contacts · smaller job market · less starting information
-Known         Some contacts · normal job market · some starting information
-Established   More contacts · stronger job market · broader starting information
-```
-
-The combination of background and standing creates starting histories without fixed character classes: an obscure former player, established coach, obscure analyst, and established analyst can all produce different knowledge/relationship shapes.
-
-General decomposition:
+Decomposition:
 
 ```text
 BACKGROUND → what kind of prior knowledge/relationships exist
-STANDING   → how broad the network, reputation, information, and job access are
+STANDING   → how broad the network, reputation, information and job access are
 ```
 
-This replaces the old background effects that regenerated or altered the future club. `You paid for it` is removed from manager background because founding a club belongs to `04 — CLUB`.
-
-Likewise, backgrounds should not retroactively change an existing club's roster age, scout count, staff, or identity after the player selects a vacancy. The world exists before the manager arrives.
-
-`Surprise me!` can randomize background and, for the first three backgrounds, a sensible standing value. The result should be revealed before confirmation.
-
-A general background confirmation can use:
-
-> **That sounds right.**
+Background must not regenerate or alter whichever existing club the player later chooses. The world exists before the manager arrives.
 
 ---
 
 # Regional tactical presets
 
-Regional tactical identities should be visible, but they must not become character classes.
+Regional tactical identities are weighted tendencies, not character classes or six absolute questionnaire answers. During Q1–Q6 regional examples are optional secondary information. After Q6, **See how the regions play** can introduce the world map before PLACE.
 
-## During Q1–Q6
+Information hierarchy:
 
-Regional examples are optional/secondary. A curious player may open a small `How do different regions approach this?` detail, but the questionnaire should not lead with fourteen region presets. The primary task is still to watch the three demonstrations and react to them.
-
-## After Q6
-
-This is the main regional-comparison moment. After `Yup, that's my volleyball.`, the player may choose something like:
-
-> **See how the regions play**
-
-This can introduce the world map immediately before `03 — PLACE`.
-
-Regional comparison should expose concrete correspondences rather than a single dominant percentage. For example:
-
-```text
-Spëddigh
-Common: Target the reception · Read the blockers · Combination offense
-Less common: Aggressive serves · Isolation offense
-```
-
-If an internal similarity score exists, it is supporting data rather than the headline.
-
-## Regional presets are weighted tendencies
-
-Do not define a region as six absolute questionnaire answers. Each question should instead have a regional distribution/weighting: a typical tendency, other common approaches, and unusual approaches.
-
-This preserves variation between clubs and managers inside the same region.
-
-The information hierarchy is:
-
-1. **Regional tradition** — broad, relatively stable public knowledge; visible in creation and encyclopedia browsing.
-2. **Club identity** — influenced by region but historically/managerially variable; requires reasonably current knowledge.
-3. **Current match tactics** — specific and volatile; learned through scouting, observation, reports and recent matches.
-
-A regional montage should therefore show representative authored examples, not imply every club or rally in the region behaves identically.
+1. **Regional tradition** — broad, stable public knowledge.
+2. **Club identity** — regionally influenced but historically/managerially variable.
+3. **Current match tactics** — volatile and learned through current evidence.
 
 ---
 
 # 03 — PLACE
 
-Major/minor classification remains visible when choosing both home region and working region. It is not merely a difficulty fact; it is part of the world's institutional geography.
-
-The intended sequence is:
+Major/minor classification remains visible for both home and working-region selection.
 
 ## 03A — Where are you from?
 
-The player gets their first meaningful look at the world map.
+Use the reusable world-map/globe surface plus an accessible Major/Minor grouped list. Selection recenters the world view and opens the regional profile/montage. Major/minor is institutional status, not land area.
 
-The long-term interface is a reusable rotatable world map/globe with:
-
-- region selection;
-- rotation and zoom;
-- terrain/topography;
-- region boundaries and labels;
-- major/minor status;
-- academy/Sixnet markers for major regions;
-- club/institution markers at appropriate zoom levels;
-- recentering on selection;
-- access to the same regional profile/montage used elsewhere.
-
-The currently calculated/topographical map is a development seam, not final geography/art. Character creation should define the interaction contract without freezing unfinished coastlines, proportions or terrain rendering.
-
-Major/minor should not be encoded by geographic area: a minor volleyball region can occupy a large land area. Institutional markers and labels should communicate volleyball status instead.
-
-The map must not be the only selection mechanism. An accessible region list, grouped as **Major regions** and **Minor regions**, should remain available alongside or below it.
-
-Selecting a home region recenters the world view and opens its regional profile/montage. The player confirms with:
-
-> **Yup, this is home.**
+Confirmation: **Yup, this is home.**
 
 ## 03B — Where does your career begin?
 
-Reuse the same map. The chosen home region remains marked, but the question is now about the working/club region.
+Reuse the same map with HOME marked. There is no separate `begin at home` action; selecting HOME again naturally means staying there.
 
-There is no separate `begin at home` action. Selecting the home region again naturally means staying home; selecting somewhere else means moving.
+The current vacancy solution is **B now, C as target**:
 
-Use one confirmation regardless of relationship:
+- **Now:** before confirming a working region, show how many managerial vacancies exist and how many are available to this manager's professional standing.
+- **Target:** eventually permit a genuinely unemployed start in which the manager searches/applies dynamically across the world.
 
-> **I'll start here.**
-
-## Derived relationships
-
-After both selections exist, expose **geographic distance** and **tactical difference/familiarity as separate dimensions**.
-
-Do not collapse them into one `fit` score.
-
-Examples:
+Example:
 
 ```text
-HOME     Bompaçao
-WORK     Spëddigh
+SPËDDIGH
+Major region
 
-Distance from home     Far
-Tactical familiarity   High
+Open manager positions      3
+Open to your standing       1
 ```
 
-or:
+Confirmation: **I'll start here.**
 
-```text
-HOME     Landavol
-WORK     Rhėn Tempaol
+After HOME and WORK exist, expose geographic distance and tactical familiarity separately. Distance ultimately derives from world geography; tactical familiarity derives from Q1–Q6 versus the working region's weighted tradition. Do not infer cultural/emotional meaning from geographic distance.
 
-Distance from home     Close
-Tactical familiarity   Low
-```
-
-Distance should ultimately derive from actual world geography rather than a hand-authored near/medium/far table. Tactical familiarity should derive from the player's Q1–Q6 choices against the working region's weighted volleyball tradition.
-
-Do not infer cultural familiarity, language, comfort, or emotional meaning from distance unless those become separate modeled systems.
-
-## Permanent world-map role
-
-The expensive map work should not exist only for onboarding. The same world surface can later support:
-
-- new-career home-region selection;
-- new-career working-region selection;
-- encyclopedia/world exploration;
-- club and transfer geography;
-- visits/travel;
-- Sixnet regional context;
-- academy geography;
-- historical/world records.
-
-The creation flow is therefore the player's introduction to a permanent world-navigation surface, not a disposable picker.
+The same world surface should later support encyclopedia browsing, transfers, visits, Sixnet/academy geography and records.
 
 ---
 
 # 04 — CLUB
 
-The established-club route should be framed as choosing a **job opening**, not choosing which club the player owns or simply `takes`.
+CLUB asks how the manager enters an institution. Existing-club and founding routes should feel categorically different:
 
-The world exists before the manager. Existing clubs have squads, staff, facilities, histories, relationships, current tactical identities, and vacancies independent of the player.
+> **A job opening asks which institution you are willing to inherit. Founding asks what institution you are willing to begin.**
 
-## 04A — How are you entering club management?
+## 04A — Entry route
 
-Where the selected working region permits both routes, offer:
+Where both routes exist:
 
-### Take a job
-
+### Look for a job
 Start as manager of an existing club.
 
-Confirmation/action:
-
-> **Show me the openings.**
+Action: **Show me the openings.**
 
 ### Found a club
-
 Start a new institution in the selected region.
 
-Confirmation/action:
+Action: **Let's build one.**
 
-> **Let's build one.**
+If founding is unavailable, do not show a dead choice merely to explain its absence.
 
-If founding is not available in the selected region, do not show a dead/disabled choice merely to explain its absence. Proceed to the available job opening(s).
+---
 
-`You paid for it` no longer belongs in 01 because this is the correct place for the institutional founding decision.
+# 04J — EXISTING-CLUB / JOB ROUTE
 
-## 04B — Job openings
+## 04J-1 — Job openings
 
-The player is choosing among vacancies compatible with their region and professional standing.
+Question: **Where do you want to work?**
 
-The question can simply be:
+The player chooses among actual managerial vacancies compatible with region and standing, not every club. A vacancy should expose enough factual information to understand the inherited institution.
 
-> **Where do you want to work?**
+### Vacancy identity
 
-Each selectable opening should clearly identify itself as a managerial vacancy rather than a club-ownership card.
+Club, region, vacancy status and—where world history supports it—reason/duration of vacancy.
 
-Example information structure:
+### SPORT
+
+Measured sporting position: circuit/competition standing, interregional record, regional-strength contribution, academy selections or other settled competition metrics. A club contributes evidence toward its region's Sixnet standing; the club itself does not qualify for Sixnet.
+
+### CLUB
+
+Operating condition: finances, contracted squad, roster depth, training facilities, staffing and other institutional resources.
+
+### VOLI LIFE
+
+Voli living conditions are first-class club metrics rather than flavor. Do not collapse them into one wellbeing score. Relevant dimensions include:
+
+- food quality and, where useful, familiarity/variety;
+- housing quality and privacy/crowding;
+- free time;
+- training load;
+- medical/recovery/care provision;
+- social structure, e.g. communal versus independent;
+- stability of routines/housing/staff arrangements.
+
+Some dimensions should create real tradeoffs rather than all scaling upward with wealth: training time versus free time, private rooms versus capacity/cost, individualized food versus operational expense, communal scheduling versus autonomy.
+
+### CLUB PRIORITIES
+
+Separate what the institution values from what it currently achieves. A club may strongly value food while currently providing only a middling standard.
+
+### BOARD EXPECTATIONS
+
+Separate three concepts:
 
 ```text
-Vål Tressa VC
-Manager vacancy
+CURRENT CONDITION → what is true now
+CLUB PRIORITY      → what the institution tends to value
+BOARD EXPECTATION  → what the manager is accountable for
+```
 
-Squad             11 contracted volis
-Club resources    Strong
-Accommodation     Established
-Recent finish     4th
+Expectations may be sporting, institutional or voli-living, but every displayed expectation must correspond to an actual enforced/measured system. Not every club is judged on every metric.
 
-Club volleyball
-Target reception · Floor defense · Combination offense
+This permits distinct institutions: an elite club may demand sporting results and expensive living standards; a development club may prioritize academy selections and development; a small club may prioritize solvency, retention and acceptable living conditions.
 
-Your volleyball
-Target reception · Read the attack · Combination offense
+> **Club success is plural, but club expectations are specific.**
+
+### Squad information
+
+`View squad` exposes names, ages, positions, contracts and public career information. It does not grant omniscient hidden knowledge. Background shapes the type of deeper evidence already known; standing shapes breadth.
+
+### Club volleyball
+
+Show current club tactical tendencies alongside the player's Q1–Q6 philosophy without synthesizing a verdict. The discrepancy itself is information.
+
+### Accepting the vacancy
+
+If creation guarantees the selected appointment, avoid `Apply for this job.` Prefer **I want this job.** for selection and a compact factual appointment review followed by **I'll take the job.** Later-career employment can use genuine applications/rejections once that system exists.
+
+Do not ask for releases, transfer targets, starter choices or detailed squad plans during creation. Those belong to the first days of actually managing the inherited club.
+
+---
+
+# 04F — FOUNDING ROUTE
+
+Founding should not become a conventional budget/facilities slider sheet. The player chooses a small number of consequential starting circumstances and institutional priorities; the world generates a viable but imperfect club from them.
+
+A founding route must begin with enough volis, staff and infrastructure for ordinary club loops to function immediately. Difficulty comes from compromises, limited resources, thin depth, low standing and lack of institutional history—not from withholding core gameplay.
+
+## 04F-1 — Starting place
+
+The working region was already selected in PLACE, so do not ask for region again. Instead offer a small number of legitimate founding situations/sites generated inside that region.
+
+A starting situation is a bundle of world facts rather than a facilities rating. It may combine:
+
+- district/local location;
+- available training space;
+- accommodation availability;
+- operating cost;
+- travel position;
+- local volleyball/institutional context.
+
+Example:
+
+```text
+Vål district
+Existing training hall
+Shared accommodation available
+Higher operating cost
+
+North coast
+Basic municipal court
+Cheap housing
+Longer travel
+
+Tressa outskirts
+Converted warehouse court
+Moderate housing
+Growing local volleyball scene
+```
+
+Long-term world geography can make these sites richer; the initial implementation only needs a few coherent generated situations.
+
+## 04F-2 — Starting backing
+
+Ask **How is the club starting out?** rather than asking for the manager's personal wealth.
+
+Use a small discrete resource tier rather than detailed sliders, provisionally:
+
+- **Bare start** — very limited resources, but core club operations function.
+- **Modest backing** — enough resources for a stable small club.
+- **Strong backing** — substantial initial financing/infrastructure.
+
+Professional standing and club capital are separate. An Established manager can found a tiny club; an Obscure manager can have external backing.
+
+Show the factual consequences before confirmation, e.g. starting funds, training space, accommodation, care provision and staff capacity. No hidden bonuses.
+
+**Strong backing remains an explicit design question:** its institutional source should eventually matter. Government/civic support, private backing, members, manager capital or other sources may create different obligations. `More money` should not become a strictly dominant founding answer. Until funding-source obligations are designed, do not falsely imply that backing tiers are complete difficulty design.
+
+## 04F-3 — Early club priorities
+
+This is the founding route's principal identity choice. A vacancy inherits a VOLI LIFE profile; a founder establishes the first priorities.
+
+Avoid direct sliders and avoid allowing the player to maximize every condition. The club's actual starting conditions should derive from:
+
+```text
+starting site
++ backing/resources
++ selected priorities
+→ feasible starting conditions
+```
+
+A priority directs scarce resources and organizational effort; it does not guarantee an `Excellent` rating.
+
+### One sporting emphasis
+
+Provisionally choose one:
+
+- **Competitive results** — greater early emphasis on people/resources capable of winning now.
+- **Player development** — greater institutional emphasis on development and future representative value.
+- **Squad continuity / sustainable building** — greater emphasis on retention, continuity and institutional stability.
+
+These are priorities, not permanent club classes.
+
+### Two living/institutional priorities
+
+Choose two from a concise set such as:
+
+- Good food
+- Comfortable housing
+- More free time
+- Strong care
+- Better training
+- Privacy
+- Communal club life
+
+The preview should immediately expose resulting tradeoffs in the projected VOLI LIFE profile. A Bare start that prioritizes food may achieve good food while accepting shared housing/basic care. A better-backed club can achieve a higher condition from the same priority.
+
+The founder should be able to create clubs with materially different lives rather than one optimal rich-club endpoint.
+
+## 04F-4 — Initial squad and staff generation
+
+Do **not** require the player to recruit an entire roster or hire every staff member during character creation.
+
+Generate a plausible founding squad from:
+
+- region;
+- starting site/resources;
+- available/free-agent population;
+- sporting priority;
+- manager background, standing and professional network;
+- selected volleyball;
+- labor-market conditions.
+
+The squad should be viable but imperfect. It should not be an optimized translation of Q1–Q6. The opening management problem is deliberately:
+
+> **This is my volleyball. These are the people I've managed to assemble. How do I reconcile the two?**
+
+Offer `View starting squad` before final confirmation. The player may go back/reroll the setup rather than individually drafting a full roster in onboarding.
+
+Background influences the causal route by which people are known/available rather than granting raw bonuses: Played can draw on player relationships; Coached on training/staff networks; Analysed on evidence about less-famous players; Established broadens who will consider the new institution; Newcomer relies more heavily on local/genuinely available/free-agent labor.
+
+Staff works similarly. Generate a minimum viable staff according to resources/network and expose remaining vacancies as early-game work. A Bare start still functions; it simply contains compromises.
+
+## 04F-5 — Club name and lightweight identity
+
+A founded club should be named here rather than in SIGNATURE because naming is part of constituting the institution. Existing clubs already have names.
+
+Allow manual entry plus regionally appropriate generated suggestions because geography is now known.
+
+Do not require a full crest/kit design editor before play. A generated/rerollable lightweight visual identity can be enough initially; deeper customization may happen in-game.
+
+## 04F-6 — Founding review
+
+Before creation, show the new institution factually:
+
+```text
+NEW CLUB
+
+Vål Nyr VC
+Spëddigh · Vål district
+
+START
+Backing             Modest
+Training             Basic
+Squad                10 volis
+Staff                3 filled · 1 vacant
+
+EARLY PRIORITIES
+Player development
+Good food
+Free time
+
+VOLI LIFE
+Food                 Good
+Housing privacy      Low
+Free time            Good
+Training load        Moderate
+Care                 Basic
+
+VOLLEYBALL
+[Q1–Q6 summary]
 
 [ View squad ]
 [ View club ]
 ```
 
-Only show information the world actually knows. If vacancy history is modeled, factual fields such as `Previous manager: resigned` or `Vacancy open: 3 weeks` are acceptable. Do not add prose about a proud institution waiting for a new direction.
+Confirmation: **Let's start this club.**
 
-The roster should be inspectable before committing. A lightweight summary is useful for players who do not want a full roster study; `View squad` should expose the actual players for those who do.
+## Founding priorities are not permanent promises
 
-The starting job market should be filtered by manager standing rather than presenting every club as equally available:
+Founding choices establish initial allocation, conditions, reputation and historical origin. They are not immutable traits.
 
-- **Obscure** managers primarily see lower-status openings;
-- **Known** managers see the normal starting market;
-- **Established** managers may have access to stronger openings;
-- **Newcomers** have a deliberately limited first job market.
+A club founded around free time can later become demanding. A development club can become a wealthy win-now institution. Repeated managerial actions should eventually outweigh the declaration made in character creation.
 
-This does not require every opening to be procedurally contested during character creation. If selecting an opening guarantees the appointment, avoid a button labeled `Apply` because it promises interviews/rejection/competition that do not exist.
+This preserves the broader rule that club identity is historical and behavioral rather than a permanent class selected on day one.
 
-Prefer a player-owned confirmation such as:
+## Founding flow summary
 
-> **I want this job.**
-
-Later-career job changes may use a real application/hiring process when that system exists.
-
-`Surprise me!` can choose among currently available openings, reveal the chosen vacancy, and allow the player to inspect or reroll before confirming.
-
-## Club identity versus manager volleyball
-
-An existing club's tactical identity should be visible alongside the player's Q1–Q6 preferences without a concluding paragraph interpreting the mismatch.
-
-For example:
-
-| | Your volleyball | Club |
-|---|---|---|
-| Serving | Target reception | Controlled serves |
-| Defense | Read the attack | Floor defense |
-| Transition | Attack in transition | Reset the play |
-| Offense | Combination | Combination |
-
-The disagreement itself is the information. Do not append a sentence telling the player that changing the club will be difficult or exciting.
-
-This is also where the game first makes clear that **regional tradition and club identity are not the same thing**. A club can be unusual within its own region.
-
-## Founding route
-
-Founding should not turn onboarding into a large facilities/economics questionnaire. The selected work region supplies geography/material grammar; starting resources generate an initial modest physical state.
-
-The exact initial-squad mechanism remains unresolved, but founding must begin with enough volis, staff, and infrastructure for the normal club loops to function immediately. Difficulty should come from weak/thin resources, low standing, limited depth, and a new institution's lack of history—not from withholding the game's core systems behind an empty roster.
-
-Major-region founding remains the intended hard institutional route; minor-region difficulty is structurally different and should not require founding to create it.
+```text
+04A — CLUB
+[ Look for a job ] / [ Found a club ]
+                         ↓
+                   Let's build one.
+                         ↓
+04F-1 — STARTING PLACE
+Choose a generated founding situation in the selected region
+                         ↓
+04F-2 — BACKING
+Bare / Modest / Strong (funding-source obligations still to design)
+                         ↓
+04F-3 — EARLY PRIORITIES
+1 sporting emphasis + 2 living/institutional priorities
+                         ↓
+WORLD GENERATION
+Facilities + VOLI LIFE + viable imperfect squad + minimum staff + finances
+                         ↓
+04F-4 — INSPECT SQUAD / STAFF
+No full onboarding recruitment draft
+                         ↓
+04F-5 — CLUB NAME
+Name + lightweight generated visual identity
+                         ↓
+04F-6 — REVIEW
+SPORT + CLUB + VOLI LIFE + PRIORITIES + SQUAD + STAFF + VOLLEYBALL
+                         ↓
+              [ Let's start this club. ]
+```
