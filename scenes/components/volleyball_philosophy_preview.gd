@@ -52,10 +52,11 @@ func _ready() -> void:
 			continue
 		actor.identity_label.visible = false
 		actor.focus_ring.visible = false
-	## A stable high broadcast angle makes spacing, block formation and serving
-	## targets legible inside a short onboarding panel.
-	_court.camera_3d.position = Vector3(13.8, 13.0, 12.8)
-	_court.camera_3d.fov = 43.0
+	## Keep the tactical angle but bring the court materially closer. The first
+	## pass devoted too much of the 300 px preview to empty arena floor, making
+	## block gaps and receiver movement technically present but visually tiny.
+	_court.camera_3d.position = Vector3(11.8, 10.5, 11.3)
+	_court.camera_3d.fov = 40.0
 	_court.camera_3d.look_at(Vector3(0.0, 0.6, 0.0), Vector3.UP)
 	_ready_to_draw = true
 	_apply_frame(0.0)
