@@ -5,3 +5,21 @@
 
 [node name="NewCareerScreen" instance=ExtResource("1_base")]
 script = ExtResource("2_script")
+
+[node name="RailTitle" parent="Layout/Rail/RailMargin/RailContent"]
+unique_name_in_owner = true
+
+[node name="RailHint" parent="Layout/Rail/RailMargin/RailContent"]
+unique_name_in_owner = true
+
+[node name="QuestionMargin" parent="Layout/MainMargin/Main/QuestionPanel"]
+unique_name_in_owner = true
+
+[node name="IdentityHeader" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep"]
+unique_name_in_owner = true
+
+[node name="SaveLabel" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/Fields"]
+unique_name_in_owner = true
+
+[node name="OrgLabel" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/Fields"]
+unique_name_in_owner = true
