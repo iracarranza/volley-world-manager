@@ -241,6 +241,8 @@ static func tempo_intent(
 		"approach_start_delay_seconds": delay,
 		"takeoff_offset_seconds": takeoff_offset,
 		"takeoff_to_contact_seconds": takeoff_to_contact,
+		## This is the hitter's requested timing relationship, not permission to
+		## make the ball cover its path faster than the physical set can travel.
 		"expected_flight_seconds": clampf(
 			takeoff_offset + takeoff_to_contact,
 			TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS,
@@ -251,10 +253,14 @@ static func tempo_intent(
 
 ## How the setter meets an individual hitter's offered rhythm.
 ##
-## `natural_flight_seconds` is the old set-height answer. It has agency only
-## when `tactic_strictness` is at the extreme end; ordinary systems ask the
-## setter to meet the hitter. `signed_error` is supplied by the rally's stable
-## seeded stream so this pure model remains replayable and directly testable.
+## The hitter owns the relationship to release; the ball still owns its flight.
+## `natural_flight_seconds` is the gravity/geometry-derived duration for this
+## actual release height, attack contact height and set distance. Coordination
+## may ask for more time by putting additional shape on the ball, but it may not
+## retime that physical arc shorter. That distinction is load-bearing for T0:
+## leaving the floor before release must not imply a 0.10 s setter-to-hitter dart.
+## `signed_error` is supplied by the rally's stable seeded stream so this pure
+## model remains replayable and directly testable.
 static func coordinate_tempo(
 	intent: Dictionary,
 	setter: VolleyballPlayer,
@@ -283,15 +289,21 @@ static func coordinate_tempo(
 	## set shape over the individual rhythm.
 	var imposition := smoothstep(0.84, 0.98, clampf(tactic_strictness, 0.0, 1.0))
 	var expected := float(intent.get("expected_flight_seconds", 0.6))
-	var target := lerpf(expected, natural_flight_seconds, imposition)
+	var physical_minimum := clampf(
+		natural_flight_seconds, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+	)
+	var requested_target := lerpf(expected, natural_flight_seconds, imposition)
+	var target := maxf(requested_target, physical_minimum)
 	var error_band := lerpf(
 		TEMPO_RECOGNITION_ERROR_POOR_SECONDS,
 		TEMPO_RECOGNITION_ERROR_ELITE_SECONDS,
 		recognition,
 	) * lerpf(1.15, 0.72, clampf(set_quality, 0.0, 1.0))
 	var error := clampf(signed_error, -1.0, 1.0) * error_band
+	var unconstrained_delivery := target + error
 	var delivered := clampf(
-		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+		maxf(unconstrained_delivery, physical_minimum),
+		TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
 	)
 	var result := intent.duplicate(true)
 	result.merge({
@@ -300,10 +312,13 @@ static func coordinate_tempo(
 		"tactic_strictness": tactic_strictness,
 		"tactic_imposition": imposition,
 		"natural_flight_seconds": natural_flight_seconds,
+		"physical_minimum_flight_seconds": physical_minimum,
 		"set_quality": set_quality,
 		"coordination_signed_error": clampf(signed_error, -1.0, 1.0),
 		"called_expected_flight_seconds": expected,
+		"requested_target_flight_seconds": requested_target,
 		"target_flight_seconds": target,
+		"flight_time_clamped_to_physics": unconstrained_delivery < physical_minimum,
 		"coordination_error_seconds": delivered - expected,
 		"delivered_flight_seconds": delivered,
 	}, true)
@@ -338,7 +353,12 @@ static func recognize_release_progress(
 	)
 	var imposition := clampf(float(result.get("tactic_imposition", 0.0)), 0.0, 1.0)
 	var natural := float(result.get("natural_flight_seconds", observed_expected))
-	var target := lerpf(observed_expected, natural, imposition)
+	var physical_minimum := clampf(
+		float(result.get("physical_minimum_flight_seconds", natural)),
+		TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+	)
+	var requested_target := lerpf(observed_expected, natural, imposition)
+	var target := maxf(requested_target, physical_minimum)
 	var recognition := clampf(float(result.get("setter_recognition", 0.0)), 0.0, 1.0)
 	var quality := clampf(float(result.get("set_quality", 0.5)), 0.0, 1.0)
 	var error_band := lerpf(
@@ -349,8 +369,10 @@ static func recognize_release_progress(
 	var error := clampf(float(result.get(
 		"coordination_signed_error", 0.0
 	)), -1.0, 1.0) * error_band
+	var unconstrained_delivery := target + error
 	var delivered := clampf(
-		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+		maxf(unconstrained_delivery, physical_minimum),
+		TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
 	)
 	result.merge({
 		"requested_tempo": called_tempo,
@@ -361,7 +383,10 @@ static func recognize_release_progress(
 		"approach_start_delay_seconds": delay,
 		"takeoff_offset_seconds": takeoff_offset,
 		"expected_flight_seconds": observed_expected,
+		"physical_minimum_flight_seconds": physical_minimum,
+		"requested_target_flight_seconds": requested_target,
 		"target_flight_seconds": target,
+		"flight_time_clamped_to_physics": unconstrained_delivery < physical_minimum,
 		"coordination_error_seconds": delivered - observed_expected,
 		"delivered_flight_seconds": delivered,
 	}, true)
