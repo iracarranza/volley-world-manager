@@ -377,14 +377,14 @@ func _show_step() -> void:
 			question_hint.text = "Take an existing institution or found a new one."
 		4:
 			question_title.text = "How do you want to manage?"
-			question_hint.text = "These are starting tendencies, not permanent manager attributes."
+			question_hint.text = "Three questions about how you work with your volis."
 		5:
 			question_title.text = "Ready to begin?"
 			question_hint.text = "Review your manager, club, volleyball and management choices."
 			_refresh_review_v2()
 		6:
 			question_title.text = "Before the first day"
-			question_hint.text = "Save metadata only. Your manager, volleyball and starting circumstances are already set."
+			question_hint.text = "Name this save and confirm how the world starts."
 			_refresh_seed_label()
 	previous_button.text = "Back to title" if current_step == 0 else "Previous"
 	if current_step == 6:

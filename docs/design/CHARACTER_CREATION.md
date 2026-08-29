@@ -1077,17 +1077,108 @@ Answering `who am I` matters only if the answer survives creation.
 
 # Implementation seams / status
 
+Verified against the live builder by rendering all seven pages through
+`tools/render_creation_flow_v2.gd`, which drives the real screen rather than a
+mockup.
+
+**Three of these gaps used to be announced in the player-facing subtitles** —
+"Six visible decisions. None is a quality score.", "Detailed vacancy and
+founding-site systems remain separate implementation seams.", "This page adds no
+new philosophy question." That copy is gone, because an interface should present
+its task rather than discuss its own scope inside the fiction. The gaps are not
+gone. They are named below instead, which is where a reader who can act on them
+looks.
+
+## Built
+
 - `ManagerProfile` exists and carries manager identity data including region/background/name/appearance.
 - `PlayerActor3D` provides the manager appearance pipeline.
 - The roster screen's manually rotatable voli viewer should be reused as the canonical 01 appearance viewer rather than duplicated.
-- The live new-career builder historically used fewer top-level steps and older philosophy/background assumptions; this document describes the intended redesigned flow, not a claim that every step is already implemented.
+- 01 YOU, 03 PLACE and 06 SIGNATURE match this document.
+- 03 asks home and work separately — `HOME · Where are you from?` over a region picker, `WORK · Where does your career begin?` over the tier row and region grid. The two-picker UI this section used to list as a seam is shipped.
+- The volleyball answers reach career state: `_create_career_v2` passes `selected_values` into `CareerManager.create_career` as `custom_principles`.
 - The current/older philosophy implementation uses `TeamPrinciples` axes and preset seams. Q1–Q6 should translate into simulation principles without exposing one raw axis per question.
+
+## GAP 02 — the six questions have no authored vignette previews
+
+`## Preview authority` above specifies, per question, "a short accessible
+description; a selectable looping visual preview; explicit confirmation before
+advancing". The shipped page has none of the three. All six questions sit on one
+page as a label and three buttons.
+
+So each tactical distinction is currently carried entirely by three short button
+labels. "Read the blockers" against "Trust your hitters" is a real distinction to
+a volleyball reader and an unexplained one to everybody else — which is the
+whole job the authored vignettes exist to do.
+
+The document and the build also disagree on **shape**, and that should be settled
+deliberately rather than by whichever is edited next: this document describes six
+pages with one question each, the build ships one page with six. The
+six-on-one layout is compact and legible. It is also the layout with nowhere to
+put a looping preview.
+
+## GAP 04 — the entry route has no vacancy or founding-site profile behind it
+
+04 ships as two buttons setting `selected_type` to `"Established"` or
+`"Founded"`. Sections `04J-1`–`04J` (job openings, vacancy identity, SPORT /
+CLUB / VOLI LIFE / CLUB PRIORITIES / BOARD EXPECTATIONS, squad information,
+accepting a vacancy) and `04F-1`–`04F-6` (starting place, backing, early
+priorities, squad and staff generation, club identity, founding review) have no
+screen at all. There is no list of openings to read and choose between, and no
+founding site to pick.
+
+The route is **not** inert. `player_generator.gd` and `staff_generator.gd` both
+branch on `"Founded"` and `career_manager.gd` has a `FOUNDED_CLUB` path, so the
+choice already changes the squad and staff a career starts with.
+
+What the rewrite lost is that it *says* so. The five-step screen's own buttons
+read:
+
+```text
+TAKE OVER A CLUB   Inherit a squad you did not pick
+                   10 volis · a going concern
+FOUND YOUR OWN     From nothing, against clubs that have everything
+                   12 volis · younger, less standing, less money
+```
+
+`new_career_screen_v2.gd` overwrites both with "Start at an existing club in your
+work region." and "Begin a new institution in your work region." — which says
+where the club is and not what either route costs. Two routes that generate
+different squads are now presented as interchangeable. Worth repairing ahead of
+the full profiles, because it is one string each.
+
+## GAP 05 — the management answers are collected, shown, and then dropped
+
+`management_values` holds `structure`, `squad` and `delegation`. The three
+sliders write to it, `_refresh_review_v2` reads it back onto the 06 review page,
+and `_create_career_v2` **does not pass it** to `CareerManager.create_career`.
+`career_state.gd` has no field for any of the three — its only `structure` is
+`housing_structure`, which is a bunkhouse.
+
+So the player answers three questions, sees the answers confirmed on the review
+page, and begins a career that does not record them. Of the three gaps this is
+the only *silent* one: 02 and 04 are visibly unfinished screens, and nothing
+anywhere indicates these answers went nowhere.
+
+Repairing it is two parts and only the first is mechanical. Adding the field and
+threading it through `create_career` is small. What the field then *does* —
+whether shared responsibility delegates anything, whether defined roles constrain
+selection — is `Explicitly unresolved` item 5 below, and should not be invented
+alongside the plumbing.
+
+## Remaining seams
+
 - Exact mappings from Q1–Q6 into simulation values should be designed after the player-facing questions and should not force the UI back into the old axis shape.
-- Manager home region and working region are separately representable in career state; the full two-picker UI remains an implementation seam.
 - Regional alignment/familiarity should be retained as information, not converted into a correctness score.
 - Background/standing should affect evidence, network and job access rather than manager-stat bonuses.
 - MANAGEMENT is structurally settled; exact thresholds/default strengths remain tunable.
 - SAVE SETUP should remain thin even if the underlying save metadata grows.
+
+A line saying *"manager home region and working region are separately
+representable in career state; the full two-picker UI remains an implementation
+seam"* stood here and has been removed rather than kept: 03 now ships both
+pickers, so the seam it named is closed. A status list is only worth reading if
+its entries are retired when they stop being true.
 
 # Explicitly unresolved
 
