@@ -47,12 +47,26 @@ func _run() -> void:
 	screen.debug_select_club_route_for_render("Founded")
 	await _capture(screen, 3, "04_club_selected.png")
 
+	## 02 is one outer creation step but seven nested states. Q1 is the normal
+	## 02_volleyball.png above; capture the far end of the questionnaire and the
+	## final review as proof that navigation does not collapse back into a matrix.
+	screen.debug_show_volleyball_question_for_render(5, 2)
+	await _capture_current("02_volleyball_q6_selected.png")
+	screen.debug_show_volleyball_review_for_render()
+	await _capture_current("02_volleyball_review.png")
+
 	print("Rendered live creation flow with project theme to %s" % OUTPUT_DIR)
 	quit()
 
 
 func _capture(screen: Control, step: int, file_name: String) -> void:
 	screen.debug_jump_to_step(step)
+	await process_frame
+	await process_frame
+	await _capture_current(file_name)
+
+
+func _capture_current(file_name: String) -> void:
 	await process_frame
 	await process_frame
 	await RenderingServer.frame_post_draw
