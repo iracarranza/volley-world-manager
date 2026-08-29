@@ -153,7 +153,7 @@ func _render_signature() -> void:
 	await _clear_root()
 	var built: Dictionary = _base_screen(
 		"06", "Ready to begin?",
-		"Review what you chose. Nothing here adds a new philosophy question."
+		"Review your manager, club, volleyball and management choices."
 	)
 	var body := built["body"] as VBoxContainer
 

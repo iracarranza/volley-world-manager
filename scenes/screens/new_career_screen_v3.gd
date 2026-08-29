@@ -1,5 +1,14 @@
 extends "res://scenes/screens/new_career_screen_v2.gd"
 
+## A layout fix for the 1280x720 base resolution, and nothing else.
+##
+## It briefly owned a `_show_step` as well, which reassigned two of the six
+## subtitles *after* `super._show_step()` had already assigned them -- trimming
+## implementation talk out of steps 1 and 3 while the sentences it was replacing
+## stayed behind in `new_career_screen_v2.gd`. Two strings per subtitle, and the
+## one a reader finds first was the one the player never saw. The trims now live
+## at the single site that authors the copy.
+
 ## The inherited editor was measured around the old five-step screen. With the
 ## background row added, its horizontal minimum became wider than the 1280x720
 ## project base and the whole HBox resolved partly off the left edge. Keep the
@@ -21,16 +30,3 @@ func _ready() -> void:
 		if slider != null:
 			slider.custom_minimum_size.x = 118.0
 	voli_controls.add_theme_constant_override("separation", 4)
-
-
-## Keep implementation status out of player-facing copy. The builder can be an
-## incomplete implementation without announcing its seams inside the fiction.
-func _show_step() -> void:
-	super._show_step()
-	if not _v2_ready:
-		return
-	match current_step:
-		1:
-			question_hint.text = "Six visible decisions. None is a quality score."
-		3:
-			question_hint.text = "Take an existing institution or found a new one."
