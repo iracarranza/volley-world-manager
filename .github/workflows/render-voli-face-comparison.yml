@@ -7,6 +7,7 @@ on:
     paths:
       - 'tools/render_voli_face_comparison.gd'
       - 'tools/render_voli_expression_pass2.gd'
+      - 'tools/render_voli_expression_pass2_refined.gd'
       - 'scenes/components/player_actor_3d.gd'
       - 'scenes/components/player_actor_3d.tscn'
       - 'scripts/data/face_expressions.gd'
@@ -61,6 +62,15 @@ jobs:
             --script tools/render_voli_expression_pass2.gd
           ls -lh artifacts/voli-expression-pass2/
 
+      - name: Render refined Voli expression pass 2
+        run: |
+          xvfb-run -a /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            --path . \
+            --rendering-method gl_compatibility \
+            --resolution 1920x1080 \
+            --script tools/render_voli_expression_pass2_refined.gd
+          ls -lh artifacts/voli-expression-pass2-refined/
+
       - name: Upload Voli face render packet
         uses: actions/upload-artifact@v4
         with:
@@ -68,5 +78,6 @@ jobs:
           path: |
             artifacts/voli-face-comparison/*.png
             artifacts/voli-expression-pass2/*.png
+            artifacts/voli-expression-pass2-refined/*.png
           if-no-files-found: error
           retention-days: 14
