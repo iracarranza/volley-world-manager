@@ -7214,3 +7214,77 @@ Worth knowing before either is attempted: inside a normal defensive window
 (~0.53 s) neither form reaches its own ceiling, so the comparison is worth
 almost nothing for the balls a defender actually plays and only pays on long
 pursuits.
+
+## The creation flow's three open steps, and why the copy no longer says so
+
+The career builder's subtitles used to announce their own incompleteness inside
+the fiction -- *"Six visible decisions. None is a quality score."*, *"Detailed
+vacancy and founding-site systems remain separate implementation seams."*, *"This
+page adds no new philosophy question."* That copy is gone, because an interface
+should present its task rather than discuss its own scope in front of the player.
+
+**Removing the announcement does not remove the gap**, and a status that lived
+only in player-facing copy is a status nobody responsible can act on. The three
+are recorded here and in `docs/design/CHARACTER_CREATION.md`'s status section,
+each checked against the build by rendering all seven pages through
+`tools/render_creation_flow_v2.gd` rather than asserted from the design intent.
+
+### 02 — the six questions have no authored vignette previews
+
+`CHARACTER_CREATION.md` §*Preview authority* specifies three things per
+question: a short accessible description, a selectable looping visual preview,
+and explicit confirmation before advancing. None of the three ship. Six questions
+sit on one page as a label and three buttons, so each tactical distinction is
+carried by a button label alone -- *"Read the blockers"* against *"Trust your
+hitters"* is a real distinction to a volleyball reader and an unexplained one to
+everybody else, which is the whole job the vignettes exist to do.
+
+**Settle the shape before authoring anything.** The document describes six pages
+of one question each; the build ships one page of six. The shipped layout is
+compact and legible, and it is also the layout with nowhere to put a looping
+preview. Picking one by editing whichever file is open next is how the two stay
+disagreed.
+
+### 04 — the entry route has no vacancy or founding-site profile behind it
+
+04 is two buttons setting `selected_type`. Sections `04J-1`-`04J` (job openings,
+vacancy identity, SPORT / CLUB / VOLI LIFE / CLUB PRIORITIES / BOARD
+EXPECTATIONS, squad information, accepting a vacancy) and `04F-1`-`04F-6`
+(starting place, backing, early priorities, squad and staff generation, club
+identity, founding review) have no screen. Part of it waits on OPEN 04-1
+(founding backing) and OPEN 04-2 (crest/kit grammar), both deliberately
+unresolved.
+
+**One half is two strings and should not wait for the rest.** The route already
+branches -- `player_generator.gd` and `staff_generator.gd` both key on
+`"Founded"` -- and the five-step screen used to say what that costs:
+
+```text
+TAKE OVER A CLUB   Inherit a squad you did not pick
+                   10 volis - a going concern
+FOUND YOUR OWN     From nothing, against clubs that have everything
+                   12 volis - younger, less standing, less money
+```
+
+`new_career_screen_v2.gd` overwrote both with text naming only where the club is.
+Two routes that generate different squads now read as interchangeable, which is a
+regression in information rather than an unbuilt feature.
+
+### 05 — the management answers are collected, shown, and then dropped
+
+`management_values` (`structure`, `squad`, `delegation`) is written by the three
+sliders, read back onto the 06 review page by `_refresh_review_v2`, and never
+passed to `CareerManager.create_career`. `career_state.gd` has no field for any
+of the three; its only `structure` is `housing_structure`, which is a bunkhouse.
+
+So the player answers three questions, sees them confirmed, and starts a career
+that did not record them. **Of the three this is the only silent one** -- 02 and
+04 are visibly unfinished screens, and nothing anywhere indicates these answers
+went nowhere.
+
+Two parts, and only the first is mechanical. Adding the field and threading it
+through `create_career` is small. What the field then *does* -- whether shared
+responsibility delegates anything, whether defined roles constrain selection --
+is `CHARACTER_CREATION.md`'s *Explicitly unresolved* item 5, and inventing it
+alongside the plumbing is how an unresolved item gets quietly resolved by
+whoever happened to be wiring that day.
