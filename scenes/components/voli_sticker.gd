@@ -276,6 +276,14 @@ const FINGERPRINT_SOURCES: Array[String] = [
 	"res://scenes/components/player_actor_3d.tscn",
 	"res://scenes/components/surface_mark_renderer_3d.gd",
 	"res://scripts/data/body_type_models.gd",
+	## **The face was missing, and a missing entry fails exactly like a cache
+	## that works.** `face_expressions.gd` owns the mouth's shape, its sampling
+	## and how far it stands off a muzzle -- all of it geometry, all of it baked
+	## into the headshot. It was not listed, so rebuilding the mouth invalidated
+	## nothing and every cached sticker kept serving the old face from disk. The
+	## comment above already states the rule this violated: digest every source
+	## that can change the baked body's geometry.
+	"res://scripts/data/face_expressions.gd",
 ]
 static var _fingerprint: String = ""
 static var _pruned: bool = false

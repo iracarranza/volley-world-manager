@@ -275,10 +275,11 @@ func _design_muzzle(actor: Node, body_type: String, variant: String) -> void:
 	## therefore grows forward (-Z) instead of being split through the skull.
 	muzzle.position.z -= (depth - old_size.z) * 0.5
 
-	for index in range(7):
-		var old_mouth := actor.find_child("Mouth%d" % index, true, false) as MeshInstance3D
-		if old_mouth != null:
-			old_mouth.visible = false
+	## Prefix, for the same reason the wings above are: the mouth was seven boxes
+	## named `Mouth0..Mouth6` and is now one swept stroke named `Mouth`, so seven
+	## exact lookups found nothing and the study drew over a live mouth.
+	for old_mouth in actor.find_children("Mouth*", "MeshInstance3D", true, false):
+		(old_mouth as MeshInstance3D).visible = false
 
 	var nose := MeshInstance3D.new()
 	nose.name = "StudyNose"
@@ -324,11 +325,21 @@ func _muzzle_spec(body_type: String, variant: String, old_size: Vector3) -> Dict
 ## The Avi rig already has exactly the articulation a wing needs: shoulder and
 ## elbow. Replace the visible upper/lower arm cylinders with wing masses centred
 ## on those same axes. The production WingLeft/WingRight cosmetics are hidden.
+## Hide whatever the production body is currently calling its wings.
+##
+## **By prefix, because the names moved and an exact lookup fails silently.**
+## These read `["WingLeft", "WingRight"]`, and production has since split each
+## wing into a covert and a primary so it can fold at the elbow -- so the lookup
+## found nothing, hid nothing, and the study drew its own wing variant *on top of*
+## the production one. A comparison sheet that quietly shows both is worse than
+## no sheet, because it still looks like a comparison.
+static func _hide_production_wings(actor: Node) -> void:
+	for node in actor.find_children("Wing*", "MeshInstance3D", true, false):
+		(node as MeshInstance3D).visible = false
+
+
 func _design_integrated_wings(actor: Node, variant: String) -> void:
-	for wing_name in ["WingLeft", "WingRight"]:
-		var old_wing := actor.find_child(wing_name, true, false) as MeshInstance3D
-		if old_wing != null:
-			old_wing.visible = false
+	_hide_production_wings(actor)
 
 	for side_name in ["LeftArm", "RightArm"]:
 		var arm := actor.get_node_or_null("BodyPivot/%s" % side_name) as Node3D

@@ -282,6 +282,13 @@ func _design_muzzle(actor: Node, body_type: String, variant: String) -> void:
 		for child in face.get_children():
 			if str(child.name).begins_with("Mouth"):
 				(child as Node3D).visible = false
+	## Production grew a nose of its own after this study was written, and it is a
+	## cosmetic under `BodyPivot` rather than a face feature under `Head/Face` --
+	## so the loop above does not reach it and the study's dark bar was landing on
+	## top of a live pale one. A variant column showing both proposals at once is
+	## not a variant column.
+	for grown in actor.find_children("Nose", "MeshInstance3D", true, false):
+		(grown as MeshInstance3D).visible = false
 
 	var nose := MeshInstance3D.new()
 	nose.name = "StudyNose"
@@ -324,11 +331,21 @@ func _muzzle_spec(body_type: String, variant: String, old_size: Vector3) -> Dict
 				return {"back_w": old_w * 0.95, "back_h": old_h * 0.78, "front_w": old_w * 0.60, "front_h": old_h * 0.53, "depth": old_d * 1.25}
 
 
+## Hide whatever the production body is currently calling its wings.
+##
+## **By prefix, because the names moved and an exact lookup fails silently.**
+## These read `["WingLeft", "WingRight"]`, and production has since split each
+## wing into a covert and a primary so it can fold at the elbow -- so the lookup
+## found nothing, hid nothing, and the study drew its own wing variant *on top of*
+## the production one. A comparison sheet that quietly shows both is worse than
+## no sheet, because it still looks like a comparison.
+static func _hide_production_wings(actor: Node) -> void:
+	for node in actor.find_children("Wing*", "MeshInstance3D", true, false):
+		(node as MeshInstance3D).visible = false
+
+
 func _design_integrated_wings(actor: Node, variant: String) -> void:
-	for wing_name in ["WingLeft", "WingRight"]:
-		var old_wing := actor.find_child(wing_name, true, false) as MeshInstance3D
-		if old_wing != null:
-			old_wing.visible = false
+	_hide_production_wings(actor)
 
 	for side_name in ["LeftArm", "RightArm"]:
 		var arm := actor.get_node_or_null("BodyPivot/%s" % side_name) as Node3D
