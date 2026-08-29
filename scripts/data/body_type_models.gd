@@ -2024,7 +2024,7 @@ static func _feli() -> Dictionary:
 				## front pad. The `taper` is what carries the jawline -- 0.66
 				## leaves a clear angle from cheek to pad without turning the head
 				## into a snout on a stick.
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge",
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
 				"radius": 0.092, "height": 0.104,
 				"depth": 0.150, "taper_width": 0.64, "taper_height": 0.70,
 				"position": Vector3(0.0, 1.706, -0.170), "color": "skin",
@@ -2378,7 +2378,7 @@ static func _cani() -> Dictionary:
 				## Feli's reach, with a gentler taper so the jaw runs straight
 				## rather than pinching -- which is why the prism flattered this
 				## face first and Feli's second.
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge",
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
 				"radius": 0.090, "height": 0.109,
 				"depth": 0.238, "taper_width": 0.63, "taper_height": 0.68,
 				"position": Vector3(0.0, 1.740, -0.208), "color": "skin",
@@ -2439,7 +2439,7 @@ static func _ursi() -> Dictionary:
 			{
 				## A bear: broad and blunt. The widest muzzle on the roster and
 				## the least tapered, so the jaw is a shelf rather than a point.
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge",
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
 				"radius": 0.100, "height": 0.100,
 				"depth": 0.175, "taper_width": 0.66, "taper_height": 0.72,
 				"position": Vector3(0.0, 1.680, -0.186), "color": "skin",
@@ -2505,7 +2505,7 @@ static func _simi() -> Dictionary:
 			{
 				## A monkey: small and prognathous -- little section, but it
 				## carries forward, which with the brow above it is the whole read.
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge",
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
 				"radius": 0.070, "height": 0.078,
 				"depth": 0.145, "taper_width": 0.62, "taper_height": 0.70,
 				"position": Vector3(0.0, 1.394, -0.140), "color": "skin",

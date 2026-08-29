@@ -82,8 +82,29 @@ const MOUTH_BOW: float = 0.19
 ## the corners of a muzzle, which is exactly where seven was coarsest.
 const MOUTH_SAMPLES: int = 15
 
-const EYE_WIDTH: float = 0.30
-const EYE_HEIGHT: float = 0.30
+## **More than half of every eye used to be its own outline.** A Feli eye is
+## authored 0.053 m across and `_ink_node` grew a 0.030 m inverted hull on every
+## side of it, so what actually showed was 0.113 m -- the geometry was a minority
+## of the mark. Worse, the hull is a fixed distance in metres while the box scales
+## with the head, so a small-headed voli's eyes were proportionally much larger
+## than a big-headed one's: the exact thing the head-normalised units above exist
+## to prevent, undone downstream by a constant nobody connected to it.
+##
+## The hull also had to go somewhere. Grown out of a mark that thin it burst
+## through the surrounding head, and the dark fringes that produced around the
+## eyes are the "speckles", "eye bags" and "dotted lines" reported on faces that
+## should be plain. Vegi's, having no muzzle to distract from them, read as a
+## moustache.
+##
+## Raised by a fifth rather than doubled, and the first attempt is the instructive
+## one. Compensating for the hull's *full* growth -- 0.060 m across, which is 0.34
+## in normalised units on a 0.178 m head -- produced eyes half again too big,
+## because most of that growth went sideways *into* the skull and was occluded.
+## What ever showed was the box plus a thin rim, and a thin rim is what this
+## replaces. Measured against the ink-collapsed render rather than against the
+## arithmetic.
+const EYE_WIDTH: float = 0.36
+const EYE_HEIGHT: float = 0.34
 const FEATURE_DEPTH: float = 0.10
 const MOUTH_THICKNESS: float = 0.10
 ## Lift off the surface, in head radii. Enough that a feature never z-fights with
@@ -213,6 +234,10 @@ static func parts(
 				FEATURE_DEPTH * radius,
 			),
 			"position": _surface(EYE_U * side, EYE_V, radius, half_height),
+			## An eye is a mark in the face's own ink colour, like the mouth and the
+			## whiskers. It is not an object sitting on a head, so nothing is drawn
+			## around it.
+			"ink": "none",
 			## Mirrored, so a tilt moves the *inner* end on both sides rather than
 			## rotating the whole face one way.
 			##

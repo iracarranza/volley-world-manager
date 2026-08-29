@@ -206,3 +206,49 @@ a 64 mm blob, which on a tapered pad drew as a hash mark. That is the fourth tim
 this pass: the mouth as seven boxes, the nose at a quarter of a muzzle radius,
 the whiskers, and now the mouth again once the pad it sits on got small enough to
 show it.
+
+
+## The speckles were the eyes' own outlines, and the eyes were mostly outline
+
+Reported last: *"little artifacts/noise on all of their faces -- looks like eye
+bags or speckles when they should be plain… dotted lines next to their eyes and
+vegi looks like mustache."*
+
+Tested rather than reasoned about: the same gallery rendered with
+`ink_metres`/`crown_ink_metres` collapsed to 0.0005. **Every artifact vanished.**
+So the noise was the ink, and the only question left was which parts.
+
+The eyes. A Feli eye is authored 0.053 m across and `_ink_node` grew a 0.030 m
+inverted hull on every side of it -- so the drawn eye was 0.113 m and **more than
+half of it was its own outline**. Grown out of a mark that thin, the hull bursts
+through the surrounding head, and the fringes that leaves are the "eye bags" and
+"dotted lines". Vegi, having no muzzle to distract from them, read as a
+moustache.
+
+There is a second defect underneath, and it is the one worth keeping. The hull is
+a fixed distance in **metres** while the eye box scales with the **head**, so a
+small-headed voli's eyes were proportionally much larger than a big-headed one's
+-- which is precisely what `face_expressions.gd`'s head-normalised units exist to
+prevent, undone downstream by a constant in another file that nobody had
+connected to them.
+
+Eyes now decline the hull like the mouth and the whiskers, and `EYE_WIDTH` /
+`EYE_HEIGHT` rise by a fifth so the drawn eye is about what it was on a mid-sized
+head -- and is now the size it says it is on every head.
+
+**The first correction overshot, and that is the instructive part.** Compensating
+for the hull's full growth -- 0.060 m across, 0.34 in normalised units on a
+0.178 m head -- doubled the constants and produced eyes half again too big,
+because most of that growth went sideways *into* the skull and was never visible.
+What ever showed was the box plus a thin rim. Measured against the ink-collapsed
+render instead of against the arithmetic, the answer is a fifth, not a double.
+
+Muzzles also moved to the body's 0.018 m pen. A snout is part of a head, not a
+crown-weight detail, and at 0.030 m its outline was printing a box on the cheek.
+
+**That is six times in one pass** that a 30 mm hull on a small feature was the
+actual defect: the mouth as seven boxes, the nose at a quarter of a muzzle
+radius, the whiskers, the mouth again on a tapered pad, the muzzle on the cheek,
+and now the eyes. The rule earned by all six: **a part small enough to be mostly
+outline is not a small part, it is an outline** -- and the parts that are marks
+rather than objects should carry no hull at all.
