@@ -11,6 +11,15 @@ const OUTPUT_DIR := "res://artifacts/creation-flow-drafts"
 const SIZE := Vector2i(1280, 720)
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const CAREER_SCENE := preload("res://scenes/screens/new_career_screen_v2.tscn")
+const CAPTURES := [
+	[0, "01_you.png"],
+	[1, "02_volleyball.png"],
+	[2, "03_place.png"],
+	[3, "04_club.png"],
+	[4, "05_management.png"],
+	[5, "06_signature.png"],
+	[6, "save_setup.png"],
+]
 
 
 func _initialize() -> void:
@@ -27,9 +36,8 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	await _capture(screen, 0, "01_you.png")
-	await _capture(screen, 5, "06_signature.png")
-	await _capture(screen, 6, "save_setup.png")
+	for capture in CAPTURES:
+		await _capture(screen, int(capture[0]), str(capture[1]))
 	print("Rendered live creation flow with project theme to %s" % OUTPUT_DIR)
 	quit()
 
