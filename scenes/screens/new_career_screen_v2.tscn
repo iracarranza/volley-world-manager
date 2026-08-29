@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/screens/new_career_screen.tscn" id="1_base"]
-[ext_resource type="Script" path="res://scenes/screens/new_career_screen_v3.gd" id="2_script"]
+[ext_resource type="Script" path="res://scenes/screens/new_career_screen_v4.gd" id="2_script"]
 
 [node name="NewCareerScreen" instance=ExtResource("1_base")]
 script = ExtResource("2_script")
