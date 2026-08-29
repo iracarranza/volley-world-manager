@@ -36,6 +36,17 @@ const MAX_SAMPLES: int = 4000
 ## buys back resolution in the clock that matters: at 0.1x, 4 wall-clock
 ## samples a second are 40 samples per rally second. Every speed below is
 ## divided back out, so the figures are rally deg/s, not wall deg/s.
+##
+## **`Engine.time_scale`, not `playback_speed`, and the difference is the whole
+## measurement.** `playback_speed` stretches the rally alone; every duration the
+## rig keeps in seconds -- the stance blend, the floor recovery, the pose
+## transition -- runs on `get_process_delta_time()` and would keep real time
+## while the body it belongs to moved at a tenth of it. At 4 fps that is a
+## 0.25 s frame against a 0.14 s transition: one frame swallows the whole thing,
+## and a probe built that way reports that no transition ever happened. It did
+## report exactly that. Scaling the engine clock slows the rally and everything
+## timed against it by the same factor, which is the relationship real playback
+## has and the only one worth measuring.
 const PLAYBACK_SPEED: float = 0.1
 ## Above this, a joint moved further in one sample than a body can move a limb.
 ## Set from the sport rather than from the data: a spiking arm is the fastest
@@ -65,12 +76,17 @@ var _previous: Dictionary = {}
 var _rows: Array = []
 var _side := ""
 var _elapsed := 0.0
+var _posed_total := 0
+var _easing_total := 0
+var _posed_last := 0
+var _easing_last := 0
 
 
 func _ready() -> void:
 	## Small on purpose. The bottleneck is fragments, not the rig, and every
 	## pixel not drawn is another sample of the rally.
 	get_window().size = Vector2i(480, 300)
+	Engine.time_scale = PLAYBACK_SPEED
 	for side in range(2):
 		_side = "home" if side == 0 else "opponent"
 		var chosen := _find_full_chain_rally(side == 0)
@@ -82,13 +98,18 @@ func _ready() -> void:
 		])
 		_previous.clear()
 		_elapsed = 0.0
+		_posed_total = 0
+		_easing_total = 0
+		_posed_last = 0
+		_easing_last = 0
 		_screen = MATCH_SCREEN.instantiate() as Control
 		add_child(_screen)
 		await get_tree().process_frame
-		_screen.load_and_play_rally(chosen.result as RallyResult, PLAYBACK_SPEED)
+		_screen.load_and_play_rally(chosen.result as RallyResult, 1.0)
 		await _sample()
 		_screen.queue_free()
 		await get_tree().process_frame
+	Engine.time_scale = 1.0
 	_report()
 	get_tree().quit(0)
 
@@ -137,12 +158,16 @@ func _sample() -> void:
 	## "did not move" column and drag the share down for a reason that has
 	## nothing to do with posing.
 	while taken < MAX_SAMPLES and bool(_screen.get("playback_active")):
-		await get_tree().create_timer(SAMPLE_SECONDS).timeout
+		## Ignoring the time scale, so the sampling cadence stays a real-time
+		## one while everything it looks at is slowed.
+		await get_tree().create_timer(SAMPLE_SECONDS, true, false, true).timeout
 		taken += 1
 		var now_usec := Time.get_ticks_usec()
 		var elapsed := maxf(float(now_usec - last_usec) / 1000000.0, 0.0001)
 		last_usec = now_usec
 		_elapsed += elapsed
+		_posed_total += _posed_last
+		_easing_total += _easing_last
 		## Which leg of the rally the drawing is on, taken off the screen's own
 		## caption rather than recomputed, so the two agree by construction. A
 		## snap is only diagnosable if you know which pose it arrived into.
@@ -150,10 +175,20 @@ func _sample() -> void:
 		var label := _screen.get("event_label") as Label
 		if label != null:
 			leg = str(label.text)
+		## Which actors `set_pose` actually reached this frame, and which are
+		## mid-transition. Read off the rig's own bookkeeping rather than
+		## inferred from the joints, because "did not move" and "was never
+		## asked to move" look identical from outside and mean opposite things.
+		var posed_now := 0
+		var easing_now := 0
 		for player_id in court.player_actors:
 			var actor := court.player_actors[player_id] as Node3D
 			if actor == null:
 				continue
+			if int(actor.get("_pose_frame")) == int(Engine.get_process_frames()):
+				posed_now += 1
+			if float(actor.get("_pose_remaining")) > 0.0:
+				easing_now += 1
 			for joint in JOINTS:
 				var node := actor.get_node_or_null(
 					str(JOINTS[joint])
@@ -192,6 +227,13 @@ func _sample() -> void:
 						"leg": leg,
 					})
 				_previous[key] = now
+		_posed_last = posed_now
+		_easing_last = easing_now
+	print("  posed by set_pose: %.2f of %d actors per frame; mid-ease: %.2f" % [
+		float(_posed_total) / float(maxi(taken, 1)),
+		court.player_actors.size(),
+		float(_easing_total) / float(maxi(taken, 1)),
+	])
 	print("  %s: %d samples over %.2f s of rally, %d actors, %.1f samples/rally-second" % [
 		_side, taken, _elapsed * PLAYBACK_SPEED, court.player_actors.size(),
 		float(taken) / maxf(_elapsed * PLAYBACK_SPEED, 0.0001),
@@ -349,14 +391,66 @@ func _report() -> void:
 		if float(row["speed"]) >= FAST_DEGREES_PER_SECOND:
 			tail.append(row)
 	tail.sort_custom(func(a, b): return float(a["step"]) > float(b["step"]))
+	## **Is 17% a cadence, or a population?**
+	##
+	## Twelve bodies are on court and `match_screen` poses only the contact actor
+	## and the blockers -- one to three of twelve, which is 8 to 25 per cent. A
+	## share in that band therefore has two readings that mean opposite things:
+	## every body updating nine times a rally second, or two bodies updating
+	## every frame while ten never move at all. Counting distinct bodies per
+	## sample separates them, and nothing else does.
+	var bodies := {}
+	var moved_per_sample := {}
+	var samples_seen := {}
+	for row in _rows:
+		var body := str(row["body"])
+		bodies[body] = true
+		var at := "%s|%d" % [str(row["side"]), int(row["sample"])]
+		if not samples_seen.has(at):
+			samples_seen[at] = {}
+		if float(row["speed"]) > 0.0001:
+			var moving: Dictionary = moved_per_sample.get(at, {})
+			moving[body] = true
+			moved_per_sample[at] = moving
+	var total_moving := 0
+	var still_samples := 0
+	for at in samples_seen:
+		var count := int(Dictionary(moved_per_sample.get(at, {})).size())
+		total_moving += count
+		if count == 0:
+			still_samples += 1
+	print("")
+	print("-- how many of the bodies move in a given frame --")
+	print("bodies on court            %d" % bodies.size())
+	print("mean bodies moving/frame   %.2f" % [
+		float(total_moving) / float(maxi(samples_seen.size(), 1)),
+	])
+	print("frames with nobody moving  %d of %d" % [
+		still_samples, samples_seen.size(),
+	])
+	var per_body := {}
+	var per_body_total := {}
+	for row in _rows:
+		var body := str(row["body"])
+		per_body_total[body] = int(per_body_total.get(body, 0)) + 1
+		if float(row["speed"]) > 0.0001:
+			per_body[body] = int(per_body.get(body, 0)) + 1
+	var shares: Array = []
+	for body in per_body_total:
+		shares.append(100.0 * float(per_body.get(body, 0))
+			/ float(maxi(int(per_body_total[body]), 1)))
+	shares.sort()
+	print("per-body move share, min/median/max  %.1f%% / %.1f%% / %.1f%%" % [
+		shares[0], shares[int(shares.size() * 0.5)], shares[shares.size() - 1],
+	])
 	print("")
 	print("-- the biggest single-frame turns, and the leg they landed in --")
 	print("%-9s %-9s %9s %11s   %s" % ["side", "joint", "degrees", "deg/s", "leg"])
 	for index in range(mini(tail.size(), 18)):
 		var row: Dictionary = tail[index]
-		print("%-9s %-9s %9.1f %11.0f   %s" % [
+		print("%-9s %-9s %9.1f %11.0f   %-28s %s" % [
 			str(row["side"]), str(row["joint"]), float(row["step"]),
-			float(row["speed"]), str(row["leg"]),
+			float(row["speed"]), str(row["leg"]), str(row["body"]),
 		])
 	var by_leg := {}
 	for row in tail:

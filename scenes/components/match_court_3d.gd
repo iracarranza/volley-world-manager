@@ -607,10 +607,20 @@ func at_the_net(player_id: int) -> bool:
 	return absf(here.y - 0.5) * court_length <= ReadyStance.NET_BAND_METERS
 
 
-func reset_player_poses() -> void:
+## Put every body back to neutral.
+##
+## Called twice over: once per drawn frame, as the wipe that playback poses the
+## contact actors on top of, and once at the end of a rally to leave the court
+## standing. `snap` separates them, and it has to: the per-frame call is an
+## ordinary neutral pose that a body may ease into, while the terminal one is
+## the last thing anything says to these actors, and a body left mid-ease there
+## would hold half a pose until the next rally.
+func reset_player_poses(snap: bool = false) -> void:
 	for actor_resource in player_actors.values():
 		var actor := actor_resource as PlayerActor3D
 		actor.set_highlighted(false)
+		if snap:
+			actor.clear_pose_transition()
 		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 

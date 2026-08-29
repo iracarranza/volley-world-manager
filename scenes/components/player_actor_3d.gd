@@ -180,6 +180,50 @@ var _floor_posture: String = "planted"
 var _floor_direction: Vector2 = Vector2.ZERO
 var _floor_remaining: float = 0.0
 var _floor_duration: float = 0.0
+## The pose being eased out of, when the *action* changes rather than the
+## stance. Same shape as the floor recovery above and driven the same way,
+## because it is the same problem one level out: a contact pose ends the frame
+## `is_contact_actor` goes false, and a new one begins the frame it goes true.
+var _pose_from: Dictionary = {}
+var _pose_remaining: float = 0.0
+var _pose_duration: float = 0.0
+## Whether, as of the latest call this frame, the action is judged to have
+## changed. Revisable within the frame -- see `_track_pose_transition`.
+var _pose_pending: bool = false
+## Whether the change being eased is *into* an action or out of one.
+var _pose_loading: bool = false
+## Which module wrote the joints: the event type while this voli is the contact
+## actor, and -1 while the gait has it. `-2` is "no frame yet", kept distinct
+## because the first pose a body is ever put in has nothing to ease out of.
+## `_pose_frame_source` is this frame's latest; `_pose_previous_source` is what
+## the previous frame finished on, which is what a change is measured against.
+var _pose_frame_source: int = -2
+var _pose_previous_source: int = -2
+## The rig as the previous frame left it, taken at the first call of this one.
+var _pose_frame_joints: Dictionary = {}
+## Whether this frame follows the last one this body was posed on.
+var _pose_continuous: bool = false
+## Frames on which the clock was advanced and the ease was armed, so both happen
+## once however many times a frame poses this body.
+var _pose_ticked_frame: int = -2
+var _pose_armed_frame: int = -2
+## What an arming displaced, so a revision within the same frame can put it back.
+var _pose_shelved: Dictionary = {}
+## Which process frame `set_pose` last ran on.
+##
+## **A transition needs a previous frame, and a still image does not have one.**
+## `voli_sticker` poses a rig three frames after configuring it, and the journal
+## poses a roster portrait twice in the same frame -- neither is playback, and
+## easing either would bake a body caught halfway between two poses. Rather than
+## a flag every caller has to set correctly, the rig asks whether it was posed
+## on the immediately preceding frame, which is true of playback and of nothing
+## else. The same question gates the head.
+var _pose_frame: int = -2
+## Where the head actually is, as against `look_yaw`/`look_pitch`, which are
+## where it has been *asked* to be.
+var _head_yaw: float = 0.0
+var _head_pitch: float = 0.0
+var _head_frame: int = -2
 ## Which way this voli is travelling relative to the way they are facing, in
 ## radians: 0 straight ahead, PI a backpedal, plus or minus a right angle a
 ## lateral shuffle.
@@ -2007,9 +2051,37 @@ func clear_look() -> void:
 	_apply_head_look()
 
 
+## Move the head toward where it has been asked to look, at a neck's pace.
+##
+## `look_yaw` is the *target*; `_head_yaw` is where the head has got to. They
+## were one variable, and the clamp on the target was doing duty as the whole
+## model of a neck -- so a ball crossing directly behind a voli took the look
+## from `+HEAD_YAW_LIMIT_DEGREES` to `-HEAD_YAW_LIMIT_DEGREES` between two
+## frames. The filmed rallies show that as a recurring, exact 124.0 degrees, on
+## five separate legs and on both sides.
+##
+## **Advanced once a frame, not once a call.** Four sites assign a look and each
+## calls this, so charging every call the frame's whole allowance would let the
+## head travel three times as fast on a frame that happens to dig. The frame
+## number is the gate; calls after the first in a frame only re-apply what the
+## first one settled on.
 func _apply_head_look() -> void:
-	if head != null:
-		head.rotation = Vector3(look_pitch, look_yaw, 0.0)
+	if head == null:
+		return
+	var frame := int(Engine.get_process_frames())
+	## Not playback: a still image, or the first look this body has ever taken.
+	## Nothing to travel from, so arrive.
+	if frame != _head_frame + 1 and frame != _head_frame:
+		_head_yaw = look_yaw
+		_head_pitch = look_pitch
+	elif frame != _head_frame:
+		var delta := get_process_delta_time()
+		_head_yaw = StanceTransitionScript.turned(_head_yaw, look_yaw, delta)
+		_head_pitch = StanceTransitionScript.turned(
+			_head_pitch, look_pitch, delta
+		)
+	_head_frame = frame
+	head.rotation = Vector3(_head_pitch, _head_yaw, 0.0)
 
 
 ## Keep the shoes on the floor when a pose folds a knee.
@@ -2219,6 +2291,114 @@ func _track_floor_recovery(
 		)
 
 
+## Notice that the action changed, and hold the pose it changed out of.
+##
+## Called at the top of `set_pose`, before the gait has overwritten anything, so
+## what `_capture_joints` returns here is genuinely last frame's finished body.
+##
+## The duration cannot be computed yet: the pose being moved *to* has not been
+## posed. So this arms, and `_apply_pose_transition` measures a frame later --
+## which is the only moment both ends of the change exist.
+func _track_pose_transition(event_type: int, is_contact_actor: bool) -> void:
+	var frame := int(Engine.get_process_frames())
+	if frame != _pose_frame:
+		## **The first call of a frame, and the rig has not been touched yet.**
+		## So this is last frame's finished body, which is the only thing worth
+		## easing out of and the only moment it can be taken.
+		_pose_previous_source = _pose_frame_source
+		_pose_frame_joints = _capture_joints()
+		_pose_continuous = frame == _pose_frame + 1
+		_pose_frame = frame
+		_pose_frame_source = -1
+	## **What this body was doing this frame is the strongest thing said about
+	## it, not the last.** `match_screen` wipes every actor to neutral and poses
+	## the ones that matter, and it does both more than once per frame in an
+	## order this rig has no business knowing: measured, a wipe lands *after*
+	## the contact pose, so reading the last call made every contact look like
+	## it had ended and every arming was cancelled by the frame it belonged to.
+	## 487 armings, 487 cancellations, no transition ever drawn. An action
+	## outranks the absence of one, whenever in the frame each is said.
+	if is_contact_actor:
+		_pose_frame_source = int(event_type)
+	## Recomputed on every call and revisable within the frame, because the
+	## frame's source is only complete once every call in it has been made.
+	_pose_pending = _pose_continuous \
+		and _pose_previous_source != -2 \
+		and _pose_frame_source != _pose_previous_source \
+		and _floor_remaining <= 0.0
+	_pose_loading = _pose_frame_source >= 0
+	if not _pose_continuous:
+		## Not playback: a portrait, a sticker, the first pose this body was
+		## ever put in. Nothing to travel from, and nothing coming that would
+		## advance a clock, so anything left armed would freeze the body here.
+		_pose_from = {}
+		_pose_remaining = 0.0
+		_head_frame = -2
+
+
+## Ease out of the pose the previous action left behind.
+##
+## Applied *before* `_ground_the_feet` at both of `set_pose`'s exits, so a body
+## caught between two poses still has its shoes on the floor -- the grounding
+## reads the finished legs, and half a pose is the finished legs this frame.
+func _apply_pose_transition() -> void:
+	var frame := int(Engine.get_process_frames())
+	## Once a frame, however many times the frame poses this body.
+	if _pose_ticked_frame != frame:
+		_pose_ticked_frame = frame
+		_pose_remaining = maxf(_pose_remaining - get_process_delta_time(), 0.0)
+	## **Armed reversibly, because the first call of a frame always lies.**
+	##
+	## The per-frame neutral wipe makes every frame of a sustained contact look
+	## like the action just ended, and the real pose call straight after says it
+	## did not. So arming keeps what it displaced and a revision puts it back --
+	## which lets a genuine change *during* an ease restart it, where simply
+	## refusing to re-arm would have swallowed every exit that landed inside an
+	## entry.
+	if _pose_pending and _pose_armed_frame != frame:
+		_pose_armed_frame = frame
+		_pose_shelved = {
+			"from": _pose_from, "remaining": _pose_remaining,
+			"duration": _pose_duration,
+		}
+		_pose_from = _pose_frame_joints
+		_pose_duration = StanceTransitionScript.pose_seconds(
+			_pose_from, _capture_joints(), _pose_loading
+		)
+		_pose_remaining = _pose_duration
+	elif not _pose_pending and _pose_armed_frame == frame:
+		_pose_armed_frame = -2
+		_pose_from = Dictionary(_pose_shelved.get("from", {}))
+		_pose_remaining = float(_pose_shelved.get("remaining", 0.0))
+		_pose_duration = float(_pose_shelved.get("duration", 0.0))
+	if _pose_remaining <= 0.0 or _pose_from.is_empty():
+		return
+	if _floor_remaining > 0.0:
+		_pose_remaining = 0.0
+		return
+	_blend_joints_toward(
+		_pose_from,
+		1.0 - StanceTransitionScript.settle(
+			1.0 - _pose_remaining / maxf(_pose_duration, 0.0001)
+		),
+	)
+
+
+## Stop easing and be wherever the next pose puts you.
+##
+## For the calls that end a rally rather than draw one: after them nothing
+## advances the clock, so a body left mid-transition holds that half-pose until
+## the next rally starts.
+func clear_pose_transition() -> void:
+	_pose_pending = false
+	_pose_remaining = 0.0
+	_pose_from = {}
+	_pose_frame = -2
+	_pose_frame_source = -2
+	_pose_previous_source = -2
+	_head_frame = -2
+
+
 ## Finish getting up, after the window that started it has closed.
 ##
 ## Two things at once, in the order the in-window version does them: the limbs
@@ -2418,6 +2598,9 @@ func set_pose(
 	action_context: Dictionary = {},
 ) -> void:
 	_ensure_node_bindings()
+	## First, because the rig still holds the previous action's finished body and
+	## every line below this overwrites it.
+	_track_pose_transition(event_type, is_contact_actor)
 	_track_landing(event_type, elevation)
 	var lift := clampf(elevation, 0.0, 1.0) * 0.82
 	## Every joint of the walk-to-run comes from `GaitBiomechanics`, which knows
@@ -2603,6 +2786,7 @@ func set_pose(
 		elif phase >= _square_up_phase(event_type) or not is_contact_actor:
 			_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
+		_apply_pose_transition()
 		_ground_the_feet(elevation, gait_knee)
 		return
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
@@ -2839,6 +3023,9 @@ func set_pose(
 			## ready posture a blocker waits in.
 			_set_elbow(left_arm, float(wall.elbow_degrees))
 			_set_elbow(right_arm, float(wall.elbow_degrees))
+	## Before the grounding, so the seam between two actions is eased while the
+	## legs are still the pose's own and the grounding still gets the last word.
+	_apply_pose_transition()
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)

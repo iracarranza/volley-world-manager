@@ -136,7 +136,7 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	pause_button.disabled = false
 	pause_button.text = "Pause"
 	match_court_3d.ball_actor.hold_at_rest()
-	match_court_3d.reset_player_poses()
+	match_court_3d.reset_player_poses(true)
 	event_label.text = "POINT COMPLETE"
 	caption_label.text = rally_result.terminal_outcome.replace("_", " ").to_upper()
 	detail_label.text = rally_result.explanation
@@ -390,7 +390,7 @@ func _play_flight(
 		) * 100.0
 		await get_tree().process_frame
 	match_court_3d.finish_movement_plan(movement_plan, duration)
-	match_court_3d.reset_player_poses()
+	match_court_3d.reset_player_poses(true)
 	## Returned so the caller knows how much of the rally's clock this leg
 	## covered. A flight runs on physics and the events run on stamps; without
 	## this the next event has no way to tell whether its window is aftermath or
@@ -2160,7 +2160,7 @@ func _close() -> void:
 	playback_paused = false
 	skip_requested = true
 	match_court_3d.ball_actor.reset_flight()
-	match_court_3d.reset_player_poses()
+	match_court_3d.reset_player_poses(true)
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	close_requested.emit()

@@ -41,6 +41,13 @@ distribution: it does nothing, and it does nothing silently.
 
 ## What the corrected film says
 
+> **Superseded below.** A fourth instrument error was found while repairing what
+> this section diagnosed, and it moves these figures: the per-joint move share is
+> 57-64%, not the 14-18% here. See "A fourth instrument error". The tail and the
+> two exact-repeat signatures survive the correction; the share does not, and is
+> left standing only because the entry that supersedes it needs something to
+> point at.
+
 Two rallies, 4.74 s and 6.75 s of rally time, 72,960 samples.
 
 ```
@@ -134,6 +141,65 @@ clock holds the previous pose. The head has the same hole one level down: no
 So the repair is not a new system. It is the third and fourth entry points into
 the one that is already written and already deriving its own durations from the
 distance between two joint sets.
+
+---
+
+# The repair, and the half of it the measurement refuses to confirm
+
+`StanceTransition` gained the two entry points its header asks for -- a contact
+pose seam and the head -- plus `MAX_JOINT_DEGREES_PER_SECOND`, which is
+`STANCE_SECONDS_PER_DEGREE` read the other way round. **No new magnitude was
+introduced**: 455 deg/s is a constant already in the file, now named as the rate
+it always was, and it serves both the pose duration and the neck.
+
+## A fourth instrument error, worse than the first three
+
+Filming with `playback_speed = 0.1` stretches the *rally* and nothing else. Every
+duration the rig keeps in seconds -- the stance blend, the floor recovery, the
+new pose transition -- runs on `get_process_delta_time()` and kept real time. At
+4 fps that is a 0.25 s frame against a 0.14 s transition: **one frame swallows
+the whole thing**, and the probe reported that no transition ever ran. The fix
+is `Engine.time_scale`, which slows the rally and everything timed against it
+together, which is the relationship real playback has.
+
+That correction moved the headline figures, so the numbers above are superseded:
+the per-joint move share is **57-64%**, not 14-18%. The 14-18% was measured
+across a clock mismatch and should not be quoted.
+
+## The head: fixed, and measured
+
+Snaps at or above 3000 deg/s fell **19 to 5**, the head's longest stillness fell
+**2.31 s to 0.61 s**, and the recurring exact 124.0 degrees is down from five
+occurrences to one -- on `01 / 08 SERVE t=0.00s`, the rally's first frame, which
+has nothing to travel from and is correct by construction. The head also *moves*
+more (78.5% of samples to 87%), which is what sweeping instead of jumping looks
+like.
+
+## The contact-pose seam: implemented, verified in isolation, and not the cause of the arm tail
+
+The mechanism is right. Driven frame by frame outside the renderer it arms on
+entry (0.140 s, the loading ceiling) and on exit (0.378 s, derived), and leaves
+the frames between alone.
+
+In real playback it arms 487 times in one rally and is revised away 487 times,
+and the arm tail does not move. That is not a bug in the arming -- it is the
+answer to a question:
+
+**`match_screen` poses an actor with its event type across the whole window**,
+both the outgoing event's actor and the next contact's, so from the rig's point
+of view the action does not change at the moments the snap happens. The 96.9
+degree identical-arm jump at a SET is *inside* a sustained contact, not at its
+boundary.
+
+So the diagnosis at the top of this document is half wrong and is corrected
+here: the head half was the neck clamp, and that is fixed. The arm half is not
+an `is_contact_actor` seam. It is a discontinuity in what a pose module returns
+across its own phase, or in the phase it is handed -- and finding which is the
+next pass, not this one.
+
+The seam machinery is kept rather than reverted because it is correct where it
+does fire and inert where nothing changes; but it is **unverified in playback**
+and this is the place that says so.
 
 ## Reproducing
 
