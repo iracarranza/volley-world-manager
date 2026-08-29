@@ -6,6 +6,14 @@ const VIGNETTE_FACTORY := preload(
 	"res://scripts/simulation/volleyball_vignette_rally_factory.gd"
 )
 
+## Character creation is a teaching surface, so preserve the production rally
+## clock/contacts while presenting the same action more legibly than the full
+## match camera. These are presentation-only exaggerations.
+const PREVIEW_CAMERA_POSITION := Vector3(9.1, 8.2, 8.9)
+const PREVIEW_CAMERA_TARGET := Vector3(-0.25, 0.80, 0.65)
+const PREVIEW_CAMERA_FOV := 37.0
+const PREVIEW_BALL_SCALE := 1.90
+
 var _match_screen: MatchScreen = null
 var _production_ready := false
 var _production_result: Resource = null
@@ -37,11 +45,7 @@ func _ready() -> void:
 	var backdrop := _match_screen.get_node_or_null("Backdrop") as CanvasItem
 	if backdrop != null:
 		backdrop.visible = false
-	_match_screen.match_court_3d.camera_3d.position = Vector3(11.8, 8.5, 9.6)
-	_match_screen.match_court_3d.camera_3d.fov = 42.0
-	_match_screen.match_court_3d.camera_3d.look_at(
-		Vector3(-0.4, 0.75, 0.8), Vector3.UP
-	)
+	_apply_preview_presentation()
 	_production_ready = true
 	set_vignette(_queued_vignette)
 
@@ -94,3 +98,18 @@ func _start_production_playback() -> void:
 	if _match_screen.playback_active:
 		_match_screen.playback_generation += 1
 	_match_screen.load_and_play_rally(_production_result, 1.0)
+	## load_and_play_rally rebuilds/resets production presentation state. Restore
+	## only vignette framing and ball readability; never author ball coordinates.
+	_apply_preview_presentation()
+
+
+func _apply_preview_presentation() -> void:
+	if _match_screen == null or _match_screen.match_court_3d == null:
+		return
+	var court := _match_screen.match_court_3d
+	court.camera_3d.position = PREVIEW_CAMERA_POSITION
+	court.camera_3d.fov = PREVIEW_CAMERA_FOV
+	court.camera_3d.look_at(PREVIEW_CAMERA_TARGET, Vector3.UP)
+	if court.ball_actor != null:
+		court.ball_actor.scale = Vector3.ONE * PREVIEW_BALL_SCALE
+		court.ball_actor.visible = true
