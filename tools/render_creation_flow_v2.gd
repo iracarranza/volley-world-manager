@@ -38,6 +38,15 @@ func _run() -> void:
 
 	for capture in CAPTURES:
 		await _capture(screen, int(capture[0]), str(capture[1]))
+
+	## A default screenshot cannot prove that toggle text remains intact once the
+	## pressed/focus style is active. Exercise one of the narrowest body controls
+	## and one route card explicitly, then keep those frames in the same artifact.
+	screen.debug_select_body_for_render("Simi")
+	await _capture(screen, 0, "01_you_selected.png")
+	screen.debug_select_club_route_for_render("Founded")
+	await _capture(screen, 3, "04_club_selected.png")
+
 	print("Rendered live creation flow with project theme to %s" % OUTPUT_DIR)
 	quit()
 
