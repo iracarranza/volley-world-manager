@@ -66,13 +66,30 @@ func set_vignette(vignette_id: String) -> void:
 	_queued_vignette = vignette_id
 	if not _production_ready:
 		return
+	## **Every question the resolver can answer, not just the first one.**
+	##
+	## Q1 was promoted to real rallies and Q2 to Q6 were left drawing through the
+	## inherited authored path -- hand-placed bodies and hand-flown balls that
+	## cannot disagree with the simulation because they never ask it. A page whose
+	## claim is "this is what your volleyball will look like" cannot keep four
+	## fifths of its answers as illustration.
+	var split := vignette_id.find("_")
+	var family := vignette_id.substr(0, split) if split > 0 else ""
+	var mode := vignette_id.substr(split + 1) if split > 0 else ""
 	if vignette_id.begins_with("good_ball_"):
+		family = "good_ball"
+		mode = vignette_id.trim_prefix("good_ball_")
+	var resolved: Resource = null
+	if family == "good_ball":
+		resolved = VIGNETTE_FACTORY.q1(mode)
+	elif VIGNETTE_FACTORY.QUESTION_SPECS.has(family):
+		resolved = VIGNETTE_FACTORY.question(family, mode)
+	if resolved != null:
 		_court.visible = false
 		_match_screen.visible = true
-		var mode := vignette_id.trim_prefix("good_ball_")
-		if mode != _production_vignette or _production_result == null:
-			_production_vignette = mode
-			_production_result = VIGNETTE_FACTORY.q1(mode)
+		if vignette_id != _production_vignette or _production_result == null:
+			_production_vignette = vignette_id
+			_production_result = resolved
 		_replay_wait = 0.0
 		_start_production_playback()
 		return

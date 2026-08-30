@@ -74,6 +74,185 @@ static func q1(mode: String) -> Resource:
 	return best
 
 
+## ## Q2 to Q5, through the same resolver Q1 uses
+##
+## Q1 was promoted to real resolved rallies and the other four questions were
+## left drawing through the authored path in `volleyball_philosophy_preview` --
+## hand-placed bodies and hand-flown balls that cannot be wrong about the
+## simulation because they never consult it. That makes them decoration on a
+## page whose whole claim is that it shows the player what their volleyball will
+## look like, and it makes them useless as diagnostics, which is the second
+## reason to move them.
+##
+## **What varies between questions is small**, which is why this is a table
+## rather than four more factories: which side serves, which principle the three
+## answers move, and which events the rally has to contain to be about the
+## question at all. Everything else -- cast, lineups, opponent, plans -- is the
+## Q1 fixture unchanged.
+const QUESTION_SPECS := {
+	"serve": {
+		"home_serving": true,
+		"principle": "serve_aggression",
+		"modes": {"controlled": 0.24, "target": 0.55, "aggressive": 0.86},
+	},
+	"defense": {
+		"home_serving": true,
+		"principle": "block_commitment",
+		"modes": {"floor": 0.24, "read": 0.50, "block": 0.86},
+	},
+	"transition": {
+		"home_serving": false,
+		"principle": "transition_commitment",
+		"modes": {"reset": 0.28, "opportunity": 0.58, "pressure": 0.86},
+	},
+	"broken": {
+		"home_serving": false,
+		"principle": "decisiveness",
+		"modes": {"structure": 0.28, "available": 0.55, "pressure": 0.86},
+	},
+}
+
+
+## A rally for one of the later questions.
+##
+## **The contract is deliberately weaker than `_q1_score`'s and says so.** Q1
+## scores six specific things because it is teaching one distinction between
+## three named answers. These four ask only that the rally *be about the
+## question*: a serve question needs a home serve, a defence question needs an
+## opponent swing that the home side answers, and so on. A contract tighter than
+## the understanding behind it would be a number invented to look rigorous, and
+## the honest move is to require what is actually known and leave the rest to the
+## grid that measures these rallies rather than judging them.
+static func question(key: String, mode: String) -> Resource:
+	var spec: Dictionary = QUESTION_SPECS.get(key, {})
+	if spec.is_empty():
+		return null
+	var modes: Dictionary = spec["modes"]
+	if not modes.has(mode):
+		return null
+	var cache_key := "%s|%s" % [key, mode]
+	if _cache.has(cache_key):
+		return _cache[cache_key]
+	## The Q1 fixture, borrowed whole. `read` is its most neutral cast, which is
+	## what a question that is not about the good-ball decision wants.
+	var fixture := _fixture("read")
+	if fixture.is_empty():
+		return null
+	var values := {
+		"decisiveness": 0.50,
+		"pin_focus": 0.50,
+		"tempo_variation": 0.50,
+		"emotional_expression": 0.50,
+		"serve_aggression": 0.50,
+		"transition_commitment": 0.50,
+		"block_commitment": 0.50,
+	}
+	values[str(spec["principle"])] = float(modes[mode])
+	var principles: Resource = TeamPrinciplesScript.custom(
+		"%s %s" % [key.capitalize(), mode], values
+	)
+	var best: Resource = null
+	var best_score := -1
+	for offset in range(SEED_SEARCH):
+		var simulator := SimulatorScript.new() as VignetteRallySimulator
+		simulator.vignette_opponent_plan = fixture.opponent_plan
+		var result: Resource = simulator.resolve(
+			fixture.players, fixture.lineup, fixture.play,
+			fixture.opponent, fixture.home_plan,
+			bool(spec["home_serving"]), BASE_SEED + offset,
+			false, false, principles,
+			"%s Home" % key.capitalize(), {}, 0.0, false, false,
+		)
+		var score := _question_score(result, key)
+		if score > best_score:
+			best = result
+			best_score = score
+		if score >= 100:
+			best = result
+			best.set_meta("vignette_seed", BASE_SEED + offset)
+			break
+	if best != null:
+		best.set_meta("vignette_mode", cache_key)
+		best.set_meta("vignette_acceptance_score", best_score)
+		_cache[cache_key] = best
+		print("%s vignette %s resolved at seed %d (acceptance %d)" % [
+			key, mode, int(best.get_meta("vignette_seed", -1)), best_score,
+		])
+	return best
+
+
+## Is this rally about the question being asked?
+##
+## Each clause is a thing a viewer would have to see for the answer to mean
+## anything, and nothing else is asserted.
+static func _question_score(result: Resource, key: String) -> int:
+	if result == null:
+		return -1
+	match key:
+		"serve":
+			## A home serve that reaches a receiver, so the answer's effect on
+			## the reception is visible rather than an ace or a net cord.
+			var serve := _first_event(
+				result, RallyEventModel.EventType.SERVE, "home"
+			)
+			if serve == null:
+				return 0
+			var reception := _first_event(
+				result, RallyEventModel.EventType.RECEPTION, "opponent"
+			)
+			return 100 if reception != null else 50
+		"defense":
+			## An opponent swing the home side actually answers, at the net or
+			## on the floor. Without the answer there is no defence to show.
+			var swing := _first_event(
+				result, RallyEventModel.EventType.ATTACK, "opponent"
+			)
+			if swing == null:
+				return 0
+			var wall := _first_event(
+				result, RallyEventModel.EventType.BLOCK, "home"
+			)
+			var dig := _first_event(result, RallyEventModel.EventType.DIG, "home")
+			return 100 if wall != null or dig != null else 40
+		"transition":
+			## Defence turning into offence: a home dig and then a home swing.
+			var dig := _first_event(result, RallyEventModel.EventType.DIG, "home")
+			if dig == null:
+				return 0
+			var swing := _first_event(
+				result, RallyEventModel.EventType.ATTACK, "home"
+			)
+			return 100 if swing != null else 50
+		"broken":
+			## Out of system: the home side touches the ball more than the three
+			## a clean pass-set-hit uses, and still gets a swing away.
+			## Contacts only. Counting every home-side event made SET_DECISION a
+			## touch, which is a tactical choice rather than a hand on the ball --
+			## and it took a three-contact rally past the four-contact bar this
+			## clause exists to check. A contract passing on an event that is not
+			## the thing it names is the same failure as a threshold measured with
+			## the wrong instrument.
+			var touches := 0
+			for raw_event in result.events:
+				var event: Resource = raw_event
+				if event == null \
+						or str(event.metadata.get("side", "")) != "home":
+					continue
+				if int(event.event_type) in [
+					RallyEventModel.EventType.POINT,
+					RallyEventModel.EventType.SET_DECISION,
+				]:
+					continue
+				touches += 1
+			var swing := _first_event(
+				result, RallyEventModel.EventType.ATTACK, "home"
+			)
+			if swing == null:
+				return 0
+			return 100 if touches >= 4 else 60
+	return 0
+
+
 static func _fixture(mode: String) -> Dictionary:
 	var gm := GameManagerScript.new()
 	gm.seed_vertical_slice_data()
