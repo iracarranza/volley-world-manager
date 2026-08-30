@@ -7656,12 +7656,47 @@ func _test_double_block_position_contract() -> void:
 			and ordered_gap >= 0.84,
 		"pair-aware wall slots preserve blocker order without moving the primary off the crossing",
 	)
+	## **Searched by rule rather than chosen**, the way M8's canonical side-out
+	## picks its seed.
+	##
+	## This replayed a hardcoded 5012 and asserted two samples that match. That
+	## asserts two different things through one message: that the coordinates are
+	## stable, and that the rally still *contains* a home double block at all. The
+	## second is a property of the fixture, not of determinism, and it broke the
+	## first time the set arc moved -- seed 5012 resolves to zero home blocks once
+	## the set is released from the height the ball was actually met at, so both
+	## replays agreed on nothing and the gate read that as non-determinism.
+	##
+	## Searching keeps the claim and drops the coupling. A seed that produces the
+	## sample is found once, then replayed; if no seed in the window produces one
+	## the check says so rather than passing vacuously.
+	var deterministic_seed := -1
+	for candidate_seed in range(5000, 5120):
+		var probe_manager := GAME_MANAGER_SCRIPT.new()
+		probe_manager.seed_vertical_slice_data()
+		probe_manager.match_state.serving_home = true
+		var probed: RallyResult = probe_manager.resolve_active_rally(candidate_seed)
+		for raw_event in probed.events:
+			var event := raw_event as RallyEvent
+			if event != null \
+					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					and str(event.metadata.get("side", "")) == "home" \
+					and int(event.metadata.get("assist_id", -1)) >= 0:
+				deterministic_seed = candidate_seed
+				break
+		probe_manager.free()
+		if deterministic_seed >= 0:
+			break
 	var deterministic_samples: Array[Dictionary] = []
 	for _run_index in range(2):
+		if deterministic_seed < 0:
+			break
 		var replay_manager := GAME_MANAGER_SCRIPT.new()
 		replay_manager.seed_vertical_slice_data()
 		replay_manager.match_state.serving_home = true
-		var replayed: RallyResult = replay_manager.resolve_active_rally(5012)
+		var replayed: RallyResult = replay_manager.resolve_active_rally(
+			deterministic_seed
+		)
 		for raw_event in replayed.events:
 			var event := raw_event as RallyEvent
 			if event != null \
@@ -7684,7 +7719,9 @@ func _test_double_block_position_contract() -> void:
 	_check(
 		deterministic_samples.size() == 2 \
 			and deterministic_samples[0] == deterministic_samples[1],
-		"double-block wall coordinates remain deterministic for seed 5012",
+		"double-block wall coordinates remain deterministic (seed %d)" % [
+			deterministic_seed,
+		],
 	)
 
 

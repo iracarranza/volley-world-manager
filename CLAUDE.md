@@ -332,9 +332,26 @@ away.
 
   The title screen is exempt from all of it because it is not an object on the
   desk but the **room the desk is in**. See `docs/design/TITLE_SCREEN.md`.
-- **Comments say why, not what.** The house style explains the decision and,
-  where a previous version was wrong, what it got wrong and how that was
-  measured.
+- **Comments are NOTEs, not prose.** One line, three at the absolute most, never
+  a paragraph. State the fact and point at the record:
+
+  ```gdscript
+  ## NOTE reads the ball's height, not the passer's body -- CONTACT_HEIGHT_CHAIN.md
+  ## NOTE 12% of physical receptions floor -- FD-005
+  ```
+
+  The reasoning, the measurement, and the account of what an earlier version got
+  wrong belong in `docs/review/`, organised by subject, which is where a reader
+  goes looking for them. Keep a number inline only when it is the fact — then
+  keep the number and drop the sentence around it.
+
+  **This replaces the previous rule**, which asked comments to explain the
+  decision and how it was measured. That was not wrong about the information
+  being worth keeping; it was wrong about where it goes. The result was 46,526
+  comment lines across the `.gd` files — 28% of every non-blank line, 37% of
+  `rally_simulator.gd`, 96% of `rally_feature_flags.gd` — and prose that
+  duplicates the review docs almost paragraph for paragraph. A file that is one
+  third essay is harder to read, not better documented.
 - **Themes are `Mikasa` (dark) and `Molten` (light)** everywhere they are named.
 - Godot gotchas that have cost time before: `_`-prefixed parameters mean
   explicitly unused; `%-22s` padding only aligns in a monospace font and this
