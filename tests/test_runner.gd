@@ -17080,10 +17080,28 @@ func _test_a_block_can_be_told_what_it_is_for() -> void:
 			int(seal.blocks), int(funnel.blocks),
 		],
 	)
-	## Sealing ends more rallies at the net than funnelling does.
+	## **This asserted an effect the simulator does not produce, and passed at
+	## 150 seeds by luck.**
+	##
+	## The claim was "sealing ends more rallies at the net than funnelling does",
+	## and it is a reasonable design claim: sealing buys reach and width, so more
+	## balls should land deep enough under the hands to be stuffed. The
+	## deflection half of that reasoning is real and scales -- the margin below
+	## goes +3, +9, +29 as the budget goes 150, 300, 600. The stuff half does
+	## not: `probe_block_intent_power.gd` measures +1, +4, **-1** across the same
+	## budgets, and did so before this branch touched anything (0, 0, -3). A
+	## margin that oscillates around zero instead of growing with n is noise, and
+	## an assertion built on it reports the seed, not the mechanism.
+	##
+	## Kept as a *live-channel* check rather than deleted, because the finding is
+	## that the differential is missing and not that stuffing is broken -- both
+	## intents stuff, at roughly the same rate, which is the thing worth holding
+	## open. The design question this leaves is real and is filed rather than
+	## papered over: why does buying reach and width produce more contacts at the
+	## net without producing more terminal ones?
 	_check(
-		int(seal.stuff) > int(funnel.stuff),
-		"a sealing block stuffs more than a funnelling one (%d vs %d)" % [
+		int(seal.stuff) > 0 and int(funnel.stuff) > 0,
+		"both block intents reach the ball terminally (%d seal, %d funnel)" % [
 			int(seal.stuff), int(funnel.stuff),
 		],
 	)

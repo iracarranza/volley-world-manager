@@ -79,11 +79,25 @@ func _initialize() -> void:
 			## An agreement between two records that both say they know is worth
 			## something. An agreement between two defaults is worth nothing, and
 			## reads identically in the gap column.
-			if str(incoming.get("height_source", "default")) in [
-				"resolved", "start_resolved"
-			] and str(outgoing.get("height_source", "default")) in [
-				"resolved", "start_resolved"
-			]:
+			## **The two legs need different things known, and accepting
+			## `start_resolved` on both repeated FD-006's error one level down.**
+			##
+			## The leg *into* a contact is being asked where it ENDS, which only
+			## `resolved` states -- `start_resolved` means precisely that the far
+			## end is not known and the 1.0 m default is standing in for it. The
+			## leg *out of* a contact is being asked where it STARTS, which both
+			## sources state. Counting `start_resolved` as known on the incoming
+			## side scored a leg as authoritative for a number nobody measured,
+			## which is the whole failure this census exists to catch.
+			##
+			## Caught by the attack repair: publishing the swing's start height
+			## without its end moved DIG from 0.0367 m to 0.1606 m while this
+			## column went *up*, which is impossible if the column means what it
+			## claimed.
+			if str(incoming.get("height_source", "default")) == "resolved" \
+					and str(outgoing.get("height_source", "default")) in [
+						"resolved", "start_resolved"
+					]:
 				row["both_known"] = int(row["both_known"]) + 1
 	_report(rows)
 	quit()
