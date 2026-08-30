@@ -18437,6 +18437,33 @@ func _set_launch_angle_degrees(
 ## a 1.85 m libero on an overpass are putting the ball in very different places
 ## above the floor and the same place above the hands.
 const SET_CLEARANCE_BY_TEMPO: Array[float] = [0.15, 0.60, 1.30, 2.20]
+## **A fast set is struck before its apex, and the model could not say so.**
+##
+## `duration_for_apex` clamps the apex to at or above both ends, so every set was
+## timed as rise-to-apex plus fall-to-hands: the ball always arrived on the way
+## *down*. That put a floor under every set of the time it takes to climb from
+## the setter's hands to the hitter's -- 0.429 s between 2.10 m and 3.00 m -- and
+## tempo could only add to it. A first tempo was structurally unable to be fast,
+## which is what a first tempo is for.
+##
+## The same arc read the other way costs nothing to compute and answers
+## correctly: the ball that peaks at 3.15 m crosses 3.00 m at 0.288 s going up
+## and 0.638 s coming down, and the model was taking the second number.
+##
+## Clearance cannot express the first one, though, and that is why this is an
+## angle. A higher apex launches faster and therefore crosses the hitter's height
+## *sooner*, so parameterising a rising contact by clearance inverts the tempo
+## order -- tempo 1 would arrive before tempo 0. What separates a quick from a
+## second-tempo ball on the rise is how much steeper than the straight line to
+## the hands the setter pushes it: flatter is faster.
+##
+## Stated as a margin above that straight line rather than as an absolute angle
+## for the same reason clearance is stated above the hands rather than above the
+## floor -- the geometry moves. A 6-degree launch is a quick over five metres to
+## a pin and cannot reach a middle standing a metre and a half away at all, and
+## the tempo table this replaces for these two rows was cut for the first case
+## and applied to the second.
+const SET_RISING_ANGLE_MARGIN_BY_TEMPO: Array[float] = [8.0, 18.0]
 ## What a setter's touch is worth: a good one delivers the tempo that was called,
 ## a poor one drifts toward the safe high ball nobody asked for.
 const SET_CLEARANCE_DRIFT: float = 0.55
@@ -18629,6 +18656,32 @@ func _set_arc(
 		level["release_height_meters"] = release_height_meters
 		level["arrival_height_meters"] = hitter_contact_height_meters
 		return level
+	## First and second tempo are met on the way up. Everything slower is caught
+	## coming down, which is what the apex model below describes correctly.
+	var rise := hitter_contact_height_meters - release_height_meters
+	if clampi(tempo, 0, 3) <= 1 and distance_meters > 0.01 and rise > 0.0 \
+			and rescue_height_meters <= 0.0:
+		var straight := rad_to_deg(atan2(rise, distance_meters))
+		var driven_angle := straight \
+			+ SET_RISING_ANGLE_MARGIN_BY_TEMPO[clampi(tempo, 0, 1)]
+		var driven := RallyKinematics.solve_struck_arc(
+			distance_meters, driven_angle,
+			release_height_meters, hitter_contact_height_meters,
+		)
+		## `solve_struck_arc` declines rather than clamping when no shot at an
+		## angle reaches that far, and a decline falls through to the apex model
+		## below -- a slower ball being much better than an undrawable one.
+		if bool(driven.get("feasible", false)):
+			return {
+				"duration_seconds": float(driven.duration_seconds),
+				"apex_height_meters": float(driven.apex_height_meters),
+				"apex_absolute_meters": float(driven.apex_absolute_meters),
+				"launch_angle_degrees": float(driven.launch_angle_degrees),
+				"required_speed_mps": float(driven.required_speed_mps),
+				"struck_before_apex": true,
+				"release_height_meters": release_height_meters,
+				"arrival_height_meters": hitter_contact_height_meters,
+			}
 	var apex := _set_apex_meters(
 		setter, tempo, set_quality, hitter_contact_height_meters,
 		rescue_height_meters,
