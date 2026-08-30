@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bclwsb3wg2r2"
+
+[deps]
+
+files=["res://commentary_corpus.timestamp.translation", "res://commentary_corpus.speaker if identifiable.translation", "res://commentary_corpus.physical event.translation", "res://commentary_corpus.exact commentary.translation", "res://commentary_corpus.immediate context.translation"]
+
+source_file="res://commentary_corpus.csv"
+dest_files=["res://commentary_corpus.timestamp.translation", "res://commentary_corpus.speaker if identifiable.translation", "res://commentary_corpus.physical event.translation", "res://commentary_corpus.exact commentary.translation", "res://commentary_corpus.immediate context.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

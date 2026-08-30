@@ -4,6 +4,10 @@ const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const TEAM_SCRIPT := preload("res://scripts/models/team.gd")
 const MATCH_STATE_SCRIPT := preload("res://scripts/models/match_state.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const RALLY_QUERY_SCRIPT := preload("res://scripts/simulation/rally_query.gd")
+const RALLY_COMMENTARY_ROUTER_SCRIPT := preload(
+	"res://scripts/simulation/rally_commentary_router.gd"
+)
 const RALLY_MOVEMENT_SYSTEM_SCRIPT := preload(
 	"res://scripts/simulation/rally_movement_system.gd"
 )
@@ -202,21 +206,24 @@ var failures: int = 0
 func _initialize() -> void:
 	if "--manager-body-only" in OS.get_cmdline_user_args():
 		_test_manager_body()
-		if failures == 0:
-			print("PASS: %d focused manager-body checks" % checks)
-			quit(0)
-		else:
-			push_error("FAIL: %d of %d focused manager-body checks failed" % [failures, checks])
-			quit(1)
+		_finish_test_run()
+		return
+	if "--commentary-only" in OS.get_cmdline_user_args():
+		_test_commentary_routing_contract()
+		_finish_test_run()
+		return
+	if "--block-overlap-only" in OS.get_cmdline_user_args():
+		_test_double_block_position_contract()
+		_finish_test_run()
+		return
+	if "--review-fixes-only" in OS.get_cmdline_user_args():
+		_test_rally_query_normalizes_physical_contacts()
+		_test_3d_playback_contract()
+		_finish_test_run()
 		return
 	if "--serve-reception-only" in OS.get_cmdline_user_args():
 		_test_career_opponent_reception_authority()
-		if failures == 0:
-			print("PASS: %d focused reception-authority checks" % checks)
-			quit(0)
-		else:
-			push_error("FAIL: %d of %d focused reception-authority checks failed" % [failures, checks])
-			quit(1)
+		_finish_test_run()
 		return
 	_test_court_coordinates()
 	_test_rotation_legality()
@@ -261,6 +268,8 @@ func _initialize() -> void:
 	_test_shadow_movement_integration()
 	_test_event_physical_time_is_derived()
 	_test_playback_samples_resolved_movement()
+	_test_double_block_position_contract()
+	_test_rally_query_normalizes_physical_contacts()
 	_test_3d_playback_contract()
 	_test_block_visualization_geometry()
 	_test_gate_fifty_continuous_reachability_timeline()
@@ -270,6 +279,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
+	_test_commentary_routing_contract()
 	_test_ambient_cogniticons_are_dimmer_not_smaller()
 	_test_blade_cogniticons_fill_from_the_bottom()
 	_test_cogniticon_motion_envelopes()
@@ -421,6 +431,10 @@ func _initialize() -> void:
 	_test_errant_attacks_land_outside_the_court()
 	_test_world_population()
 	_test_world_aging()
+	_finish_test_run()
+
+
+func _finish_test_run() -> void:
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -434,6 +448,188 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+## Query contact predicates describe physical touches, not resolver bookkeeping.
+## A normal serve-reception-set-attack point therefore has four contacts even
+## though RallyResult also carries a synthetic POINT terminal record.
+func _test_rally_query_normalizes_physical_contacts() -> void:
+	var result := RallyResult.new()
+	for event_type in [
+		RALLY_EVENT_SCRIPT.EventType.SERVE,
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.SET_DECISION,
+		RALLY_EVENT_SCRIPT.EventType.SET,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK,
+		RALLY_EVENT_SCRIPT.EventType.POINT,
+	]:
+		var event := RALLY_EVENT_SCRIPT.new()
+		event.event_type = event_type
+		event.metadata = {"side": "home"}
+		result.events.append(event)
+	result.terminal_outcome = "kill"
+	var clauses: Array[Dictionary] = RALLY_QUERY_SCRIPT.clauses_from_text(
+		"contacts=4;sequence contains SERVE > RECEPTION > SET > ATTACK"
+	)
+	var evaluation := RALLY_QUERY_SCRIPT.evaluate(result, true, clauses)
+	var facts: Dictionary = evaluation["facts"]
+	_check(
+		int(facts["contacts"]) == 4
+			and Array(facts["events"]).size() == 4
+			and Array(facts["sequence"]) == ["SERVE", "RECEPTION", "SET", "ATTACK"]
+			and bool(evaluation["matches"])
+			and RALLY_QUERY_SCRIPT.result_summary(77, evaluation).contains("4 contacts"),
+		"rally queries exclude SET_DECISION and synthetic POINT records from physical contacts",
+	)
+
+
+## Commentary is a presentation stream over resolved contacts, not another
+## spelling of the simulator trace. These fixtures gate the boundaries found in
+## the broadcast corpus: one physical event speaks once, analysis states its
+## inference basis, unsupported terms stay silent, and percentages remain UI
+## diagnostics.
+func _test_commentary_routing_contract() -> void:
+	var stuffed := RallyResult.new()
+	stuffed.home_team_won = true
+	stuffed.reception_quality = 0.67
+	stuffed.set_quality = 0.72
+	stuffed.attack_quality = 0.58
+	var stuffed_attack := _commentary_event(
+		0, RALLY_EVENT_SCRIPT.EventType.ATTACK, "Away Hitter", true,
+		0.58, {"side": "away", "attack_direction": "cross-court"}
+	)
+	stuffed_attack.detail = "attack quality 58% against a closing wall"
+	var stuff_block := _commentary_event(
+		1, RALLY_EVENT_SCRIPT.EventType.BLOCK, "Home Middle", true,
+		0.91, {"side": "home", "outcome": "stuff"}
+	)
+	var stuff_point := _commentary_event(
+		2, RALLY_EVENT_SCRIPT.EventType.POINT, "Home Middle", true
+	)
+	stuffed.events.assign([stuffed_attack, stuff_block, stuff_point])
+	RALLY_COMMENTARY_ROUTER_SCRIPT.route(stuffed)
+	_check(
+		stuffed_attack.commentary_silent
+			and not stuff_block.commentary_silent
+			and stuff_point.commentary_silent
+			and stuffed_attack.dedupe_group == stuff_block.dedupe_group,
+		"attack, stuff and point records produce one call for one physical ending",
+	)
+	_check(
+		"%" not in stuffed_attack.commentary_headline
+			and "%" not in stuff_block.commentary_headline
+			and not stuffed.commentary_diagnostics.is_empty()
+			and "%" in stuffed.commentary_diagnostics[-1],
+		"simulation percentages stay in diagnostics and never leak into commentary",
+	)
+
+	var shaped := RallyResult.new()
+	shaped.home_team_won = true
+	var funnel_block := _commentary_event(
+		0, RALLY_EVENT_SCRIPT.EventType.BLOCK, "Home Middle", true,
+		0.72, {
+			"side": "home", "outcome": "funnel", "block_intent": "Funnel",
+		}
+	)
+	var funnel_dig := _commentary_event(
+		1, RALLY_EVENT_SCRIPT.EventType.DIG, "Home Libero", true,
+		0.74, {"side": "home", "arrival_margin": 0.11}
+	)
+	var funnel_point := _commentary_event(
+		2, RALLY_EVENT_SCRIPT.EventType.POINT, "Home Hitter", true
+	)
+	shaped.events.assign([funnel_block, funnel_dig, funnel_point])
+	RALLY_COMMENTARY_ROUTER_SCRIPT.route(shaped)
+	var funnel_evidence: Dictionary = funnel_block.analyst_evidence[0] \
+		if not funnel_block.analyst_evidence.is_empty() else {}
+	_check(
+		str(funnel_evidence.get("key", "")) == "funnel"
+			and not str(funnel_evidence.get("inference_basis", "")).is_empty()
+			and not shaped.commentary_analysis.is_empty(),
+		"intentional funnel analysis is post-point evidence with an explicit inference basis",
+	)
+
+	var whiff := RallyResult.new()
+	whiff.home_team_won = false
+	var whiff_attack := _commentary_event(
+		0, RALLY_EVENT_SCRIPT.EventType.ATTACK, "Home Hitter", false,
+		0.08, {"side": "home", "set_path_whiff": true}
+	)
+	var whiff_point := _commentary_event(
+		1, RALLY_EVENT_SCRIPT.EventType.POINT, "Away Team", true
+	)
+	whiff.events.assign([whiff_attack, whiff_point])
+	RALLY_COMMENTARY_ROUTER_SCRIPT.route(whiff)
+	_check(
+		str(whiff_attack.event_subtype) == "error_whiff_unvalidated"
+			and whiff_attack.commentary_silent
+			and whiff_attack.commentary_headline.is_empty(),
+		"the unresolved true-whiff case remains classified but deliberately unvoiced",
+	)
+
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var routed_contacts := 0
+	var diagnostics_present := false
+	var raw_trace_leaks := 0
+	var forbidden_terms := [
+		"platform dime", "got tooled", "soft block", "sprawl dig",
+		"cross-court bullet", "beaten by tempo",
+	]
+	var forbidden_uses := 0
+	for seed_value in range(41900, 41912):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		if not rally.commentary_diagnostics.is_empty():
+			diagnostics_present = true
+		var combined := "%s %s" % [
+			str(rally.commentary_headline), str(rally.commentary_analysis),
+		]
+		for event_resource in rally.events:
+			var event: Resource = event_resource
+			if str(event.physical_event_id).is_empty() \
+					or str(event.event_subtype).is_empty() \
+					or str(event.commentary_status).is_empty():
+				continue
+			routed_contacts += 1
+			combined += " %s %s" % [
+				str(event.commentary_headline),
+				str(event.metadata.get("action_outcome", "")),
+			]
+			if not event.commentary_headline.is_empty() \
+					and event.commentary_headline == event.detail:
+				raw_trace_leaks += 1
+		for forbidden in forbidden_terms:
+			if str(forbidden).to_lower() in combined.to_lower():
+				forbidden_uses += 1
+	manager.free()
+	_check(
+		routed_contacts > 0 and diagnostics_present and raw_trace_leaks == 0,
+		"resolved rallies carry structured commentary fields without reusing raw trace detail",
+	)
+	_check(
+		forbidden_uses == 0,
+		"production commentary and action labels exclude corpus-unvalidated terminology",
+	)
+
+
+func _commentary_event(
+	sequence: int,
+	event_type: int,
+	actor_name: String,
+	success: bool,
+	quality: float = 0.5,
+	metadata: Dictionary = {},
+) -> Resource:
+	var event: Resource = RALLY_EVENT_SCRIPT.new()
+	event.sequence = sequence
+	event.event_type = event_type
+	event.actor_name = actor_name
+	event.success = success
+	event.quality = quality
+	event.metadata = metadata.duplicate(true)
+	return event
 
 
 ## Gate: a club wears its region, and the shirt is legible on the floor.
@@ -7327,6 +7523,171 @@ func _test_playback_samples_resolved_movement() -> void:
 	court.free()
 
 
+## The opponent-attack/home-block resolver path used to stage a correct wall,
+## overwrite both blockers onto the attack contact x, then publish separated
+## phase targets again. That contradictory middle state was visible as merged
+## torsos when playback sampled it as a leg start. Assert the whole emitted
+## contract—live snapshot, attack phase, block phase and explicit metadata—not
+## merely the geometry helper in isolation.
+func _test_double_block_position_contract() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = true
+	var observed := 0
+	var collapsed := 0
+	var disagreements := 0
+	var narrowest := INF
+	for seed_value in range(5000, 5600):
+		var result: RallyResult = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		var opponent_attack: RallyEvent = null
+		for raw_event in result.events:
+			var event := raw_event as RallyEvent
+			if event == null:
+				continue
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == "opponent":
+				opponent_attack = event
+				continue
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					or str(event.metadata.get("side", "")) != "home":
+				continue
+			## The event actor is the hand that contacted the ball. That can be the
+			## formation's assistant, so wall geometry must use the explicit wall
+			## identities rather than relabelling the contact hand as primary.
+			var primary_id := int(event.metadata.get(
+				"block_wall_primary_id", event.actor_id
+			))
+			var assist_id := int(event.metadata.get(
+				"block_wall_assist_id", event.metadata.get("assist_id", -1)
+			))
+			if primary_id < 0 or assist_id < 0:
+				continue
+			observed += 1
+			var primary := Vector2(event.metadata.get("primary_position", Vector2.ZERO))
+			var assist := Vector2(event.metadata.get("assist_position", Vector2.ZERO))
+			var gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(primary, assist).length()
+			narrowest = minf(narrowest, gap)
+			if primary.is_equal_approx(assist):
+				collapsed += 1
+			var block_phase: Dictionary = event.metadata.get("home_phase_targets", {})
+			var attack_phase: Dictionary = opponent_attack.metadata.get(
+				"home_phase_targets", {}
+			) if opponent_attack != null else {}
+			var live_snapshot: Dictionary = event.metadata.get(
+				"blocker_live_positions", {}
+			)
+			## The wall closes during the attack flight, so the opponent ATTACK's
+			## phase map is the authoritative wall movement. A BLOCK event may carry
+			## only the next post-contact mover after timeline finalisation; when it
+			## still carries the wall pair, it must agree too.
+			var block_phase_carries_wall := block_phase.has(primary_id) \
+				and block_phase.has(assist_id)
+			var block_phase_agrees := not block_phase_carries_wall \
+				or (block_phase.has(primary_id) and block_phase.has(assist_id) \
+					and Vector2(block_phase[primary_id]).is_equal_approx(primary) \
+					and Vector2(block_phase[assist_id]).is_equal_approx(assist))
+			var agrees := attack_phase.has(primary_id) and attack_phase.has(assist_id) \
+				and live_snapshot.has(primary_id) and live_snapshot.has(assist_id) \
+				and Vector2(attack_phase[primary_id]).is_equal_approx(primary) \
+				and Vector2(attack_phase[assist_id]).is_equal_approx(assist) \
+				and Vector2(live_snapshot[primary_id]).is_equal_approx(primary) \
+				and Vector2(live_snapshot[assist_id]).is_equal_approx(assist) \
+				and live_snapshot.has(int(event.actor_id)) \
+				and Vector2(event.metadata.get(
+					"body_contact_position", Vector2.ZERO
+				)).is_equal_approx(Vector2(live_snapshot[int(event.actor_id)])) \
+				and block_phase_agrees
+			if not agrees:
+				disagreements += 1
+				print("double-block disagreement seed %d primary %d assist %d" % [
+					seed_value, primary_id, assist_id,
+				])
+				print("  explicit %s / %s" % [primary, assist])
+				print("  attack phase %s / %s" % [
+					attack_phase.get(primary_id, null), attack_phase.get(assist_id, null),
+				])
+				print("  block phase %s / %s" % [
+					block_phase.get(primary_id, null), block_phase.get(assist_id, null),
+				])
+				print("  live %s / %s; body %s" % [
+					live_snapshot.get(primary_id, null), live_snapshot.get(assist_id, null),
+					event.metadata.get("body_contact_position", null),
+				])
+			if observed >= 4:
+				break
+		if observed >= 4:
+			break
+	manager.free()
+	_check(
+		observed >= 2,
+		"double-block regression fixture publishes representative home walls (%d)"
+			% observed,
+	)
+	_check(
+		collapsed == 0 and narrowest >= 0.84,
+		"two-person blocks never publish identical primary/assist coordinates (%d collapsed; %.3f m narrowest)"
+			% [collapsed, narrowest],
+	)
+	_check(
+		disagreements == 0,
+		"live blocker positions, wall phase targets and block metadata agree",
+	)
+	## A separate endpoint is not enough if assigning those endpoints makes the
+	## two named blockers exchange sides. A middle attack can draw its assistant
+	## from either half of the net, while `_block_wall_positions` has one stable
+	## default side. The pair-aware step must mirror that assistant slot without
+	## moving the primary off the read crossing.
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	var default_wall: Dictionary = simulator._block_wall_positions(0.55, false)
+	var ordered_wall: Dictionary = simulator._block_wall_positions_preserving_order(
+		default_wall, 10, 11,
+		{10: Vector2(0.42, 0.50), 11: Vector2(0.70, 0.50)},
+	)
+	var ordered_primary := Vector2(ordered_wall.primary_position)
+	var ordered_assist := Vector2(ordered_wall.assist_position)
+	var ordered_gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+		ordered_primary, ordered_assist
+	).length()
+	_check(
+		is_equal_approx(ordered_primary.x, 0.55)
+			and ordered_primary.x < ordered_assist.x
+			and ordered_gap >= 0.84,
+		"pair-aware wall slots preserve blocker order without moving the primary off the crossing",
+	)
+	var deterministic_samples: Array[Dictionary] = []
+	for _run_index in range(2):
+		var replay_manager := GAME_MANAGER_SCRIPT.new()
+		replay_manager.seed_vertical_slice_data()
+		replay_manager.match_state.serving_home = true
+		var replayed: RallyResult = replay_manager.resolve_active_rally(5012)
+		for raw_event in replayed.events:
+			var event := raw_event as RallyEvent
+			if event != null \
+					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					and str(event.metadata.get("side", "")) == "home" \
+					and int(event.metadata.get("assist_id", -1)) >= 0:
+				deterministic_samples.append({
+					"primary": Vector2(event.metadata.get(
+						"primary_position", Vector2.ZERO
+					)),
+					"assist": Vector2(event.metadata.get(
+						"assist_position", Vector2.ZERO
+					)),
+					"live": Dictionary(event.metadata.get(
+						"blocker_live_positions", {}
+					)).duplicate(true),
+				})
+				break
+		replay_manager.free()
+	_check(
+		deterministic_samples.size() == 2 \
+			and deterministic_samples[0] == deterministic_samples[1],
+		"double-block wall coordinates remain deterministic for seed 5012",
+	)
+
+
 ## Pure geometry/color checks for the per-blocker square and double-block
 ## connection rect. Neither needs a live CanvasItem draw context, since the
 ## interesting logic (opacity/redness by strength, gap by coordination) is
@@ -7635,7 +7996,10 @@ func _test_ball_kinematics_force_derived() -> void:
 					end_height,
 				) or not is_equal_approx(
 					float(display.apex_height_meters),
-					BallFlightModel.apex_between(start_height, end_height, drawn),
+					BallFlightModel.apex_between(
+						start_height, end_height, drawn,
+						BallPresentation.trajectory_gravity(display),
+					),
 				) or str(display.get("height_contract", "")) != "gravity_true":
 				invariant_held = false
 	_check(
@@ -8034,6 +8398,26 @@ func _test_3d_playback_contract() -> void:
 			and not screen.match_court_3d.home_player_ids.has(101),
 		"3D playback spawns exactly the players in the authoritative rally snapshots",
 	)
+	## Every preset must be a point inside the tightest enclosed shell. This is
+	## stricter than testing A'ace alone: a preset valid in compact Spëddigh is
+	## valid in every larger reviewed indoor venue.
+	screen.match_court_3d.venue_region = "Spëddigh"
+	screen.match_court_3d.venue_open_air = false
+	screen.match_court_3d.venue_tight = true
+	var camera_limits := screen.match_court_3d.free_camera_limits()
+	var invalid_camera_presets: Array[String] = []
+	for preset in screen.match_court_3d.CAMERA_PRESETS:
+		var preset_name := str(preset["name"])
+		var camera_position := Vector3(preset["position"])
+		if absf(camera_position.x) > float(camera_limits["half_width"]) + 0.001 \
+				or absf(camera_position.z) > float(camera_limits["half_length"]) + 0.001 \
+				or camera_position.y > float(camera_limits["ceiling"]) + 0.001:
+			invalid_camera_presets.append(preset_name)
+	_check(
+		invalid_camera_presets.is_empty(),
+		"all camera presets remain inside the compact enclosed venue shell: %s"
+			% ", ".join(invalid_camera_presets),
+	)
 	var left_actor := screen.match_court_3d.player_actors[1] as PlayerActor3D
 	var right_actor := screen.match_court_3d.player_actors[2] as PlayerActor3D
 	var left_start := left_actor.position
@@ -8075,6 +8459,9 @@ func _test_3d_playback_contract() -> void:
 		9911, true, "Heading Probe", "Right",
 		{"height_cm": 190.0, "wingspan_cm": 194.0, "body_type": "Feli"},
 	)
+	## This synchronous SceneTree test runs before @onready bindings; production
+	## receives this reference normally when the actor enters its first frame.
+	heading_actor.signature_surge = heading_actor.get_node("SignatureSurge3D")
 	heading_actor.set_tactical_position(Vector2.ZERO, Vector3.ZERO)
 	for frame_index in range(1, 5):
 		heading_actor.set_tactical_position(
@@ -8083,6 +8470,19 @@ func _test_3d_playback_contract() -> void:
 	_check(
 		absf(heading_actor.travel_heading_offset) > 0.25,
 		"sub-centimetre frames accumulate into a refresh-independent travel heading",
+	)
+	_check(
+		absf(heading_actor.signature_surge.action_direction.x) < 0.001
+			and heading_actor.signature_surge.action_direction.y > 0.999,
+		"live along-court movement feeds its actual direction into signature VFX",
+	)
+	heading_actor.set_tactical_position(
+		Vector2.ZERO, heading_actor.position + Vector3(-0.03, 0.0, 0.0)
+	)
+	_check(
+		heading_actor.signature_surge.action_direction.x < -0.999
+			and absf(heading_actor.signature_surge.action_direction.y) < 0.001,
+		"live leftward movement reverses the signature VFX trail",
 	)
 	heading_actor.free()
 	left_actor.set_pose(
@@ -8238,6 +8638,20 @@ func _test_3d_playback_contract() -> void:
 			and Vector2(movement_plan[101]["target"]).is_equal_approx(block.start_position)
 			and movement_plan.has(102),
 		"3D transitions move the next contact actor and the reacting unit together",
+	)
+	## The same block is held only when the caller explicitly identifies this as
+	## an already-airborne window. Merely being the next contact above must retain
+	## the approach; the explicit form holds both wall members at their current x
+	## while preserving the resolver's depth target.
+	var airborne_plan := screen._build_movement_plan(attack, block, 0.20, block)
+	var primary_here := Vector2(screen.match_court_3d.live_positions[101])
+	var assist_here := Vector2(screen.match_court_3d.live_positions[102])
+	_check(
+		is_equal_approx(Vector2(airborne_plan[101]["target"]).x, primary_here.x)
+			and is_equal_approx(Vector2(airborne_plan[102]["target"]).x, assist_here.x)
+			and is_equal_approx(Vector2(airborne_plan[101]["target"]).y, block.start_position.y)
+			and is_equal_approx(Vector2(airborne_plan[102]["target"]).y, 0.47),
+		"only an explicitly airborne block holds both wall members laterally",
 	)
 	## And the other half of the same rule, which has moved once and is stated
 	## here in its current form rather than deleted.

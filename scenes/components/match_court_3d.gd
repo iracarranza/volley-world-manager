@@ -3,6 +3,9 @@ extends Node3D
 
 const FALLBACK_PLAYER_SCENE := preload("res://scenes/components/player_actor_3d.tscn")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
+## The v2 gallery is the latest reviewed venue geometry. Its base exposes a
+## runtime entry point that builds only the room (no probe actors or capture).
+const VENUE_BUILDER := preload("res://tools/run_visual_court_gallery_v2.gd")
 
 @export var court_width: float = 9.0
 @export var court_length: float = 18.0
@@ -16,7 +19,17 @@ var player_actors: Dictionary = {}
 var live_positions: Dictionary = {}
 var home_player_ids: Dictionary = {}
 var camera_preset: int = 0
+var camera_follow_player_id: int = -1
 var light_mode_enabled: bool = false
+var venue_region: String = ""
+var venue_id: String = ""
+var venue_open_air: bool = false
+var venue_tight: bool = false
+var _venue_builder: Node
+var _base_environment: Environment
+var _base_key_transform: Transform3D
+var _base_fill_transform: Transform3D
+var _base_camera_far: float = 80.0
 
 ## Where the match is watched from.
 ##
@@ -35,14 +48,23 @@ var light_mode_enabled: bool = false
 ## a 2.2 m near rake -- which is where a broadcast camera sits in a real hall,
 ## in the stand rather than beside the court.
 const CAMERA_PRESETS: Array[Dictionary] = [
-	{"name": "Broadcast", "position": Vector3(15.5, 9.0, 9.5), "fov": 46.0},
-	{"name": "End line", "position": Vector3(0.0, 8.0, 24.5), "fov": 44.0},
-	{"name": "High tactical", "position": Vector3(0.0, 26.0, 0.2), "fov": 42.0},
+	{"name": "Broadcast", "position": Vector3(15.0, 9.0, 9.5), "fov": 46.0},
+	## The compact Spëddigh shell is the limiting enclosed venue: its usable end
+	## depth is 20.05 m and its ceiling is 10.85 m. Presets live inside that
+	## common envelope so selecting one can never put the lens behind an opaque
+	## wall or above the roof. The tactical FOV widens to retain the whole court
+	## from the physically available height.
+	{"name": "End line", "position": Vector3(0.0, 8.0, 19.4), "fov": 50.0},
+	{"name": "High tactical", "position": Vector3(0.0, 10.25, 0.2), "fov": 92.0},
 ]
 
 
 func _ready() -> void:
 	add_to_group("ui_palette_3d")
+	_base_environment = $WorldEnvironment.environment.duplicate(true) as Environment
+	_base_key_transform = ($KeyLight as DirectionalLight3D).transform
+	_base_fill_transform = ($FillLight as OmniLight3D).transform
+	_base_camera_far = camera_3d.far
 	apply_ui_palette(false)
 	_apply_camera_preset()
 	ball_actor.reset_flight()
@@ -124,19 +146,82 @@ func _spawn_player(
 
 func apply_ui_palette(light_mode: bool) -> void:
 	light_mode_enabled = light_mode
-	_apply_mesh_color($ArenaFloor, UIPalette.color(&"court_floor", light_mode))
-	_apply_mesh_color($CourtSurface, UIPalette.color(&"court_surface", light_mode))
+	_reset_venue_base()
+	if not venue_region.is_empty():
+		_build_venue()
+
+
+func _apply_base_palette() -> void:
+	_apply_mesh_color($ArenaFloor, UIPalette.color(&"court_floor", light_mode_enabled))
+	_apply_mesh_color($CourtSurface, UIPalette.color(&"court_surface", light_mode_enabled))
 	for line in [
 		$EndLineHome, $EndLineAway, $AttackLineHome, $AttackLineAway,
 		$SidelineLeft, $SidelineRight,
 	]:
-		_apply_mesh_color(line, UIPalette.color(&"court_line", light_mode))
-	_apply_mesh_color($Net, UIPalette.color(&"court_net", light_mode), true)
-	_apply_mesh_color($LeftPost, UIPalette.color(&"court_post", light_mode), false, 0.18)
-	_apply_mesh_color($RightPost, UIPalette.color(&"court_post", light_mode), false, 0.18)
-	_apply_lighting(light_mode)
+		_apply_mesh_color(line, UIPalette.color(&"court_line", light_mode_enabled))
+	_apply_mesh_color($Net, UIPalette.color(&"court_net", light_mode_enabled), true)
+	_apply_mesh_color($LeftPost, UIPalette.color(&"court_post", light_mode_enabled), false, 0.18)
+	_apply_mesh_color($RightPost, UIPalette.color(&"court_post", light_mode_enabled), false, 0.18)
+	_apply_lighting(light_mode_enabled)
 	for actor in player_actors.values():
-		(actor as PlayerActor3D).apply_ui_palette(light_mode)
+		(actor as PlayerActor3D).apply_ui_palette(light_mode_enabled)
+
+
+## Select the actual room for the fixture without touching gameplay or camera
+## choice. Unknown regions fall back to the canonical Landavol venue.
+func configure_venue(region_name: String) -> Dictionary:
+	venue_region = region_name.strip_edges().replace("’", "'")
+	_reset_venue_base()
+	if venue_region.is_empty():
+		venue_id = ""
+		venue_open_air = false
+		venue_tight = false
+		return {}
+	return _build_venue()
+
+
+func _build_venue() -> Dictionary:
+	if _venue_builder == null:
+		_venue_builder = VENUE_BUILDER.new()
+		_venue_builder.set("runtime_only", true)
+		_venue_builder.name = "VenueRuntimeBuilder"
+		add_child(_venue_builder)
+	var details := Dictionary(_venue_builder.call("apply_runtime", self, venue_region))
+	venue_id = str(details.get("id", "landavol"))
+	venue_region = str(details.get("region", "Landavol"))
+	venue_open_air = bool(details.get("open_air", false))
+	venue_tight = bool(details.get("tight", false))
+	return details
+
+
+## Interior limits for an orbital camera. The reviewed halls have opaque walls
+## at x ±15.9 and end walls at z ±23.2 (±20.6 in the compact hall); a camera
+## outside those surfaces sees only their unlit back face. Keep a small margin
+## inside the shell. Pāwa is open-air and intentionally has no such constraint.
+func free_camera_limits() -> Dictionary:
+	if venue_region.is_empty() or venue_open_air:
+		return {"enclosed": false}
+	return {
+		"enclosed": true,
+		"half_width": 15.35,
+		"half_length": 20.05 if venue_tight else 22.65,
+		"ceiling": 10.85 if venue_tight else 13.35,
+	}
+
+
+func _reset_venue_base() -> void:
+	var extras := get_node_or_null("VenueExtras")
+	if extras != null:
+		extras.free()
+	if _base_environment != null:
+		$WorldEnvironment.environment = _base_environment.duplicate(true)
+	var key := $KeyLight as DirectionalLight3D
+	var fill := $FillLight as OmniLight3D
+	key.transform = _base_key_transform
+	fill.transform = _base_fill_transform
+	key.shadow_enabled = true
+	camera_3d.far = _base_camera_far
+	_apply_base_palette()
 
 
 ## The room the court is in, rather than a studio the court is photographed in.
@@ -183,7 +268,8 @@ const AMBIENT_COLOR := Color(0.92, 0.87, 0.80)
 
 
 func _apply_lighting(light_mode: bool) -> void:
-	var environment := $WorldEnvironment.environment.duplicate() as Environment
+	var environment := (_base_environment if _base_environment != null \
+		else $WorldEnvironment.environment).duplicate(true) as Environment
 	## Linear, not Filmic. See above.
 	environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	environment.background_color = UIPalette.color(&"canvas", light_mode).darkened(0.18)
@@ -562,7 +648,7 @@ func set_player_pose(
 	if not player_actors.has(player_id):
 		return
 	var actor := player_actors[player_id] as PlayerActor3D
-	actor.set_highlighted(highlighted)
+	actor.set_highlighted(highlighted or player_id == camera_follow_player_id)
 	## Carried rather than derived here. The resolver already decided how
 	## strained this contact was; the court's job is to hand that verdict to the
 	## actor, not to form a second opinion from the positions.
@@ -579,6 +665,16 @@ func set_player_pose(
 	actor.set_pose(
 		event_type, elevation, phase, direction, highlighted, action_context
 	)
+	## Contact is the single shared frame between the incoming and outgoing ball.
+	## Fit only at that frame; carrying the fit through a follow-through would
+	## freeze the hand where the ball used to be.
+	if absf(phase) <= 0.02 \
+			and action_context.has("contact_anchor_height_meters"):
+		actor.fit_contact_anchor_height(
+			event_type,
+			float(action_context["contact_anchor_height_meters"]),
+			action_context,
+		)
 
 
 ## What this voli stands like between contacts. See `ReadyStance`.
@@ -610,32 +706,18 @@ func at_the_net(player_id: int) -> bool:
 func reset_player_poses() -> void:
 	for actor_resource in player_actors.values():
 		var actor := actor_resource as PlayerActor3D
-		actor.set_highlighted(false)
+		actor.set_highlighted(actor.player_id == camera_follow_player_id)
 		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 
 func trajectory_world_position(trajectory: Dictionary, progress: float) -> Vector3:
-	var t := clampf(progress, 0.0, 1.0)
-	var start := Vector2(trajectory.get("start_position", Vector2(0.5, 0.5)))
-	var control := Vector2(trajectory.get("control_position", start.lerp(
-		Vector2(trajectory.get("end_position", start)), 0.5
-	)))
-	var end := Vector2(trajectory.get("end_position", start))
-	var inverse := 1.0 - t
-	var court_position := inverse * inverse * start \
-		+ 2.0 * inverse * t * control + t * t * end
-	## The same parabola `BallTrajectory.height_at_progress` draws, from the same
-	## function, because it is the same ball. These were two hand-kept copies of
-	## one curve -- the court sampled a Dictionary and the resource sampled its own
-	## fields -- and a court that disagreed with the model about where the ball was
-	## would have been invisible until something checked one against the other.
-	var height := BallFlightModel.height_between(
-		float(trajectory.get("start_height_meters", 1.0)),
-		float(trajectory.get("end_height_meters", 1.0)),
-		float(trajectory.get("duration", 0.5)),
-		t,
+	## No local trajectory arithmetic. The screen, probes and court all consume
+	## the same sample, including the launch's spin-adjusted gravity.
+	var sample := BallPresentation.sample(trajectory, progress)
+	var court_position := Vector2(sample.court)
+	return tactical_to_world(
+		court_position.x, court_position.y, float(sample.height_meters)
 	)
-	return tactical_to_world(court_position.x, court_position.y, height)
 
 
 func trajectory_world_velocity(trajectory: Dictionary, progress: float) -> Vector3:
@@ -724,18 +806,44 @@ func _watch_the_ball(ball_position: Vector3) -> void:
 
 
 func cycle_camera() -> String:
-	camera_preset = (camera_preset + 1) % CAMERA_PRESETS.size()
+	return set_camera_preset(camera_preset + 1)
+
+
+func camera_preset_names() -> Array[String]:
+	var names: Array[String] = []
+	for preset in CAMERA_PRESETS:
+		names.append(str(preset["name"]))
+	return names
+
+
+func set_camera_preset(index: int) -> String:
+	camera_preset = posmod(index, CAMERA_PRESETS.size())
 	_apply_camera_preset()
 	return str(CAMERA_PRESETS[camera_preset]["name"])
+
+
+## Camera focus is presentation state only. Keeping it on the court lets the
+## followed voli retain their nameplate while contact playback highlights other
+## actors in the normal way.
+func set_camera_follow_target(player_id: int) -> void:
+	camera_follow_player_id = player_id if player_actors.has(player_id) else -1
+	for raw_id in player_actors:
+		var actor := player_actors[raw_id] as PlayerActor3D
+		actor.set_highlighted(int(raw_id) == camera_follow_player_id)
 
 
 func _apply_camera_preset() -> void:
 	if camera_3d == null:
 		return
 	var preset: Dictionary = CAMERA_PRESETS[camera_preset]
-	camera_3d.position = Vector3(preset["position"])
-	camera_3d.fov = float(preset["fov"])
-	camera_3d.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)
+	if venue_open_air and camera_preset == 0:
+		camera_3d.position = Vector3(14.8, 7.2, 9.0)
+		camera_3d.fov = 52.0
+		camera_3d.look_at(Vector3(-0.6, 2.6, 0.2), Vector3.UP)
+	else:
+		camera_3d.position = Vector3(preset["position"])
+		camera_3d.fov = float(preset["fov"])
+		camera_3d.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)
 
 
 ## The rally's cognition stream, and the sampler both playback paths share.

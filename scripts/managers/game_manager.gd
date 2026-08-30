@@ -26,6 +26,7 @@ var match_state: Resource
 var defensive_plans: Dictionary = {}
 var opponent_team: Resource
 var team: Resource
+var last_tactical_input_manifest: Dictionary = {}
 
 
 func _ready() -> void:
@@ -503,6 +504,8 @@ func resolve_active_rally(
 	development_physical_reception: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
+	last_tactical_input_manifest = tactical_input_manifest(seed_value)
+	simulator.tactical_input_manifest = last_tactical_input_manifest.duplicate(true)
 	## Handed in before the resolve, not looked up inside it. The resolver stays
 	## a function of what it was given, which is what makes a rally replayable
 	## from a seed.
@@ -526,6 +529,30 @@ func resolve_active_rally(
 		development_legacy_platform_dig,
 		development_physical_reception,
 	)
+
+
+## Immutable values at the authoritative handoff.  This is evidence only: the
+## simulator still receives the typed resources below and never resolves from
+## this dictionary.
+func tactical_input_manifest(seed_value: int = -1) -> Dictionary:
+	var lineup := current_lineup()
+	var play := called_play()
+	var plan := current_defensive_plan()
+	var sheet_data: Dictionary = team.tactic_sheet.to_dict() \
+		if team != null and team.tactic_sheet != null else {}
+	## Clipboard phase/view are editor lenses, not gameplay inputs.
+	sheet_data.erase("phase")
+	sheet_data.erase("view")
+	return {
+		"seed": seed_value,
+		"selected_rotation": selected_rotation,
+		"called_play_id": called_play_id,
+		"active_play_ids_by_rotation": active_play_ids_by_rotation.duplicate(true),
+		"lineup": lineup.to_dict() if lineup != null else {},
+		"offensive_play": play.to_dict() if play != null else {},
+		"defensive_plan": plan.to_dict() if plan != null else {},
+		"tactic_sheet": sheet_data,
+	}
 
 
 func record_rally(result: Resource) -> Dictionary:

@@ -3,12 +3,18 @@ extends Resource
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
+const TacticSheetModel := preload("res://scripts/models/tactic_sheet.gd")
 
 @export var team_name: String = "Port Azure VC"
 @export var players: Array[Resource] = []
 @export var setter_id: int = -1
 @export_range(1, 6) var current_rotation: int = 1
 @export var rotations: Dictionary = {}
+## Optional AI-authored inputs.  When absent the resolver builds its historical
+## neutral defaults; when present they travel through the same tactical readers
+## and physical authority as the manager's side.
+@export var defensive_plans: Dictionary = {}
+@export var tactic_sheet: Resource = TacticSheetModel.new()
 @export_range(0.0, 1.0) var scouting_confidence: float = 0.42
 ## What this side believes about volleyball, from the same table the home team
 ## picks from.
@@ -76,6 +82,10 @@ func player_by_id(player_id: int) -> Resource:
 
 func current_lineup() -> RotationLineup:
 	return rotations.get(current_rotation) as RotationLineup
+
+
+func current_defensive_plan() -> Resource:
+	return defensive_plans.get(current_rotation) as Resource
 
 
 func player_at_slot(slot_number: int) -> Resource:

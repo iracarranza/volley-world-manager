@@ -291,7 +291,7 @@ static func _compile_serve(serve_event: Resource, cues: Array) -> void:
 ##
 ## `arrival_margin` is the whole cue: positive means they were waiting for it,
 ## negative means the serve beat them there. That is a real read -- it is the
-## same quantity the vocabulary names a Platform dime and a Shank from -- so this
+## same quantity the vocabulary names a Dime pass and a Shank from -- so this
 ## is a place a cue is earned rather than added for coverage.
 static func _compile_reception(
 	events: Array, reception_index: int, cues: Array
