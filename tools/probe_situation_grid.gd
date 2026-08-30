@@ -69,7 +69,16 @@ const CONTACT_WINDOW_SECONDS: float = 0.35
 ## joint rates in the thousands until it was excluded.
 const SETTLE_SECONDS: float = 0.20
 
-const SITUATIONS: Array[String] = ["quick", "read", "hitter"]
+## Every vignette the resolver can build, as `family|mode`. Widened from the
+## three Q1 answers once Q2 to Q5 moved onto the resolver, which is the test of
+## whether rows stay comparable when the situations stop resembling each other.
+const SITUATIONS: Array[String] = [
+	"good_ball|quick", "good_ball|read", "good_ball|hitter",
+	"serve|controlled", "serve|target", "serve|aggressive",
+	"defense|floor", "defense|read", "defense|block",
+	"transition|reset", "transition|opportunity", "transition|pressure",
+	"broken|structure", "broken|available", "broken|pressure",
+]
 
 ## The joints a body is made of, in the order a reader wants them. Same list for
 ## every contact type, because that is the point.
@@ -93,15 +102,19 @@ var _rows: Array = []
 func _ready() -> void:
 	get_window().size = Vector2i(480, 300)
 	Engine.time_scale = TIME_SCALE
-	for mode in SITUATIONS:
-		var result: Resource = FACTORY.q1(mode)
+	for situation in SITUATIONS:
+		var split := situation.find("|")
+		var family := situation.substr(0, split)
+		var mode := situation.substr(split + 1)
+		var result: Resource = FACTORY.q1(mode) if family == "good_ball" \
+			else FACTORY.question(family, mode)
 		if result == null:
 			continue
 		_screen = MATCH_SCREEN.instantiate() as Control
 		add_child(_screen)
 		await get_tree().process_frame
 		_screen.load_and_play_rally(result as RallyResult, 1.0)
-		await _film(mode, result)
+		await _film("%s/%s" % [family.substr(0, 4), mode.substr(0, 6)], result)
 		_screen.queue_free()
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
@@ -261,7 +274,7 @@ static func _wrapped(delta: float) -> float:
 func _report() -> void:
 	print("")
 	print("-- every contact, measured the same way --")
-	print("%-7s %-10s %6s %7s %7s %7s %7s %8s %7s %7s %9s %s" % [
+	print("%-12s %-10s %6s %7s %7s %7s %7s %8s %7s %7s %9s %s" % [
 		"where", "contact", "actor", "t s", "gap s", "drawn s", "share",
 		"reach m", "lag s", "lift m", "peak d/s", "",
 	])
@@ -277,7 +290,7 @@ func _report() -> void:
 		## instant as the attack it met has a zero gap for a good reason. Both
 		## printed blank rather than as a body that stood still.
 		var timed := gap > 0.0001
-		print("%-7s %-10s %6d %7.3f %7s %7s %7s %8s %7.2f %7.2f %9s %s" % [
+		print("%-12s %-10s %6d %7.3f %7s %7s %7s %8s %7.2f %7.2f %9s %s" % [
 			row["mode"], row["kind"], int(row["actor"]), float(row["t"]),
 			"%.3f" % gap if timed else "   -- ",
 			"%.3f" % float(row["drawn"]) if timed else "   -- ",
