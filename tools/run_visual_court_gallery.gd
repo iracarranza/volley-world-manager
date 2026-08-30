@@ -13,7 +13,8 @@ var _cinematic_ball: MeshInstance3D
 
 
 func _shoot(venue: Dictionary) -> void:
-	_court = COURT.instantiate()
+	var court_scene := load(COURT_PATH) as PackedScene
+	_court = court_scene.instantiate()
 	add_child(_court)
 	await get_tree().process_frame
 	_key = _court.get_node("KeyLight") as DirectionalLight3D

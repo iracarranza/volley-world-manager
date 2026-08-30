@@ -1,4 +1,4 @@
-[gd_resource type="FontVariation" format=3]
+[gd_resource type="FontVariation" format=3 uid="uid://b0yhtaeo1ms84"]
 
 [ext_resource type="FontFile" uid="uid://oh1xf4cs7bb2" path="res://Yatra_One/YatraOne-Regular.ttf" id="1_face"]
 [ext_resource type="FontFile" uid="uid://c7p6mbo4vtrcv" path="res://Cherry_Bomb_One/CherryBombOne-Regular.ttf" id="2_fallback"]

@@ -3,20 +3,7 @@
 [ext_resource type="Script" path="res://scenes/screens/match_screen.gd" id="1_screen"]
 [ext_resource type="PackedScene" path="res://scenes/components/match_court_3d.tscn" id="2_court"]
 [ext_resource type="Script" path="res://scenes/components/dynamic_court_camera.gd" id="3_dynamic_camera"]
-
-[sub_resource type="StyleBoxFlat" id="HudPanel"]
-bg_color = Color(0.025, 0.045, 0.075, 0.92)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.28, 0.43, 0.62, 0.7)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-shadow_color = Color(0, 0, 0, 0.4)
-shadow_size = 8
+[ext_resource type="PackedScene" path="res://scenes/components/broadcast_overlay.tscn" id="4_overlay"]
 
 [node name="MatchScreen" type="Control"]
 layout_mode = 3
@@ -35,15 +22,18 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 color = Color(0.008, 0.015, 0.028, 1)
 
 [node name="SubViewportContainer" type="SubViewportContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 0
 stretch = true
 
 [node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
@@ -55,154 +45,10 @@ render_target_update_mode = 2
 [node name="MatchCourt3D" parent="SubViewportContainer/SubViewport" instance=ExtResource("2_court")]
 unique_name_in_owner = true
 
-[node name="VignetteTop" type="ColorRect" parent="."]
-mouse_filter = 2
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_bottom = 92.0
-grow_horizontal = 2
-color = Color(0.01, 0.02, 0.04, 0.38)
-
-[node name="HUD" type="Control" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 1
-
-[node name="TopPanel" type="PanelContainer" parent="HUD"]
-layout_mode = 1
-anchors_preset = 10
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -594.0
-offset_top = 18.0
-offset_right = 594.0
-offset_bottom = 74.0
-grow_horizontal = 2
-theme_override_styles/panel = SubResource("HudPanel")
-
-[node name="Margin" type="MarginContainer" parent="HUD/TopPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 9
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 9
-
-[node name="Controls" type="HBoxContainer" parent="HUD/TopPanel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 9
-
-[node name="ModeLabel" type="Label" parent="HUD/TopPanel/Margin/Controls"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.96, 0.82, 0.28, 1)
-theme_override_font_sizes/font_size = 17
-text = "3D MATCH ENGINE"
-
-[node name="Divider" type="VSeparator" parent="HUD/TopPanel/Margin/Controls"]
-layout_mode = 2
-
-[node name="EventLabel" type="Label" parent="HUD/TopPanel/Margin/Controls"]
+[node name="BroadcastOverlay" parent="." instance=ExtResource("4_overlay")]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(270, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.72, 0.82, 0.94, 1)
-text = "READY"
-
-[node name="Spacer" type="Control" parent="HUD/TopPanel/Margin/Controls"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="SpeedOption" type="OptionButton" parent="HUD/TopPanel/Margin/Controls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(82, 0)
-layout_mode = 2
-tooltip_text = "Playback speed"
-
-[node name="PauseButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(76, 0)
-layout_mode = 2
-text = "Pause"
-
-[node name="ReplayButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(76, 0)
-layout_mode = 2
-text = "Replay"
-
-[node name="SkipButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 0)
-layout_mode = 2
-text = "Skip"
-
-[node name="CameraButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(96, 0)
-layout_mode = 2
-tooltip_text = "Cycle camera (C)"
-text = "Broadcast"
-
-[node name="CloseButton" type="Button" parent="HUD/TopPanel/Margin/Controls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(72, 0)
-layout_mode = 2
-tooltip_text = "Close 3D replay (Esc)"
-text = "Close"
-
-[node name="BottomPanel" type="PanelContainer" parent="HUD"]
-layout_mode = 1
-anchors_preset = 12
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -520.0
-offset_top = -154.0
-offset_right = 520.0
-offset_bottom = -22.0
-grow_horizontal = 2
-grow_vertical = 0
-theme_override_styles/panel = SubResource("HudPanel")
-
-[node name="Margin" type="MarginContainer" parent="HUD/BottomPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 14
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 12
-
-[node name="Content" type="VBoxContainer" parent="HUD/BottomPanel/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 5
-
-[node name="CaptionLabel" type="Label" parent="HUD/BottomPanel/Margin/Content"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.93, 0.70, 1)
-theme_override_font_sizes/font_size = 22
-text = "Rally playback"
-horizontal_alignment = 1
-
-[node name="DetailLabel" type="Label" parent="HUD/BottomPanel/Margin/Content"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.83, 0.88, 0.94, 1)
-text = "Resolved simulation events appear here."
-horizontal_alignment = 1
-text_overrun_behavior = 3
-
-[node name="ProgressBar" type="ProgressBar" parent="HUD/BottomPanel/Margin/Content"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 8)
-layout_mode = 2
-mouse_filter = 2
-show_percentage = false
 
 [node name="DynamicCourtCamera" type="Node" parent="."]
+unique_name_in_owner = true
 script = ExtResource("3_dynamic_camera")
 court_path = NodePath("../SubViewportContainer/SubViewport/MatchCourt3D")

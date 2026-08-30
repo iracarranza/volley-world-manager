@@ -7,6 +7,9 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
+const TacticalInstructionModelRef := preload(
+	"res://scripts/simulation/tactical_instruction_model.gd"
+)
 
 ## How close two second-contact claims have to be before the ball is contested.
 ##
@@ -42,6 +45,9 @@ const ShadowReceptionSystemModel := preload("res://scripts/simulation/shadow_rec
 const RallyShadowComparisonModel := preload("res://scripts/simulation/rally_shadow_comparison.gd")
 const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout_policy.gd")
 const RallyActionVocabularyModel := preload("res://scripts/simulation/rally_action_vocabulary.gd")
+const RallyCommentaryRouterModel := preload(
+	"res://scripts/simulation/rally_commentary_router.gd"
+)
 const CognitionCompilerModel := preload("res://scripts/simulation/cognition_compiler.gd")
 const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
 const PlatformContactModel := preload(
@@ -1154,9 +1160,16 @@ var exertion_cost: Dictionary = {}
 ## `VolleyballTeam`; it sees the sheet, which is the same boundary
 ## `defensive_plan` and `team_principles` already respect.
 ##
-## Home only, and that asymmetry is honest rather than an omission: the sheet is
-## the manager's own club's, and an opponent hands-call would have to be invented.
+## The manager's authored sheet.  The opponent receives an equivalent optional
+## sheet below; neutral AI leaves its values at the baseline defaults.
 var tactic_sheet: Resource = null
+## Equivalent authored input for the other side.  Ordinary AI opponents may
+## leave this null; tests and future manager policies can hand the same resource
+## through the same consumers without a side-specific implementation.
+var opponent_tactic_sheet: Resource = null
+## Read-only IDs/values captured by GameManager immediately before resolve.
+var tactical_input_manifest: Dictionary = {}
+var tactical_attribution: Dictionary = {}
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
 var opponent_principles: Resource
@@ -1252,6 +1265,8 @@ func resolve(
 	platform_dig_development_force_legacy = development_legacy_platform_dig \
 		and OS.is_debug_build()
 	opponent_plan = null
+	opponent_tactic_sheet = opponent_team.tactic_sheet \
+		if opponent_team != null and "tactic_sheet" in opponent_team else null
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
 	## The other bench has opinions too. Every read of a principle on this side
@@ -1274,6 +1289,7 @@ func resolve(
 	setter_can_run_quick = false
 	swing_index = 0
 	last_set_decision = {}
+	tactical_attribution = {}
 	opponent_anticipated_lane = str(
 		opponent_team.anticipated_lane()
 	) if opponent_team != null else ""
@@ -1343,12 +1359,19 @@ func resolve(
 	## whole identity is the serve -- Xérvu at 0.92 -- served exactly like one who
 	## never risks it, and `serve_aggression` was the single best-wired principle
 	## in the resolver while being visible from only one side of the net.
+	var opponent_authored_plan: Resource = opponent_team.current_defensive_plan() \
+		if opponent_team.has_method("current_defensive_plan") else null
+	var called_opponent_risk := float(opponent_authored_plan.serve_risk) \
+		if opponent_authored_plan != null \
+		else _rating(opponent_server, "serve_aggression")
 	var opponent_risk := clampf(
-		_rating(opponent_server, "serve_aggression")
+		called_opponent_risk
 			+ (float(opponent_principles.serve_aggression) - 0.5) * 0.70,
 		0.0, 1.0,
 	)
-	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
+	var intended_target := str(opponent_authored_plan.serve_target) \
+		if opponent_authored_plan != null \
+		else str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_decision := _serve_decision(
 		"opponent", intended_target, opponent_server, opponent_risk
 	)
@@ -1430,6 +1453,8 @@ func resolve(
 		if not serve_error else "The serve does not enter the court.", {
 			"side": "opponent", "target": str(serve_decision.target),
 			"called_target": intended_target,
+			"called_risk": called_opponent_risk,
+			"effective_risk": opponent_risk,
 			"aim_point": serve_decision.aim_point,
 			"serve_mode": serve_decision.mode,
 			"changed_target": serve_decision.changed_target,
@@ -2655,6 +2680,9 @@ func resolve(
 				## the setter's eventual delivery error.
 				"target": intended_hitter_body,
 			}
+			if active_play != null \
+					and active_play.assignment_for_player(assignment.player_id) != null:
+				assignment_data["authored_start_position"] = assignment.start_position
 			approach_preparation = ApproachMechanicsModel.prepare_for_attack(
 				attack_state, hitter_actor, assignment_data, receiver.id, rally_clock
 			)
@@ -2781,8 +2809,14 @@ func resolve(
 	home_tempo_timing["achieved_release_progress"] = hitter_release_progress
 	home_tempo_timing["release_position"] = hitter_start
 	home_tempo_timing["full_approach_start"] = hitter_full_approach_start
-	home_tempo_timing["achieved_tempo"] = home_effective_tempo
-	home_tempo_timing["achieved_relationship"] = \
+	## `home_effective_tempo` remains the release-progress classification used by
+	## gameplay that was already resolved against it. The coordination record's
+	## achieved tempo also includes the delivered ball clock: a ball arriving
+	## before the published takeoff-to-contact interval is physically T0 even
+	## when the hitter had reached a nominal T1 plant. Keeping both prevents a
+	## reporting correction from silently changing this rally's block/outcome.
+	home_tempo_timing["release_progress_tempo"] = home_effective_tempo
+	home_tempo_timing["release_progress_relationship"] = \
 		ApproachMechanicsModel.achieved_relationship(
 			home_tempo_timing, hitter_release_progress
 		)
@@ -2909,6 +2943,11 @@ func resolve(
 	## published, so a side that almost never spikes looked identical whether its
 	## sets were bad or its run-ups were, and three separate investigations went
 	## looking for the cause in the first gate.
+	var attack_tactical := _attack_tactical_decision(
+		hitter, lineup, hit_type,
+		opponent_block_formation.get("primary") != null, false,
+	)
+	hit_type = str(attack_tactical.attack_type_after)
 	var intended_hit_type := hit_type
 	## Capability is not permission at the third contact either.
 	##
@@ -2977,6 +3016,7 @@ func resolve(
 			str(opponent_plan_for_wall.block_intent) \
 				if opponent_plan_for_wall != null else "Balanced",
 			hit_type,
+			str(attack_tactical.effective),
 		),
 		"home",
 	)
@@ -2988,7 +3028,8 @@ func resolve(
 	## which was harmless while the lane *was* the target and is a different point
 	## now that the hitter picks one and the setter misses it by some amount.
 	var attack_choice := _choose_attack_target(
-		hitter, set_target, hit_type, opponent_defenders,
+		hitter, set_target, hit_type, opponent_defenders, false,
+		str(attack_tactical.effective),
 	)
 	if set_path_whiff:
 		using_live_attack = false
@@ -3148,6 +3189,7 @@ func resolve(
 			)),
 			"set_path_whiff": set_path_whiff,
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
+			"tactical_instruction": attack_tactical.duplicate(true),
 			"intended_type": intended_hit_type,
 			"swing_downgraded": swing_downgraded,
 			"swing_deficit_terms": swing_deficit_terms,
@@ -3642,6 +3684,9 @@ func resolve(
 			"block_hands_followed": bool(
 				block_resolution.get("block_hands_followed", false)
 			),
+			"block_geometry_instruction": Dictionary(
+				opponent_block_formation.get("block_geometry_instruction", {})
+			).duplicate(true),
 			## And *how* the wall was beaten, which the attack event already
 			## carried and this one did not. Over the top is a reach problem and
 			## around the edge is a read problem -- they want opposite fixes, and
@@ -4238,6 +4283,8 @@ func _resolve_home_serve(
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
 		], {"side": "home", "target": str(serve_decision.target),
 			"called_target": target_name, "aim_point": serve_decision.aim_point,
+			"called_risk": called_serve_risk,
+			"effective_risk": serve_risk,
 			"serve_mode": serve_decision.mode,
 			"changed_target": serve_decision.changed_target,
 			"target_familiarity": serve_decision.target_familiarity,
@@ -5530,8 +5577,8 @@ func _resolve_opponent_transition(
 	opponent_tempo_timing["achieved_release_progress"] = opponent_release_progress
 	opponent_tempo_timing["release_position"] = opponent_approach_start
 	opponent_tempo_timing["full_approach_start"] = opponent_full_approach_start
-	opponent_tempo_timing["achieved_tempo"] = opponent_effective_tempo
-	opponent_tempo_timing["achieved_relationship"] = \
+	opponent_tempo_timing["release_progress_tempo"] = opponent_effective_tempo
+	opponent_tempo_timing["release_progress_relationship"] = \
 		ApproachMechanicsModel.achieved_relationship(
 			opponent_tempo_timing, opponent_release_progress
 		)
@@ -5625,13 +5672,19 @@ func _resolve_opponent_transition(
 		float(home_block_formation.get("read_quality", 0.0)),
 		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
 	)
-	var home_wall_positions := _block_wall_positions(home_wall_x, false)
 	var staged_home_primary := home_block_formation.get(
 		"primary"
 	) as VolleyballPlayer
 	var staged_home_assist := home_block_formation.get(
 		"assist"
 	) as VolleyballPlayer
+	var home_wall_positions := _block_wall_positions(home_wall_x, false)
+	home_wall_positions = _block_wall_positions_preserving_order(
+		home_wall_positions,
+		staged_home_primary.id if staged_home_primary != null else -1,
+		staged_home_assist.id if staged_home_assist != null else -1,
+		live_positions,
+	)
 	if staged_home_primary != null:
 		live_positions[staged_home_primary.id] = Vector2(
 			home_wall_positions.primary_position
@@ -5711,6 +5764,19 @@ func _resolve_opponent_transition(
 	## the opponent's target is chosen before the run-up is evaluated, so a
 	## downgraded swing still flies at the spot the full swing had picked. That
 	## understates the downgrade and is the remaining asymmetry here.
+	var opponent_tactical := _attack_tactical_decision(
+		opponent_hitter, opponent_team.current_lineup(),
+		str(attack_choice.attack_type),
+		home_block_formation.get("primary") != null, true,
+	)
+	attack_choice["attack_type"] = str(opponent_tactical.attack_type_after)
+	home_target = TacticalInstructionModelRef.legacy_attack_target(
+		home_target, opponent_contact, str(opponent_tactical.effective), true
+	)
+	attack_choice["target"] = home_target
+	attack_choice["direction"] = _attack_direction(
+		opponent_contact.x, Vector2(home_target.x, 1.0 - home_target.y)
+	)
 	var opponent_deficit_terms := ApproachMechanicsModel.attack_family_deficit_terms(
 		opponent_hitter, opponent_approach, hitter_arrival_margin,
 		ApproachMechanicsModel.attack_family_for_hit_type(
@@ -5772,6 +5838,7 @@ func _resolve_opponent_transition(
 			str(defensive_plan.block_intent) if defensive_plan != null \
 				else "Balanced",
 			str(attack_choice.attack_type),
+			str(opponent_tactical.effective),
 		),
 		"opponent",
 	)
@@ -5928,6 +5995,7 @@ func _resolve_opponent_transition(
 			)),
 			"set_path_whiff": opponent_set_path_whiff,
 			"attack_type": attack_choice.attack_type,
+			"tactical_instruction": opponent_tactical.duplicate(true),
 			## Both downgrades, separately. `intended_type` is what the position and
 			## the set called for, `chosen_type` what the set-quality gate left, and
 			## `attack_type` what the run-up left after that. Collapsing the three
@@ -6085,10 +6153,19 @@ func _resolve_opponent_transition(
 	if not geometric.is_empty():
 		block_outcome = str(geometric.block_outcome)
 	var opponent_hitter_point := bool(geometric.get("hitter_point", false))
+	## The wall was already staged from `_block_wall_positions` at release. Keep
+	## those same two authoritative slots when the contest resolves. This used to
+	## overwrite both blockers with `Vector2(opponent_contact.x, 0.54)`, collapsing
+	## a correctly formed wall onto one point before the phase map separated it
+	## again. Playback could sample that contradictory live state as the next leg's
+	## start, and protected block targets correctly refused to cosmetically repair
+	## it.
 	if blocker != null:
-		live_positions[blocker.id] = Vector2(opponent_contact.x, 0.54)
+		live_positions[blocker.id] = Vector2(home_wall_positions.primary_position)
 	if assisting_blocker != null:
-		live_positions[assisting_blocker.id] = Vector2(opponent_contact.x, 0.54)
+		live_positions[assisting_blocker.id] = Vector2(
+			home_wall_positions.assist_position
+		)
 	var deflection_target := home_target
 	if block_outcome in ["touch", "funnel"]:
 		deflection_target = _home_block_deflection_target(
@@ -6243,6 +6320,7 @@ func _resolve_opponent_transition(
 		_home_floor_phase_positions(
 			lineup, defensive_plan, opponent_contact.x,
 			blocker_id, assisting_blocker_id, home_wall_x,
+			home_wall_positions,
 		),
 		players, live_positions, float(set_flight_time), home_floor_intents,
 	)
@@ -6275,6 +6353,19 @@ func _resolve_opponent_transition(
 				opponent_cover_stage
 			opponent_attack_event.metadata["opponent_phase_intents"] = \
 				opponent_cover_stage_intents
+	## Snapshot the same authoritative live state onto the block event. This is
+	## diagnostics/presentation evidence, not another placement calculation: the
+	## regression gate can now prove the resolver's live map, its phase map and the
+	## two explicit wall-position fields all describe one wall.
+	var home_blocker_live_positions := {}
+	if blocker != null:
+		home_blocker_live_positions[blocker.id] = Vector2(
+			live_positions[blocker.id]
+		)
+	if assisting_blocker != null:
+		home_blocker_live_positions[assisting_blocker.id] = Vector2(
+			live_positions[assisting_blocker.id]
+		)
 	var blocker_name := contact_blocker.display_name if contact_blocker != null \
 		else "No assigned blocker"
 	narration["blocker"] = blocker_name
@@ -6324,6 +6415,9 @@ func _resolve_opponent_transition(
 			"block_hands_followed": bool(
 				block_result.get("block_hands_followed", false)
 			),
+			"block_geometry_instruction": Dictionary(
+				home_block_formation.get("block_geometry_instruction", {})
+			).duplicate(true),
 			## Alongside the hands, and for the same reason -- see the note on the
 			## opponent block above. The plan's intent is what separates a funnel
 			## that funnelled from a seal that was beaten.
@@ -6393,6 +6487,7 @@ func _resolve_opponent_transition(
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			"primary_position": Vector2(home_wall_positions.primary_position),
 			"assist_position": Vector2(home_wall_positions.assist_position),
+			"blocker_live_positions": home_blocker_live_positions.duplicate(true),
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
 			"setter_pull": block_result.setter_pull,
@@ -7405,8 +7500,8 @@ func _resolve_home_continuation(
 	cont_tempo_timing["release_position"] = hitter_start
 	cont_tempo_timing["full_approach_start"] = \
 		continuation_full_approach_start
-	cont_tempo_timing["achieved_tempo"] = continuation_effective_tempo
-	cont_tempo_timing["achieved_relationship"] = \
+	cont_tempo_timing["release_progress_tempo"] = continuation_effective_tempo
+	cont_tempo_timing["release_progress_relationship"] = \
 		ApproachMechanicsModel.achieved_relationship(
 			cont_tempo_timing, continuation_release_progress
 		)
@@ -7548,6 +7643,11 @@ func _resolve_home_continuation(
 	## Same rule as the first-ball swing: capability shapes the outcome, it does
 	## not remove the option.
 	var continuation_hit_type := _hit_type(assignment, hitter)
+	var continuation_tactical := _attack_tactical_decision(
+		hitter, lineup, continuation_hit_type,
+		cont_formation.get("primary") != null, false,
+	)
+	continuation_hit_type = str(continuation_tactical.attack_type_after)
 	var continuation_intended_type := continuation_hit_type
 	var continuation_deficit := ApproachMechanicsModel.attack_family_deficit(
 		hitter, continuation_approach, hitter_arrival_margin,
@@ -7614,7 +7714,8 @@ func _resolve_home_continuation(
 	## first ball still hands it. That difference is deliberate and is the first
 	## ball's to fix, not this one's.
 	var attack_choice := _choose_attack_target(
-		hitter, set_target, continuation_hit_type, continuation_defenders
+		hitter, set_target, continuation_hit_type, continuation_defenders, false,
+		str(continuation_tactical.effective)
 	)
 	var attack_target: Vector2 = attack_choice.target
 	## The third swing, against the wall this path actually forms.
@@ -7631,6 +7732,7 @@ func _resolve_home_continuation(
 			str(cont_wall_plan.block_intent) if cont_wall_plan != null \
 				else "Balanced",
 			continuation_hit_type,
+			str(continuation_tactical.effective),
 		),
 		"transition",
 	)
@@ -7716,6 +7818,7 @@ func _resolve_home_continuation(
 			)),
 			"set_path_whiff": continuation_set_path_whiff,
 			"attack_type": continuation_hit_type,
+			"tactical_instruction": continuation_tactical.duplicate(true),
 			"intended_type": continuation_intended_type,
 			"swing_downgraded": continuation_downgraded,
 			"intended_target": intended_attack_target,
@@ -8049,6 +8152,11 @@ func _resolve_home_continuation(
 			"block_wall_assist_id": int(
 				assisting_blocker.id if assisting_blocker != null else -1
 			),
+			"block_geometry_instruction": Dictionary(
+				cont_formation.get(
+					"block_geometry_instruction", {}
+				)
+			).duplicate(true),
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			## When each blocker jumped, so playback can draw the apex where the
 			## blocker actually put it. Without this the drawn jump was centred on
@@ -8478,6 +8586,8 @@ func _form_opponent_block(
 	set_height_extra_meters: float = 0.0,
 ) -> Dictionary:
 	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
+	var defensive_plan: Resource = _opponent_defensive_plan(opponent_team) \
+		if opponent_team != null else null
 	var front_blockers: Array[VolleyballPlayer] = []
 	var setter_pull := {}
 	if opponent_team == null or lineup == null:
@@ -8488,7 +8598,9 @@ func _form_opponent_block(
 		}
 	for player_id in lineup.front_row_player_ids():
 		var player := opponent_team.player_by_id(player_id) as VolleyballPlayer
-		if player != null:
+		var assignment: Resource = defensive_plan.assignment_for(player_id) \
+			if defensive_plan != null else null
+		if player != null and (assignment == null or bool(assignment.block_participation)):
 			front_blockers.append(player)
 			var slot_number := lineup.slot_for_player(player.id)
 			var start: Vector2 = CourtConstants.slot_position(slot_number)
@@ -8514,6 +8626,10 @@ func _form_opponent_block(
 		if distance < primary_distance:
 			primary = candidate
 			primary_distance = distance
+	var block_geometry := _block_geometry_decision(
+		primary, lineup, defensive_plan, attack_x, true
+	)
+	var formation_target_x := float(block_geometry.formation_target_after)
 	## How long the blockers actually have: the set's own flight time, which the
 	## kinematics solver already produced from real distance and launch angle.
 	##
@@ -8553,8 +8669,15 @@ func _form_opponent_block(
 	## block philosophy a home-only lever on an axis both benches should own.
 	var commitment_principle := float(opponent_principles.block_commitment)
 	close_time += (commitment_principle - 0.5) * 0.18
+	var strategy := str(defensive_plan.block_strategy) if defensive_plan != null \
+		else "Read Block"
+	var pin_attack := attack_x <= 0.34 or attack_x >= 0.66
+	if strategy == "Commit Pin":
+		close_time += 0.10 if pin_attack else -0.08
+	elif strategy == "Commit Middle":
+		close_time += 0.10 if not pin_attack else -0.09
 	var primary_terms := _blocker_close_terms(
-		primary, lineup, attack_x, close_time
+		primary, lineup, formation_target_x, close_time
 	)
 	var primary_close := float(primary_terms.fraction)
 	## The assist cannot have crossed the court before the setter touched it.
@@ -8601,7 +8724,7 @@ func _form_opponent_block(
 		if candidate.id == primary.id:
 			continue
 		var candidate_terms := _blocker_close_terms(
-			candidate, lineup, attack_x, assist_close_time
+			candidate, lineup, formation_target_x, assist_close_time
 		)
 		var close_fraction := float(candidate_terms.fraction)
 		if close_fraction > assist_close or assist_terms.is_empty():
@@ -8630,6 +8753,8 @@ func _form_opponent_block(
 		"assist_attempt": assist_attempt,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		"hands_instruction": _hands_instruction_for(primary, lineup, true),
+		"block_geometry_instruction": block_geometry,
 		## The reached positions, so the geometric wall stands where the blockers
 		## closed to rather than where they began.
 		"primary_net_x": float(primary_terms.get("closed_net_x", 0.5)),
@@ -8650,7 +8775,7 @@ func _form_opponent_block(
 		"assist_close_attempted": assist_close_attempted,
 		"quality": block_quality,
 		"coverage_segments": _home_block_segments(
-			attack_x, primary, primary_close, assist, assist_close
+			formation_target_x, primary, primary_close, assist, assist_close
 		),
 		"setter_pull": setter_pull,
 		"read_quality": read_quality,
@@ -9178,6 +9303,7 @@ func _choose_attack_target(
 	hit_type: String,
 	defenders: Array[Vector2],
 	mirrored: bool = false,
+	tactical_call: String = "",
 ) -> Dictionary:
 	var accuracy := _rating(hitter, "attack_accuracy")
 	var variety := _rating(hitter, "shot_variety")
@@ -9223,7 +9349,12 @@ func _choose_attack_target(
 			var depth_fraction := inverse_lerp(
 				ATTACK_COURT_MAX.y, ATTACK_COURT_MIN.y, y
 			)
-			var score := nearest 				- absf(depth_fraction - preferred_depth) * 3.2 				- absf(x - contact.x) * 1.6
+			var score := nearest \
+				- absf(depth_fraction - preferred_depth) * 3.2 \
+				- absf(x - contact.x) * 1.6 \
+				+ TacticalInstructionModelRef.attack_target_score_bias(
+					tactical_call, contact, candidate, true
+				)
 			if score > best_score:
 				best_score = score
 				best_target = candidate
@@ -9251,6 +9382,9 @@ func _choose_attack_target(
 			aim.y + rng.randf_range(-spread, spread) * 0.8,
 			ATTACK_COURT_MIN.y, ATTACK_COURT_MAX.y
 		),
+	)
+	target = TacticalInstructionModelRef.legacy_attack_target(
+		target, contact, tactical_call, false
 	)
 	var resolved_target := Vector2(target.x, 1.0 - target.y) if mirrored else target
 	return {
@@ -9822,6 +9956,11 @@ func _initial_home_positions(
 					position = Vector2(zone.center)
 			else:
 				position = defensive_plan.defender_position(player_id, position)
+		var clipboard_position := TacticalInstructionModelRef.normalized_placement(
+			tactic_sheet, player_id, false
+		)
+		if bool(clipboard_position.get("authored", false)):
+			position = Vector2(clipboard_position.target)
 		positions[player_id] = position
 	return positions
 
@@ -9862,6 +10001,11 @@ func _initial_opponent_positions(
 		var zone: Resource = reception_zones.get(player.id) as Resource
 		if zone != null and bool(zone.enabled):
 			position = Vector2(zone.center)
+		var clipboard_position := TacticalInstructionModelRef.normalized_placement(
+			opponent_tactic_sheet, player.id, true
+		)
+		if bool(clipboard_position.get("authored", false)):
+			position = Vector2(clipboard_position.target)
 		## Mirrored, for the same reason as the home side: the ball leaves from
 		## behind this baseline, so the server does too.
 		if player.id == serving_id:
@@ -9981,10 +10125,12 @@ func _home_floor_phase_positions(
 	primary_blocker_id: int,
 	assisting_blocker_id: int,
 	wall_x: float = NAN,
+	wall_positions: Dictionary = {},
 ) -> Dictionary:
 	return _floor_phase_positions(
 		lineup, defensive_plan, attack_x,
 		primary_blocker_id, assisting_blocker_id, false, wall_x,
+		wall_positions,
 	)
 
 
@@ -10089,6 +10235,7 @@ func _floor_phase_positions(
 	assisting_blocker_id: int,
 	opponent_side: bool,
 	wall_x: float = NAN,
+	wall_positions: Dictionary = {},
 ) -> Dictionary:
 	var positions := {}
 	if lineup == null:
@@ -10116,9 +10263,10 @@ func _floor_phase_positions(
 	## floor behind them still shades on the attack lane: where the hitter is and
 	## where the ball goes through the tape are different facts, and only the wall
 	## stands on the second one.
-	var wall := _block_wall_positions(
-		attack_x if is_nan(wall_x) else wall_x, opponent_side
-	)
+	var wall := wall_positions.duplicate(true) \
+		if not wall_positions.is_empty() else _block_wall_positions(
+			attack_x if is_nan(wall_x) else wall_x, opponent_side
+		)
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id == primary_blocker_id:
@@ -10130,6 +10278,14 @@ func _floor_phase_positions(
 		var fallback := CourtConstants.slot_position(slot_number)
 		var target: Vector2 = defensive_plan.defender_position(player_id, fallback) \
 			if defensive_plan != null else fallback
+		var sheet: Resource = opponent_tactic_sheet if opponent_side else tactic_sheet
+		var authored_placement := TacticalInstructionModelRef.normalized_placement(
+			sheet, player_id, opponent_side
+		)
+		if bool(authored_placement.get("authored", false)):
+			## The mark is the intended base; later terms and live movement can move
+			## or fail to reach it, so it never becomes a teleport.
+			target = Vector2(authored_placement.target)
 
 		var zone: Resource = defensive_plan.zone_for(
 			player_id, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
@@ -10151,9 +10307,36 @@ func _floor_phase_positions(
 			target.y = lerpf(target.y, 0.32 if opponent_side else 0.68, 0.18)
 		var assignment: Resource = defensive_plan.assignment_for(player_id) \
 			if defensive_plan != null else null
-		if assignment != null \
-				and "inside seam" in str(assignment.seam_responsibility).to_lower():
-			target.x = lerpf(target.x, 0.50, 0.08)
+		var responsibility_intent := TacticalInstructionModelRef.defensive_target(
+			target, assignment, attack_x, opponent_side
+		)
+		target = Vector2(responsibility_intent.target)
+		var floor_behaviour := ""
+		var priorities: Array = []
+		if sheet != null:
+			if sheet.has_method("behaviour_for_player"):
+				floor_behaviour = str(sheet.behaviour_for_player(
+					player_id, TacticalInstructionModelRef.PHASE_FLOOR, slot_number
+				))
+			else:
+				floor_behaviour = str(sheet.behaviour_of(
+					slot_number, TacticalInstructionModelRef.PHASE_FLOOR
+				))
+			priorities = Array(sheet.get("zone_priorities"))
+		var floor_intent := TacticalInstructionModelRef.clipboard_floor_target(
+			target, floor_behaviour, priorities, attack_x, opponent_side
+		)
+		target = Vector2(floor_intent.target)
+		var attribution_key := "%s:%d:floor" % [
+			"opponent" if opponent_side else "home", player_id,
+		]
+		tactical_attribution[attribution_key] = {
+			"placement": authored_placement,
+			"responsibilities": responsibility_intent.terms,
+			"clipboard_behaviour": floor_behaviour,
+			"zone_priorities": floor_intent.priorities,
+			"physical_target": target,
+		}
 		positions[player_id] = Vector2(
 			clampf(target.x, 0.06, 0.94),
 			clampf(target.y, 0.04, 0.44) if opponent_side \
@@ -10242,7 +10425,10 @@ func _opponent_defensive_plan(opponent_team: Resource) -> Resource:
 	var lineup: RotationLineup = opponent_team.current_lineup()
 	if lineup == null:
 		return null
-	opponent_plan = DefensivePlanModel.new()
+	var authored: Resource = opponent_team.current_defensive_plan() \
+		if opponent_team.has_method("current_defensive_plan") else null
+	opponent_plan = authored.duplicate(true) if authored != null \
+		else DefensivePlanModel.new()
 	opponent_plan.ensure_defaults(lineup, opponent_team.players)
 	## Deliberately no floor preset on top.
 	##
@@ -10560,6 +10746,55 @@ static func _block_wall_positions(
 			clampf(lane_x + BLOCK_SHOULDER_OFFSET * inward, 0.05, 0.95), wall_y
 		),
 	}
+
+
+## Keep the named primary on the read crossing while choosing the assistant's
+## shoulder from the side that player is actually closing from. The basic wall
+## helper quite reasonably prefers the court's inward side, but on a middle
+## attack either side is inward. If the resolved assistant came from the other
+## half, blindly using that default inverted the pair's left/right order: two
+## independent straight-line journeys crossed during the jump, merged, and
+## emerged in the opposite slots.
+##
+## This is still the same two-slot wall and the same shoulder offset. It only
+## mirrors the assistant slot when the default would force the two identified
+## bodies to exchange sides. The pair is shifted together at a clamp boundary
+## so the full shoulder spacing survives deterministically.
+static func _block_wall_positions_preserving_order(
+	wall: Dictionary,
+	primary_id: int,
+	assist_id: int,
+	live: Dictionary,
+) -> Dictionary:
+	var ordered := wall.duplicate(true)
+	if primary_id < 0 or assist_id < 0 \
+			or not live.has(primary_id) or not live.has(assist_id):
+		return ordered
+	var primary_start := Vector2(live[primary_id])
+	var assist_start := Vector2(live[assist_id])
+	var primary_target := Vector2(ordered.get(
+		"primary_position", primary_start
+	))
+	var assist_target := Vector2(ordered.get(
+		"assist_position", assist_start
+	))
+	var start_delta := primary_start.x - assist_start.x
+	var target_delta := primary_target.x - assist_target.x
+	if absf(start_delta) <= 0.001 or start_delta * target_delta >= 0.0:
+		return ordered
+	var start_sign := signf(start_delta)
+	assist_target.x = primary_target.x - start_sign * BLOCK_SHOULDER_OFFSET
+	if assist_target.x < 0.05:
+		var shift_right := 0.05 - assist_target.x
+		assist_target.x += shift_right
+		primary_target.x += shift_right
+	elif assist_target.x > 0.95:
+		var shift_left := assist_target.x - 0.95
+		assist_target.x -= shift_left
+		primary_target.x -= shift_left
+	ordered["primary_position"] = primary_target
+	ordered["assist_position"] = assist_target
+	return ordered
 
 
 ## Where this opponent setter takes the ball in serve receive: the same release
@@ -13123,6 +13358,10 @@ func _second_contact_duty_bonus(
 		"Secondary emergency setter": duty_bonus = 0.18
 		"Stay available to attack": duty_bonus = -0.16
 		"No second-contact duty": duty_bonus = -0.24
+	if assignment != null:
+		duty_bonus += TacticalInstructionModelRef.emergency_second_contact_bonus(
+			str(assignment.emergency_responsibility)
+		)
 	if candidate.id == designated_setter_id:
 		duty_bonus = 0.46
 	elif candidate == preferred_setter:
@@ -14080,6 +14319,11 @@ func _second_contact_setter(
 				responsibility_bonus = -0.10
 			"No second-contact duty":
 				responsibility_bonus = -0.22
+		if assignment != null:
+			responsibility_bonus += TacticalInstructionModelRef \
+				.emergency_second_contact_bonus(
+					str(assignment.emergency_responsibility)
+				)
 		var score := _rating(candidate, "set_accuracy") * 0.44 \
 			+ _rating(candidate, "ball_control") * 0.28 \
 			+ _rating(candidate, "decision_making") * 0.16 \
@@ -14202,7 +14446,11 @@ func _resolve_attack_coverage(
 		var score := proximity * 0.42 \
 			+ _rating(candidate, "ball_control") * 0.24 \
 			+ _rating(candidate, "anticipation") * 0.18 \
-			+ responsibility_bonus + float(deflection_priority - 1) * 0.045
+			+ responsibility_bonus + float(deflection_priority - 1) * 0.045 \
+			+ TacticalInstructionModelRef.emergency_coverage_bonus(
+				str(assignment.emergency_responsibility) \
+					if assignment != null else "", target
+			)
 		if score > best_score:
 			best = candidate
 			best_score = score
@@ -14317,6 +14565,8 @@ func _finish(
 	result.analysis["team_identity"] = str(home_principles.preset_name)
 	result.analysis["team_principles"] = home_principles.to_dict()
 	result.analysis["identity_effects"] = identity_effects.duplicate(true)
+	result.analysis["tactical_input_manifest"] = tactical_input_manifest.duplicate(true)
+	result.analysis["tactical_attribution"] = tactical_attribution.duplicate(true)
 	if shadow_reception_trace != null:
 		var existing_rollout: Dictionary = _trace_summary().get(
 			"reception_rollout", {}
@@ -14348,6 +14598,7 @@ func _finish(
 	## reacting to rather than re-deriving it, which is the whole reason the
 	## vocabulary is a shared tag and not a caption string.
 	RallyActionVocabularyModel.annotate(result)
+	RallyCommentaryRouterModel.route(result)
 	result.cognition_cues.assign(CognitionCompilerModel.compile(result))
 	return result
 
@@ -15214,11 +15465,18 @@ func _choose_assignment(
 			var available := float(provisional_arc.duration_seconds)
 			var travel := _movement_time(contender, start, target, "transition")
 			var rescue_height := _set_rescue_height_meters(travel, available)
+			## One preference channel, still subordinate to feasibility: priority 1
+			## is first in the authored order, Secondary is the fallback behind the
+			## called Primary, and the called Primary gets the strongest pull.
+			var order_bias := float(7 - clampi(int(assignment.priority), 1, 6)) * 0.025
+			if assignment.player_id == play.secondary_hitter_id:
+				order_bias += 0.10
+			if follow_play and assignment.player_id == play.primary_hitter_id:
+				order_bias += 0.20
 			var terms := _setter_option_terms(
 				setter, contender, pass_quality, travel, available,
 				rescue_height,
-				0.20 if follow_play and assignment.player_id == play.primary_hitter_id \
-					else 0.0,
+				order_bias,
 				assignment.lane == opponent_anticipated_lane,
 				flow_for_team,
 				assignment.lane,
@@ -15637,14 +15895,99 @@ func _fallback_hitter(
 ## is a real state and must read as one -- it is what every block in the game had
 ## until now.
 func _hands_instruction_for(
-	blocker: VolleyballPlayer, lineup: RotationLineup
+	blocker: VolleyballPlayer, lineup: RotationLineup, opponent_side: bool = false
 ) -> String:
-	if tactic_sheet == null or blocker == null or lineup == null:
+	if blocker == null or lineup == null:
 		return ""
 	var slot := lineup.slot_for_player(blocker.id)
 	if slot <= 0:
 		return ""
-	return str(tactic_sheet.behaviour_of(slot, "Block"))
+	var sheet: Resource = opponent_tactic_sheet if opponent_side else tactic_sheet
+	if sheet == null:
+		return ""
+	if sheet.has_method("behaviour_for_player"):
+		return str(sheet.behaviour_for_player(blocker.id, "Block", slot))
+	return str(sheet.behaviour_of(slot, "Block"))
+
+
+func _tactical_instruction_for(
+	player: VolleyballPlayer,
+	lineup: RotationLineup,
+	phase: String,
+	opponent_side: bool = false,
+) -> String:
+	if player == null or lineup == null:
+		return ""
+	var slot := lineup.slot_for_player(player.id)
+	if slot <= 0:
+		return ""
+	var sheet: Resource = opponent_tactic_sheet if opponent_side else tactic_sheet
+	if sheet == null:
+		return ""
+	if sheet.has_method("behaviour_for_player"):
+		return str(sheet.behaviour_for_player(player.id, phase, slot))
+	return str(sheet.behaviour_of(slot, phase))
+
+
+func _instruction_adherence(
+	player: VolleyballPlayer, call: String, phase: String, opponent_side: bool
+) -> Dictionary:
+	var discipline := _rating(player, "tactical_discipline")
+	var side := "opponent" if opponent_side else "home"
+	var roll := float(posmod(hash("%d|%s|%s|%d|%d" % [
+		rally_seed, side, phase, player.id if player != null else -1, swing_index,
+	]), 100003)) / 100003.0
+	return TacticalInstructionModelRef.adherence(call, discipline, roll)
+
+
+func _attack_tactical_decision(
+	hitter: VolleyballPlayer,
+	lineup: RotationLineup,
+	current_type: String,
+	wall_available: bool,
+	opponent_side: bool = false,
+) -> Dictionary:
+	var call := _tactical_instruction_for(
+		hitter, lineup, TacticalInstructionModelRef.PHASE_ATTACK, opponent_side
+	)
+	var decision := _instruction_adherence(
+		hitter, call, TacticalInstructionModelRef.PHASE_ATTACK, opponent_side
+	)
+	var typed := TacticalInstructionModelRef.attack_type_for_call(
+		current_type, str(decision.get("effective", "")), wall_available
+	)
+	decision["effective"] = str(typed.effective)
+	decision["attack_type_before"] = current_type
+	decision["attack_type_after"] = str(typed.attack_type)
+	if not str(typed.override_reason).is_empty():
+		decision["followed"] = false
+		decision["override_reason"] = str(typed.override_reason)
+	return decision
+
+
+func _block_geometry_decision(
+	blocker: VolleyballPlayer,
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	attack_x: float,
+	opponent_side: bool,
+) -> Dictionary:
+	var call := _hands_instruction_for(blocker, lineup, opponent_side)
+	var decision := _instruction_adherence(
+		blocker, call, TacticalInstructionModelRef.PHASE_BLOCK, opponent_side
+	)
+	var assignment: Resource = defensive_plan.assignment_for(blocker.id) \
+		if defensive_plan != null and blocker != null else null
+	var seam_call := str(assignment.seam_responsibility) \
+		if assignment != null else ""
+	var geometry := TacticalInstructionModelRef.block_formation_target(
+		attack_x, str(decision.get("effective", "")), seam_call
+	)
+	decision["seam_responsibility"] = seam_call
+	decision["formation_target_before"] = attack_x
+	decision["formation_target_after"] = float(geometry.target)
+	decision["formation_target_after_behaviour"] = float(geometry.after_behaviour)
+	return decision
 
 
 
@@ -15723,6 +16066,10 @@ func _form_home_block(
 		if distance < primary_distance:
 			primary = candidate
 			primary_distance = distance
+	var block_geometry := _block_geometry_decision(
+		primary, lineup, defensive_plan, attack_x, false
+	)
+	var formation_target_x := float(block_geometry.formation_target_after)
 	## How long the blockers actually have: the set's own flight time, which the
 	## kinematics solver already produced from real distance and launch angle.
 	##
@@ -15770,7 +16117,7 @@ func _form_home_block(
 	elif strategy == "Commit Middle":
 		close_time += 0.10 if not pin_attack else -0.09
 	var primary_terms := _blocker_close_terms(
-		primary, lineup, attack_x, close_time
+		primary, lineup, formation_target_x, close_time
 	)
 	var primary_close := float(primary_terms.fraction)
 	## The assist cannot have crossed the court before the setter touched it.
@@ -15817,7 +16164,7 @@ func _form_home_block(
 		if candidate.id == primary.id:
 			continue
 		var candidate_terms := _blocker_close_terms(
-			candidate, lineup, attack_x, assist_close_time
+			candidate, lineup, formation_target_x, assist_close_time
 		)
 		var close_fraction := float(candidate_terms.fraction)
 		if close_fraction > assist_close or assist_terms.is_empty():
@@ -15853,9 +16200,10 @@ func _form_home_block(
 		## that is how the sheet is keyed -- a plan is a shape the club plays, and
 		## it outlives whoever stands in position four.
 		##
-		## Home only. The sheet belongs to the manager's own club, so an opponent
-		## hands-call would have to be invented, and this pass does not invent one.
+		## Identity-safe Clipboard call, resolved through the same consumer as the
+		## optional opponent sheet.
 		"hands_instruction": _hands_instruction_for(primary, lineup),
+		"block_geometry_instruction": block_geometry,
 		## The reached positions, so the geometric wall stands where the blockers
 		## closed to rather than where they began.
 		"primary_net_x": float(primary_terms.get("closed_net_x", 0.5)),
@@ -15878,7 +16226,7 @@ func _form_home_block(
 		"quality": block_quality,
 		"outcome": "miss",
 		"coverage_segments": _home_block_segments(
-			attack_x, primary, primary_close, assist, assist_close
+			formation_target_x, primary, primary_close, assist, assist_close
 		),
 		"setter_pull": setter_pull,
 		"read_quality": read_quality,
@@ -16202,6 +16550,7 @@ func _geometric_swing(
 	flow_for_team: float,
 	block_intent: String = "Balanced",
 	attack_type: String = "",
+	tactical_call: String = "",
 ) -> Dictionary:
 	if hitter == null:
 		return {}
@@ -16223,6 +16572,7 @@ func _geometric_swing(
 			geometric_rng, wall.size(), defenders.size()
 		),
 		attack_type,
+		tactical_call,
 	)
 	## Collision geometry contains only hands that reached the wall. Playback
 	## needs every jump attempt, including a late closer and the wall reacting to

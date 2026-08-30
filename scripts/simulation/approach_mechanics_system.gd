@@ -59,6 +59,7 @@ const HIT_TYPE_FAMILY := {
 	"Controlled roll": "controlled_roll",
 	"Emergency tip": "tip",
 	"Short tip": "tip",
+	"Tool attempt": "tool_block",
 }
 
 ## Seconds of lateness that count as one full unit of shortfall, so a timing
@@ -119,6 +120,14 @@ static func prepare_for_attack(
 		target, str(assignment.get("lane", "Left Pin")), side, null,
 		APPROACH_DEPTH, int(assignment.get("tempo", 3)),
 	)
+	## An authored start is a requested runway mark, not a teleport.  It replaces
+	## the derived mark as movement intent; `project_toward` below still decides
+	## how much of that request the live body can physically reach in time.
+	var authored_start: Variant = assignment.get("authored_start_position", null)
+	if authored_start is Vector2:
+		start = Vector2(authored_start)
+		if side == &"opponent":
+			start.y = 1.0 - start.y
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
 	## Run *through* the approach mark, not to it. This is the leg that ends
 	## where the run-up begins, so stopping dead on arrival makes every hitter
@@ -150,6 +159,7 @@ static func prepare_for_attack(
 		## scouting/debug overlays ("missed their spot by 0.4m") without ever
 		## feeding it into anything that draws a court position.
 		"approach_target_position": start,
+		"authored_start_requested": authored_start is Vector2,
 		"preparation_time_seconds": preparation_time,
 		"preparation_distance_meters": float(projection.get("distance_meters", 0.0)),
 		"reached_approach_start": bool(projection.get("reached_target", false)),
@@ -374,6 +384,18 @@ static func recognize_release_progress(
 		maxf(unconstrained_delivery, physical_minimum),
 		TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
 	)
+	## Coordination error changes when the ball arrives, so it also changes the
+	## takeoff that would physically meet that ball. Keeping the pre-error offset
+	## here published two incompatible clocks: achieved T1 (takeoff at release),
+	## a 0.122 s flight, and 0.197 s from takeoff to hand contact. Playback could
+	## satisfy them only by accelerating the body. Reconcile the relationship
+	## from the delivered flight while retaining the intended offset beside it.
+	var intended_takeoff_offset := takeoff_offset
+	var physical_takeoff_offset := delivered - float(result.get(
+		"takeoff_to_contact_seconds", 0.22
+	))
+	if actual_tempo <= 1:
+		actual_tempo = 0 if physical_takeoff_offset < -0.025 else 1
 	result.merge({
 		"requested_tempo": called_tempo,
 		"requested_relationship": TEMPO_RELATIONSHIPS[called_tempo],
@@ -381,7 +403,9 @@ static func recognize_release_progress(
 		"recognized_tempo": actual_tempo,
 		"recognized_relationship": TEMPO_RELATIONSHIPS[actual_tempo],
 		"approach_start_delay_seconds": delay,
-		"takeoff_offset_seconds": takeoff_offset,
+		"intended_takeoff_offset_seconds": intended_takeoff_offset,
+		"takeoff_offset_seconds": physical_takeoff_offset,
+		"physical_takeoff_offset_seconds": physical_takeoff_offset,
 		"expected_flight_seconds": observed_expected,
 		"physical_minimum_flight_seconds": physical_minimum,
 		"requested_target_flight_seconds": requested_target,
@@ -389,6 +413,8 @@ static func recognize_release_progress(
 		"flight_time_clamped_to_physics": unconstrained_delivery < physical_minimum,
 		"coordination_error_seconds": delivered - observed_expected,
 		"delivered_flight_seconds": delivered,
+		"achieved_tempo": actual_tempo,
+		"achieved_relationship": TEMPO_RELATIONSHIPS[actual_tempo],
 	}, true)
 	return result
 

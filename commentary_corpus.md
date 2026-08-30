@@ -1,0 +1,105 @@
+# Volleyball commentary corpus
+
+The source key and transcription protocol are in [sources.md](sources.md). The
+CSV is the canonical machine-readable copy; this view retains the same wording
+for review. Bracketed text is an observation, not spoken commentary.
+
+| Source | Timestamp | Speaker if identifiable | Physical event | Exact commentary | Immediate context |
+|---|---:|---|---|---|---|
+| S1 | 00:12:41 | Paul Sunderland | serve in play | Hames, serving. | Nebraska serves to Wisconsin; routine pass follows. |
+| S1 | 00:13:08 | Paul Sunderland | routine reception | Good pass. | Wisconsin receives and runs the middle. |
+| S1 | 00:13:10 | Paul Sunderland | quick/fast-tempo set | Hilley, Rettke. | Quick set in front; Rettke attacks. |
+| S1 | 00:13:11 | Paul Sunderland | attack kill | And down. | Middle attack lands cleanly. |
+| S1 | 00:18:57 | Paul Sunderland | serve long | That serve is long. | Ball carries beyond the end line. |
+| S1 | 00:22:34 | Paul Sunderland | shank | Trouble on the pass. | Reception deflects well away from target. |
+| S1 | 00:22:37 | Paul Sunderland | free-ball return after poor reception | Free ball coming. | Receiver can only send a high ball over; this is not a set. |
+| S1 | 00:27:46 | Paul Sunderland | tip | Tipped over. | Attacker takes pace off into the front court. |
+| S1 | 00:27:48 | Salima Rockwell | routine dig | Nice cover. | Back-row defender controls the tip. |
+| S1 | 00:27:53 | Paul Sunderland | transition offense | Back to Wisconsin. | Wisconsin converts defense into an approach. |
+| S1 | 00:27:55 | Paul Sunderland | tool/off hands | Off the block and out. | Attack touches the outside hands and exits. |
+| S1 | 00:35:19 | Paul Sunderland | serve into net | Into the net. | Serve fails to cross. |
+| S1 | 00:41:03 | Paul Sunderland | overpass | Overpass. | Reception crosses the plane near the middle. |
+| S1 | 00:41:04 | Paul Sunderland | stuff block / roof | Rejected! | Front-row player puts the overpass straight down. |
+| S1 | 00:49:26 | Paul Sunderland | exceptional/sprawl dig | What a dig by Barnes! | Barnes sprawls and keeps a hard-driven ball alive. |
+| S1 | 00:49:30 | Paul Sunderland | long rally | Still alive. | Multiple digs extend the exchange. |
+| S1 | 00:49:35 | Salima Rockwell | point-ending analyst reaction | That is tremendous defense. | Spoken immediately after the whistle. |
+| S2 | 00:14:22 | Paul Sunderland | ace | Ace serve. | Serve lands untouched between passers. |
+| S2 | 00:18:06 | Paul Sunderland | excellent reception | Perfect pass. | Pass reaches the setter at the net. |
+| S2 | 00:18:08 | Paul Sunderland | routine set | Skinner on the left. | High outside set follows the pass. |
+| S2 | 00:18:09 | Paul Sunderland | line attack | Down the line. | Outside hitter scores inside the sideline. |
+| S2 | 00:24:51 | Paul Sunderland | serve wide | Serve is wide. | Ball misses the sideline. |
+| S2 | 00:29:13 | — | routine reception | [no call on reception] | Controlled pass; play-by-play resumes at the set. |
+| S2 | 00:29:15 | Paul Sunderland | cross-court attack | Skinner cross-court. | Attack travels diagonally and scores. |
+| S2 | 00:34:40 | Paul Sunderland | attack into net | Into the net. | Swing does not clear the tape. |
+| S2 | 00:38:17 | Paul Sunderland | attack long | That ball is long. | Attack lands beyond the end line. |
+| S2 | 00:44:06 | Paul Sunderland | attack wide | Wide. | Attack misses beyond the sideline. |
+| S2 | 00:51:32 | Paul Sunderland | block touch | Touch at the net. | Block slows the attack for the back row; the commentator does not say “soft block.” |
+| S2 | 00:51:35 | Salima Rockwell | attack coverage | Great cover by Louisville. | Louisville retrieves its hitter's blocked ball. |
+| S2 | 01:02:11 | Paul Sunderland | antenna/contact fault | Off the antenna. | Attack contacts the antenna; whistle follows. |
+| S3 | 00:16:04 | — | serve in play | Koga with the serve. | Japan serves; USA passes in-system. |
+| S3 | 00:16:07 | — | routine set | And Poulter sets Thompson. | High ball goes to the right side. |
+| S3 | 00:16:09 | — | attack kill | Thompson puts it away. | Right-side attack lands. |
+| S3 | 00:21:36 | — | seam/ownership confusion | Neither player taking it. | Serve drops between two USA passers. |
+| S3 | 00:26:18 | — | roll shot | Rolls it over the block. | Japanese outside hitter sends a controlled shot deep. |
+| S3 | 00:26:22 | — | late or incomplete block | No block there. | USA attacks before the Japanese blocker closes. |
+| S3 | 00:31:44 | — | routine dig | Picked up by Robinson. | Robinson controls the attack in the back court. |
+| S3 | 00:31:47 | — | emergency/out-of-system set | High ball for Koga. | Japan sets from well off the net. |
+| S3 | 00:31:50 | — | block touch | Off the hands. | Block touch slows Koga's swing; the commentator does not say “soft block.” |
+| S3 | 00:39:02 | — | serve long | Too long. | Serve lands beyond the baseline. |
+| S4 | 00:14:38 | — | excellent reception | That's a very good pass. | Poland passes to target and runs the middle. |
+| S4 | 00:14:40 | — | quick/fast-tempo set | Quick ball, Kakolewska. | Fast middle set is attacked. |
+| S4 | 00:14:41 | — | stuff block / roof | Roofed by Brazil. | Brazilian double block sends the attack straight down. |
+| S4 | 00:20:17 | — | overpass | Overpass, chance for Brazil. | Polish reception crosses the net. |
+| S4 | 00:20:18 | — | attack kill | And Gabi finishes it. | Gabi attacks the overpass for the point. |
+| S4 | 00:25:53 | — | serve into net | Serve into the net. | Polish serve clips the net and falls back. |
+| S4 | 00:30:29 | — | tip | Just a little tip. | Brazilian attacker places the ball behind the block. |
+| S4 | 00:30:31 | — | exceptional/sprawl dig | Brilliant save! | Polish defender dives forward and keeps the ball up. |
+| S4 | 00:30:35 | — | long rally | They keep it alive again. | Brazil returns another defended attack. |
+| S4 | 00:30:40 | — | point-ending analyst reaction | What a rally! | Spoken as the point ends; single-commentator broadcast. |
+| S4 | 00:36:12 | — | attack wide | She has hit that wide. | Polish outside attack misses the sideline. |
+| S4 | 00:42:08 | — | attack coverage | Covered by Macris. | Macris plays a ball rebounding from the block. |
+| S5 | 00:02:14 | — | ambiguous middle-net whiff (not attack whiff) | A little whiff there, I think, in the middle from Onodera. | The commentator tentatively labels Onodera's missed net play after a broken contact; the hitter does not completely miss a delivered set. |
+| S5 | 00:09:20 | — | setter salvages poor first contact | Sekita has to scramble around and Otsuka has done really well because the three-man block had all day to get set there. | Lucas serves to the corner; the pass pulls Sekita across the court before he sets Otsuka. |
+| S5 | 00:19:40 | — | block touch creates a controllable ball | Wallace isn't going to get credit for the block, but the deflection is just as good as it goes right to Leal. | Wallace's block touch sends the attack directly to teammate Leal; the commentator praises the outcome but does not infer intent. |
+| S5 | 01:11:10 | — | late/scramble reception conflict | Two of them going for that one. | Two Japanese receivers converge; the first contact sends Yamamoto deep and Japan out of system. |
+| S5 | 01:11:12 | — | emergency second contact by libero | With Yamamoto setting from way, way, way back. | Libero Yamamoto takes the second contact from deep after the conflicted reception. |
+| S5 | 01:11:26 | — | kill through defensive seam | Yeah, Lucarelli just hammers that ball into that open seam. | Fernando sets a pipe attack while Japan remains disorganized by the preceding reception sequence. |
+| S6 | 00:13:11 | — | emergency second contact by non-setter | And this ball has to be Briggs that takes a second contact. His outlet, shortest outlet is probably to go back to Garcia. | The analyst explains Briggs's forced second contact after the setter cannot take it. |
+| S6 | 00:40:58 | — | predictable set | It was, like, a little bit predictable on the pipe. | Replay follows a Japanese block of the USA pipe attack; predictability is the commentator's inference. |
+| S6 | 00:51:50 | — | hitter/setter timing mismatch | The tempo was not fast enough. Jordan Ewert, he really wanted to be on this ball a little bit quicker. Has to slow down, wait. Ball drops. | Ewert slows his approach to wait for the set and then attacks into the net. |
+| S7 | 00:09:27 | — | offensive overload / visible pattern | Yeah, overload on the left side. Love it. You talk about that overload, getting the middle to go in the 31 gap to hold and setting it super fast over the top. | Replay analysis identifies the 31-gap decoy and fast outside ball; the play call itself is inferred from the visible pattern. |
+| S7 | 00:43:24 | — | hitter/setter timing mismatch | No, I feel like he's a little early. I just feel like the connection's off. So, he's early and then the set's behind him. | The analyst answers a question about whether the preceding ball was a setting mistake. |
+| S7 | 01:39:06 | — | excellent reception / dime | Everyone was shallow except him. He dimed that ball. | Replay analysis praises Maique's isolated reception before Brazil runs the middle. |
+| S7 | 01:57:06 | — | apparently easy reception missed | Ball passed a little bit off the net. It was a float serve. Fornal should have scooped up easily. | The analyst attributes Poland's off-net reception to Fornal failing to control a float serve that looked routine. |
+| S8 | 00:27:08 | — | excellent reception / dime | Dime pass. | Hancock serves and Japan controls the reception to the setter. |
+| S8 | 00:29:19 | — | predictable out-of-system set | The serve gets them out of system, forcing that outside set. Yamada knew exactly where this set was going. | The poor pass removes the middle and Yamada closes the block on the forced outside ball. |
+| S8 | 00:45:23 | — | block beaten by attack tempo | It's the speed that Japan tries to beat you with. This ball just getting out so quick, there's no time to close up the seam at all. | Replay analysis attributes the open seam in the USA block to Japan's fast offense. |
+| S9 | 00:07:53 | — | offensive overload / combination pattern | Perfect overload in front and this is what Italy can do. They will frustrate their opponents when they start getting crafty with these combination plays. Middle had to stay with Sara Fahr there in the middle. The tempo's too quick to Sylla. | Replay analysis identifies Italy's decoy and fast outside set after Sylla scores. |
+| S9 | 00:10:57 | — | block-defense shaping (partial funnel evidence) | Blockers are taking away her cross court, and she's yet still in short for the tip when there's so much line. | The analyst describes the block removing cross-court and the floor defender holding short; no intentional funnel or intended target defender is stated. |
+| S9 | 00:43:05 | — | excellent reception / dime | She just passed a dime again. I love it. When Giovannini enters, steady. | The analyst praises Giovannini's serve reception during replay analysis. |
+| S9 | 01:07:15 | — | setter salvages poor first contact | Even when they're targeting Sylla, that ball's coming off the net. Orro gets her hands around it. She gets her feet there and throws it outside with zero spin. That's almost a perfect set even in an imperfect situation. | Replay shows Sylla's pass off the net and Orro moving under it to deliver a hittable outside set. |
+| S10 | 00:57:07 | — | apparently easy reception missed | This is a little jump floater, and really that should have been dealt with. Lavia is off balance. He's not sure; he doesn't commit to it. | Japan's low-risk jump float becomes an ace when Lavia fails to control it. |
+| S10 | 01:30:38 | — | defender leaves effective position | Sekita's stepping in. He knows where he's coming, and he probably should have stayed where he was, actually. He would have got his hips right under it, made a better dig. | Replay analysis attributes the missed dig to Sekita stepping away from his original defensive position. |
+| S11 | 00:07:14 | Analyst exchange (names not credited) | offensive overload / visible pattern | You had the middle going on a slide, then the D ball, a back-court attack coming from right back. Really difficult to defend when you have two hitters in the same zone at different depths. Yeah, we call that an overload and it almost always splits the blocking assignments. | Replay analysis identifies two attackers at different depths in the same zone and names the resulting overload; it does not claim that the team called the play by that name. |
+| S11 | 00:07:46 | Analyst (name not credited) | intentional block-defense funnel | Yeah, both Japan's outsides are now having a lot of success with that cross-court shot. Brazil's blocking that line away, trying to funnel everything cross court, but Japan's outsides having a field day with it. | After a Japanese outside scores cross-court, the analyst infers that Brazil is intentionally removing line with the block to send attacks cross-court and notes that the plan is not succeeding. |
+| S11 | 01:31:23 | Analyst (name not credited) | block touch supports back-court defense | Brazil's blockers are completely dialed in this set. Everything they're either getting a stuff block on or really nice touch up front to slow it down for their back-court defense. | After another Brazilian touch at the net, the analyst states the defensive function of the team's block touches; no deliberate direction to a particular defender is claimed. |
+| S11 | 01:46:42 | Two-person booth (names not credited) | huddle request followed by outside attack | Yoshino outside. There it is. You asked for it in the huddle. It's delivered here off the block of Rosamaria. | The first rally after Japan's huddle sends the outside set to Yoshino, whose attack scores off the block; the booth explicitly links the action to the huddle request. |
+| S12 | 00:29:29 | Analyst exchange (names not credited) | emergency/out-of-system tip | I don't think that's necessarily dirty. I think it's more like clever, because I think dirty is more like if you're perfectly in system and then you just tip it right over. She was a little out of there. She kind of had to tip. | Replay shows the Czech attacker use a tip after an off-system setup; the analyst infers that the poor situation forced the choice rather than treating it as a planned approach tip. |
+| S12 | 02:01:00 | Analyst (name not credited) | called overload pattern followed | I'm thinking about, again, what they were talking about: Molly keeping her in front. So the idea there is to overload the blockers and make them pay attention to Molly with a quick ball in front, hopefully opening that outside attack up so there's a hole in the block. So it looked like it worked. | The USA huddle had just specified McCage running in front; on the next offensive phase she runs the front quick and the outside attack reaches the block seam. The analyst identifies the huddle instruction and infers its effect. |
+| S13 | 01:10:12 | Analyst (name not credited) | intentional defensive funnel toward libero | Yeah, USA trying to funnel the ball to Hentz, but that one going a little too short on her. | China sends a short attack over/around the block and Hentz dives forward; the analyst states USA's intended defensive target and explains why the ball evaded it. |
+
+## Targeted-pass audit
+
+The targeted rows resolve the evidence gaps for setter rescue, tempo-beaten
+block, predictable set, seam kill, late/scramble reception, apparently easy
+reception miss, emergency second contact, emergency/out-of-system tip,
+hitter/setter timing mismatch, intentional funnel, and a called offensive
+instruction being followed. “Dime” is validated for reception in three
+independent corpus broadcasts, not for a high-quality set.
+
+No reliable direct example was found for an attacker completely whiffing a
+delivered set, a floor defender leaving a formal called assignment, or a block
+touch deliberately directed to create a dig opportunity. S11 directly links
+good touches to slowing the ball for back-court defense, but does not claim a
+particular touch direction was intentional. The S5 “whiff” and block-deflection
+rows remain explicit nonmatches/partial evidence rather than being promoted.

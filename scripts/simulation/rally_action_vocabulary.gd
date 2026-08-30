@@ -106,7 +106,7 @@ static func classify(result: Resource, index: int) -> Dictionary:
 				return _result("Ace", 1.0, true)
 			var reception_margin := float(event.metadata.get("arrival_margin", 0.2))
 			if float(event.quality) >= 0.74 and reception_margin <= 0.12:
-				return _result("Platform dime", 0.88, true)
+				return _result("Dime pass", 0.88, true)
 			if float(event.quality) < 0.25 and reception_margin >= 0.18:
 				return _result("Shank", 0.84, true)
 			if bool(event.success) and reception_margin < 0.0:
@@ -121,8 +121,9 @@ static func classify(result: Resource, index: int) -> Dictionary:
 			## there? -- and both asked it of `primary_close`, which cannot
 			## answer it. The primary blocker is *selected* as the front-row
 			## player nearest the attack lane, so their close saturates at
-			## 1.00 at every percentile: measured, `Dime` fired zero times
-			## across 800 rallies while `Telegraphed` was 20.5% of every
+			## 1.00 at every percentile: measured, the excellent-set label fired
+			## zero times across 800 rallies while the predictable-set label was
+			## 20.5% of every
 			## name in the game. The most important entry in the vocabulary
 			## was unreachable and its opposite was the most common thing
 			## that happened, both from one field.
@@ -133,19 +134,21 @@ static func classify(result: Resource, index: int) -> Dictionary:
 			var assist_close := _assist_close(following_block)
 			if bool(event.success) and float(event.quality) >= 0.72 \
 					and following_block != null and assist_close < 0.48:
-				return _result("Dime", 0.90, true)
+				return _result("Perfect set", 0.90, true)
 			if bool(event.success) and prior_quality < 0.42 and float(event.quality) >= 0.56:
 				return _result("Save set", 0.75, true)
 			if following_block != null and assist_close >= 0.88:
-				return _result("Telegraphed", 0.74, true)
+				return _result("Predictable set", 0.74, true)
 			return _result("Set delivered" if bool(event.success) else "Set missed", 0.34, false)
 		RallyEventModel.EventType.ATTACK:
 			var attack_block := _next_type(result.events, index, RallyEventModel.EventType.BLOCK)
 			var attack_side_won := _side_won(result, str(event.metadata.get("side", "home")))
 			var block_outcome := str(attack_block.metadata.get("outcome", "")) \
 				if attack_block != null else ""
-			if attack_side_won and block_outcome in ["touch", "funnel", "recycle"]:
+			if attack_side_won and block_outcome == "tool":
 				return _result("Tool off the block", 1.0, true)
+			if attack_side_won and block_outcome == "touch":
+				return _result("Off the block", 0.82, true)
 			if block_outcome == "stuff":
 				return _result("Swung into the block", 0.90, true)
 			if attack_side_won:
@@ -158,7 +161,7 @@ static func classify(result: Resource, index: int) -> Dictionary:
 				if direction == "seam":
 					return _result("Seam kill", 0.80, true)
 				if direction == "cross-court" and float(event.quality) >= 0.70:
-					return _result("Cross-court bullet", 0.84, true)
+					return _result("Hard cross-court attack", 0.84, true)
 			if not bool(event.success) or bool(event.metadata.get("attack_missed", false)):
 				return _result("Attack error", 0.76, false)
 			return _result("Swing continued", 0.30, false)
@@ -167,8 +170,8 @@ static func classify(result: Resource, index: int) -> Dictionary:
 			var block_side_won := _side_won(result, str(event.metadata.get("side", "home")))
 			if outcome == "stuff":
 				return _result("Roof", 1.0, true)
-			if outcome in ["touch", "funnel", "recycle"] and not block_side_won:
-				return _result("Got tooled", 0.96, true)
+			if outcome == "tool" and not block_side_won:
+				return _result("Tool off the block", 0.96, true)
 			## Floor dig only. A funnel is the wall steering the ball into its own
 			## back court; if the next contact is attack coverage the ball went
 			## back to the hitters, which is the opposite result.
@@ -179,12 +182,12 @@ static func classify(result: Resource, index: int) -> Dictionary:
 			if outcome == "touch" and next != null \
 					and int(next.event_type) == RallyEventModel.EventType.DIG \
 					and bool(next.success):
-				return _result("Soft block", 0.80, true)
+				return _result("Block touch", 0.80, true)
 			## Same correction: a wall beaten by tempo is one the
 			## travelling blocker could not reach, which `primary_close`
 			## cannot express.
 			if outcome == "miss" and _assist_close(event) < 0.35:
-				return _result("Beaten by tempo", 0.70, true)
+				return _result("Late block", 0.70, true)
 			return _result("Block formed", 0.32, false)
 		## **The metadata test is gone because the event type now carries it.**
 		## "Cover" was reached by asking a `DEFENSE` event whether its metadata
@@ -202,7 +205,7 @@ static func classify(result: Resource, index: int) -> Dictionary:
 		RallyEventModel.EventType.DIG:
 			var defense_margin := float(event.metadata.get("arrival_margin", 0.2))
 			if bool(event.success) and defense_margin < 0.0:
-				return _result("Sprawl dig", 0.86, true)
+				return _result("Diving save", 0.86, true)
 			if not bool(event.success) and defense_margin > 0.24:
 				return _result("Missed the easy one", 0.82, true)
 			return _result("Dig controlled" if bool(event.success) else "Defense beaten", 0.36, false)

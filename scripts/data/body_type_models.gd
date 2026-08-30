@@ -451,6 +451,211 @@ static func _patch_point(
 ## reverses handedness -- so a winding that faces outward on the chest faces
 ## *into* the body on the back. Flipping here rather than at every call site is
 ## the difference between one rule and sixteen chances to get it wrong.
+## A single stroke laid along a curve on a body, instead of a row of chips.
+##
+## **The same defect `build_surface_patch` above was written for, one face
+## further in.** A mouth was seven axis-aligned `BoxMesh` segments placed along a
+## parabola and never rotated, which on a skull is survivable and on a muzzle is
+## not: a 0.10 m snout curves away far faster than a 0.185 m head, so toward the
+## corners each box left the surface at a different depth and the stroke opened
+## into a row of separate dark chips. It looked like bared teeth, and the
+## measured repair at the time was to raise `MUZZLE_LIFT` to 0.13 -- which does
+## not close the gaps, it floats the whole row in front of the snout.
+##
+## The other half was invisible and worse. `PlayerActor3D._ink_node` gives every
+## mesh its own inverted hull, so seven boxes carried **seven independent 30 mm
+## black outlines**, which is what actually drew the chips. One mesh has one
+## outline, and `BACKLOG.md`'s open note on roster-distance line noise -- "two
+## outlines at slightly different offsets is most of the noise" -- gets seven
+## fewer of them per face.
+##
+## `points` is the centreline already projected onto the body, `normals` the
+## outward surface normal at each. The ribbon is framed per sample from those two,
+## so it shears along the surface the way `build_surface_patch` does rather than
+## tilting a slab off it; `thickness` is the half-width across the stroke and
+## `depth` how far it stands proud, both in metres.
+## A snout: a box that tapers toward its front face.
+##
+## **The angular jaw is the point, not a side effect.** A sphere muzzle gives a
+## round bulge with no jawline at all, and the study's prism gave a straight jaw
+## meeting a corner -- which reads as a snout on a body drawn entirely from flat
+## planes, and which is what was chosen. Eight vertices, front face smaller than
+## the back, so the taper is the whole shape.
+##
+## Sized from `half_width` and `half_height` -- the same envelope a sphere muzzle
+## published as `radius` and `height * 0.5` -- because `PlayerActor3D._mouth_override`
+## and `_featured_muzzle` both read a muzzle's size by those names and would
+## otherwise have to learn a second vocabulary for the same quantity.
+## **Width and height taper independently, and collapsing them was wrong.** A
+## single ratio makes the front pad a scale model of the back, which is a cone
+## with corners; a snout narrows faster across than it does top-to-bottom, and
+## that difference is the jawline. The study this shape was taken from used
+## 0.64 across against 0.71 down on the same muzzle.
+static func build_wedge(
+	half_width: float,
+	half_height: float,
+	depth: float,
+	taper_width: float,
+	taper_height: float,
+) -> ArrayMesh:
+	var back := depth * 0.5
+	var front := -depth * 0.5
+	var front_w := half_width * taper_width
+	var front_h := half_height * taper_height
+	var b := [
+		Vector3(-half_width, half_height, back), Vector3(half_width, half_height, back),
+		Vector3(half_width, -half_height, back), Vector3(-half_width, -half_height, back),
+	]
+	var f := [
+		Vector3(-front_w, front_h, front), Vector3(front_w, front_h, front),
+		Vector3(front_w, -front_h, front), Vector3(-front_w, -front_h, front),
+	]
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	## Front, back, then the four tapering sides.
+	##
+	## **Wound with `face = -1`, and the first version was not.** `_patch_quad`
+	## emits `a-b-c` / `a-c-d`, and this codebase's front face for that order is
+	## the *negation* of the geometric cross product -- so a front face listed
+	## corner-clockwise as seen from outside points inward. Every wedge came out
+	## inside-out: the muzzle itself was culled and what showed through was the
+	## interior of its own black ink hull, which reads as a snout-shaped hole.
+	## `_limb_mesh` records the same trap in the same file: reversed winding made
+	## an inverted-hull outline "fill the limb solid black".
+	_patch_quad(tool, -1.0, f[0], f[1], f[2], f[3])
+	_patch_quad(tool, -1.0, b[1], b[0], b[3], b[2])
+	_patch_quad(tool, -1.0, b[0], b[1], f[1], f[0])
+	_patch_quad(tool, -1.0, b[2], b[3], f[3], f[2])
+	_patch_quad(tool, -1.0, b[3], b[0], f[0], f[3])
+	_patch_quad(tool, -1.0, b[1], b[2], f[2], f[1])
+	tool.generate_normals()
+	return tool.commit()
+
+
+## A tapered feather fan, broad where it grows out of a limb and narrow at the tip.
+##
+## **A box cannot be a wing for the same reason it could not be a mouth.** The Avi
+## wings were one `BoxMesh` each, 0.40 m deep at the shoulder and 0.40 m deep at
+## the wrist, which is the profile of a shield rather than of plumage -- and the
+## file's own comment above them already claimed "Feathers, not panels" over a
+## single constant-section slab. A wing's whole read is that it grows *out of*
+## something and runs out at the end.
+##
+## Swept along -y from the root, because that is the direction a limb hangs in
+## the rig and the fan is parented to a limb. `sweep` trails the tip backward in
+## +z so the trailing edge rakes instead of squaring off; zero is a straight fan.
+static func build_fan(
+	root_chord: float,
+	tip_chord: float,
+	span: float,
+	thickness: float,
+	sweep: float = 0.0,
+) -> ArrayMesh:
+	var steps := 6
+	var half := maxf(thickness, 0.001) * 0.5
+	var front: Array = []
+	var back: Array = []
+	for index in range(steps + 1):
+		var along := float(index) / float(steps)
+		var chord := lerpf(root_chord, tip_chord, along)
+		var down := -span * along
+		## The leading edge stays on the limb's own line; the chord and the rake
+		## both grow backward from it, so the fan never drifts in front of the arm
+		## it belongs to.
+		var lead := sweep * along
+		front.append(Vector3(0.0, down, lead))
+		back.append(Vector3(0.0, down, lead + chord))
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var side := Vector3(half, 0.0, 0.0)
+	for index in range(steps):
+		var step := index + 1
+		_patch_quad(tool, 1.0,
+			front[index] + side, front[step] + side,
+			back[step] + side, back[index] + side)
+		_patch_quad(tool, 1.0,
+			back[index] - side, back[step] - side,
+			front[step] - side, front[index] - side)
+		## The leading and trailing edges, which is where the taper actually shows.
+		_patch_quad(tool, 1.0,
+			front[index] - side, front[step] - side,
+			front[step] + side, front[index] + side)
+		_patch_quad(tool, 1.0,
+			back[index] + side, back[step] + side,
+			back[step] - side, back[index] - side)
+	var last := steps
+	_patch_quad(tool, 1.0,
+		front[0] + side, back[0] + side, back[0] - side, front[0] - side)
+	_patch_quad(tool, 1.0,
+		front[last] - side, back[last] - side, back[last] + side, front[last] + side)
+	tool.generate_normals()
+	return tool.commit()
+
+
+static func build_stroke(
+	points: PackedVector3Array,
+	normals: PackedVector3Array,
+	thickness: float,
+	depth: float,
+) -> ArrayMesh:
+	var count := points.size()
+	if count < 2 or normals.size() != count:
+		return ArrayMesh.new()
+	var outer_up: Array = []
+	var outer_down: Array = []
+	var inner_up: Array = []
+	var inner_down: Array = []
+	for index in range(count):
+		## Central difference along the stroke, one-sided at the ends. The
+		## direction the stroke is *going* is what decides which way its width
+		## lies, and taking it from a neighbour rather than from the authored
+		## parabola keeps the frame correct for any curve a caller supplies.
+		var ahead: Vector3 = points[mini(index + 1, count - 1)]
+		var behind: Vector3 = points[maxi(index - 1, 0)]
+		var along := ahead - behind
+		if along.length() < 0.000001:
+			along = Vector3(1.0, 0.0, 0.0)
+		along = along.normalized()
+		var out := normals[index]
+		out = Vector3(0.0, 0.0, -1.0) if out.length() < 0.000001 else out.normalized()
+		## Across the stroke, tangent to the surface: perpendicular to both the
+		## sweep and the normal. This is the axis a box could not follow, because a
+		## box's own axes are the world's.
+		var across := out.cross(along)
+		across = Vector3(0.0, 1.0, 0.0) if across.length() < 0.000001 \
+			else across.normalized()
+		var centre: Vector3 = points[index]
+		var proud := centre + out * depth
+		var bitten := centre - out * PATCH_BITE
+		outer_up.append(proud + across * thickness)
+		outer_down.append(proud - across * thickness)
+		inner_up.append(bitten + across * thickness)
+		inner_down.append(bitten - across * thickness)
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index in range(count - 1):
+		var step := index + 1
+		## Face out, face in, then the two long edges -- the same four-walled
+		## shell `build_surface_patch` builds, swept along a curve instead of
+		## stacked in rows.
+		_patch_quad(tool, 1.0,
+			outer_up[index], outer_up[step], outer_down[step], outer_down[index])
+		_patch_quad(tool, 1.0,
+			inner_down[index], inner_down[step], inner_up[step], inner_up[index])
+		_patch_quad(tool, 1.0,
+			inner_up[index], inner_up[step], outer_up[step], outer_up[index])
+		_patch_quad(tool, 1.0,
+			outer_down[index], outer_down[step], inner_down[step], inner_down[index])
+	## The two ends, so a stroke seen from the side is a solid and not a trough.
+	var last := count - 1
+	_patch_quad(tool, 1.0,
+		inner_up[0], inner_down[0], outer_down[0], outer_up[0])
+	_patch_quad(tool, 1.0,
+		outer_up[last], outer_down[last], inner_down[last], inner_up[last])
+	tool.generate_normals()
+	return tool.commit()
+
+
 static func _patch_quad(
 	tool: SurfaceTool, face: float, a: Vector3, b: Vector3, c: Vector3, d: Vector3
 ) -> void:
@@ -695,7 +900,8 @@ static func silhouette(
 		chosen_features(resolved, player_id, choices),
 	)
 	var marked := _add_markings(
-		featured, resolved, player_id, chosen_marking(resolved, player_id, choices)
+		_add_nose(featured), resolved,
+		player_id, chosen_marking(resolved, player_id, choices),
 	)
 	return _add_neck(_add_garments(marked) if draw_garments else marked)
 
@@ -1103,10 +1309,124 @@ static func _featured_ear(
 	return part
 
 
+## How much of a muzzle's radius the nose takes, how flat it is, how high up the
+## snout it sits, and how far it sinks into it.
+##
+## **All four were measured off a render, and the first attempt got three wrong.**
+## It was a quarter-radius sphere seated two thirds up and standing 0.72 of the
+## snout's depth proud, and it came out as a bauble bolted to the face -- because
+## a cosmetic carries a 0.030 m inverted hull, and a 25 mm nose is therefore
+## *smaller than its own outline*. The ring dominated the mark and the protrusion
+## caught the key light, so the one thing on the face that reads was a bright
+## disc with a heavy circle round it.
+##
+## A nose is wide, low and mostly *in* the snout. Wider than half the muzzle so
+## the outline is a rim rather than the subject; flattened front-to-back so it is
+## a dome and not a ball; high on the snout where a muzzle's own profile is
+## broadest; and sunk far enough that its silhouette merges with the snout
+## instead of sitting on it. It also takes the body's lighter pen -- the crown
+## weight exists for a part that carries a type's identity at thumbnail size, and
+## this one is read at conversational distance if at all.
+## **Measured against the pad it sits on, not the muzzle's widest section.** It
+## was 0.46 of the back half-width, which on a strongly tapered snout is most of
+## the front face: Feli's nose came out 0.72 of its own pad's half-width and
+## pinched the face shut, reading as small-featured rather than as small-nosed.
+## Cani carried the identical ratio and showed it far less, because a longer
+## snout has more surface either side of the nose for the eye to land on.
+##
+## A half, of the pad. The blunter the muzzle the wider the pad and the bigger
+## the nose that follows -- which is the right relationship and the one the old
+## constant could not express, because it never knew the taper existed.
+const NOSE_PAD_FRACTION: float = 0.50
+const NOSE_FLATTEN: float = 0.62
+const NOSE_HEIGHT_FRACTION: float = 0.74
+const NOSE_SINK: float = 0.52
+
+
+## The crown-coloured mark on a skin-coloured snout.
+##
+## **Why the muzzle stopped being crown-coloured, and why this replaces it.**
+## All four muzzled types authored the whole snout as `crown`, which on Feli is
+## `f0dcc0` against a `c98f4e` head -- a near-white patch with a hard edge across
+## the middle of a tan face. It read as a mask rather than as a snout, and it
+## made the mouth worse in two directions at once: the mouth's ink colour is
+## chosen from *skin* luminance, so Feli's dark stroke sat on near-white and read
+## as a bared row, while Ursi's dark `4a3b34` skin selects the *light* stroke and
+## put a pale mouth on a pale muzzle where it nearly vanished. Colouring the
+## muzzle `skin` gives the mouth the same contrast against the snout that it has
+## against the head, on every type.
+##
+## The two-tone reading `crown` was there for survives as a nose, which is the
+## place a real muzzle is actually a different colour.
+##
+## **Derived here rather than authored four times.** `_featured_muzzle` scales a
+## muzzle by `MUZZLE_FEATURES` and slides it along -z, so a nose with an absolute
+## position would sit correctly on a standard muzzle and float off a short or a
+## long one. Reading the muzzle *after* the feature axis has run makes one rule
+## serve four types and follow the axis for nothing -- the same choice
+## `PlayerActor3D._mouth_override` makes, and for the reason it states: a second
+## copy of these numbers would be a constant wearing the muzzle's name.
+##
+## Size stays in `radius`/`height`/`position` and never in an instance `scale`,
+## which is the constraint `MUZZLE_FEATURES` states above and which exists
+## because `_mouth_override` reads those three by name.
+static func _add_nose(spec: Dictionary) -> Dictionary:
+	var extras: Array = Array(spec.get("extras", []))
+	var muzzle := {}
+	for raw_part in extras:
+		var part := Dictionary(raw_part)
+		if str(part.get("name", "")) == "Muzzle":
+			muzzle = part
+			break
+	## A beak *is* the snout and the mouth both -- Avi gets no muzzle and no
+	## mouth, and it must not get a nose stuck to its face either.
+	if muzzle.is_empty():
+		return spec
+	var radius := float(muzzle.get("radius", 0.10))
+	var half_height := float(muzzle.get("height", radius * 2.0)) * 0.5
+	var centre: Vector3 = muzzle.get("position", Vector3.ZERO)
+	var up := NOSE_HEIGHT_FRACTION
+	## **A wedge has a front plane; a sphere has a front curve.** On the plane the
+	## nose sits at a fixed depth wherever it is on the face, and the pad it sits
+	## on has already tapered in, so the height is measured against the tapered
+	## face rather than the muzzle's widest section. On a sphere how far forward
+	## the surface is still depends on how high up it you are.
+	var wedge := str(muzzle.get("shape", "sphere")) == "wedge"
+	var taper := clampf(float(muzzle.get("taper_height", 1.0)), 0.05, 1.0) if wedge else 1.0
+	var taper_width := clampf(
+		float(muzzle.get("taper_width", 1.0)), 0.05, 1.0
+	) if wedge else 1.0
+	var nose_radius := radius * taper_width * NOSE_PAD_FRACTION
+	var forward := 1.0 if wedge else sqrt(maxf(1.0 - up * up, 0.0))
+	var reach := float(muzzle.get("depth", radius * 2.0)) * 0.5 if wedge else radius
+	var noses := extras.duplicate(true)
+	noses.append({
+		"name": "Nose", "parent": str(muzzle.get("parent", "BodyPivot")),
+		"shape": "sphere",
+		"radius": nose_radius, "height": nose_radius * 2.0 * NOSE_FLATTEN,
+		"position": Vector3(
+			centre.x,
+			centre.y + half_height * taper * up,
+			centre.z - reach * forward * (1.0 if wedge else NOSE_SINK)
+				+ (nose_radius * NOSE_FLATTEN * NOSE_SINK if wedge else 0.0),
+		),
+		"color": "crown", "ink": "body",
+	})
+	var carried := spec.duplicate(true)
+	carried["extras"] = noses
+	return carried
+
+
 static func _featured_muzzle(part: Dictionary, muzzle: Dictionary) -> Dictionary:
 	var size := float(muzzle.size)
 	part["radius"] = float(part.get("radius", 0.10)) * size
 	part["height"] = float(part.get("height", 0.15)) * size
+	## **Reach scales too, now that a muzzle has one.** A wedge carries its
+	## projection in `depth`, and a "long muzzle" that grew only in section would
+	## be a fatter face rather than a longer one -- which is the opposite of what
+	## the axis is named for.
+	if part.has("depth"):
+		part["depth"] = float(part.depth) * size
 	var position: Vector3 = part.get("position", Vector3.ZERO)
 	## The snout carries forward on -z, which is the direction both authored
 	## muzzles already sit in front of their heads.
@@ -1462,8 +1782,14 @@ static func _toward_universal(spec: Dictionary) -> Dictionary:
 		if head.has("height"):
 			head["height"] = head_radius * 1.9
 		blended["head"] = head
-	blended["head_y"] = _pull(
-		float(spec.get("head_y", rig * 0.9)), UNIVERSAL_RATIOS.head_y * rig
+	var authored_head_y := float(spec.get("head_y", rig * 0.9))
+	var blended_head_y := _pull(authored_head_y, UNIVERSAL_RATIOS.head_y * rig)
+	blended["head_y"] = blended_head_y
+	blended["extras"] = _carry_head_extras(
+		Array(spec.get("extras", [])),
+		authored_head_y,
+		float(Dictionary(spec.get("head", {})).get("height", 0.3)) * 0.5,
+		blended_head_y - authored_head_y,
 	)
 	## The produce torso is the Vegi's whole identity and its proportions are the
 	## cosmetic, so it is left alone. The other two carry the kit on the torso and
@@ -1480,6 +1806,61 @@ static func _toward_universal(spec: Dictionary) -> Dictionary:
 			)
 		blended["torso"] = torso
 	return blended
+
+
+## How far below the authored head a part may sit and still count as worn on it,
+## as a multiple of the head's own height.
+##
+## One, so the band runs from the chin down by another head height. Ears and
+## crests sit *above* the head and are caught by having no upper bound at all;
+## tails, tail feathers and produce lobes are all a torso's length below and are
+## not caught by anything. Derived from the head rather than listed by name,
+## because the list would be the thing that goes stale -- a new horn or a jowl
+## should follow the head without anybody adding it here.
+const HEAD_EXTRA_REACH: float = 1.0
+
+
+## Carry everything worn on the head with the head when the blend moves it.
+##
+## **The muzzle was standing still while the face walked away.** `_toward_universal`
+## pulls `head_y` toward the shared figure, and every extra's position is absolute
+## in `BodyPivot` space, so a type whose head disagreed with the reference had its
+## snout, ears and crest left behind by exactly that disagreement. Measured, Feli's
+## head rises 0.0455 m under the blend and Cani's 0.0330 -- so Feli's muzzle sank
+## nearly half a centimetre further down its own face than Cani's did, on two
+## bodies authored with the same head.
+##
+## That is not a small cosmetic drift, because `PlayerActor3D._mouth_override`
+## anchors the mouth at `muzzle.position.y - head.position.y`: the *unblended*
+## muzzle against the *blended* head. So the mouth inherited the whole error, and
+## the nose derived from the muzzle inherited it again.
+##
+## `_add_neck` already exists because the same blend opened a gap at the *other*
+## end of the head, and its comment states the rule this follows: re-authoring
+## every `head_y` against the blend would be "correct until the blend moves, and
+## silently wrong after". A part that moves with the head by construction cannot
+## go stale.
+static func _carry_head_extras(
+	extras: Array, authored_head_y: float, head_half_height: float, shift: float
+) -> Array:
+	if absf(shift) < 0.000001:
+		return extras.duplicate(true)
+	var floor_y := authored_head_y - head_half_height \
+		- head_half_height * 2.0 * HEAD_EXTRA_REACH
+	var carried: Array = []
+	for raw_part in extras:
+		var part := Dictionary(raw_part).duplicate(true)
+		## Only what hangs off the body's own trunk. A wing is parented to an arm
+		## and moves with the shoulder; nothing on a limb has an opinion about
+		## where the head went.
+		var parent := str(part.get("parent", "BodyPivot"))
+		var position: Vector3 = part.get("position", Vector3.ZERO)
+		if parent == "BodyPivot" and position.y >= floor_y:
+			part["position"] = Vector3(
+				position.x, position.y + shift, position.z
+			)
+		carried.append(part)
+	return carried
 
 
 static func _pull(authored: float, universal: float) -> float:
@@ -1610,6 +1991,11 @@ static func _feli() -> Dictionary:
 		"rig_height": 1.96,
 		"skin": Color("c98f4e"),
 		"crown": Color("f0dcc0"),
+		## The one thing a cat face cannot do without. Feli's snout is short and
+		## round, so with a nose and a mouth on it and nothing else the whole lower
+		## face is one unbroken plane -- which is most of why it read as flat
+		## beside Cani, whose folded ears and longer muzzle already break it up.
+		"whiskers": true,
 		"extras": [
 			{
 				"name": "EarLeft", "parent": "BodyPivot", "shape": "cone",
@@ -1624,9 +2010,24 @@ static func _feli() -> Dictionary:
 				"rotation": Vector3(0.0, 0.0, -14.0), "color": "skin",
 			},
 			{
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
-				"radius": 0.10, "height": 0.15,
-				"position": Vector3(0.0, 1.70, -0.15), "color": "crown",
+				## **Proportioned as a cat's, which it was not.** Feli authored
+				## 0.10 x 0.15 against Cani's 0.095 x 0.14 on an identical 0.185
+				## head -- wider and taller -- while projecting 0.15 forward
+				## against Cani's 0.19. A snout fat in section and short in reach
+				## is a bulge, and the nose, the mouth and the whiskers are all
+				## sized and seated off it, so one oversized muzzle put three
+				## oversized features on a face with no room for them. Cani read
+				## as correct under the same rules because Cani's muzzle already
+				## was the right shape.
+				##
+				## A cat: short, narrow, shallow, and strongly tapered to a small
+				## front pad. The `taper` is what carries the jawline -- 0.66
+				## leaves a clear angle from cheek to pad without turning the head
+				## into a snout on a stick.
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
+				"radius": 0.092, "height": 0.104,
+				"depth": 0.150, "taper_width": 0.64, "taper_height": 0.70,
+				"position": Vector3(0.0, 1.706, -0.170), "color": "skin",
 			},
 			## Hung off the hips rather than the torso so it swings with the
 			## stride the pose code already drives, instead of sitting rigid.
@@ -1703,24 +2104,70 @@ static func _avi() -> Dictionary:
 				"position": Vector3(0.0, 2.10, 0.03),
 				"rotation": Vector3(-14.0, 0.0, 0.0), "color": "crown",
 			},
+			## **A wing folds at the elbow, and this one could not.**
+			##
+			## It was one 0.86 m box per side hung off `LeftArm` -- the *upper*
+			## bone -- while the arm is a two-bone chain of 0.45 and 0.53. So the
+			## fan spanned a joint it was not attached across, and every pose that
+			## bends the elbow tore it off the limb. That is why `AVI - BLOCK`
+			## detached far worse than `AVI - REST` in the study renders: at rest
+			## the arm is nearly straight and the lie is cheap.
+			##
+			## Two fans per side, one per bone, is both the fix and the anatomy:
+			## coverts on the upper arm, primaries on the forearm, and the wing
+			## folds because the rig folds.
+			##
+			## **"Feathers, not panels" was written over a constant-section slab.**
+			## 0.40 m of chord at the shoulder and 0.40 m at the wrist is a shield.
+			## `build_fan` tapers, and the primaries carry a rake so the trailing
+			## edge runs out instead of squaring off.
+			##
+			## **And they are opaque again.** The 0.55 alpha was buying back
+			## silhouette these ate as slabs; tapered, they eat far less. It was
+			## also never doing what it looked like it was doing -- `_ink_node`
+			## gives every mesh an opaque inverted hull, so a see-through wing was
+			## carrying a solid 30 mm black contour, which is the single strongest
+			## cue that a thing is a separate object. `ink` puts them on the body's
+			## own 0.018 m pen instead of the crown weight: `BACKLOG.md` justifies
+			## that heavier line because "a crown is the smallest thing on a figure
+			## and carries the whole identity of its type", and a wing is the one
+			## cosmetic that argument excludes -- it is the largest thing on the
+			## figure.
 			{
-				"name": "WingLeft", "parent": "BodyPivot/LeftArm",
-				"shape": "box", "size": Vector3(0.06, 0.86, 0.40),
-				"position": Vector3(-0.07, -0.40, 0.12),
-				"rotation": Vector3(0.0, 0.0, 6.0), "color": "skin",
-				## Feathers, not panels. The wing fans are the largest cosmetic in
-				## the game and the only one big enough to hide the body wearing
-				## them -- an Avi's own torso, and on a block the teammate behind.
-				## Translucency keeps the reach they exist to show while giving
-				## back the silhouette they were eating.
-				"alpha": 0.55,
+				"name": "WingCovertLeft", "parent": "BodyPivot/LeftArm",
+				"shape": "fan",
+				"root_chord": 0.30, "tip_chord": 0.23,
+				"span": 0.45, "thickness": 0.05, "sweep": 0.02,
+				"position": Vector3(-0.042, 0.0, -0.045),
+				"rotation": Vector3(0.0, 0.0, 4.0),
+				"color": "skin", "ink": "body",
 			},
 			{
-				"name": "WingRight", "parent": "BodyPivot/RightArm",
-				"shape": "box", "size": Vector3(0.06, 0.86, 0.40),
-				"position": Vector3(0.07, -0.40, 0.12),
-				"rotation": Vector3(0.0, 0.0, -6.0), "color": "skin",
-				"alpha": 0.55,
+				"name": "WingPrimaryLeft", "parent": "BodyPivot/LeftArm/Elbow",
+				"shape": "fan",
+				"root_chord": 0.23, "tip_chord": 0.09,
+				"span": 0.53, "thickness": 0.04, "sweep": 0.06,
+				"position": Vector3(-0.042, 0.0, -0.045),
+				"rotation": Vector3(0.0, 0.0, 3.0),
+				"color": "skin", "ink": "body",
+			},
+			{
+				"name": "WingCovertRight", "parent": "BodyPivot/RightArm",
+				"shape": "fan",
+				"root_chord": 0.30, "tip_chord": 0.23,
+				"span": 0.45, "thickness": 0.05, "sweep": 0.02,
+				"position": Vector3(0.042, 0.0, -0.045),
+				"rotation": Vector3(0.0, 0.0, -4.0),
+				"color": "skin", "ink": "body",
+			},
+			{
+				"name": "WingPrimaryRight", "parent": "BodyPivot/RightArm/Elbow",
+				"shape": "fan",
+				"root_chord": 0.23, "tip_chord": 0.09,
+				"span": 0.53, "thickness": 0.04, "sweep": 0.06,
+				"position": Vector3(0.042, 0.0, -0.045),
+				"rotation": Vector3(0.0, 0.0, -3.0),
+				"color": "skin", "ink": "body",
 			},
 			{
 				"name": "TailFeathers", "parent": "BodyPivot", "shape": "box",
@@ -1839,6 +2286,35 @@ static func build_mesh(spec: Dictionary) -> Mesh:
 			var box := BoxMesh.new()
 			box.size = spec.get("size", Vector3(0.2, 0.2, 0.2))
 			return box
+		"stroke":
+			## Positions and normals arrive already projected onto the body the
+			## stroke lies on, because only the caller knows what that body is --
+			## a mouth wraps a head on one voli and a muzzle on the next.
+			return build_stroke(
+				PackedVector3Array(spec.get("points", PackedVector3Array())),
+				PackedVector3Array(spec.get("normals", PackedVector3Array())),
+				float(spec.get("thickness", 0.01)),
+				float(spec.get("depth", 0.01)),
+			)
+		"wedge":
+			## `radius` and `height` rather than a half-width and a half-height,
+			## because a muzzle's size is read by those two names in two other
+			## files and a second vocabulary for one quantity is how they drift.
+			return build_wedge(
+				float(spec.get("radius", 0.09)),
+				float(spec.get("height", 0.12)) * 0.5,
+				float(spec.get("depth", 0.12)),
+				clampf(float(spec.get("taper_width", 0.66)), 0.05, 1.0),
+				clampf(float(spec.get("taper_height", 0.72)), 0.05, 1.0),
+			)
+		"fan":
+			return build_fan(
+				float(spec.get("root_chord", 0.3)),
+				float(spec.get("tip_chord", 0.12)),
+				float(spec.get("span", 0.5)),
+				float(spec.get("thickness", 0.03)),
+				float(spec.get("sweep", 0.0)),
+			)
 		_:
 			var capsule := CapsuleMesh.new()
 			capsule.radius = float(spec.get("radius", 0.3))
@@ -1898,9 +2374,14 @@ static func _cani() -> Dictionary:
 			## this by name, so the face draws its mouth onto the muzzle instead of
 			## burying it inside.
 			{
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
-				"radius": 0.095, "height": 0.14,
-				"position": Vector3(0.0, 1.74, -0.19), "color": "crown",
+				## A dog: the long one. Deeper than it is wide and nearly twice
+				## Feli's reach, with a gentler taper so the jaw runs straight
+				## rather than pinching -- which is why the prism flattered this
+				## face first and Feli's second.
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
+				"radius": 0.090, "height": 0.109,
+				"depth": 0.238, "taper_width": 0.63, "taper_height": 0.68,
+				"position": Vector3(0.0, 1.740, -0.208), "color": "skin",
 			},
 			{
 				"name": "Tail", "parent": "BodyPivot", "shape": "cylinder",
@@ -1956,9 +2437,12 @@ static func _ursi() -> Dictionary:
 				"position": Vector3(0.17, 1.87, 0.0), "color": "skin",
 			},
 			{
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
-				"radius": 0.105, "height": 0.13,
-				"position": Vector3(0.0, 1.68, -0.17), "color": "crown",
+				## A bear: broad and blunt. The widest muzzle on the roster and
+				## the least tapered, so the jaw is a shelf rather than a point.
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
+				"radius": 0.100, "height": 0.100,
+				"depth": 0.175, "taper_width": 0.66, "taper_height": 0.72,
+				"position": Vector3(0.0, 1.680, -0.186), "color": "skin",
 			},
 		],
 	}
@@ -2019,9 +2503,12 @@ static func _simi() -> Dictionary:
 				"rotation": Vector3(-12.0, 0.0, 0.0), "color": "crown",
 			},
 			{
-				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
-				"radius": 0.082, "height": 0.10,
-				"position": Vector3(0.0, 1.395, -0.125), "color": "crown",
+				## A monkey: small and prognathous -- little section, but it
+				## carries forward, which with the brow above it is the whole read.
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
+				"radius": 0.070, "height": 0.078,
+				"depth": 0.145, "taper_width": 0.62, "taper_height": 0.70,
+				"position": Vector3(0.0, 1.394, -0.140), "color": "skin",
 			},
 		],
 	}
