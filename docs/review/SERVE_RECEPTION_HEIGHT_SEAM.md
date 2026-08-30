@@ -37,11 +37,28 @@ whole of "the reception is happening far above the ground", and it is
 §0 of `FAILURE_MODES.md` in its plainest form: a value measured with the wrong
 instrument.
 
-The second error survives fixing the first. Even integrated correctly, the
-number asked for is the height at the flight's **end**, and the serve's
-published duration runs to its landing point on the floor. The reception does
-not happen at the end of the serve; it happens partway through it. The right
-question is the height at the interception time, and no caller asks it.
+The second error survives fixing the first, and it is the worse of the two. The
+number asked for is the height at the flight's **end** -- and the serve's
+duration runs to where the ball *lands*, while the reception is timed at exactly
+that instant. Serve duration 0.822 s, reception at t=0.822. So the passer is
+being placed on a ball at the moment it reaches the floor, and asking that
+flight for its end height is asking where the ball is when it lands. The answer
+is 0.00 m and it is correct.
+
+FD-006's closure argument for this family reads:
+
+> The serve's published flight is already terminated at the pass -- its end time
+> and the reception's own stamp agree, so evaluating it at its far end *is*
+> evaluating it at the contact.
+
+The two times do agree. What does not follow is that the far end is the contact:
+it is the landing, and the reception was timed onto it. A real serve receive
+happens *before* the ball lands, at a platform height, which is a moment the
+flight has to be asked for by time and nobody asks.
+
+The wrong gravity is what hid this. Reading 9.800 turns a ball on the floor into
+a ball at 3.79 m -- a wrong number, but a *plausible-looking* one, where the
+right number would have been an obvious zero.
 
 So the fix is not "use the published gravity" -- that alone moves the reception
 from 3.79 m to the floor, where `PlatformContactModel` refuses the contact
