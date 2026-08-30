@@ -8930,6 +8930,7 @@ func _physical_playback_profile(
 ) -> Dictionary:
 	return {
 		"height_cm": player.height_cm,
+		"mass_kg": player.mass_kg,
 		## Which club's strip this voli is drawn in. Empty for the opposition and
 		## for every caller that has no club, which keeps the palette colours
 		## those were drawn against.

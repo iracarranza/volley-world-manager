@@ -51,6 +51,7 @@ var champion_region: String = ""
 var tactical_position: Vector2 = Vector2.ZERO
 var dominant_hand: String = "Right"
 var height_cm: float = 188.0
+var mass_kg: float = 82.0
 var wingspan_cm: float = 191.0
 var stride_length_m: float = 0.83
 var body_type: String = "Vegi"
@@ -60,6 +61,9 @@ var shoulder_offset: Vector2 = Vector2(0.40, 1.52)
 var hip_offset: Vector2 = Vector2(0.16, 0.48)
 var body_height_scale: float = 1.0
 var arm_length_scale: float = 1.0
+## The authored torso scale after height/stride fitting. Pose deformation always
+## starts here, so squash and extension do not accumulate from frame to frame.
+var torso_rest_scale: Vector3 = Vector3.ONE
 ## How long this voli's legs are for their height, from `stride_length_m`.
 var leg_length_scale: float = 1.0
 var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
@@ -465,6 +469,7 @@ func configure(
 		expression = chosen_face
 	_build_silhouette()
 	_apply_physical_profile(physical_profile)
+	torso_rest_scale = torso.scale
 	## Name and position. It used to read `name · 200 cm · R`, which spent both
 	## its fields on things the body already shows -- height in how tall the rig
 	## is drawn, handedness in which arm swings -- and never said who this voli
@@ -2552,6 +2557,97 @@ func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> Vector2:
 ## already crossing the net. Elevation was continuous across that boundary and
 ## only the arms teleported, which is why it read as a broken limb rather than a
 ## timing error.
+func _apply_torso_deformation(
+	event_type: int, phase: float, is_contact_actor: bool,
+	contact_direction: Vector2,
+) -> void:
+	torso.scale = torso_rest_scale
+	torso.rotation = Vector3.ZERO
+	if not is_contact_actor:
+		return
+	var compression := 0.0
+	var extension := 0.0
+	match event_type:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
+			compression = smoothstep(-0.35, 0.18, phase) * (1.0 - smoothstep(0.55, 1.0, phase))
+		RallyEventModel.EventType.SET:
+			compression = 1.0 - smoothstep(-0.45, 0.05, phase)
+			extension = smoothstep(-0.08, 0.55, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
+		RallyEventModel.EventType.ATTACK:
+			compression = smoothstep(-0.78, -0.48, phase) * (1.0 - smoothstep(-0.30, -0.04, phase))
+			extension = smoothstep(-0.30, 0.02, phase) * (1.0 - smoothstep(0.48, 0.92, phase))
+		RallyEventModel.EventType.BLOCK:
+			compression = 1.0 - smoothstep(-0.58, -0.18, phase)
+			extension = smoothstep(-0.28, 0.08, phase) * (1.0 - smoothstep(0.55, 0.95, phase))
+		RallyEventModel.EventType.SERVE:
+			compression = smoothstep(-0.75, -0.38, phase) * (1.0 - smoothstep(-0.18, 0.04, phase))
+			extension = smoothstep(-0.24, 0.04, phase) * (1.0 - smoothstep(0.50, 0.90, phase))
+	var response := _body_motion_response()
+	var vertical := 1.0 - 0.10 * compression * response + 0.085 * extension * response
+	var width := 1.0 + 0.07 * compression * response - 0.045 * extension * response
+	torso.scale = Vector3(
+		torso_rest_scale.x * width,
+		torso_rest_scale.y * vertical,
+		torso_rest_scale.z * width,
+	)
+	var handed := -1.0 if dominant_hand == "Left" else 1.0
+	var action_roll := 0.0
+	if event_type in [RallyEventModel.EventType.ATTACK, RallyEventModel.EventType.SERVE]:
+		action_roll = handed * (extension - compression * 0.35) * 4.5 * response
+	elif event_type in [RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE]:
+		action_roll = clampf(contact_direction.x, -1.0, 1.0) * compression * 5.0 * response
+	torso.rotation.z = deg_to_rad(action_roll)
+
+
+func _body_motion_response() -> float:
+	match body_type:
+		"Feli", "Simi": return 1.18
+		"Avi": return 1.10
+		"Cani": return 0.96
+		"Ursi": return 0.78
+		"Vegi": return 1.12 if produce in ["Stalk", "Aubergine"] else 0.92
+	return 1.0
+
+
+## Secondary weight shift belongs to the whole toy, not only the torso mesh.
+## The primary biomechanics still own every joint; this adds the small opposing
+## lean that makes anticipation load one side and follow-through finish on the
+## other. It is deliberately a single-body curve, not an anatomical spine.
+func _apply_secondary_body_motion(
+	event_type: int, phase: float, contact_direction: Vector2,
+	action_context: Dictionary,
+) -> void:
+	var response := _body_motion_response()
+	var handed := -1.0 if dominant_hand == "Left" else 1.0
+	var roll_degrees := 0.0
+	var lateral_shift := 0.0
+	match event_type:
+		RallyEventModel.EventType.ATTACK:
+			var load := smoothstep(-0.78, -0.42, phase) * (1.0 - smoothstep(-0.22, 0.02, phase))
+			var follow := smoothstep(-0.12, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
+			roll_degrees = handed * (-4.5 * load + 7.5 * follow)
+			lateral_shift = handed * (-0.018 * load + 0.030 * follow)
+		RallyEventModel.EventType.SERVE:
+			var coil := smoothstep(-0.72, -0.34, phase) * (1.0 - smoothstep(-0.12, 0.08, phase))
+			var release := smoothstep(-0.14, 0.16, phase) * (1.0 - smoothstep(0.62, 0.94, phase))
+			roll_degrees = handed * (-3.5 * coil + 6.0 * release)
+			lateral_shift = handed * 0.020 * (release - coil)
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
+			var commit := smoothstep(-0.30, 0.18, phase) * (1.0 - smoothstep(0.70, 1.0, phase))
+			roll_degrees = clampf(contact_direction.x, -1.0, 1.0) * 6.5 * commit
+			lateral_shift = clampf(contact_direction.x, -1.0, 1.0) * 0.026 * commit
+		RallyEventModel.EventType.SET:
+			var release := smoothstep(-0.18, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
+			var back := -1.0 if bool(action_context.get("back_set", false)) else 1.0
+			roll_degrees = back * handed * 2.8 * release
+		RallyEventModel.EventType.BLOCK:
+			var press := smoothstep(-0.25, 0.10, phase) * (1.0 - smoothstep(0.58, 0.92, phase))
+			if block_arms != &"two":
+				roll_degrees = (1.0 if contact_direction.x > 0.0 else -1.0) * 4.0 * press
+	body_pivot.rotation.z += deg_to_rad(roll_degrees * response)
+	body_pivot.position.x += lateral_shift * response * body_height_scale
+
+
 func set_pose(
 	event_type: int,
 	elevation: float,
@@ -2580,6 +2676,7 @@ func set_pose(
 	body_pivot.position = Vector3(0.0, lift + locomotion_bob, 0.0)
 	body_pivot.rotation = Vector3(float(gait.torso_pitch_radians), 0.0, 0.0)
 	body_pivot.scale = Vector3.ONE * body_height_scale
+	_apply_torso_deformation(event_type, phase, is_contact_actor, contact_direction)
 	left_arm.rotation_degrees = Vector3(float(gait.left_arm_degrees), 0.0, -12.0)
 	right_arm.rotation_degrees = Vector3(float(gait.right_arm_degrees), 0.0, 12.0)
 	left_arm.position = Vector3(-shoulder_offset.x, shoulder_offset.y, 0.0)
@@ -2992,6 +3089,10 @@ func set_pose(
 			## ready posture a blocker waits in.
 			_set_elbow(left_arm, float(wall.elbow_degrees))
 			_set_elbow(right_arm, float(wall.elbow_degrees))
+	## Last, after the primary joint solution, so anticipation and follow-through
+	## shift the completed toy-body silhouette instead of fighting the action's
+	## biomechanics for ownership of individual limbs.
+	_apply_secondary_body_motion(event_type, phase, contact_direction, action_context)
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)
@@ -3299,6 +3400,13 @@ func _apply_material_color(
 
 func _apply_physical_profile(profile: Dictionary) -> void:
 	height_cm = clampf(float(profile.get("height_cm", REFERENCE_HEIGHT_CM)), 150.0, 220.0)
+	## Mass is interpreted relative to height, so 82 kg means something different
+	## on a 160 cm and a 210 cm player. Missing mass deliberately lands at the
+	## reference build for that height, preserving every older portrait caller.
+	var expected_mass := 82.0 * pow(height_cm / REFERENCE_HEIGHT_CM, 2.0)
+	mass_kg = clampf(float(profile.get("mass_kg", expected_mass)), 45.0, 145.0)
+	var mass_girth := clampf(pow(mass_kg / maxf(expected_mass, 1.0), 0.35), 0.88, 1.14)
+	var limb_girth := lerpf(1.0, mass_girth, 0.58)
 	wingspan_cm = clampf(float(profile.get("wingspan_cm", REFERENCE_WINGSPAN_CM)), 150.0, 235.0)
 	stride_length_m = clampf(float(profile.get("stride_length_m", 0.83)), 0.55, 1.15)
 	## Scale the silhouette so its own stated height becomes this player's real
@@ -3346,15 +3454,16 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	var leg_gain := leg_span * (leg_length_scale - 1.0)
 	var hip_y := hip_offset.y + leg_gain
 	for leg in [left_leg, right_leg]:
-		leg.scale.y = leg_length_scale
+		leg.scale = Vector3(limb_girth, leg_length_scale, limb_girth)
 		leg.position.y = hip_y
 	var crown := float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M))
 	var upper_span := maxf(crown - hip_offset.y, 0.1)
 	var squeeze := clampf((upper_span - leg_gain) / upper_span, 0.55, 1.45)
 	for part in [torso, head]:
 		part.position.y = hip_y + (part.position.y - hip_offset.y) * squeeze
-	torso.scale.y = squeeze
+	torso.scale = Vector3(mass_girth, squeeze, mass_girth)
 	for arm in [left_arm, right_arm]:
+		arm.scale = Vector3(limb_girth, 1.0, limb_girth)
 		arm.position.y = hip_y + (arm.position.y - hip_offset.y) * squeeze
 	shoulder_offset.y = hip_y + (shoulder_offset.y - hip_offset.y) * squeeze
 	hip_offset.y = hip_y

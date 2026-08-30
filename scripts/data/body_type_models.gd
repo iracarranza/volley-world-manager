@@ -65,14 +65,22 @@ const PRODUCE_BODIES := {
 	"Tomato": {
 		"skin": Color("d63b2a"), "crown": Color("3f7a35"),
 		"crown_shape": "calyx",
-		"torso": {"shape": "sphere", "radius": 0.33, "height": 0.66},
+		"torso": {"shape": "profile", "radius": 0.36, "height": 0.70,
+			"profile": [Vector2(-1.0, 0.10), Vector2(-0.72, 0.29),
+				Vector2(-0.20, 0.36), Vector2(0.28, 0.355),
+				Vector2(0.72, 0.29), Vector2(1.0, 0.10)],
+			"depth_scale": 0.90, "lobes": 6, "lobe_depth": 0.075},
 		"torso_y": 1.02, "head_y": 1.46, "head_radius": 0.13,
 		"shoulder": Vector2(0.31, 1.28), "rig_height": 1.80,
 	},
 	"Aubergine": {
 		"skin": Color("54307a"), "crown": Color("4e8a3a"),
 		"crown_shape": "hood",
-		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
+		"torso": {"shape": "profile", "radius": 0.285, "height": 1.12,
+			"profile": [Vector2(-1.0, 0.08), Vector2(-0.78, 0.20),
+				Vector2(-0.35, 0.285), Vector2(0.08, 0.265),
+				Vector2(0.58, 0.205), Vector2(1.0, 0.09)],
+			"depth_scale": 0.82, "lobes": 5, "lobe_depth": 0.04},
 		"torso_y": 1.16, "head_y": 1.78, "head_radius": 0.12,
 		"shoulder": Vector2(0.27, 1.52), "rig_height": 2.06,
 	},
@@ -81,7 +89,10 @@ const PRODUCE_BODIES := {
 		"crown_shape": "twig",
 		## A pear is two masses, so it is the one produce with a second torso
 		## lobe rather than a single scaled primitive -- the waist is the shape.
-		"torso": {"shape": "sphere", "radius": 0.32, "height": 0.60},
+		"torso": {"shape": "profile", "radius": 0.37, "height": 0.92,
+			"profile": [Vector2(-1.0, 0.10), Vector2(-0.78, 0.27),
+				Vector2(-0.38, 0.385), Vector2(0.05, 0.34),
+				Vector2(0.55, 0.185), Vector2(1.0, 0.075)], "depth_scale": 0.88},
 		"torso_y": 0.94, "head_y": 1.62, "head_radius": 0.12,
 		"shoulder": Vector2(0.26, 1.40), "rig_height": 1.92,
 		"extra_lobe": {"radius": 0.22, "height": 0.48, "y": 1.36},
@@ -92,7 +103,10 @@ const PRODUCE_BODIES := {
 	## the whole read, which is why it is the tallest and the thinnest at once.
 	"Stalk": {
 		"skin": Color("9dbf5c"), "crown": Color("cfe08a"),
-		"torso": {"shape": "capsule", "radius": 0.165, "height": 1.34},
+		"torso": {"shape": "profile", "radius": 0.19, "height": 1.36,
+			"profile": [Vector2(-1.0, 0.115), Vector2(-0.75, 0.17),
+				Vector2(-0.10, 0.19), Vector2(0.55, 0.17),
+				Vector2(1.0, 0.105)], "depth_scale": 0.78},
 		"torso_y": 1.24, "head_y": 1.92, "head_radius": 0.105,
 		"shoulder": Vector2(0.22, 1.60), "rig_height": 2.12,
 		## Ribs, so a thin cylinder does not read as a pipe. Offset in pairs
@@ -133,7 +147,12 @@ const PRODUCE_BODIES := {
 		## longer the shape: it is what the kit, the shorts and the arms are
 		## measured off, and the lobes are what anybody sees. Left at a radius the
 		## lobes comfortably swallow, so it cannot poke out between two of them.
-		"torso": {"shape": "sphere", "radius": 0.275, "height": 0.72},
+		"torso": {"shape": "profile", "radius": 0.34, "height": 0.76,
+			"profile": [Vector2(-1.0, 0.16), Vector2(-0.72, 0.27),
+				Vector2(-0.15, 0.325), Vector2(0.48, 0.34),
+				Vector2(0.82, 0.29), Vector2(1.0, 0.16)],
+			"sides": 32, "lobes": 4, "lobe_depth": 0.24,
+			"depth_scale": 0.92},
 		"torso_y": 1.04, "head_y": 1.56, "head_radius": 0.128,
 		"shoulder": Vector2(0.34, 1.34), "rig_height": 1.88,
 		## Rounder and shorter than the first cut, which flared. At height 0.76
@@ -143,10 +162,6 @@ const PRODUCE_BODIES := {
 		## else had taken its place. A pepper is widest at the shoulder and *blunt*
 		## underneath, so the lobes are wider across, shorter, and no longer pushed
 		## out along the radius at all.
-		"lobes": {
-			"count": 4, "offset": 0.145, "radius": 0.225, "height": 0.60,
-			"y": 1.075, "across": 0.94, "out": 1.0,
-		},
 		"crown_shape": "cap",
 	},
 }
@@ -305,6 +320,17 @@ static func palette_for(body_key: String, player_id: int) -> Dictionary:
 static func _torso_radius_at(torso: Dictionary, up: float) -> float:
 	var radius := float(torso.get("radius", 0.32))
 	var shape := str(torso.get("shape", "sphere"))
+	if shape == "profile":
+		var profile: Array = torso.get("profile", [])
+		if profile.is_empty():
+			return radius
+		var normalized := clampf(up, -1.0, 1.0)
+		for index in range(profile.size() - 1):
+			var lower: Vector2 = profile[index]
+			var upper: Vector2 = profile[index + 1]
+			if normalized <= upper.x:
+				return lerpf(lower.y, upper.y, inverse_lerp(lower.x, upper.x, normalized))
+		return float((profile.back() as Vector2).y)
 	if shape == "capsule":
 		var semi := float(torso.get("height", 1.0)) * 0.5
 		## Where the cylinder ends and the cap begins.
@@ -832,7 +858,7 @@ const UNIVERSAL_RATIOS := {
 ## can, because every type *is* authored as a full skeleton and then pulled toward
 ## the shared one. Turning this up does not invent anything; it stops discarding
 ## what each type already says about itself.
-static var type_expression: float = 0.45
+static var type_expression: float = 0.82
 
 ## Whether the kit is drawn as garments with edges, or stays paint on the
 ## body. Same reason as the flag above: two candidates, rendered rather than
@@ -1190,7 +1216,16 @@ static func _apply_features(spec: Dictionary, features: Dictionary) -> Dictionar
 		var torso: Dictionary = Dictionary(featured.get("torso", {}))
 		if torso.has("radius"):
 			torso["radius"] = float(torso.radius) * girth
-			featured["torso"] = torso
+		## Purpose-built bodies use a vertical radius profile instead of one
+		## primitive radius. Scale every section so build remains an independent
+		## axis after the authored silhouettes replaced capsules and spheres.
+		if torso.has("profile"):
+			var scaled_profile: Array[Vector2] = []
+			for raw_section in Array(torso.profile):
+				var section: Vector2 = raw_section
+				scaled_profile.append(Vector2(section.x, section.y * girth))
+			torso["profile"] = scaled_profile
+		featured["torso"] = torso
 		## **The `shorts` box in every body spec is never drawn**, so nothing is
 		## scaled here. `_build_silhouette` builds a mesh from it and
 		## `_apply_physical_profile` immediately replaces that mesh with a section
@@ -1280,11 +1315,18 @@ static func _featured_ear(
 	part: Dictionary, ears: Dictionary, head_centre: Vector3
 ) -> Dictionary:
 	var position: Vector3 = part.get("position", Vector3.ZERO)
-	if str(part.get("shape", "sphere")) == "cone":
+	var ear_shape := str(part.get("shape", "sphere"))
+	if ear_shape in ["cone", "profile"]:
 		var authored_height := float(part.get("height", 0.22))
 		var height := authored_height * float(ears.length)
 		part["height"] = height
 		part["radius"] = float(part.get("radius", 0.08)) * float(ears.width)
+		if ear_shape == "profile":
+			var widened: Array[Vector2] = []
+			for raw_point in part.get("profile", []):
+				var point: Vector2 = raw_point
+				widened.append(Vector2(point.x, point.y * float(ears.width)))
+			part["profile"] = widened
 		var rotation: Vector3 = part.get("rotation", Vector3.ZERO)
 		var splay := float(ears.splay)
 		var turned := rotation.z + (splay if rotation.z >= 0.0 else -splay)
@@ -1539,6 +1581,12 @@ static func _add_markings(
 					"TabbyArm%d" % (index + 1),
 					_mark_on_arm(spec, index, 0.34 + float(index / 2) * 0.22, 1.5),
 					ink, 0.0, Vector3(1.25, 0.26, 0.50)
+				))
+			for cheek in [-1.0, 1.0]:
+				extras.append(_mark(
+					"TabbyCheek%s" % ("Left" if cheek < 0.0 else "Right"),
+					_mark_on_face(spec, cheek * 0.72, -0.16, 0.52), ink,
+					cheek * 24.0, Vector3(1.2, 0.20, 0.30)
 				))
 		"spots":
 			for index in range(6):
@@ -1973,7 +2021,10 @@ static func _vegi(produce: String) -> Dictionary:
 ## the eye something to track when they change direction.
 static func _feli() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.27, "height": 0.94},
+		"torso": {"shape": "profile", "radius": 0.29, "height": 0.94,
+			"profile": [Vector2(-1.0, 0.13), Vector2(-0.72, 0.22),
+				Vector2(-0.05, 0.245), Vector2(0.55, 0.29),
+				Vector2(1.0, 0.14)], "depth_scale": 0.72},
 		"torso_y": 1.10,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.50, 0.22, 0.34)},
@@ -2076,7 +2127,10 @@ static func _feli() -> Dictionary:
 ## rather than as two thin sticks.
 static func _avi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
+		"torso": {"shape": "profile", "radius": 0.27, "height": 1.10,
+			"profile": [Vector2(-1.0, 0.10), Vector2(-0.70, 0.17),
+				Vector2(-0.12, 0.20), Vector2(0.54, 0.27),
+				Vector2(1.0, 0.11)], "depth_scale": 0.58},
 		"torso_y": 1.20,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.44, 0.20, 0.32)},
@@ -2253,8 +2307,49 @@ static func _limb_mesh(
 	return surface.commit()
 
 
+## A deliberately authored body contour. The profile is a sequence of
+## Vector2(vertical fraction, radius) rings from -1 at the seat to +1 at the
+## shoulder. Unlike scaling a capsule, moving one ring changes only that part of
+## the body: a pear can have a low belly and a narrow neck, a Cani can carry a
+## chest, and an Ursi can settle its mass through the hips.
+static func _profile_mesh(spec: Dictionary) -> Mesh:
+	var profile: Array = spec.get("profile", [])
+	if profile.size() < 2:
+		return CapsuleMesh.new()
+	var height := float(spec.get("height", 1.0))
+	var sides := int(spec.get("sides", 20))
+	var lobes := int(spec.get("lobes", 0))
+	var lobe_depth := float(spec.get("lobe_depth", 0.0))
+	var depth_scale := float(spec.get("depth_scale", 1.0))
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for ring in range(profile.size() - 1):
+		var lower: Vector2 = profile[ring]
+		var upper: Vector2 = profile[ring + 1]
+		for side in range(sides):
+			var a := TAU * float(side) / float(sides)
+			var b := TAU * float(side + 1) / float(sides)
+			var lower_a := lower.y * (1.0 + lobe_depth * cos(float(lobes) * a))
+			var lower_b := lower.y * (1.0 + lobe_depth * cos(float(lobes) * b))
+			var upper_a := upper.y * (1.0 + lobe_depth * cos(float(lobes) * a))
+			var upper_b := upper.y * (1.0 + lobe_depth * cos(float(lobes) * b))
+			var points := [
+				Vector3(cos(a) * lower_a, lower.x * height * 0.5, sin(a) * lower_a * depth_scale),
+				Vector3(cos(b) * lower_b, lower.x * height * 0.5, sin(b) * lower_b * depth_scale),
+				Vector3(cos(b) * upper_b, upper.x * height * 0.5, sin(b) * upper_b * depth_scale),
+				Vector3(cos(a) * upper_a, upper.x * height * 0.5, sin(a) * upper_a * depth_scale),
+			]
+			for corner in [0, 1, 2, 0, 2, 3]:
+				surface.add_vertex(points[corner])
+	surface.index()
+	surface.generate_normals()
+	return surface.commit()
+
+
 static func build_mesh(spec: Dictionary) -> Mesh:
 	match str(spec.get("shape", "capsule")):
+		"profile":
+			return _profile_mesh(spec)
 		"limb":
 			return _limb_mesh(
 				float(spec.get("top_radius", 0.09)),
@@ -2331,7 +2426,10 @@ static func build_mesh(spec: Dictionary) -> Mesh:
 ## *standing*. The ears drop instead of pricking up, for the same reason.
 static func _cani() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.295, "height": 1.00},
+		"torso": {"shape": "profile", "radius": 0.325, "height": 1.00,
+			"profile": [Vector2(-1.0, 0.14), Vector2(-0.70, 0.235),
+				Vector2(-0.12, 0.27), Vector2(0.48, 0.325),
+				Vector2(1.0, 0.16)], "depth_scale": 0.88},
 		"torso_y": 1.14,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.54, 0.22, 0.36)},
@@ -2359,14 +2457,20 @@ static func _cani() -> Dictionary:
 			## read the same -- a feature that cannot be seen is not a feature.
 			## Lifted 0.02 with it so the wider seat still meets the skull.
 			{
-				"name": "EarLeft", "parent": "BodyPivot", "shape": "cone",
-				"radius": 0.075, "height": 0.26,
+				"name": "EarLeft", "parent": "BodyPivot", "shape": "profile",
+				"radius": 0.11, "height": 0.30,
+				"profile": [Vector2(-1.0, 0.025), Vector2(-0.58, 0.085),
+					Vector2(0.30, 0.11), Vector2(1.0, 0.065)],
+				"depth_scale": 0.42,
 				"position": Vector3(-0.195, 1.88, 0.02),
 				"rotation": Vector3(0.0, 0.0, 152.0), "color": "skin",
 			},
 			{
-				"name": "EarRight", "parent": "BodyPivot", "shape": "cone",
-				"radius": 0.075, "height": 0.26,
+				"name": "EarRight", "parent": "BodyPivot", "shape": "profile",
+				"radius": 0.11, "height": 0.30,
+				"profile": [Vector2(-1.0, 0.025), Vector2(-0.58, 0.085),
+					Vector2(0.30, 0.11), Vector2(1.0, 0.065)],
+				"depth_scale": 0.42,
 				"position": Vector3(0.195, 1.88, 0.02),
 				"rotation": Vector3(0.0, 0.0, -152.0), "color": "skin",
 			},
@@ -2406,7 +2510,10 @@ static func _cani() -> Dictionary:
 ## nothing to it, Ursi makes one by being dense.
 static func _ursi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.355, "height": 1.02},
+		"torso": {"shape": "profile", "radius": 0.39, "height": 1.02,
+			"profile": [Vector2(-1.0, 0.18), Vector2(-0.72, 0.33),
+				Vector2(-0.10, 0.39), Vector2(0.50, 0.375),
+				Vector2(1.0, 0.20)], "depth_scale": 0.96},
 		"torso_y": 1.10,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.62, 0.22, 0.42)},
@@ -2464,7 +2571,10 @@ static func _ursi() -> Dictionary:
 ## in a human's place on a human's head was half the problem.
 static func _simi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.285, "height": 0.76},
+		"torso": {"shape": "profile", "radius": 0.325, "height": 0.76,
+			"profile": [Vector2(-1.0, 0.12), Vector2(-0.65, 0.205),
+				Vector2(-0.05, 0.25), Vector2(0.58, 0.325),
+				Vector2(1.0, 0.18)], "depth_scale": 0.75},
 		"torso_y": 0.98,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.46, 0.20, 0.32)},
@@ -2497,14 +2607,23 @@ static func _simi() -> Dictionary:
 			## mouth off the skull -- `_mouth_override` reads it by name -- and a
 			## face with its mouth on a snout is not a human face.
 			{
-				"name": "Brow", "parent": "BodyPivot", "shape": "box",
-				"size": Vector3(0.20, 0.05, 0.06),
-				"position": Vector3(0.0, 1.505, -0.115),
-				"rotation": Vector3(-12.0, 0.0, 0.0), "color": "crown",
+				"name": "BrowLeft", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.068, "height": 0.045,
+				"position": Vector3(-0.052, 1.505, -0.122),
+				"rotation": Vector3(-12.0, 0.0, -9.0),
+				"scale": Vector3(1.35, 1.0, 0.48), "color": "crown",
+			},
+			{
+				"name": "BrowRight", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.068, "height": 0.045,
+				"position": Vector3(0.052, 1.505, -0.122),
+				"rotation": Vector3(-12.0, 0.0, 9.0),
+				"scale": Vector3(1.35, 1.0, 0.48), "color": "crown",
 			},
 			{
 				## A monkey: small and prognathous -- little section, but it
-				## carries forward, which with the brow above it is the whole read.
+				## carries forward, which with the curved brow above it is the
+				## whole read.
 				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
 				"radius": 0.070, "height": 0.078,
 				"depth": 0.145, "taper_width": 0.62, "taper_height": 0.70,
