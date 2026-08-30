@@ -113,6 +113,14 @@ func _scan(rally: Resource, census: Dictionary) -> void:
 		var row := _leg(census, str(RallyEventScript.EventType.keys()[kind]))
 		row.events += 1
 		var named := {}
+		## **Which side is silent, not just how many.** Each leg publishes roughly
+		## one team of the twelve, and the repair is to publish the other -- but
+		## which one differs per leg and reading it out of a 19,000-line resolver
+		## is guesswork. Counted here instead.
+		if not Dictionary(meta.get("home_phase_targets", {})).is_empty():
+			row["home_map"] = int(row.get("home_map", 0)) + 1
+		if not Dictionary(meta.get("opponent_phase_targets", {})).is_empty():
+			row["opponent_map"] = int(row.get("opponent_map", 0)) + 1
 		for key in ["home_phase_targets", "opponent_phase_targets"]:
 			for player_id in Dictionary(meta.get(key, {})):
 				named[int(player_id)] = true
@@ -171,7 +179,9 @@ func _print(census: Dictionary) -> void:
 			continue
 		var row: Dictionary = census.legs[name]
 		print("%-16s %8d %11d %11d %9d %8d %11d %10d" % [
-			name, row.events, row.published, row.contacting, row.silent,
+			name + (" [h%d/o%d]" % [
+				int(row.get("home_map", 0)), int(row.get("opponent_map", 0)),
+			]), row.events, row.published, row.contacting, row.silent,
 			row.no_leg, row.with_intent, row.with_timing,
 		])
 		for key in totals:

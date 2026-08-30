@@ -7609,8 +7609,26 @@ func _test_ball_kinematics_force_derived() -> void:
 			## contact heights in the resolver's own flight time -- ends where it
 			## should, and its apex is whatever gravity makes it rather than whatever
 			## presentation wanted.
-			if not is_equal_approx(explicit_rise, apex) \
-					or str(trajectory.get("height_contract", "")) != "relative_rise":
+			## **Two contracts reach this loop now, and the rise means something
+			## different under each.** `relative_rise` puts the rise *in* the apex
+			## field, so the two are equal by construction. `absolute_projectile`
+			## -- what every free-flight family already publishes, and what the
+			## serve's leg became when it started being sliced at the reception --
+			## states an absolute apex beside the rise, so the same claim is that
+			## they differ by exactly the launch height. Neither is loosened: each
+			## contract is checked against its own definition, and the drawn-flight
+			## assertions below are untouched.
+			var contract := str(trajectory.get("height_contract", ""))
+			var rise_stated := false
+			match contract:
+				"relative_rise":
+					rise_stated = is_equal_approx(explicit_rise, apex)
+				"absolute_projectile":
+					rise_stated = is_equal_approx(
+						explicit_rise,
+						apex - float(trajectory.get("start_height_meters", 0.0)),
+					)
+			if not rise_stated:
 				invariant_held = false
 			var display := BallPresentation.display_trajectory(
 				event, null, trajectory, result.player_physical_profiles
@@ -16901,9 +16919,16 @@ func _test_the_serve_is_one_forward_flight() -> void:
 					launch_published += 1
 				## Struck from a real reach, not from the 1.0 m every published
 				## trajectory in the game used to carry.
+				## `resolved` as well as `start_resolved`, because the serve's leg is
+				## now the prefix that was actually played and states *both* ends.
+				## The assertion is "not the 1.0 m default every trajectory used to
+				## carry", and a record that resolved both ends satisfies that more
+				## strongly than one that resolved only the near one. The height
+				## bound below is untouched and is what does the actual work.
 				if float(trajectory.get("start_height_meters", 0.0)) > 1.8 \
-						and str(trajectory.get("height_source", "")) \
-							== "start_resolved":
+						and str(trajectory.get("height_source", "")) in [
+							"start_resolved", "resolved",
+						]:
 					start_height_real += 1
 				## **Truncation must not redefine the launch.** The reconstruction
 				## `BallPresentation.launch_speed_mps` performs reads the endpoint
@@ -17016,7 +17041,21 @@ func _test_a_block_can_be_told_what_it_is_for() -> void:
 					plan.block_intent = intent
 			for serving_home in [true, false]:
 				manager.match_state.serving_home = serving_home
-				for seed_value in range(5000, 5150):
+				## **300, because 150 could not resolve the claim below.**
+				##
+				## Deflections are rare -- about 25 of 160-odd home blocks -- so
+				## "sealing deflects more than funnelling" was a comparison of two
+				## small counts, and it inverted to 25 against 26 when the attack
+				## leg began publishing the covering side. That is not the
+				## mechanism failing. `tools/probe_block_intent_power.gd` runs the
+				## same count at widening budgets and the margin grows with n:
+				## +4 at 150 seeds, +9 at 300, +27 at 600. The direction is stable
+				## and 150 sits inside the noise around it.
+				##
+				## So the assertion is given a population that can carry it rather
+				## than a looser comparison. Widening the check to `>=` would have
+				## made this pass while destroying the only thing it tests.
+				for seed_value in range(5000, 5300):
 					var result: Resource = manager.resolve_active_rally(seed_value)
 					if result == null:
 						continue

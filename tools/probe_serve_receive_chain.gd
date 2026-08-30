@@ -14,6 +14,7 @@ extends SceneTree
 const FACTORY := preload("res://scripts/simulation/volleyball_vignette_rally_factory.gd")
 const SIM := preload("res://scripts/simulation/rally_simulator.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const FREE := preload("res://scripts/simulation/free_flight_interception_system.gd")
 const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd")
 
 const MODES: Array[String] = ["quick", "high", "back"]
@@ -84,3 +85,16 @@ func _report(event: RallyEvent, out: Dictionary) -> void:
 	print("    realised end height read by the next contact: %.2f m" % [
 		SIM.realised_flight_end_height(out),
 	])
+	var free: Dictionary = event.metadata.get("authoritative_free_flight", {})
+	if not free.is_empty():
+		var flown := float(free.get("duration", 0.0))
+		print("    FREE FLIGHT: %.2f m -> %.2f m over %.3f s, apex rise %.3f, g=%.3f" % [
+			float(free.get("start_height_meters", NAN)),
+			float(free.get("end_height_meters", NAN)),
+			flown, float(free.get("apex_rise_meters", NAN)),
+			float(free.get("launch_gravity_mps2", NAN)),
+		])
+		print("      height at the drawn contact time (%.3f s in): %.2f m" % [
+			duration,
+			FREE.height_at_time(free, float(free.get("start_time", 0.0)) + duration),
+		])

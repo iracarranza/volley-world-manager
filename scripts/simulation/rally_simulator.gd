@@ -1462,6 +1462,12 @@ func resolve(
 			"movement_start": opponent_serve_origin,
 			"movement_target": opponent_serve_base,
 			"outgoing_trajectory": serve_trajectory,
+			## The same ball, in the form that can be asked where it is at a
+			## given time rather than only where it ends. Read by nobody yet --
+			## see `_canonical_serve` for why it exists.
+			"authoritative_free_flight": canonical_serve.get(
+				"authoritative_free_flight", {}
+			),
 		})
 	## And the resolver reasons from the court, not the service zone, for every
 	## contact after this one.
@@ -1572,6 +1578,63 @@ func resolve(
 		if live_receiver != null:
 			receiver = live_receiver
 			receiver_arrived = true
+	## **Where this ball is passed, which is not where it lands.**
+	##
+	## The reception used to be stamped at `serve_trajectory.end_time` and placed
+	## at `serve_landing` -- the moment and the point at which the ball reaches
+	## the floor. A passer meets a descending serve at their platform, which is
+	## strictly earlier and, at serve pace, a metre or more in front. The old
+	## contact was at ground level and only looked like a height because the
+	## reader integrated the launch under 9.8 where this ball falls at 21.009,
+	## which turned a ball on the floor into a ball at 3.79 m. See
+	## `docs/review/SERVE_RECEPTION_HEIGHT_SEAM.md`.
+	##
+	## The height is the same `pass_contact_height_meters` this path already used
+	## for the outgoing pass and for `_reached_point` below, so the contact is now
+	## resolved at the height the body was always being placed for.
+	##
+	## **Named residual:** the claim above still ranks candidates against the
+	## landing and the full serve duration, because who takes the ball is decided
+	## before which body's platform height applies. A passer reading where a serve
+	## is coming down is the right way to choose, but it leaves the claim's
+	## arrival margin measured over a window 0.084 s longer than the one actually
+	## available on the seed above. Bounded and stated rather than fixed by
+	## guessing a representative height here.
+	var serve_free_flight: Dictionary = canonical_serve.get(
+		"authoritative_free_flight", {}
+	)
+	var reception_point := serve_landing
+	var reception_window := serve_time
+	var reception_contact_time := float(
+		serve_trajectory.get("end_time", rally_clock + serve_time)
+	)
+	var serve_descent: Dictionary = FreeFlightInterceptionModel.descent_to_height(
+		serve_free_flight,
+		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
+	) if receiver != null else {}
+	## The leg that was actually played, ending at the contact rather than at the
+	## floor -- §5's `incoming.end ≡ C`, which every family downstream of a
+	## platform contact has had since M5 and the serve never did. It is what the
+	## reception reads its contact height and incoming velocity from, and what
+	## the serve event publishes as its drawn ball, so the ball the eye follows
+	## and the ball the platform meets are the same record.
+	var serve_realised: Dictionary = {}
+	if bool(serve_descent.get("available", false)):
+		reception_point = Vector2(serve_descent.contact_position)
+		reception_contact_time = float(serve_descent.contact_time)
+		reception_window = maxf(
+			reception_contact_time
+				- float(serve_free_flight.get("start_time", 0.0)),
+			RallyKinematics.MIN_FLIGHT_DURATION,
+		)
+		serve_realised = FreeFlightInterceptionModel.realised_prefix(
+			serve_free_flight, reception_contact_time
+		)
+		if not serve_realised.is_empty() and not result.events.is_empty():
+			var struck_serve := result.events[0] as RallyEvent
+			if struck_serve != null \
+					and struck_serve.event_type == RallyEventModel.EventType.SERVE:
+				struck_serve.metadata["outgoing_trajectory"] = serve_realised
 	## **A serve is the hardest ball in the game to read**, which is the whole
 	## point of a float: eighteen metres of flight from a contact the passer
 	## cannot see the hand on, and nothing in front of it to funnel the answer.
@@ -1651,9 +1714,9 @@ func resolve(
 	## forearms touched the ball turned every poor but reachable pass into an ace
 	## before the reception model had produced its contact.
 	var reception_success := false
-	var receiver_start: Vector2 = live_positions.get(receiver.id, serve_landing)
+	var receiver_start: Vector2 = live_positions.get(receiver.id, reception_point)
 	var receiver_move_time := _movement_time(
-		receiver, receiver_start, serve_landing, "lateral"
+		receiver, receiver_start, reception_point, "lateral"
 	)
 	if using_live_reception:
 		var live_metadata: Dictionary = selected_live_reception.get("metadata", {})
@@ -1664,13 +1727,13 @@ func resolve(
 			"movement_duration", receiver_move_time
 		))
 		live_positions[receiver.id] = Vector2(live_reception_integration.get(
-			"receiver_center_position", serve_landing
+			"receiver_center_position", reception_point
 		))
 		rally_clock = float(live_reception_integration.get(
 			"simulation_time", rally_clock
 		))
 	var receiver_reach := _reached_point(
-		receiver, receiver_start, serve_landing, serve_time, "lateral",
+		receiver, receiver_start, reception_point, reception_window, "lateral",
 		float(arrival.get("read_error_meters", 0.0)),
 		## The contact family's own body-derived height, not the trajectory's
 		## ambiguous endpoint height. A reception already computes this exact
@@ -1678,7 +1741,7 @@ func resolve(
 		## either meaning of `end_height_meters` authoritative by accident.
 		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
 		_incoming_ball_direction(
-			serve_trajectory, serve_landing, opponent_serve_origin
+			serve_trajectory, reception_point, opponent_serve_origin
 		),
 	)
 	if not using_live_reception:
@@ -1688,7 +1751,7 @@ func resolve(
 		live_positions[receiver.id] = receiver_reach
 	var preferred_release: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id()) \
 		if defensive_plan != null else Vector2(0.50, 0.60)
-	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
+	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, reception_point)
 	var home_reception_setter := _player_by_id(players, lineup.active_setter_id())
 	## Captured before the pass resolves, because the anchor is what this contact
 	## was aimed at and the destination is where it went. Conflating them is how
@@ -1701,15 +1764,16 @@ func resolve(
 		)),
 	)
 	var reception_pass := _reception_pass_result(
-		receiver, receiver_start, serve_landing, desired_pass_target,
+		receiver, receiver_start, reception_point, desired_pass_target,
 		opponent_serve_origin, serve_quality, arrival,
-		float(result.reception_quality), 0.51, 0.98, serve_trajectory,
+		float(result.reception_quality), 0.51, 0.98,
+		serve_realised if not serve_realised.is_empty() else serve_trajectory,
 		_player_by_id(players, lineup.active_setter_id()),
 		home_reception_intent,
 		_platform_body_velocity(
 			receiver_start, receiver_reach, receiver_move_time, serve_time
 		),
-		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
+		reception_contact_time,
 	)
 	if using_live_reception:
 		var selected_metadata: Dictionary = selected_live_reception.get(
@@ -1767,7 +1831,7 @@ func resolve(
 		true, serve_time, opponent_by_id, opponent_serve_intents,
 	)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		serve_landing, Vector2(reception_pass.destination), reception_success,
+		reception_point, Vector2(reception_pass.destination), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
 		"%d%% reception quality. %s %s" % [
 			roundi(float(result.reception_quality) * 100.0),
@@ -1843,8 +1907,13 @@ func resolve(
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
-			"event_time": _contact_time(serve_trajectory, rally_clock),
-			"incoming_trajectory": serve_trajectory,
+			## **The leg this contact actually received.** Publishing the
+			## untruncated serve here while the serve event publishes the sliced
+			## one is two records of one handover, which is precisely what the
+			## one-ball chain check exists to catch -- and did.
+			"event_time": reception_contact_time,
+			"incoming_trajectory": serve_realised \
+				if not serve_realised.is_empty() else serve_trajectory,
 			"outgoing_trajectory": pass_trajectory,
 			"body_alignment": reception_pass.body_alignment,
 			## What the second contact is going to be asked to reach. Published on
@@ -3378,6 +3447,32 @@ func resolve(
 				"intent": &"blocking", "progress": 0.0,
 			}
 		attack_event.metadata["opponent_phase_intents"] = opponent_stage_intents
+	## **FD-003, the attacking side's own six.** This leg is the set flight, and
+	## until now only the *defending* side was published on it -- the wall
+	## staging and the floor shape behind it -- so half of every attack leg was
+	## `_support_target_for_side` guessing with a lerp table.
+	##
+	## Cover is not struck into existence. It is walked into while the set is in
+	## the air, and the block leg has always published the finished shape from
+	## the same helper; this is that shape one flight earlier, through the same
+	## traversal authority, so a voli who cannot reach the ring inside a quick
+	## set's flight simply does not get there. Written into `live_positions` for
+	## the same reason the opponent's staging is: a map that presentation draws
+	## toward and the resolver then reasons from a different position would be
+	## two answers to one question.
+	var home_cover_stage_intents := {}
+	var home_cover_stage := _cover_phase_map(
+		players, lineup, defensive_plan,
+		hitter.id if hitter != null else -1, set_target,
+		float(set_flight_time), false, home_cover_stage_intents,
+	)
+	if not home_cover_stage.is_empty():
+		for raw_cover_id in home_cover_stage:
+			live_positions[int(raw_cover_id)] = Vector2(
+				home_cover_stage[raw_cover_id]
+			)
+		attack_event.metadata["home_phase_targets"] = home_cover_stage
+		attack_event.metadata["home_phase_intents"] = home_cover_stage_intents
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
@@ -3700,6 +3795,8 @@ func resolve(
 			coverage_pass_target = Vector2(coverage_flight.destination)
 			coverage_intent = coverage_flight.platform_intent
 			coverage_incoming = coverage_flight.authoritative_free_flight
+		## Why each coverer went where they went, filled by the map on the event.
+		var home_coverage_leg_intents := {}
 		var coverage_meta := {"side": "home", "coverage": "attack",
 			"platform_intent": coverage_intent,
 			"blocked_hitter_id": hitter.id,
@@ -3710,7 +3807,21 @@ func resolve(
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
 			"incoming_trajectory": opponent_block_trajectory,
-			"event_time": coverage_contact_time}
+			"event_time": coverage_contact_time,
+			## **FD-002.** The covering side collapsing behind its own hitter
+			## while the ball comes off the block. Targets on an event describe
+			## the leg *arriving* at it, so this is the deflection's own flight --
+			## which is exactly the interval the action-window census measured as
+			## `published 0, silent 143`. Same helper the block leg already uses;
+			## no new shape and no new magnitude.
+			"home_phase_targets": _cover_phase_map(
+				players, lineup, defensive_plan,
+				hitter.id if hitter != null else -1,
+				recycle_target,
+				float(opponent_block_trajectory.get("duration", 0.30)),
+				false, home_coverage_leg_intents,
+			),
+			"home_phase_intents": home_coverage_leg_intents}
 		if not coverage_flight.is_empty():
 			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
 		_add_event(result, RallyEventModel.EventType.ATTACK_COVERAGE,
@@ -4108,7 +4219,13 @@ func _resolve_home_serve(
 			## serve's own flight.
 			"movement_start": CourtConstants.serve_origin(0.82, true),
 			"movement_target": home_serve_base,
-			"outgoing_trajectory": serve_trajectory})
+			"outgoing_trajectory": serve_trajectory,
+			## The same ball, in the form that can be asked where it is at a
+			## given time rather than only where it ends. Read by nobody yet --
+			## see `_canonical_serve` for why it exists.
+			"authoritative_free_flight": canonical_serve.get(
+				"authoritative_free_flight", {}
+			)})
 	live_positions[server.id] = home_serve_base
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
@@ -4155,6 +4272,41 @@ func _resolve_home_serve(
 	## ordinary no-arrival path above.
 	if receiver == null:
 		receiver = opponent_team.best_defender() as VolleyballPlayer
+	## The opponent's half of the same repair, kept in step deliberately. Every
+	## asymmetry ever found in this engine was one side modelled fully and the
+	## other written as a parallel implementation, and a reception whose contact
+	## height is right on one side of the net and at floor level on the other is
+	## exactly that shape. See the home path's block for the reasoning and for
+	## the named residual on the claim's window.
+	var serve_free_flight: Dictionary = canonical_serve.get(
+		"authoritative_free_flight", {}
+	)
+	var reception_point := opponent_landing
+	var reception_window := serve_time
+	var reception_contact_time := float(
+		serve_trajectory.get("end_time", rally_clock + serve_time)
+	)
+	var serve_descent: Dictionary = FreeFlightInterceptionModel.descent_to_height(
+		serve_free_flight,
+		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
+	) if receiver != null else {}
+	var serve_realised: Dictionary = {}
+	if bool(serve_descent.get("available", false)):
+		reception_point = Vector2(serve_descent.contact_position)
+		reception_contact_time = float(serve_descent.contact_time)
+		reception_window = maxf(
+			reception_contact_time
+				- float(serve_free_flight.get("start_time", 0.0)),
+			RallyKinematics.MIN_FLIGHT_DURATION,
+		)
+		serve_realised = FreeFlightInterceptionModel.realised_prefix(
+			serve_free_flight, reception_contact_time
+		)
+		if not serve_realised.is_empty() and not result.events.is_empty():
+			var struck_serve := result.events[0] as RallyEvent
+			if struck_serve != null \
+					and struck_serve.event_type == RallyEventModel.EventType.SERVE:
+				struck_serve.metadata["outgoing_trajectory"] = serve_realised
 	var opponent_arrival: Dictionary = _read_adjusted_arrival(
 		Dictionary(opponent_claim.get("arrival", {})),
 		_read_error_meters(
@@ -4170,7 +4322,7 @@ func _resolve_home_serve(
 		else opponent_team.court_position(receiver.id, "serve_receive"),
 	)
 	var receiver_move_time := _movement_time(
-		receiver, receiver_start, opponent_landing, "lateral"
+		receiver, receiver_start, reception_point, "lateral"
 	)
 	var support_count := int(opponent_claim.get("support_count", 0))
 	var opponent_support_term := _support_term(
@@ -4215,10 +4367,10 @@ func _resolve_home_serve(
 	## verdict made before that contact exists.
 	var reception_success := false
 	var opponent_receiver_reach := _reached_point(
-		receiver, receiver_start, opponent_landing, serve_time, "lateral", 0.0,
+		receiver, receiver_start, reception_point, reception_window, "lateral", 0.0,
 		GeometricAttackPromotionModel.pass_contact_height_meters(receiver),
 		_incoming_ball_direction(
-			serve_trajectory, opponent_landing,
+			serve_trajectory, reception_point,
 			CourtConstants.serve_origin(0.82, true),
 		),
 	)
@@ -4243,15 +4395,16 @@ func _resolve_home_serve(
 		)),
 	)
 	var opponent_pass := _reception_pass_result(
-		receiver, receiver_start, opponent_landing, opponent_setter_release,
+		receiver, receiver_start, reception_point, opponent_setter_release,
 		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
-		reception_quality, 0.02, 0.49, serve_trajectory,
+		reception_quality, 0.02, 0.49,
+		serve_realised if not serve_realised.is_empty() else serve_trajectory,
 		_opponent_setter(opponent_team),
 		opponent_reception_intent,
 		_platform_body_velocity(
 			receiver_start, opponent_receiver_reach, receiver_move_time, serve_time
 		),
-		float(serve_trajectory.get("end_time", rally_clock + serve_time)),
+		reception_contact_time,
 	)
 	var opponent_reception_verdict := _reception_contact_verdict(
 		receiver_arrived,
@@ -4271,7 +4424,7 @@ func _resolve_home_serve(
 		lineup, defensive_plan, false, serve_time, home_by_id, home_serve_intents
 	)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		opponent_landing, opponent_pass_destination,
+		reception_point, opponent_pass_destination,
 		reception_success,
 		reception_quality, "%s receives" % receiver.display_name,
 		"Opponent reception quality: %d%%. %s%s" % [
@@ -4325,8 +4478,13 @@ func _resolve_home_serve(
 			## outgoing trajectory `_ensure_event_trajectories` invented one from
 			## `flight_time` -- which on a reception is the *incoming* serve's
 			## duration -- and stamped it at the `event_time` default of zero.
-			"event_time": _contact_time(serve_trajectory, rally_clock),
-			"incoming_trajectory": serve_trajectory,
+			## **The leg this contact actually received.** Publishing the
+			## untruncated serve here while the serve event publishes the sliced
+			## one is two records of one handover, which is precisely what the
+			## one-ball chain check exists to catch -- and did.
+			"event_time": reception_contact_time,
+			"incoming_trajectory": serve_realised \
+				if not serve_realised.is_empty() else serve_trajectory,
 			"outgoing_trajectory": opponent_pass.trajectory,
 			"body_alignment": opponent_pass.body_alignment,
 			"pass_apex_meters": opponent_pass.get("pass_apex_meters", 0.0),
@@ -6037,6 +6195,26 @@ func _resolve_opponent_transition(
 			_defensive_intents(floor_phase_positions, home_floor_intents)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
+		## FD-003, mirrored: the opponent's own six walking into cover behind
+		## their hitter while their set is in the air. See the home attack leg.
+		var opponent_cover_stage_intents := {}
+		var opponent_cover_stage := _cover_phase_map(
+			opponent_team.on_court_players(),
+			opponent_team.current_lineup(),
+			_opponent_defensive_plan(opponent_team),
+			opponent_hitter.id if opponent_hitter != null else -1,
+			opponent_contact, float(set_flight_time),
+			true, opponent_cover_stage_intents,
+		)
+		if not opponent_cover_stage.is_empty():
+			for raw_cover_id in opponent_cover_stage:
+				opponent_live_positions[int(raw_cover_id)] = Vector2(
+					opponent_cover_stage[raw_cover_id]
+				)
+			opponent_attack_event.metadata["opponent_phase_targets"] = \
+				opponent_cover_stage
+			opponent_attack_event.metadata["opponent_phase_intents"] = \
+				opponent_cover_stage_intents
 	var blocker_name := contact_blocker.display_name if contact_blocker != null \
 		else "No assigned blocker"
 	narration["blocker"] = blocker_name
@@ -6262,6 +6440,7 @@ func _resolve_opponent_transition(
 			coverage_pass_target = Vector2(coverage_flight.destination)
 			coverage_intent = coverage_flight.platform_intent
 			coverage_incoming = coverage_flight.authoritative_free_flight
+		var opponent_coverage_leg_intents := {}
 		var coverage_meta := {
 			"side": "opponent", "coverage": "attack",
 			"platform_intent": coverage_intent,
@@ -6274,6 +6453,17 @@ func _resolve_opponent_transition(
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
 			"incoming_trajectory": home_block_trajectory,
 			"event_time": coverage_contact_time,
+			## FD-002, mirrored. See the home coverage site.
+			"opponent_phase_targets": _cover_phase_map(
+				opponent_team.on_court_players(),
+				opponent_team.current_lineup(),
+				_opponent_defensive_plan(opponent_team),
+				opponent_hitter.id if opponent_hitter != null else -1,
+				home_block_target,
+				float(home_block_trajectory.get("duration", 0.30)),
+				true, opponent_coverage_leg_intents,
+			),
+			"opponent_phase_intents": opponent_coverage_leg_intents,
 		}
 		if not coverage_flight.is_empty():
 			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
@@ -7623,6 +7813,23 @@ func _resolve_home_continuation(
 		## or for how long, which the other two both did. Same map, same shape.
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
 			_defensive_intents(cont_block_stage, cont_floor_intents)
+	## FD-003, on the continuation exchange: the attacking side walking into
+	## cover during its own set flight. See the home attack leg.
+	var cont_cover_stage_intents := {}
+	var cont_cover_stage := _cover_phase_map(
+		players, lineup, defensive_plan,
+		hitter.id if hitter != null else -1, set_target,
+		float(continuation_flight_time), false, cont_cover_stage_intents,
+	)
+	if not cont_cover_stage.is_empty():
+		for raw_cover_id in cont_cover_stage:
+			live_positions[int(raw_cover_id)] = Vector2(
+				cont_cover_stage[raw_cover_id]
+			)
+		(result.events[-1] as RallyEvent).metadata["home_phase_targets"] = \
+			cont_cover_stage
+		(result.events[-1] as RallyEvent).metadata["home_phase_intents"] = \
+			cont_cover_stage_intents
 	## The proven crossing, matching the other two block sites -- see
 	## `_block_contact_point`. Truncation and deflection origin at once, so this
 	## is the §5 realised contact for the continuation swing.
@@ -7893,6 +8100,7 @@ func _resolve_home_continuation(
 			coverage_pass_target = Vector2(coverage_flight.destination)
 			coverage_intent = coverage_flight.platform_intent
 			coverage_incoming = coverage_flight.authoritative_free_flight
+		var continuation_coverage_leg_intents := {}
 		var coverage_meta := {
 			"side": "home", "coverage": "attack",
 			"platform_intent": coverage_intent,
@@ -7905,6 +8113,15 @@ func _resolve_home_continuation(
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
 			"incoming_trajectory": cont_block_trajectory,
 			"event_time": coverage_contact_time,
+			## FD-002, on the continuation exchange. See the home coverage site.
+			"home_phase_targets": _cover_phase_map(
+				players, lineup, defensive_plan,
+				hitter.id if hitter != null else -1,
+				block_event_end,
+				float(cont_block_trajectory.get("duration", 0.30)),
+				false, continuation_coverage_leg_intents,
+			),
+			"home_phase_intents": continuation_coverage_leg_intents,
 		}
 		if not coverage_flight.is_empty():
 			_merge_coverage_flight_metadata(coverage_meta, coverage_flight)
@@ -15956,6 +16173,47 @@ func _canonical_serve(
 		## eleven gates and the key names have not changed.
 		"authority": "canonical",
 	}
+	## **The serve as a flight that can be asked a question about a time.**
+	##
+	## Every other family's ball is minted by `FreeFlightInterceptionModel`, which
+	## is what makes it answerable: `height_at_time` and `opportunities` need a
+	## flight they can evaluate at any instant, not two endpoints and a duration.
+	## The serve was the one family that never got one -- M5 scoped free flight to
+	## physical platform contacts, and its certification counted digs -- so the
+	## reception could only be handed the serve's *end*.
+	##
+	## That end is the landing, and the reception is stamped at exactly that
+	## instant, so the passer was being placed on the ball at the moment it
+	## reaches the floor. Reading it under the wrong gravity is the only reason
+	## the number looked like a height at all: 9.8 against this ball's 21.009
+	## turns a ball on the floor into a ball at 3.79 m. See
+	## `docs/review/SERVE_RECEPTION_HEIGHT_SEAM.md`.
+	##
+	## Published here and read by nobody yet. The launch is the same one
+	## `_stamp_launch_state` already puts on the drawn arc, so this is a second
+	## *view* of one ball rather than a second ball -- which is the distinction
+	## `authoritative_flight_id` exists to keep checkable.
+	var direction := AttackCourseModelRef.direction_meters(
+		float(launch.get("bearing_degrees", 0.0)), attacking_negative_y
+	)
+	var free_flight := FreeFlightInterceptionModel.from_launch(
+		"serve", contact, contact_height,
+		Vector3(
+			direction.x * horizontal,
+			float(launch.get("vertical_speed_mps", 0.0)),
+			direction.y * horizontal,
+		),
+		rally_clock,
+		"%d:serve:%s:%d" % [rally_seed, key, server.id],
+		float(launch.get("gravity_mps2", BallFlightModel.DEFAULT_GRAVITY_MPS2)),
+	)
+	## `from_launch` reads elevation off the velocity but has no way to know which
+	## end of the court this ball is going down, so the bearing is stated by the
+	## family that chose it rather than re-derived from a sign convention.
+	if not free_flight.is_empty():
+		free_flight["launch_bearing_degrees"] = float(
+			launch.get("bearing_degrees", 0.0)
+		)
 	return {
 		"landing": landing,
 		"outcome": str(serve.outcome),
@@ -15966,6 +16224,7 @@ func _canonical_serve(
 		"contact_height_meters": contact_height,
 		"net_clearance_meters": float(resolution.get("net_clearance_meters", 0.0)),
 		"launch": launch,
+		"authoritative_free_flight": free_flight,
 		"spin": Dictionary(serve.get("spin", {})),
 	}
 
