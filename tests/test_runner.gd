@@ -200,6 +200,15 @@ var failures: int = 0
 
 
 func _initialize() -> void:
+	if "--manager-body-only" in OS.get_cmdline_user_args():
+		_test_manager_body()
+		if failures == 0:
+			print("PASS: %d focused manager-body checks" % checks)
+			quit(0)
+		else:
+			push_error("FAIL: %d of %d focused manager-body checks failed" % [failures, checks])
+			quit(1)
+		return
 	if "--serve-reception-only" in OS.get_cmdline_user_args():
 		_test_career_opponent_reception_authority()
 		if failures == 0:
@@ -20129,7 +20138,6 @@ func _test_manager_body() -> void:
 				)
 			))
 		ends[axis] = drawn
-	actor.queue_free()
 	var reaches := true
 	for axis in ends:
 		var drawn: Array = ends[axis]
@@ -20139,6 +20147,37 @@ func _test_manager_body() -> void:
 		reaches,
 		"each body slider draws a visibly different body at each of its ends",
 	)
+
+	## 5. Reconfiguring the same preview actor replaces its coat synchronously.
+	##
+	## The creator calls `configure` on every one-centimetre slider step. Coat
+	## meshes used to be cleared with `queue_free`, so the old seven Tabby marks
+	## remained in the tree while seven replacements were added. Because the
+	## number of rebuilds tracked the number of slider steps, the doubled coat
+	## appeared to belong to even heights and disappear at odd ones. Height has no
+	## authority over coat; one selected coat must be one set of marks after every
+	## rebuild of the same actor.
+	var coat_counts: Array[int] = []
+	for height in [188.0, 189.0, 190.0, 191.0, 192.0, 193.0]:
+		var body := MANAGER_PROFILE_SCRIPT.DEFAULT_APPEARANCE.duplicate(true)
+		body["body_type"] = "Feli"
+		body["marking"] = "tabby"
+		body["height_cm"] = height
+		actor.configure(
+			0, true, "", "Right",
+			MANAGER_PROFILE_SCRIPT.appearance_profile(body),
+		)
+		var count := 0
+		for node in actor.find_children("*", "MeshInstance3D", true, false):
+			if node.has_meta("cosmetic") and str(node.name).begins_with("Tabby"):
+				count += 1
+		coat_counts.append(count)
+	_check(
+		coat_counts == [7, 7, 7, 7, 7, 7],
+		"one Tabby coat survives every consecutive height rebuild (%s)"
+			% str(coat_counts),
+	)
+	actor.queue_free()
 
 	## And the body survives a save, which is where the whole thing is going.
 	var carrier := CAREER_STATE_SCRIPT.new()

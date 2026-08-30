@@ -3561,7 +3561,14 @@ func _joint_ball(bone: Node3D, radius: float, drop: float) -> void:
 ## and does not.
 func _build_cosmetics() -> void:
 	for existing in _cosmetics():
-		existing.queue_free()
+		## `configure` is a synchronous rebuild. Deferring this removal leaves the
+		## old coat in the tree while the replacement is added below, so a slider
+		## that reconfigures one preview actor can draw two copies of every Tabby
+		## bar for the rest of that frame. With one-centimetre slider steps the
+		## rebuild count looks like height parity even though height never chooses a
+		## marking. Nothing keeps a reference to these generated meshes, so remove
+		## them in the same operation that replaces them.
+		existing.free()
 	for raw_part in silhouette.get("extras", []):
 		var part: Dictionary = raw_part
 		var parent := get_node_or_null(str(part.get("parent", "BodyPivot")))
