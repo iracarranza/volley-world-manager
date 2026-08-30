@@ -31,11 +31,7 @@ func _ready() -> void:
 	_match_screen = MATCH_SCREEN_SCENE.instantiate() as MatchScreen
 	_viewport.add_child(_match_screen)
 	_match_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var inner_viewport := _match_screen.get_node_or_null(
-		"SubViewportContainer/SubViewport"
-	) as SubViewport
-	if inner_viewport != null:
-		inner_viewport.size = Vector2i(760, 300)
+	_fit_inner_viewport()
 	var hud := _match_screen.get_node_or_null("HUD") as Control
 	if hud != null:
 		hud.visible = false
@@ -48,6 +44,22 @@ func _ready() -> void:
 	_apply_preview_presentation()
 	_production_ready = true
 	set_vignette(_queued_vignette)
+
+
+## The MatchScreen brings its own SubViewport, so the outer one resizing has to
+## carry through or the court is rendered at a size the page is not showing.
+func _viewport_fitted(_to: Vector2i) -> void:
+	_fit_inner_viewport()
+
+
+func _fit_inner_viewport() -> void:
+	if _match_screen == null or _viewport == null:
+		return
+	var inner := _match_screen.get_node_or_null(
+		"SubViewportContainer/SubViewport"
+	) as SubViewport
+	if inner != null:
+		inner.size = _viewport.size
 
 
 func set_vignette(vignette_id: String) -> void:

@@ -27,8 +27,21 @@ func _ready() -> void:
 	stretch = true
 	custom_minimum_size = Vector2(0,250)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_viewport = SubViewport.new(); _viewport.name = "GameplayViewport"; _viewport.size = Vector2i(760,300); _viewport.own_world_3d = true; _viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_viewport = SubViewport.new(); _viewport.name = "GameplayViewport"; _viewport.own_world_3d = true; _viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	## **A stretched SubViewportContainer takes its minimum size from the
+	## viewport inside it**, so a fixed 760 here was a 760-pixel floor under the
+	## whole 02 page. With the nested questionnaire installed around it the
+	## question panel could no longer fit 1280: the title cut off mid-word, the
+	## confirm button left the screen and the step rail was clipped on the far
+	## side -- the same overflow v3's `_ready` was written to repair on 01,
+	## reintroduced one page along by a different control.
+	##
+	## Starting at one pixel and following the container means this never
+	## dictates a layout again; the render resolution becomes a consequence of
+	## the space the page gives it, which is the right direction for that to run.
+	_viewport.size = Vector2i(1, 1)
 	add_child(_viewport)
+	resized.connect(_fit_viewport)
 	_court = COURT_SCENE.instantiate() as MatchCourt3D; _viewport.add_child(_court)
 	await get_tree().process_frame
 	_court.setup_players(HOME_BASE,AWAY_BASE)
@@ -44,7 +57,20 @@ func _ready() -> void:
 	## BallActor3D.reset_flight() hides the whole node. Authored preview placement
 	## does not call begin_ball_flight(), so make the production ball visible here.
 	_court.ball_actor.visible = true
+	_fit_viewport()
 	_ready_to_draw = true; _reset_players(); _apply_frame(0.0)
+
+## Match the render target to the space the page actually gave this control.
+func _fit_viewport()->void:
+	if _viewport == null: return
+	var wanted := Vector2i(maxi(int(size.x), 1), maxi(int(size.y), 1))
+	if _viewport.size == wanted: return
+	_viewport.size = wanted
+	_viewport_fitted(wanted)
+
+## Hook for a subclass carrying its own nested viewport. Empty here.
+func _viewport_fitted(_to: Vector2i)->void:
+	pass
 
 func set_vignette(vignette_id:String)->void:
 	_vignette_id=vignette_id; _clock=0.0

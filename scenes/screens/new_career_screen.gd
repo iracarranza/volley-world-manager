@@ -41,15 +41,6 @@ const AXIS_QUESTIONS := [
 ## What each body type is, in the two or three words a picker has room for. The
 ## bodies are drawn beside these, so the line names the thing the silhouette
 ## cannot say rather than describing the silhouette.
-const BODY_BLURBS := {
-	"Vegi": "grown",
-	"Feli": "ears up",
-	"Avi": "beak",
-	"Cani": "ears down",
-	"Ursi": "round",
-	"Simi": "long arms",
-}
-
 ## How far the preview swings either side of square, and how long a swing takes.
 ##
 ## A swing rather than a turntable, because a full rotation spends half its time
@@ -122,6 +113,21 @@ func _ready() -> void:
 	step_panels = [
 		%VoliStep, %IdentityStep, %RegionStep, %TypeStep, %NamesStep,
 	]
+	## **A question long enough to ask something is wider than the screen.**
+	##
+	## Neither heading wrapped, so each one's minimum width was however long its
+	## sentence happened to be, and a `Label` hands that straight up the chain: on
+	## 02 the title alone asked for 1,060 pixels, the layout resolved to 1,486
+	## against a 1,280 base, and the page lost its title mid-word, its step rail
+	## and its confirm button off either edge.
+	##
+	## Measured rather than guessed at -- the obvious suspect was the new court
+	## preview, whose stretched viewport really was imposing a 760-pixel floor,
+	## and removing that floor changed nothing because the title was the binding
+	## constraint all along. Walking `get_combined_minimum_size()` down the tree
+	## is what separated them.
+	question_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	question_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_build_step_rail()
 	_build_voli_choices()
 	_build_tier_choices()
@@ -218,8 +224,16 @@ func _build_voli_choices() -> void:
 		button.toggle_mode = true
 		button.button_group = body_group
 		button.custom_minimum_size = Vector2(84, 36)
-		button.text = "%s\n%s" % [body_type, str(BODY_BLURBS.get(body_type, ""))]
-		button.add_theme_font_size_override("font_size", 11)
+		## **The name, and nothing else.**
+		##
+		## Each button used to carry a second line -- "ears up", "beak", "round",
+		## "long arms" -- describing the body the viewer is looking at while they
+		## look at it. The preview is a live rotatable actor two controls away and
+		## it updates the moment a type is chosen, so the prose was the interface
+		## narrating its own picture, and narrating it badly: "round" is not what
+		## an Ursi is and "grown" is not what a Vegi is.
+		button.text = body_type
+		button.add_theme_font_size_override("font_size", 12)
 		button.set_meta("value", body_type)
 		button.pressed.connect(_select_body_type.bind(body_type))
 		_body_row.add_child(button)
