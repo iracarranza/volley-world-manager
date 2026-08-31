@@ -304,7 +304,7 @@ already written down.
 
 **2. There is already a rule for what a Vegi variant may not do**, discovered
 once for silhouettes and worth promoting to the mechanical layer.
-`body_type_models.gd:52` cut Pumpkin and Turnip because both read as "a heavy
+`body_type_models.gd:53` cut Pumpkin and Turnip because both read as "a heavy
 round mass", which Ursi "owns outright and owns better":
 
 > "a Vegi competing with a body type for the same read is a Vegi doing nothing."
@@ -313,46 +313,92 @@ Generalised: **a Vegi differentiator must never be a weak version of another
 type's affordance.** A slightly-reachy Vegi is a bad Avi. Whatever a Vegi has
 must be off the six-verb grid entirely.
 
-**3. `TRAITS.md` already owns this exact slot.** A **Physical trait** is
-"unusual morphology or a persistent physical characteristic — changes what the
-body can do, and is a *label on the body*, not a second copy of it", with a
-rarity budget, a prominence rule, and the direction rule that generation owns
-the centimetres and the trait labels an outlier of a distribution that already
-exists. Narrow, niche, two-sided, surfaced through the journal: that is the
-described behaviour of traits, not of a body-type sub-table.
+**3. It is not traits, and the reason matters.** An earlier draft of this
+section routed produce differentiators to `TRAITS.md` on the grounds that a
+hidden per-produce effect is an undisclosed dice roll. That was wrong, twice:
+
+- **The body is drawn.** Produce is a *silhouette* — squat, tall, wide, waisted,
+  rooted, lobed — so a produce-entailed effect is observable and attributable
+  without ever naming the species. The manager sees a stalky Vegi getting to a
+  ball and forms the belief; nobody has to be told "Stalk". Finding 1 is
+  satisfied by the drawing, not by concealment.
+- **Traits roll independently of the body.** That is what makes them a separate
+  axis, and it is exactly why they are the wrong home for something the
+  morphology *entails*. `TRAITS.md`'s own direction rule — generation owns the
+  centimetres, the trait is a label on an outlier of a distribution that already
+  exists — argues for produce owning this, not against it. A produce
+  differentiator is not a label on the body. It **is** the body.
+
+So: produce differentiators are morphology, they live with the produce, and the
+trait axis stays untouched.
+
+### What a produce may differentiate: the off-grid test
+
+The constraint is **not magnitude**. It is position relative to the six verbs,
+and how often the effect fires. Two worked examples, both real proposals:
+
+**A Stalk with slightly greater standing reach — rejected.** `standing_reach_cm`
+is read in eight places (`setter_capability_system.gd:78`, `:216`;
+`geometric_attack_promotion.gd` for blocker, hitter, server and setter reach),
+so it is not a small bonus on a rare event — it is a small bonus on **every
+event**. And it is *Reach*, which is Avi's whole affordance. This is
+`body_type_models.gd:54` again in mechanical form: a Vegi competing with a body
+type for the same read is a Vegi doing nothing, except here it partly succeeds,
+which is worse — it muddies Avi.
+
+**A Pepper that recovers faster off the floor — accepted.** Nothing on the
+six-verb grid owns this. Anchor is stability *during* contact; getting up is
+what happens once the body has already lost. The hook exists and currently reads
+nothing about the player at all: `live_reception_integrator.gd:59` is a bare
+
+```gdscript
+var recovery_duration := 0.34 if action == "emergency_keep_alive" else 0.16
+```
+
+and the state it governs is expensive — `RECOVERING` carries a `posture_factor`
+of 0.68, and `contact_envelope_system.gd:120` gates takeoff entirely while a
+player is `DIVING`, `RECOVERING` or `AIRBORNE`. So the effect is real, and it
+fires only in rallies where that player has hit the floor.
+
+The test, stated once:
+
+> A produce differentiator must be **off the six-verb grid** and must fire on a
+> **subset of rallies**, not on every contact. If you can name which of Reach,
+> Sustain, Switch, Anchor or Manipulate it is a weak version of, it is rejected.
+
+### Why this does not make Vegi dominant
+
+Vegi has **no affordance**. One narrow, situational, off-grid effect against a
+full affordance is not parity, so a guaranteed produce differentiator does not
+make Vegi the correct pick — it makes Vegi *specific* rather than *absent*,
+which is the actual complaint about median-everything.
+
+The frequency arithmetic supports it. Body types are flat at 1/6 (§1) and
+`produce_for()` is uniform over five, so **each produce is about 3.3% of the
+population**, and an effect like Pepper's then fires only in the subset of those
+rallies where the player goes to the floor. That is niche in the literal sense.
+
+Two lines to hold:
+
+- **No extra trait budget for Vegi**, and no adaptability bonus. A developmental
+  or system-adaptability bonus would make Vegi correct for any manager who
+  changes system, and would restore precisely what Homi's retirement removed:
+  one sane default and five departures from it.
+- **One differentiator per produce, not a suite.** Five produce with one
+  off-grid effect each is a texture; five produce with a package each is six
+  body types wearing a seventh's clothes.
 
 ### So what Vegi actually is
 
-Vegi keeps **no affordance and no bonus** — including adaptability, which stays
-refused. A developmental or system-adaptability bonus would make Vegi correct
-for any manager who changes system, and would restore precisely what Homi's
-retirement removed: one sane default and five departures from it.
+All-rounder at the **type** level — no affordance, nothing the other five must
+be measured against — and specific at the **player** level, through a silhouette
+the manager can see and one small thing that silhouette does.
 
-What changes is only the reading:
-
-> The other five types are legible **before** you read the player — the body
-> tells you the affordance. A Vegi is legible only **after**. It is the type
-> whose identity comes entirely from its traits, because it has no affordance
-> to overshadow them.
-
-That is a real difference in how a manager relates to the player, and it costs
-nothing in balance, because **Vegi gets no extra trait budget.** This is the
-line to hold. If every Vegi were *guaranteed* a niche differentiator while the
-other five were not, Vegi would have an affordance after all — call it Variance
-— and it would be a free one. The distinction is perceptual, not mechanical:
-same budget, nothing competing with it.
-
-The trade a manager takes on a Vegi is therefore **higher scouting cost and
-higher variance for the same expected value** — which is a genuine decision, and
-one the journal is already built to hold.
-
-**Open, and not decided here:** whether produce should nonetheless *bias* which
-physical traits a Vegi can draw (a Stalk being likelier to roll a
-long-limbed outlier), keeping the produce name internal while letting the
-silhouette and the trait agree. That preserves finding 1 — the manager reads the
-trait and the body, never the species — but it needs the trait budget to exist
-first, and it edges toward the taxonomy `body_type_models.gd:38` refused. Worth
-revisiting only once traits ship.
+**Open:** three of the five produce have no proposed differentiator (Tomato,
+Aubergine, Stalk), and Pear needs care — `body_type_models.gd:55` already calls
+it "the massive one among the produce", which is adjacent to Anchor and so the
+most likely of the five to fail the off-grid test. Not invented here; the test
+above is what they have to pass.
 
 ### Sustain and Switch: the seam that was nearly a duplicate
 
