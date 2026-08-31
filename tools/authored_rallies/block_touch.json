@@ -1,0 +1,29 @@
+{
+  "format": "volley-world-manager/scripted-rally/v1",
+  "serving_side": "opponent",
+  "seed": 118,
+  "note": "The same authored first attack with a two-voli wall and a resolved block touch.",
+  "initial_positions": {
+    "1": [0.82, 0.683333],
+    "2": [0.81, 0.8],
+    "3": [0.46, 0.6],
+    "4": [0.14, 0.68],
+    "5": [0.19, 0.8],
+    "6": [0.45, 0.84],
+    "101": [0.82, 0.16],
+    "102": [0.5, 0.44],
+    "103": [0.82, 0.16],
+    "104": [0.36, 0.44],
+    "105": [0.18, 0.16],
+    "106": [0.5, 0.13]
+  },
+  "movement": [],
+  "actions": [
+    {"actor": 105, "action": "serve", "intent_time": 0.0, "target": [0.45, 0.92], "serve_type": "Standing", "aggression": 1.0},
+    {"actor": 6, "action": "receive", "intent_time": 0.0, "target": 1, "attempted_action": "platform pass"},
+    {"actor": 1, "action": "set", "intent_time": 0.2, "target": 4, "set_family": "outside", "tempo": 2},
+    {"actor": 4, "action": "attack", "intent_time": 0.5, "target": [0.28, 0.22], "attack_action": "Power swing", "course": "line", "aggression": 0.72},
+    {"actor": 102, "action": "block", "intent_time": 2.2, "target": [0.5, 0.5], "block_intent": "Seal"},
+    {"actor": 104, "action": "block", "intent_time": 2.2, "target": [0.36, 0.5], "block_intent": "Seal"}
+  ]
+}

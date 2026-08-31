@@ -24059,6 +24059,56 @@ func _test_scripted_rally_intent_boundary() -> void:
 	var manager: Object = GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	var fixture := _scripted_fixture(manager)
+	var loaded_file := SCRIPTED_RALLY_DRIVER_SCRIPT.load_script_file(
+		"res://tools/authored_rallies/probe_rally.json"
+	)
+	var file_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var file_result: Resource = file_driver.resolve_script(
+		Dictionary(loaded_file.get("script", {})), manager.players,
+		manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(),
+	) if bool(loaded_file.get("ok", false)) else null
+	_check(
+		file_result != null and file_result.events.size() == 6 \
+			and SCRIPTED_RALLY_DRIVER_SCRIPT.seam_census(file_result.events).is_empty(),
+		"a hand-authored rally loaded from the persistence format resolves all six playback families with a strict seam",
+	)
+	var file_ledger: Array = file_result.analysis.get("scripted_intents", []) \
+		if file_result != null else []
+	_check(
+		file_ledger.size() == 6 \
+			and str(Dictionary(file_ledger[4]).status) == "missed" \
+			and "2.200" in str(Dictionary(file_ledger[4]).reason) \
+			and "2.507" in str(Dictionary(file_ledger[4]).reason),
+		"a missed block reports both its authored commitment and resolved net-crossing moments",
+	)
+	var roundtrip_path := OS.get_temp_dir().path_join("vwm_scripted_rally_roundtrip.json")
+	var roundtrip_error := SCRIPTED_RALLY_DRIVER_SCRIPT.save_script_file(
+		roundtrip_path, Dictionary(loaded_file.get("script", {}))
+	)
+	var roundtrip := SCRIPTED_RALLY_DRIVER_SCRIPT.load_script_file(roundtrip_path) \
+		if roundtrip_error.is_empty() else {}
+	_check(
+		roundtrip_error.is_empty() and bool(roundtrip.get("ok", false)) \
+			and SCRIPTED_RALLY_DRIVER_SCRIPT.validate(Dictionary(roundtrip.script)).is_empty(),
+		"scripted rally persistence writes the same hand-authorable JSON format it loads",
+	)
+	var unreachable := fixture.duplicate(true)
+	unreachable["movement"] = [{
+		"actor": 2, "start_time": 0.0, "end_time": 0.001,
+		"target": Vector2(0.0, 0.0),
+	}]
+	var movement_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var movement_result = movement_driver.resolve_script(
+		unreachable, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		movement_result == null and "actor 2" in movement_driver.last_refusal \
+			and "0.000-0.001" in movement_driver.last_refusal \
+			and "production requires" in movement_driver.last_refusal,
+		"an unreachable authored waypoint is refused with actor, interval, and production travel time",
+	)
 	var old_time := fixture.duplicate(true)
 	old_time.actions[0]["time"] = old_time.actions[0].intent_time
 	old_time.actions[0].erase("intent_time")

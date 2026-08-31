@@ -9,7 +9,7 @@ const ACTIONS: Array[StringName] = [
 	&"serve", &"receive", &"set", &"attack", &"block", &"dig", &"cover",
 ]
 const TOP_LEVEL_KEYS: Array[String] = [
-	"serving_side", "initial_positions", "actions", "note",
+	"serving_side", "initial_positions", "actions", "movement", "seed", "note",
 ]
 const COMMON_ACTION_KEYS: Array[String] = [
 	"actor", "action", "intent_time", "target", "note",
@@ -25,6 +25,13 @@ const FAMILY_ACTION_KEYS := {
 }
 const SIDE_HOME := &"home"
 const SIDE_OPPONENT := &"opponent"
+const FILE_FORMAT := "volley-world-manager/scripted-rally/v1"
+const FILE_KEYS: Array[String] = [
+	"format", "serving_side", "initial_positions", "actions", "movement", "seed", "note",
+]
+const MOVEMENT_KEYS: Array[String] = [
+	"actor", "start_time", "end_time", "target", "note",
+]
 
 var last_refusal: String = ""
 var _script_states: Dictionary = {}
@@ -88,7 +95,155 @@ static func validate(script: Dictionary) -> String:
 			var tempo: Variant = action.get("tempo", 2)
 			if not tempo is int or int(tempo) < 0 or int(tempo) > 3:
 				return "action %d tempo must be an integer from 0 through 3" % index
+	var seed: Variant = script.get("seed", 1)
+	if not seed is int:
+		return "seed must be an integer"
+	return _validate_paths(script.get("movement", []), ids)
+
+
+static func _validate_paths(raw_paths: Variant, ids: Dictionary) -> String:
+	if not raw_paths is Array:
+		return "movement must be an array"
+	for index in Array(raw_paths).size():
+		if not Array(raw_paths)[index] is Dictionary:
+			return "movement %d must be a dictionary" % index
+		var path: Dictionary = Array(raw_paths)[index]
+		for raw_key in path:
+			if str(raw_key) not in MOVEMENT_KEYS:
+				return "movement %d has an unknown key '%s'" % [index, str(raw_key)]
+		if not path.get("actor", null) is int or not ids.has(int(path.actor)):
+			return "movement %d names an unknown actor" % index
+		var start: Variant = path.get("start_time", null)
+		var finish: Variant = path.get("end_time", null)
+		if not (start is float or start is int) or not (finish is float or finish is int) \
+				or not is_finite(float(start)) or not is_finite(float(finish)) \
+				or float(start) < 0.0 or float(finish) <= float(start):
+			return "movement %d must have a finite positive interval" % index
+		var target: Variant = path.get("target", null)
+		if not target is Vector2 or not CourtConstants.is_normalized(target):
+			return "movement %d target is outside normalized court" % index
 	return ""
+
+
+## JSON is both the hand-authoring and persistence format. Court coordinates
+## are two-number arrays and voli ids are decimal object keys / integers, so a
+## person never has to type engine-only Vector2 syntax.
+static func load_script_file(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {"ok": false, "error": "could not open scripted rally '%s'" % path}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		return {"ok": false, "error": "scripted rally must be a JSON object"}
+	var external: Dictionary = parsed
+	for raw_key in external:
+		if str(raw_key) not in FILE_KEYS:
+			return {"ok": false, "error": "script file has an unknown key '%s'" % str(raw_key)}
+	if str(external.get("format", "")) != FILE_FORMAT:
+		return {"ok": false, "error": "script file format must be '%s'" % FILE_FORMAT}
+	var decoded := _decode_external_script(external)
+	var error := validate(decoded)
+	if not error.is_empty():
+		return {"ok": false, "error": error}
+	return {"ok": true, "error": "", "script": decoded}
+
+
+static func save_script_file(path: String, script: Dictionary) -> String:
+	var error := validate(script)
+	if not error.is_empty():
+		return error
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return "could not write scripted rally '%s'" % path
+	file.store_string(JSON.stringify(_encode_external_script(script), "  ") + "\n")
+	return ""
+
+
+static func _decode_external_script(external: Dictionary) -> Dictionary:
+	var raw_seed: Variant = external.get("seed", 1)
+	var decoded := {
+		"serving_side": str(external.get("serving_side", "")),
+		"initial_positions": {}, "actions": [], "movement": [],
+		"seed": _decode_json_integer(raw_seed),
+	}
+	if external.has("note"):
+		decoded["note"] = str(external.note)
+	var raw_positions: Variant = external.get("initial_positions", {})
+	if raw_positions is Dictionary:
+		for raw_id in Dictionary(raw_positions):
+			var id_text := str(raw_id)
+			if not id_text.is_valid_int():
+				decoded.initial_positions[id_text] = Dictionary(raw_positions)[raw_id]
+				continue
+			decoded.initial_positions[int(id_text)] = _decode_point(Dictionary(raw_positions)[raw_id])
+	var raw_actions: Variant = external.get("actions", [])
+	if raw_actions is Array:
+		for raw_action in Array(raw_actions):
+			if not raw_action is Dictionary:
+				decoded.actions.append(raw_action)
+				continue
+			var action: Dictionary = Dictionary(raw_action).duplicate(true)
+			if action.has("actor"):
+				action.actor = _decode_json_integer(action.actor)
+			if action.has("tempo"):
+				action.tempo = _decode_json_integer(action.tempo)
+			if action.has("target"):
+				action.target = _decode_json_integer(action.target) if action.target is float \
+					else _decode_point(action.target)
+			decoded.actions.append(action)
+	var raw_movement: Variant = external.get("movement", [])
+	if raw_movement is Array:
+		for raw_path in Array(raw_movement):
+			if not raw_path is Dictionary:
+				decoded.movement.append(raw_path)
+				continue
+			var path: Dictionary = Dictionary(raw_path).duplicate(true)
+			if path.has("actor"):
+				path.actor = _decode_json_integer(path.actor)
+			if path.has("target"):
+				path.target = _decode_point(path.target)
+			decoded.movement.append(path)
+	return decoded
+
+
+static func _encode_external_script(script: Dictionary) -> Dictionary:
+	var encoded := {
+		"format": FILE_FORMAT, "serving_side": str(script.serving_side),
+		"seed": int(script.get("seed", 1)), "initial_positions": {},
+		"movement": [], "actions": [],
+	}
+	if script.has("note"):
+		encoded["note"] = str(script.note)
+	for raw_id in Dictionary(script.initial_positions):
+		encoded.initial_positions[str(int(raw_id))] = _encode_point(script.initial_positions[raw_id])
+	for raw_path in Array(script.get("movement", [])):
+		var path: Dictionary = Dictionary(raw_path).duplicate(true)
+		path.target = _encode_point(path.target)
+		encoded.movement.append(path)
+	for raw_action in Array(script.actions):
+		var action: Dictionary = Dictionary(raw_action).duplicate(true)
+		if action.get("target", null) is Vector2:
+			action.target = _encode_point(action.target)
+		encoded.actions.append(action)
+	return encoded
+
+
+static func _decode_point(value: Variant) -> Variant:
+	if value is Array and Array(value).size() == 2 \
+			and (Array(value)[0] is float or Array(value)[0] is int) \
+			and (Array(value)[1] is float or Array(value)[1] is int):
+		return Vector2(float(Array(value)[0]), float(Array(value)[1]))
+	return value
+
+
+static func _decode_json_integer(value: Variant) -> Variant:
+	if value is float and is_equal_approx(float(value), roundf(float(value))):
+		return int(value)
+	return value
+
+
+static func _encode_point(value: Vector2) -> Array[float]:
+	return [value.x, value.y]
 
 
 static func _validate_target(index: int, family: StringName, target: Variant, ids: Dictionary) -> String:
@@ -151,11 +306,13 @@ func resolve_script(
 	lineup: RotationLineup,
 	opponent_team: Resource,
 	defensive_plan: Resource,
-	seed_value: int = 1,
+	seed_value: int = -1,
 ) -> Resource:
 	last_refusal = validate(script)
 	if not last_refusal.is_empty():
 		return null
+	if seed_value < 0:
+		seed_value = int(script.get("seed", 1))
 	var home_serving := StringName(script.serving_side) == SIDE_HOME
 	rally_seed = seed_value
 	rng.seed = seed_value
@@ -177,12 +334,17 @@ func resolve_script(
 	last_refusal = _apply_authored_positions(Dictionary(script.initial_positions))
 	if not last_refusal.is_empty():
 		return null
+	var movement_audit := _validate_movement_reachability(Array(script.get("movement", [])))
+	last_refusal = str(movement_audit.get("error", ""))
+	if not last_refusal.is_empty():
+		return null
 	_sync_live_positions()
 	result.initial_home_positions = live_positions.duplicate(true)
 	result.initial_opponent_positions = opponent_live_positions.duplicate(true)
 	_intent_records = []
 	_expected_families = [&"serve"]
 	_expected_side = StringName(script.serving_side)
+	result.analysis["scripted_movement"] = movement_audit.get("records", [])
 	var actions: Array = script.actions
 	var serve_action: Dictionary = actions[0]
 	var server_state: RallyPlayerState = _script_states.get(int(serve_action.actor))
@@ -198,9 +360,9 @@ func resolve_script(
 			last_refusal = "action %d attempts a second serve" % index
 			break
 		if family == &"block":
-			_record_intent(index, action, "missed", "no preceding attack to contest")
-			index += 1
-			continue
+			_record_intent(index, action, "failed", "no preceding attack to contest")
+			result.terminal_outcome = "scripted_illegal_intention"
+			break
 		if family not in _expected_families:
 			_record_intent(index, action, "failed", "action is illegal for the resolved ball state")
 			result.terminal_outcome = "scripted_illegal_intention"
@@ -212,7 +374,7 @@ func resolve_script(
 			break
 		var opportunity := _contact_opportunity(action, current_flight)
 		if opportunity.is_empty():
-			_record_intent(index, action, "missed", "body and ball never coincided")
+			_record_intent(index, action, "missed", _contact_miss_reason(action, current_flight))
 			_publish_uncontrolled_terminal(result, current_flight, action, index)
 			break
 		var incoming := FreeFlightInterceptionModel.realised_prefix(current_flight, float(opportunity.contact_time))
@@ -238,6 +400,67 @@ func resolve_script(
 		index += 1
 	result.analysis["scripted_intents"] = _intent_records.duplicate(true)
 	return result
+
+
+func _contact_miss_reason(action: Dictionary, free_flight: Dictionary) -> String:
+	return "%s committed at %.3f; the incoming ball's resolved flight ended at %.3f" % [
+		str(action.action), float(action.intent_time),
+		float(free_flight.get("end_time", free_flight.get("natural_end_time", NAN))),
+	]
+
+
+## Movement is authored as a requested waypoint interval. This pass asks the
+## production locomotion model whether each actor can traverse each interval;
+## it never places the live body at the target. Applying twelve overlapping
+## movement tracks to rally state/playback is the separate Slice 4 integration.
+func _validate_movement_reachability(paths: Array) -> Dictionary:
+	var grouped: Dictionary = {}
+	for raw_path in paths:
+		var path: Dictionary = raw_path
+		var actor_id := int(path.actor)
+		if not grouped.has(actor_id):
+			grouped[actor_id] = []
+		grouped[actor_id].append(path)
+	var records: Array[Dictionary] = []
+	for raw_id in grouped:
+		var actor_id := int(raw_id)
+		var actor: RallyPlayerState = _script_states.get(actor_id)
+		if actor == null:
+			return {"error": "movement names unavailable actor %d" % actor_id, "records": records}
+		var actor_paths: Array = grouped[raw_id]
+		actor_paths.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+			return float(left.start_time) < float(right.start_time)
+		)
+		var projected := actor.snapshot()
+		var previous_end := -INF
+		for path in actor_paths:
+			var start := float(path.start_time)
+			var finish := float(path.end_time)
+			if start < previous_end:
+				return {
+					"error": "movement for actor %d overlaps another movement during %.3f-%.3f" \
+						% [actor_id, start, finish], "records": records,
+				}
+			var duration := finish - start
+			var target := Vector2(path.target)
+			var required := RallyMovementSystemModel.traversal_seconds(
+				projected, target, RallyPlayerState.MovementMode.TRANSITION)
+			var record := {
+				"actor": actor_id, "start_time": start, "end_time": finish,
+				"target": target, "available_seconds": duration,
+				"required_seconds": required,
+			}
+			records.append(record)
+			if required > duration:
+				return {
+					"error": "movement for actor %d during %.3f-%.3f is unreachable; production requires %.3f seconds" \
+						% [actor_id, start, finish, required], "records": records,
+				}
+			var projection := RallyMovementSystemModel.project_toward(
+				projected, target, duration, RallyPlayerState.MovementMode.TRANSITION)
+			projected = projection.get("actor", projected)
+			previous_end = finish
+	return {"error": "", "records": records}
 
 
 func _apply_authored_positions(authored: Dictionary) -> String:
@@ -539,8 +762,8 @@ func _publish_block_consequences(
 	var block_contact_time := NAN
 	var block_contact_position := Vector2.ZERO
 	var block_incoming := {}
+	var crossing := FreeFlightInterceptionModel.net_crossing(attack_flight)
 	if not contact_kind.is_empty():
-		var crossing := FreeFlightInterceptionModel.net_crossing(attack_flight)
 		if not crossing.is_empty():
 			block_contact_time = float(crossing.time)
 			block_contact_position = Vector2(crossing.position)
@@ -553,6 +776,12 @@ func _publish_block_consequences(
 		if actor == null:
 			continue
 		var touched := actor.player_id == contact_actor_id and not contact_kind.is_empty()
+		var miss_reason := ""
+		if not touched:
+			miss_reason = "blocker committed at %.3f; the attack crossed the net at %s" % [
+				float(action.intent_time),
+				"%.3f" % float(crossing.time) if not crossing.is_empty() else "no resolved moment",
+			]
 		var role := "primary" if offset == 0 else "assist"
 		var opportunity: Dictionary = formation.get("%s_opportunity" % role, {})
 		var metadata := {
@@ -560,7 +789,7 @@ func _publish_block_consequences(
 			"intent_time": float(action.intent_time), "physical_contact": touched,
 			"side": String(actor.team_side),
 			"block_contact_kind": contact_kind if touched else "",
-			"block_miss_reason": str(record.get("block_miss_reason", "")),
+			"block_miss_reason": miss_reason,
 			"body_contact_position": Vector2(opportunity.get("body_contact_position", actor.position)),
 		}
 		var resolved_time := block_contact_time if touched else NAN
@@ -577,7 +806,7 @@ func _publish_block_consequences(
 			float(record.get("quality", 0.0)), "%s attempts a block" % actor.player.display_name,
 			"", metadata)
 		_record_intent(first_index + offset, action, "contacted" if touched else "missed",
-			"" if touched else "the attack did not meet this wall", resolved_time, height)
+			miss_reason, resolved_time, height)
 	if contact_kind.is_empty():
 		_expected_families = [&"dig"]
 		_expected_side = _opposite_side(_expected_side)

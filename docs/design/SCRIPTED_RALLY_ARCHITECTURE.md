@@ -29,6 +29,9 @@ The top level contains:
 - `initial_positions`: exactly the twelve on-court voli IDs mapped to normalized
   court coordinates.
 - `actions`: one or more timed intentions, beginning with a serve.
+- optional `movement`: waypoint requests with `actor`, `start_time`, `end_time`,
+  and normalized `target`;
+- optional `seed`, persisted with authored files for repeatable inspection;
 - optional `note`.
 
 Every action declares `actor`, `action`, `intent_time`, and normally `target`.
@@ -97,6 +100,25 @@ launch. `seam_census()` audits only events which claim `physical_contact`.
 The returned `RallyResult` is directly consumable by
 `MatchScreen.load_and_play_rally()` because playback reads `.events`; no second
 playback implementation exists for scripts.
+
+## Files and visible playback
+
+The only persisted format is `volley-world-manager/scripted-rally/v1` JSON.
+Coordinates are hand-authorable `[x, y]` arrays; `load_script_file()` decodes
+them to production values and `save_script_file()` writes the same shape. The
+examples in `tools/authored_rallies/` are therefore fixtures, editable authored
+rallies, and save-file examples at once.
+
+`tools/authored_playback.tscn` loads a named file, resolves it, and passes the
+returned result directly to `MatchScreen.load_and_play_rally()`. Its persistent
+overlay and stdout show every intent ledger entry, including misses and
+refusals. It must run with a renderer, not `--headless`.
+
+Movement intervals remain intentions. Production locomotion certifies whether
+the requested actor can reach the waypoint during the authored interval; an
+unreachable request is refused with actor, interval, and required travel time.
+Validation does not place or teleport the actor. Applying twelve concurrent
+movement tracks to resolved state and playback remains Slice 4.
 
 ## Audit disposition and slice 2
 
