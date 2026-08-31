@@ -172,7 +172,7 @@ was "A'ace only" is obsolete.
 | Landavol | *(none — deliberate)* |
 | Spëddigh | `attack_power` −10, `block_timing` −8 |
 | Pāwa Hitō | `feinting` −11, `set_disguise` −9 |
-| Blôc du Larg | `improvisation` −11, `serve_power` −9 |
+| Blôc du Larg | `improvisation` −11, `transition_speed` −9 |
 | Xérvu | `reception` −11, `dig_control` −9 |
 | Taktikã | `explosiveness` −12, `jump_reach` −10 |
 | Ĭspayk | `shot_variety` −12, `adaptability` −10 |
@@ -182,11 +182,12 @@ The generator compensates each region's negative ceiling budget back across its
 specialty list. A weakness therefore changes *what kind of elite player* the
 region produces instead of reducing the world's talent supply.
 
-**Blôc du Larg note:** `serve_power −9` is current implementation, not a stale
-document artifact. It is a separate design choice from `serve_aggression 0.30`.
-If the intended fiction is "Largôis sides serve conservatively but can still
-produce a rare cannon server," the code table — not merely this spec — is what
-would need to change.
+**Blôc du Larg note:** conservative serving is now carried by
+`serve_aggression = 0.30`, not by a `serve_power` ceiling penalty. This preserves
+the possibility of an exceptional Largôis server whose pressure compounds with
+the region's blocking system. The second ceiling weakness is instead
+`transition_speed −9`: the same structure that makes Blôc hard to break also
+makes it slower to turn a defensive contact into immediate offense.
 
 ### C11. A'ace selective recruitment
 
@@ -217,7 +218,7 @@ orthogonal to origin. Do not add a regional body-type distribution as a routine
 | **Landavol** | breadth; build the system you want | no imposed peak | no imposed weakness |
 | **Spëddigh** | keep broken rallies moving through speed and tempo variation | `tempo_variation 0.90`, work-rate/mobility specialties | power and blocking ceilings; fatigue 1.18 |
 | **Pāwa Hitō** | make time itself the advantage; retain output while the rally/match drains everyone else | `fatigue_resistance 0.55`, transition 0.94, large frame | little deception |
-| **Blôc du Larg** | deny clean endings with a large organized wall and the floor behind it | block commitment, block timing, control, +4 wingspan | improvisation; currently serve-power ceiling |
+| **Blôc du Larg** | deny clean endings with a large organized wall and the floor behind it | block commitment, block timing, control, +4 wingspan | improvisation and slow transition |
 | **Xérvu** | take control from the service line through power, variation and risk | serve aggression 0.92 + six serve specialties | reception / floor defence |
 | **Taktikã** | learn the opponent and optimize as the match develops | `read_rate 1.55`, decision/composure/tactical specialties | physical contest |
 | **Ĭspayk** | feed one perfected terminal swing as early and often as possible | decisiveness 0.90, pin focus 0.88, attack package, largest frame | shot variety and adaptability |
@@ -259,9 +260,12 @@ of the specialty claim. Blôc is now expressed through +3/+2/+4 physique,
 `block_timing`, `reception_stability`, `dig_control`, `ball_control`, conservative
 tactical principles and strong block commitment.
 
-Its present ceiling weakness is `improvisation −11, serve_power −9`. The latter
-is a live design choice and should be reconsidered separately if conservative
-serving is meant to describe selection rather than physical capability.
+Its ceiling weakness is now `improvisation −11, transition_speed −9`. The two
+costs describe the same failure mode at different levels: when Blôc can establish
+its shape it is oppressive, but when the rally breaks that shape it is slower to
+invent and slower to turn defence into attack. Serving remains conservative by
+choice rather than capped capability, so a strong server can create an unusually
+dangerous serve-to-block rotation.
 
 ### Xérvu — serving owns the region
 
@@ -317,10 +321,6 @@ added for it.
 6. **Off-ball regional shape remains dependent on the off-ball movement system.**
 7. **Do not add regional body-type bias.** Equal morphology distribution across
    origins is deliberate.
-8. **Review Blôc du Larg's `serve_power −9` separately from documentation.** If
-   the desired trade-off is "serves safe" rather than "cannot develop serving
-   power," remove or replace that penalty in `REGION_CEILING_PENALTY` and let
-   `serve_aggression 0.30` carry the conservative choice.
 
 ---
 
@@ -332,7 +332,7 @@ own training emphasis.
 
 - **Ĭspayk cannot adapt; Taktikã is built on learning.**
 - **Xérvu gives up first-contact/floor strength; Blôc du Larg makes clean endings difficult.**
-- **Blôc du Larg cannot improvise; Spëddigh lives on changing the shape of a broken rally.**
+- **Blôc du Larg cannot improvise or transition quickly; Spëddigh lives on changing the shape of a broken rally.**
 - **Taktikã cannot win the physical contest; Pāwa Hitō and Ĭspayk can force one.**
 - **Spëddigh gives up terminal power/blocking; other regions can punish that at the net.**
 - **A'ace cannot grow shared tactical understanding; Taktikã's whole product is decision quality.**
