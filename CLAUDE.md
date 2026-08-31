@@ -12,8 +12,40 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-24 on the FD-009/FD-007 closure at
-`8f96dc6`: **2,178 checks pass, 0 fail**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-30 at `0bf250c`, after the merge of
+the voli-body work at `5a55494`: **2 of 2,174 checks fail**. A *third* failure
+is a regression; these two are not.
+
+**The two are older than this branch and fail on `origin/main` unchanged.** Named
+so nobody re-derives them:
+
+- `_test_tempo_buys_flight_time` -- "only an extremely strict tactic imposes
+  authored set shape over hitter rhythm"
+- `_test_playback_geometry_is_drawable` -- "the two blockers stand beside each
+  other, not inside each other (24 walls, 1 stacked, narrowest 0.000 m)"
+
+**The line above used to read "2,178 checks pass, 0 fail" at `8f96dc6`, and it
+was still saying so a week after that stopped being true.** The 2,174-with-two
+measured at `5a55494` was never written here, so the file told every reader the
+branch was green and to treat any failure as a regression -- which would have
+made both known failures look like something the reader had just broken. That is
+the exact failure this section spends a page warning about, and it happened to
+the headline rather than to an entry.
+
+**Zero delta from `5a55494`, and that is the right answer.** 2,174 before, 2,174
+after, same two failures. The seven commits in between are documentation plus
+`PRODUCE_BODIES` geometry -- the Stalk rebuilt from a smooth shaft into a leek --
+and the suite samples neither, so an unmoved count is what a presentation-only
+pass has to look like. The claim is checked independently: the garment clearance
+and sole contact probes both re-run clean (every row positive, collars 0.0180
+exactly, `defending` 9.71 degrees), and
+`validate_voli_body_construction.gd` passes.
+
+One caveat on that zero. `probe_garment_clearance.gd:36` iterates the six body
+*types* and builds one Vegi, whose produce is whatever `produce_for(1)` returns
+-- **Pepper**. The Stalk collar is the one thing this pass changed that
+`_seat_collar` reads, and no probe has ever measured it. See
+`docs/review/GARMENT_INK_CLEARANCE.md`.
 
 **Four checks written, four gained, and the predecessor was recorded** -- so the
 delta is attributable and says no sampling population moved. That is the right
