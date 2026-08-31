@@ -819,8 +819,17 @@ func apply_ui_palette(light_mode: bool) -> void:
 	## that happens to suit the first body type tried.
 	var face_color := Color("18131f") if skin_color.get_luminance() > 0.30 \
 		else Color("f6eddc")
+	## The pupil takes the other one. Both inks already exist and one of them is
+	## always the wrong choice for this skin -- which is exactly what makes it the
+	## right choice for a mark that has to read *against* the eye. No third colour
+	## to check against six skins and fourteen strips.
+	var pupil_color := Color("f6eddc") if face_color == Color("18131f") \
+		else Color("18131f")
 	for feature in _face_features():
-		_apply_material_color(feature, face_color)
+		_apply_material_color(
+			feature,
+			pupil_color if str(feature.name).begins_with("Pupil") else face_color,
+		)
 	for cosmetic in _cosmetics():
 		var part_alpha := float(cosmetic.get_meta("alpha", 1.0))
 		match str(cosmetic.get_meta("color_key", "skin")):
