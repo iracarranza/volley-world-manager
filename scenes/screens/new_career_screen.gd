@@ -619,7 +619,9 @@ func _fill_region_grid() -> void:
 			_set_principles(
 				VolleyballRegions.preferred_principles(selected_region), true
 			)
-		_suggest_manager_name()
+		## NOTE guarded like `_select_region`; unguarded it overwrote a typed name
+		if manager_name_tracks_region:
+			_suggest_manager_name()
 	for region_name in names:
 		var button := Button.new()
 		button.toggle_mode = true
@@ -875,6 +877,20 @@ func _previous() -> void:
 func _next() -> void:
 	error_label.text = ""
 	if current_step < step_panels.size() - 1:
+		## **A name you have been shown and kept is a name you chose.**
+		##
+		## `manager_name_tracks_region` only cleared when the manager *typed*, so
+		## accepting the offer left it set and every later region or tier change
+		## silently replaced the name -- three times across the flow, at the
+		## identity step, the club step and the save setup. `suggested_name`'s own
+		## contract is "offered rather than imposed", and an offer that keeps
+		## being re-made after you have taken it is imposed.
+		##
+		## Leaving the step is the moment the offer closes: the name has been on
+		## screen, it was editable, and it is now the manager's whether they
+		## touched it or not.
+		if current_step == 0:
+			manager_name_tracks_region = false
 		current_step += 1
 		_show_step()
 		return

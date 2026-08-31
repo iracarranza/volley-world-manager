@@ -676,9 +676,31 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 			ink_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			ink_material.cull_mode = BaseMaterial3D.CULL_FRONT
 			ink_material.grow = true
-			ink_material.grow_amount = ink_metres \
-				if str(mesh.name) in INK_BODY_PARTS else crown_ink_metres
+			ink_material.grow_amount = _ink_weight_for(mesh)
 			ink.material_override = ink_material
+
+
+## How heavy a line this mesh takes.
+##
+## **The body models already say, and nothing was reading it.** Nine parts are
+## authored `"ink": "body"` in `body_type_models.gd` -- every muzzle, the nose,
+## the crown -- and it reaches the node as metadata. The weight was chosen from
+## `INK_BODY_PARTS` instead, a list of *names*, and not one authored part name is
+## in it. So every part that declared itself body took the 0.030 m cosmetic line.
+##
+## Measured before changing: `tools/body_ink_weight.tscn` reports the nose at
+## 0.042 to 0.064 m across against a 0.030 m hull each side -- ratio 0.71 on
+## Simi, 0.92 on Cani, 0.96 on Feli. Majority outline, which is the same
+## arithmetic that made a Feli eye 0.053 m wide render at 0.113 m and produce the
+## speckle the face pass removed.
+##
+## The name list stays as the fallback, because it is right about the parts it
+## names and its own comment explains why it is a closed set. This only stops it
+## overriding a part that stated its own weight.
+static func _ink_weight_for(mesh: MeshInstance3D) -> float:
+	if str(mesh.get_meta("ink", "")) == "body":
+		return ink_metres
+	return ink_metres if str(mesh.name) in INK_BODY_PARTS else crown_ink_metres
 
 
 func apply_ui_palette(light_mode: bool) -> void:
