@@ -722,7 +722,8 @@ func _resolve_attack_intent(
 			}),
 	)
 	_record_intent(index, action, "contacted", "", float(opportunity.contact_time), contact_height)
-	return _publish_block_consequences(result, block_actions, formation, record, outgoing, index + 1)
+	return _publish_block_consequences(
+		result, block_actions, formation, wall, record, outgoing, index + 1)
 
 
 func _block_formation(
@@ -752,8 +753,73 @@ func _block_formation(
 	return formation
 
 
+## What production can actually establish about one missed block. The ordinary
+## interception search only returns a contact or nothing, so this asks the same
+## movement/contact model at the resolved net crossing and retains its measured
+## margins. It does not create a timing tolerance: when the model cannot produce
+## a reachable baseline, no authored-commit window is claimed.
+func _block_attempt_diagnostic(
+	action: Dictionary, actor: RallyPlayerState, attack_flight: Dictionary,
+) -> Dictionary:
+	var crossing := FreeFlightInterceptionModel.net_crossing(attack_flight)
+	if crossing.is_empty():
+		return {"classification": "unresolved", "detail": "no resolved net crossing"}
+	var crossing_time := float(crossing.time)
+	var crossing_position := Vector2(crossing.position)
+	var crossing_height := float(crossing.height_meters)
+	var flight_start := float(attack_flight.get("start_time", crossing_time))
+	var commitment := float(action.intent_time)
+	var attempt := RallyMovementSystemModel.evaluate_opportunity(
+		actor, &"block", crossing_position, crossing_time,
+		commitment, 0.0, crossing_height, true)
+	var baseline := RallyMovementSystemModel.evaluate_opportunity(
+		actor, &"block", crossing_position, crossing_time,
+		flight_start, 0.0, crossing_height, true)
+	var required_lead := float(baseline.travel_time)
+	if bool(baseline.requires_jump):
+		required_lead += float(baseline.takeoff_time_seconds)
+	var latest_commit := crossing_time - required_lead
+	var lateral_separation := absf(crossing_position.x - actor.position.x) \
+		* CourtConstants.COURT_WIDTH_METERS
+	## This is deliberately an optimistic lateral budget: all movement capacity
+	## and all horizontal reach are credited to x. A positive remainder therefore
+	## proves the path was laterally unreachable; zero does not prove it was not.
+	var lateral_gap := maxf(
+		lateral_separation - float(attempt.movement_capacity_meters)
+			- float(attempt.contact_reach_meters),
+		0.0,
+	)
+	var classification := "unresolved"
+	if commitment > crossing_time:
+		classification = "timing_after_crossing"
+	elif bool(attempt.reachable):
+		classification = "reachable"
+	elif bool(baseline.reachable) and commitment > latest_commit:
+		classification = "timing"
+	elif lateral_gap > 0.0:
+		classification = "position"
+	elif float(baseline.vertical_margin_meters) < 0.0:
+		classification = "geometry"
+	return {
+		"classification": classification,
+		"actor": actor.player_id, "commitment_time": commitment,
+		"net_crossing_time": crossing_time,
+		"net_crossing_position": crossing_position,
+		"net_crossing_height_meters": crossing_height,
+		"reachable_at_crossing": bool(attempt.reachable),
+		"baseline_reachable": bool(baseline.reachable),
+		"latest_commit_time": latest_commit if bool(baseline.reachable) else null,
+		"required_lead_seconds": required_lead if bool(baseline.reachable) else null,
+		"available_seconds": maxf(crossing_time - commitment, 0.0),
+		"travel_time_seconds": float(attempt.travel_time),
+		"lateral_gap_meters": lateral_gap,
+		"vertical_margin_meters": float(attempt.vertical_margin_meters),
+		"baseline_vertical_margin_meters": float(baseline.vertical_margin_meters),
+	}
+
+
 func _publish_block_consequences(
-	result: Resource, actions: Array[Dictionary], formation: Dictionary,
+	result: Resource, actions: Array[Dictionary], formation: Dictionary, wall: Array,
 	record: Dictionary, attack_flight: Dictionary, first_index: int,
 ) -> Dictionary:
 	var contact_kind := str(record.get("block_contact_kind", ""))
@@ -777,12 +843,13 @@ func _publish_block_consequences(
 			continue
 		var touched := actor.player_id == contact_actor_id and not contact_kind.is_empty()
 		var miss_reason := ""
-		if not touched:
-			miss_reason = "blocker committed at %.3f; the attack crossed the net at %s" % [
-				float(action.intent_time),
-				"%.3f" % float(crossing.time) if not crossing.is_empty() else "no resolved moment",
-			]
 		var role := "primary" if offset == 0 else "assist"
+		## Diagnose against the final resolved attack flight, not the open-court
+		## probe used to stage the wall. Forming a wall changes the resolver's shot
+		## choice, so those two crossings are allowed to differ.
+		var diagnostic := _block_attempt_diagnostic(action, actor, attack_flight)
+		if not touched:
+			miss_reason = _block_miss_reason(actor, diagnostic, wall, record)
 		var opportunity: Dictionary = formation.get("%s_opportunity" % role, {})
 		var metadata := {
 			"script_action_index": first_index + offset,
@@ -790,6 +857,7 @@ func _publish_block_consequences(
 			"side": String(actor.team_side),
 			"block_contact_kind": contact_kind if touched else "",
 			"block_miss_reason": miss_reason,
+			"block_miss_diagnostic": diagnostic,
 			"body_contact_position": Vector2(opportunity.get("body_contact_position", actor.position)),
 		}
 		var resolved_time := block_contact_time if touched else NAN
@@ -821,6 +889,55 @@ func _publish_block_consequences(
 		result.terminal_outcome = "scripted_block_%s" % contact_kind
 		return {"authoritative_free_flight": {}}
 	return {"authoritative_free_flight": current_flight}
+
+
+func _block_miss_reason(
+	actor: RallyPlayerState, diagnostic: Dictionary, wall: Array, record: Dictionary,
+) -> String:
+	var actor_id := actor.player_id
+	var classification := str(diagnostic.get("classification", "unresolved"))
+	var crossing_time := float(diagnostic.get("net_crossing_time", NAN))
+	if classification == "timing_after_crossing":
+		return "blocker %d committed at %.3f after the attack crossed the net at %.3f; production publishes that contact moment, not a wider block timing window" % [
+			actor_id, float(diagnostic.commitment_time), crossing_time]
+	var wall_entry := {}
+	for raw_entry in wall:
+		var entry: Dictionary = raw_entry
+		if int(entry.get("player_id", -1)) == actor_id:
+			wall_entry = entry
+			break
+	if not wall_entry.is_empty():
+		var ball_height := float(record.get("ball_height_at_net_meters", NAN))
+		var vertical_gap := ball_height - float(wall_entry.get("reach_height_m", 0.0))
+		var lateral := absf(
+			float(record.get("net_crossing_x", 0.5)) - float(wall_entry.get("net_x", 0.5))
+		) * CourtConstants.COURT_WIDTH_METERS
+		var edge_gap := lateral - float(wall_entry.get("half_width_m", 0.0))
+		if edge_gap > 0.0 and vertical_gap > 0.0:
+			return "blocker %d reached the net, but the ball crossed %.3f m outside the hands and %.3f m above them" % [
+				actor_id, edge_gap, vertical_gap]
+		if edge_gap > 0.0:
+			return "blocker %d reached the net, but the ball crossed %.3f m outside the hands" % [
+				actor_id, edge_gap]
+		if vertical_gap > 0.0:
+			return "blocker %d reached the net, but the ball crossed %.3f m above the hands" % [
+				actor_id, vertical_gap]
+		return "blocker %d formed a reachable wall at the %.3f net crossing, but production published no per-actor contact-failure quantity" % [
+			actor_id, crossing_time]
+	if classification == "timing":
+		return "blocker %d committed at %.3f; production reach window ended at %.3f for the %.3f net crossing" % [
+			actor_id, float(diagnostic.commitment_time),
+			float(diagnostic.latest_commit_time), crossing_time,
+		]
+	if classification == "position":
+		return "blocker %d could not reach the attack path; lateral gap at the %.3f net crossing was %.3f m" % [
+			actor_id, crossing_time, float(diagnostic.lateral_gap_meters),
+		]
+	if classification == "geometry":
+		return "blocker %d could not meet the ball at the net; vertical reach margin was %.3f m" % [
+			actor_id, float(diagnostic.vertical_margin_meters)]
+	return "blocker %d produced no reachable wall at the %.3f net crossing; production publishes no authored-commit timing window for this miss" % [
+		actor_id, crossing_time]
 
 
 func _attack_free_flight(swing: Dictionary, opportunity: Dictionary, index: int) -> Dictionary:

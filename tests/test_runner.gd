@@ -24078,9 +24078,41 @@ func _test_scripted_rally_intent_boundary() -> void:
 	_check(
 		file_ledger.size() == 6 \
 			and str(Dictionary(file_ledger[4]).status) == "missed" \
-			and "2.200" in str(Dictionary(file_ledger[4]).reason) \
-			and "2.507" in str(Dictionary(file_ledger[4]).reason),
-		"a missed block reports both its authored commitment and resolved net-crossing moments",
+			and "lateral gap" in str(Dictionary(file_ledger[4]).reason) \
+			and "0.823 m" in str(Dictionary(file_ledger[4]).reason),
+		"an early block miss reports the production-derived position quantity that failed",
+	)
+	var late_block := Dictionary(loaded_file.script).duplicate(true)
+	late_block.actions[4].intent_time = 2.55
+	var late_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var late_result: Resource = late_driver.resolve_script(
+		late_block, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(),
+	)
+	var late_reason := str(Dictionary(
+		Array(late_result.analysis.scripted_intents)[4]
+	).reason)
+	_check(
+		"committed at 2.550 after" in late_reason \
+			and "crossed the net at 2.507" in late_reason \
+			and "not a wider block timing window" in late_reason \
+			and not "lateral gap" in late_reason,
+		"a post-crossing block commitment reports timing and the resolver's absent wider window",
+	)
+	var moved_block := Dictionary(loaded_file.script).duplicate(true)
+	moved_block.initial_positions[102] = Vector2(0.10, 0.44)
+	var moved_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var moved_result: Resource = moved_driver.resolve_script(
+		moved_block, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(),
+	)
+	var moved_reason := str(Dictionary(
+		Array(moved_result.analysis.scripted_intents)[4]
+	).reason)
+	_check(
+		"lateral gap" in moved_reason and "1.518 m" in moved_reason \
+			and moved_reason != str(Dictionary(file_ledger[4]).reason),
+		"repositioning the blocker changes the measured position failure rather than repeating timing prose",
 	)
 	var roundtrip_path := OS.get_temp_dir().path_join("vwm_scripted_rally_roundtrip.json")
 	var roundtrip_error := SCRIPTED_RALLY_DRIVER_SCRIPT.save_script_file(
