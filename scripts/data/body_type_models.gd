@@ -103,19 +103,37 @@ const PRODUCE_BODIES := {
 	## the whole read, which is why it is the tallest and the thinnest at once.
 	"Stalk": {
 		"skin": Color("9dbf5c"), "crown": Color("cfe08a"),
+		## Widest at the very base and narrowing all the way up, with a step at
+		## the sheath. The profile used to bulge below mid-height and taper to a
+		## rounded top of exactly `head_radius` -- a smooth convex shaft with a
+		## continuous tip, which reads as one obvious thing and not as a plant.
+		## Max radius is unchanged at 0.19 so the traffic inflection still keys
+		## off the same number; what changed is where it sits and what follows it.
 		"torso": {"shape": "profile", "radius": 0.19, "height": 1.36,
-			"profile": [Vector2(-1.0, 0.115), Vector2(-0.75, 0.17),
-				Vector2(-0.10, 0.19), Vector2(0.55, 0.17),
-				Vector2(1.0, 0.105)], "depth_scale": 0.78},
+			"profile": [Vector2(-1.0, 0.19), Vector2(-0.80, 0.175),
+				Vector2(-0.76, 0.135), Vector2(-0.25, 0.125),
+				Vector2(0.35, 0.105), Vector2(0.78, 0.085),
+				Vector2(1.0, 0.05)], "depth_scale": 0.78},
 		"torso_y": 1.24, "head_y": 1.92, "head_radius": 0.105,
 		"shoulder": Vector2(0.22, 1.60), "rig_height": 2.12,
-		## Ribs, so a thin cylinder does not read as a pipe. Offset in pairs
-		## down the length rather than spaced evenly, which is closer to how a
-		## stalk actually bundles.
+		## Two sheath collars across the body and short bundling low on it.
+		##
+		## These used to be three capsules of height 0.78-0.94 running the upper
+		## two thirds of a 1.36 shaft, added so a thin cylinder "does not read as
+		## a pipe". They fixed pipe by making every element vertical, on a body
+		## whose problem was that it was already too vertical. The collars are
+		## the load-bearing part now: a horizontal break is the only thing in
+		## this vocabulary that interrupts a long upright silhouette. The short
+		## ribs stay because a stalk does bundle -- but low, at the heart, where
+		## celery actually does it, and at a third of the length.
 		"ribs": [
-			{"x": -0.10, "y": 1.44, "height": 0.86},
-			{"x": 0.10, "y": 1.40, "height": 0.78},
-			{"x": 0.0, "y": 1.34, "height": 0.94},
+			{"x": 0.0, "y": 0.86, "height": 0.30, "thickness": 0.036},
+			{"x": 0.0, "y": 1.02, "height": 0.34, "thickness": 0.052,
+				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
+			{"x": -0.055, "y": 0.78, "height": 0.26, "thickness": 0.030},
+			{"x": 0.055, "y": 0.82, "height": 0.24, "thickness": 0.030},
+			{"x": 0.0, "y": 1.46, "height": 0.30, "thickness": 0.044,
+				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
 		],
 		"crown_shape": "blades",
 	},
@@ -756,15 +774,20 @@ static func _produce_crown(body: Dictionary) -> Array:
 				},
 			]
 		"blades":
-			## Stalk. A fan of upright leaves, which is what a stalk's top is.
+			## Stalk. A fan of leaves that splays *wider than the body*, which is
+			## the one silhouette cue that reads as plant from across the court.
+			## They used to lean +/-16 degrees, which is a tuft on top of a shaft
+			## rather than a termination of it.
 			var blades: Array = []
-			for index in range(3):
-				var lean := -16.0 + 16.0 * float(index)
+			for index in range(5):
+				var fraction := float(index) / 4.0
+				var lean := -62.0 + 31.0 * float(index)
 				blades.append({
 					"name": "Blade%d" % index, "parent": "BodyPivot",
-					"shape": "box", "size": Vector3(0.055, 0.30, 0.022),
+					"shape": "box", "size": Vector3(0.05, 0.38, 0.020),
 					"position": Vector3(
-						-0.05 + 0.05 * float(index), top + 0.14, 0.0
+						lerpf(-0.075, 0.075, fraction), top + 0.11,
+						lerpf(0.02, -0.02, fraction)
 					),
 					"rotation": Vector3(0.0, 0.0, lean), "color": "crown",
 				})
@@ -2071,6 +2094,10 @@ static func _vegi(produce: String) -> Dictionary:
 				"position": Vector3(
 					float(rib.x), float(rib.y), float(rib.get("z", 0.04))
 				),
+				## Capsules stand on Y unless told otherwise. A collar lying
+				## across the body is the one element that breaks a long
+				## vertical silhouette, and nothing else in the vocabulary does.
+				"rotation": rib.get("rotation", Vector3.ZERO),
 				"color": "crown",
 			})
 	if body.has("blush"):
