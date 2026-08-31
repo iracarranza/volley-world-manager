@@ -168,9 +168,12 @@ const REGION_CEILING_PENALTY := {
 	## They go through you. They have never needed to go around you, so the
 	## deception attributes were never taught.
 	"Pāwa Hitō": {"feinting": -11, "set_disguise": -9},
-	## A structured side is a side that struggles when the structure breaks, and
-	## a wall built on staying home does not learn to serve people off it.
-	"Blôc du Larg": {"improvisation": -11, "serve_power": -9},
+	## A structured side is a side that struggles when the structure breaks.
+	## Largôis sides also transition conservatively: they are built to restore
+	## shape, not to explode out of a dig into the next attack. Serving remains a
+	## tactical choice (`serve_aggression` 0.30), so an exceptional server can
+	## still make a Blôc rotation especially dangerous behind the wall.
+	"Blôc du Larg": {"improvisation": -11, "transition_speed": -9},
 	## Six specialty attributes on serving, and a tradition that treats the first
 	## contact as somebody else's problem.
 	"Xérvu": {"reception": -11, "dig_control": -9},
