@@ -40,7 +40,7 @@ A Cani setter and a Feli setter currently differ in numbers, not in which
 system suits them.
 
 **And the stat blocks themselves are the wrong shape.** §3 is the reframe:
-one physical affordance per type, no technique or mental modifiers, with the
+one physical inflection per type, no technique or mental modifiers, with the
 Ursi-setter audit as the worked evidence for why the current table does not
 generate anything. §4 and §5 describe what ships; §3 describes what it should
 become.
@@ -139,7 +139,7 @@ by collapsing outside a narrow band.
 
 ---
 
-## 3. The affordance layer
+## 3. The inflection layer
 
 **Status: designed here, not built.** §4 and §5 below still describe the
 shipped behaviour. This section is the reframe they should be rewritten
@@ -188,19 +188,32 @@ with poor `hand_control` is handed the ceiling to become a good setter for
 reasons the fiction never earned. **Ursi and Feli are the categorical error**:
 a morphology is reaching into the mind. Nothing about being heavy is composure.
 
-### The six affordances
+### The six axes, and what an inflection is
 
-One physical rule per type; the volleyball attributes decide whether the player
-can exploit it.
+An **inflection is a bend, not a buff.** It runs along one axis, it is
+directional, and the volleyball attributes decide whether the player can exploit
+it. The six axes are the vocabulary; every body in the game is described in it.
 
-| type | affordance | it changes |
+**Amplitude is the second dimension, and it is what separates the five animals
+from the produce.** An animal type carries one *major* inflection. A Vegi
+carries only *minor* ones. Same grammar, different volume — which is why Vegi
+still reads as the all-rounder without being a hole in the vocabulary.
+
+That reading is earned rather than asserted. Because an inflection is
+directional, a **large** one is a large commitment: strong in its situation and
+correspondingly weak outside it. A **small** one is a small commitment. So low
+amplitude *is* the all-rounder property — a Vegi is not a body with nothing, it
+is a body that has not committed. §2's zero-sum rule already says this from the
+other side: Avi buy their ceiling by collapsing outside a narrow band.
+
+| type | axis | it changes |
 | --- | --- | --- |
 | **Avi** | **Reach** | the spatial envelope of contact, especially vertically |
 | **Cani** | **Sustain** | how much work the body repeats before it decays |
 | **Feli** | **Switch** | how fast the body changes state or direction |
 | **Ursi** | **Anchor** | how much disruption the body tolerates *during* contact |
 | **Simi** | **Manipulate** | how finely contact with the ball can be controlled |
-| **Vegi** | none | no dominant affordance |
+| **Vegi** | — | no major inflection on any axis; see below |
 
 Anchor is the load-bearing rename. "Big and slow" is a static advantage and
 generates nothing; "how compromised may this body be and still deliver" is a
@@ -230,8 +243,8 @@ Six bodies, six different solution spaces, same position:
 
 ### The two tests that replace "six different jobs"
 
-1. **Same body, six positions, six emergent uses** — the affordance is portable.
-2. **Same position, six bodies, six solution spaces** — the affordance is
+1. **Same body, six positions, six emergent uses** — the inflection is portable.
+2. **Same position, six bodies, six solution spaces** — the inflection is
    distinguishing.
 
 The old §2 test ("same position, six different jobs") passes for a set of
@@ -242,17 +255,17 @@ would have caught the two real defects above:
 
 > **No body type may modify an attribute in `MENTAL_ATTRIBUTES`, and no body
 > type may modify a technique attribute** — only `PHYSICAL_ATTRIBUTES` and the
-> affordance parameters. One loop over `attribute_registry.gd`; fails naming the
+> inflection parameters. One loop over `attribute_registry.gd`; fails naming the
 > type and the attribute.
 
 That check fails today on Ursi/`composure`, Feli/`tactical_discipline`, and
 eleven technique modifiers.
 
-### Where each affordance attaches
+### Where each inflection attaches
 
 The reframe is cheaper than it looks, because the seams exist and are live:
 
-| affordance | existing seam |
+| axis | existing seam |
 | --- | --- |
 | Reach | `ContactEnvelopeSystem` — `maximum_contact_height_meters`, `_horizontal_reach()` |
 | Sustain | `GameManager.stamina_fatigue_scale()` and per-rally fatigue accrual — **not** `stride_length_m`, which is spoken for (§5) |
@@ -278,127 +291,148 @@ hook, named in advance by someone solving a different problem.
   skill decides execution" is therefore shipped behaviour. The defect is not the
   mechanism — it is *which* ceilings are moved. Stripping the 13 non-physical
   modifiers is most of the work.
+### Vegi: the low-amplitude body
 
-### Vegi: all-rounder at the type level, specific at the player level
+Vegi has **no major inflection on any axis**. What it has instead is a set of
+*minor* ones carried by the five produce — small, situational, and evident.
+The reading to hold: **all-rounders with visible differences, not all-rounders
+with nothing.**
 
-The question this answers: can Vegi keep reading as the all-rounder while
-individual Vegi carry narrow, niche differentiators?
+Three findings shaped how this is built.
 
-**Yes — but the differentiator must not be attached to the produce, and it is
-not new machinery.** Three findings decide this.
-
-**1. The variants already exist and are already deliberately unnamed.**
+**1. The variants already exist and are already deliberately anonymous.**
 `body_type_models.gd:60` defines five produce — Tomato, Aubergine, Pear, Stalk,
 Pepper — assigned deterministically per player (`produce_for()`, seeded from the
 id so a Vegi is the same aubergine for their whole career). The header at `:38`
-is an explicit standing decision:
+is a standing decision:
 
 > "A Vegi is not 'a Tomato' and is never labelled as one anywhere a player can
 > read… Surfacing the name turns a body into a species and invites a taxonomy
 > nobody asked for."
 
-A mechanical differentiator keyed to produce cannot stay internal — an invisible
-per-produce bonus is an undisclosed dice roll, and disclosing it makes produce a
-species. So **produce is the wrong hook**, and it is the wrong hook for a reason
-already written down.
+**2. The body is drawn, so anonymity costs nothing.** Produce is a
+*silhouette* — squat, tall, waisted, rooted, lobed — so an inflection that
+follows from the shape is observable and attributable without the species name.
+The manager sees a stalky Vegi slip through a crowded seam and forms the belief.
+Nobody has to be told "Stalk".
 
-**2. There is already a rule for what a Vegi variant may not do**, discovered
-once for silhouettes and worth promoting to the mechanical layer.
-`body_type_models.gd:53` cut Pumpkin and Turnip because both read as "a heavy
-round mass", which Ursi "owns outright and owns better":
+**3. It is not traits, and the reason matters.** An earlier draft routed this to
+`TRAITS.md` on the grounds that a hidden per-produce effect is an undisclosed
+dice roll — wrong, per finding 2. And traits roll *independently of the body*,
+which is exactly why they are the wrong home for something the morphology
+entails. `TRAITS.md`'s own direction rule — generation owns the centimetres, the
+trait labels an outlier of a distribution that already exists — argues for
+produce owning this. A produce inflection is not a label on the body. It **is**
+the body. The trait axis stays untouched.
 
-> "a Vegi competing with a body type for the same read is a Vegi doing nothing."
+### Major and minor: the test is frequency, not axis
 
-Generalised: **a Vegi differentiator must never be a weak version of another
-type's affordance.** A slightly-reachy Vegi is a bad Avi. Whatever a Vegi has
-must be off the six-verb grid entirely.
+An earlier version of this section said a produce inflection must be **off the
+six-verb grid entirely**. That was wrong, and it was wrong because it conflated
+two separate constraints:
 
-**3. It is not traits, and the reason matters.** An earlier draft of this
-section routed produce differentiators to `TRAITS.md` on the grounds that a
-hidden per-produce effect is an undisclosed dice roll. That was wrong, twice:
+> **Axis may be shared. Frequency may not.**
+>
+> An **animal** inflection is a *standing property* — it changes how the body
+> works, on every contact, always.
+> A **produce** inflection is *situational* — it names a circumstance, and does
+> nothing outside it.
 
-- **The body is drawn.** Produce is a *silhouette* — squat, tall, wide, waisted,
-  rooted, lobed — so a produce-entailed effect is observable and attributable
-  without ever naming the species. The manager sees a stalky Vegi getting to a
-  ball and forms the belief; nobody has to be told "Stalk". Finding 1 is
-  satisfied by the drawing, not by concealment.
-- **Traits roll independently of the body.** That is what makes them a separate
-  axis, and it is exactly why they are the wrong home for something the
-  morphology *entails*. `TRAITS.md`'s own direction rule — generation owns the
-  centimetres, the trait is a label on an outlier of a distribution that already
-  exists — argues for produce owning this, not against it. A produce
-  differentiator is not a label on the body. It **is** the body.
+Under the off-grid rule, anything resembling another type's axis was rejected.
+Under the frequency rule, the real defect in the rejected proposals becomes
+visible, and it was never the axis:
 
-So: produce differentiators are morphology, they live with the produce, and the
-trait axis stays untouched.
+**A Stalk with greater standing reach is still rejected — but for the right
+reason.** `standing_reach_cm` is read in eight places
+(`setter_capability_system.gd:78`, `:216`; `geometric_attack_promotion.gd` for
+blocker, hitter, server and setter reach). It is not a small effect on a rare
+event; it is a small effect on **every** event. That makes it a standing
+property at low amplitude — a diluted Avi — which is the one thing a Vegi may
+not be. A Stalk who reached further *only on a fully-extended one-handed touch*
+would be perfectly legal: same axis, narrow situation.
 
-### What a produce may differentiate: the off-grid test
+The silhouette rule at `body_type_models.gd:54` still stands alongside this and
+is a **different** rule: Pumpkin and Turnip were cut because they *looked* like
+an Ursi, not because they behaved like one. A produce may share an axis. It may
+not share a read.
 
-The constraint is **not magnitude**. It is position relative to the six verbs,
-and how often the effect fires. Two worked examples, both real proposals:
+### The inflections
 
-**A Stalk with slightly greater standing reach — rejected.** `standing_reach_cm`
-is read in eight places (`setter_capability_system.gd:78`, `:216`;
-`geometric_attack_promotion.gd` for blocker, hitter, server and setter reach),
-so it is not a small bonus on a rare event — it is a small bonus on **every
-event**. And it is *Reach*, which is Avi's whole affordance. This is
-`body_type_models.gd:54` again in mechanical form: a Vegi competing with a body
-type for the same read is a Vegi doing nothing, except here it partly succeeds,
-which is worse — it muddies Avi.
+Grounded in the geometry. `PRODUCE_BODIES` torso radius × height:
 
-**A Pepper that recovers faster off the floor — accepted.** Nothing on the
-six-verb grid owns this. Anchor is stability *during* contact; getting up is
-what happens once the body has already lost. The hook exists and currently reads
-nothing about the player at all: `live_reception_integrator.gd:59` is a bare
+| produce | radius | height | ratio | shoulder |
+| --- | ---: | ---: | ---: | ---: |
+| Tomato | 0.36 | 0.70 | **0.51** | 0.31 |
+| Pepper | 0.34 | 0.76 | 0.45 | **0.34** |
+| Pear | 0.37 | 0.92 | 0.40 | 0.26 |
+| Aubergine | 0.285 | 1.12 | 0.25 | 0.27 |
+| Stalk | **0.19** | 1.36 | **0.14** | 0.22 |
 
-```gdscript
-var recovery_duration := 0.34 if action == "emergency_keep_alive" else 0.16
-```
+**Tomato — off the floor first.** *Situation: after the body has gone down.*
+The roundest and lowest-shouldered of the five. Seam:
+`live_reception_integrator.gd:59` is a bare
+`0.34 if emergency else 0.16` that reads nothing about the player. The state it
+shortens is expensive — `RECOVERING` carries a 0.68 posture factor and
+`contact_envelope_system.gd:120` gates takeoff outright — so the decision is
+real: **a Tomato is the defender you can afford to spend early.** Dig-first
+defensive systems get cheaper with one on the floor. Magnitude: 0.34 → ~0.30. No
+new state, just less time in an expensive one.
 
-and the state it governs is expensive — `RECOVERING` carries a `posture_factor`
-of 0.68, and `contact_envelope_system.gd:120` gates takeoff entirely while a
-player is `DIVING`, `RECOVERING` or `AIRBORNE`. So the effect is real, and it
-fires only in rallies where that player has hit the floor.
+**Stalk — less room in traffic.** *Situation: another body on the path.*
+Radius 0.19, half of Pear's. Seam: `OBSTRUCTION_CLEARANCE_M = 0.715` and
+`_berth_scale()`, which already returns a per-player 0.72–1.24. **A Stalk is who
+you stack in a crowded seam** — the middle of a five-person receive, a defensive
+shape where two paths cross. *Note before building:* `_berth_scale` currently
+reads `ego`, cohesion and pair familiarity. It is a **social** quantity today,
+and adding a physical term changes what the function means. Deliberate decision,
+not a smuggled one.
 
-The test, stated once:
+**Pepper — a wider platform base.** *Situation: forearm contacts only.*
+The widest shoulder in the set at 0.34, equal to its own torso radius — square,
+where every other produce narrows. This is the **Manipulate** axis at low
+amplitude, restricted to reception and dig, and it is legal precisely because
+the frequency rule replaced the off-grid rule; the earlier draft rejected it for
+sharing Simi's axis. Note the cost that comes with the same geometry: a square
+body needs *more* berth, which is Stalk's benefit inverted. Two-sided by
+construction, which is what an inflection should be.
 
-> A produce differentiator must be **off the six-verb grid** and must fire on a
-> **subset of rallies**, not on every contact. If you can name which of Reach,
-> Sustain, Switch, Anchor or Manipulate it is a weak version of, it is rejected.
+**Pear — nothing, and this is the test working.** Radius 0.37, the widest, and
+`body_type_models.gd:55` already calls it "the massive one among the produce".
+Anything built from that mass is Anchor, and at any amplitude a mass-derived
+Pear inflection collides with Ursi's *read*, not merely its axis — which is the
+silhouette rule, which still bites.
 
-### Why this does not make Vegi dominant
+**Aubergine — nothing, for now.** 0.285 × 1.12, no extreme on any axis. Not
+invented for symmetry; see below.
 
-Vegi has **no affordance**. One narrow, situational, off-grid effect against a
-full affordance is not parity, so a guaranteed produce differentiator does not
-make Vegi the correct pick — it makes Vegi *specific* rather than *absent*,
-which is the actual complaint about median-everything.
+### Do not fill all five
 
-The frequency arithmetic supports it. Body types are flat at 1/6 (§1) and
-`produce_for()` is uniform over five, so **each produce is about 3.3% of the
-population**, and an effect like Pepper's then fires only in the subset of those
-rallies where the player goes to the floor. That is niche in the literal sense.
+Three inflections across five produce is better than five. Not because five is
+too much work — because **a Vegi who is genuinely unremarkable is the type
+working.** Fill every slot and this becomes the suite the design keeps warning
+about: six body types wearing a seventh's clothes. An incomplete set reads as
+"some Vegi have a thing"; a complete one reads as "Vegi is the type that has
+things", and only the first leaves the all-rounder intact.
 
-Two lines to hold:
+Two further lines to hold:
 
-- **No extra trait budget for Vegi**, and no adaptability bonus. A developmental
+- **No extra trait budget for Vegi, and no adaptability bonus.** A developmental
   or system-adaptability bonus would make Vegi correct for any manager who
   changes system, and would restore precisely what Homi's retirement removed:
   one sane default and five departures from it.
-- **One differentiator per produce, not a suite.** Five produce with one
-  off-grid effect each is a texture; five produce with a package each is six
-  body types wearing a seventh's clothes.
+- **One inflection per produce, never a package.**
 
-### So what Vegi actually is
+### Why this does not make Vegi dominant
 
-All-rounder at the **type** level — no affordance, nothing the other five must
-be measured against — and specific at the **player** level, through a silhouette
-the manager can see and one small thing that silhouette does.
+Amplitude is the trade, and it runs both ways. A major inflection is a major
+commitment — strong in its situation, weak outside it — so a Vegi is not a body
+that gave something up; it is a body that did not commit. That is a real
+position in the roster, not a consolation.
 
-**Open:** three of the five produce have no proposed differentiator (Tomato,
-Aubergine, Stalk), and Pear needs care — `body_type_models.gd:55` already calls
-it "the massive one among the produce", which is adjacent to Anchor and so the
-most likely of the five to fail the off-grid test. Not invented here; the test
-above is what they have to pass.
+The frequency arithmetic keeps it honest. Body types are flat at 1/6 (§1) and
+`produce_for()` is uniform over five, so **each produce is about 3.3% of the
+population**, and a situational inflection then fires only in the subset of
+those rallies that reach its circumstance.
 
 ### Sustain and Switch: the seam that was nearly a duplicate
 
@@ -407,13 +441,13 @@ versus speed-of-reversal. Both are distance over time, which is a much narrower
 gap than Reach/Anchor/Manipulate, and it collapses in play into "fast in a line"
 versus "fast to turn". Resolved by moving both off that axis:
 
-- **Cani = Sustain.** The affordance is *low decay*, not speed. Ground coverage
+- **Cani = Sustain.** The inflection is *low decay*, not speed. Ground coverage
   stops being the rule and becomes a consequence of it — a Cani's advantage
   therefore **grows across a rally and across a match** rather than being a flat
   movement stat. "I can still get to that in the fifth set" is a different
   sentence from "I can get to that", and only the second one was available under
   Traverse.
-- **Feli = Switch.** The affordance is *state change* — initiate, arrest,
+- **Feli = Switch.** The inflection is *state change* — initiate, arrest,
   reverse, re-initiate — priced in decay. Not top speed, and not distance.
 
 They remain mirror images, which is the §2 zero-sum requirement, but they are
@@ -498,7 +532,7 @@ the lesson:
 | Feli | −0.03 | −0.013 | right sign, off by 2× |
 
 This is `FAILURE_MODES.md` §0 exactly: a number acting on a distribution it was
-never measured against. Ground coverage belongs to §3's **Sustain** affordance,
+never measured against. Ground coverage belongs to §3's **Sustain** axis,
 and Sustain has to reach locomotion through something other than a stride
 offset — repeat cost, recovery between movement cycles, or decay rate — because
 the stride field itself is derived and gated. This is part of why Sustain is
