@@ -234,9 +234,8 @@ var _landing_remaining: float = 0.0
 ## which case `_ground_the_feet` must not do it a second time. Consumed on read.
 var _feet_already_grounded: bool = false
 
-## Thigh share of total leg length. Slightly over half, which is roughly true
-## and is the ratio that keeps a folded knee reading as a knee.
-const THIGH_SHARE: float = 0.54
+## NOTE the ratio lives in body_type_models.gd because the trousers are cut to it
+const THIGH_SHARE: float = BodyTypeModelsScript.THIGH_SHARE
 
 ## How far in front of the ankle the shoe sits, in rig units.
 ##

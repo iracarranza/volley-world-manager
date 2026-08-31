@@ -347,13 +347,28 @@ static func parts(
 	## on another. On Feli that is an 18.5 mm bar standing 18.5 mm proud of a snout
 	## whose entire height is 150 mm. The span already carried `mouth_scale`
 	## through `step`; these two never did.
+	## **A span scales with the snout; a line weight does not.**
+	##
+	## Both of these took `mouth_scale`, and half of that was the right fix: a
+	## depth authored for a skull and carried onto a muzzle stood the mouth proud
+	## of the snout, which is the defect the note above records. Thickness is a
+	## different quantity. It is a *line weight*, and a line weight is about
+	## surviving the quantiser at roster distance rather than about the size of
+	## what it is drawn on -- the same argument `WHISKER_ROOT_RADIUS` makes for
+	## the whiskers, which carry no scale at all.
+	##
+	## Measured with both scaled, against the eye, which is the mark that reads:
+	## Vegi 0.34 of the eye's height and every muzzled body 0.12 to 0.13, a third
+	## of it. That is the report that expressions cannot be made out on Feli and
+	## Simi while Vegi is fine -- Vegi is the one body with no muzzle, so it is
+	## the one whose mouth was never scaled down.
 	var stroke_scale := mouth_scale if anchor != null else 1.0
 	result.append({
 		"name": "Mouth",
 		"shape": "stroke",
 		"points": points,
 		"normals": normals,
-		"thickness": MOUTH_THICKNESS * radius * stroke_scale * 0.5,
+		"thickness": MOUTH_THICKNESS * radius * 0.5,
 		"depth": FEATURE_DEPTH * radius * stroke_scale,
 		"position": Vector3.ZERO,
 		"rotation": Vector3.ZERO,

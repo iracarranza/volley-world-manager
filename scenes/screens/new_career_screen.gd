@@ -466,6 +466,13 @@ func _build_preview_world() -> void:
 func _refresh_preview() -> void:
 	if _preview_actor == null:
 		return
+	## **Standing, not ready.** `ready_stance` defaults to the defender's crouch,
+	## which carries the torso 0.30 rad forward -- correct on a court and wrong
+	## here, where the reported symptom was every voli in the creator leaning.
+	## `watching` is authored for "a voli watching a ball that is not theirs", and
+	## in the creator there is no ball at all, so it is the existing answer rather
+	## than a fourth stance invented for a menu.
+	_preview_actor.ready_stance = "watching"
 	var profile := ManagerProfile.appearance_profile(appearance)
 	_preview_actor.configure(
 		0, true, "", ManagerProfile.actor_hand(appearance), profile

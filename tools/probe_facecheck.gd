@@ -30,15 +30,27 @@ func _ready() -> void:
 		if face == null:
 			print("%-8s no Face node" % body_type)
 		else:
+			## The mouth against the eye, because the eye is the mark that reads
+			## and the mouth is the one reported as too small. A ratio rather
+			## than an absolute: heads differ in size across the six and the
+			## question is legibility on each, not millimetres.
+			var eye_h := 0.0
+			var mouth := Vector3.ZERO
 			for child in face.get_children():
 				var mesh_node := child as MeshInstance3D
 				if mesh_node == null or mesh_node.mesh == null:
 					continue
-				print("%-8s %-10s pos=%s size=%s" % [
-					body_type, child.name, mesh_node.position,
-					mesh_node.mesh.get_aabb().size,
-				])
+				var box := mesh_node.mesh.get_aabb().size
+				if str(child.name) == "EyeR":
+					eye_h = box.y
+				if str(child.name) == "Mouth":
+					mouth = box
+			print("%-8s mouth %6.4f wide %6.4f tall   eye tall %6.4f   mouth/eye %5.2f" % [
+				body_type, mouth.x, mouth.y, eye_h,
+				mouth.y / maxf(eye_h, 0.0001),
+			])
 		actor.queue_free()
-	print("\nz is forward-negative: a mark clears the one behind it by moving")
-	print("further negative than that one's own front face reaches.")
+	print("\nmouth/eye is the stroke's thickness against the eye's height. The")
+	print("eye reads at roster distance, so it is the reference a mouth has to")
+	print("hold its own against.")
 	get_tree().quit()

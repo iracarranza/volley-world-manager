@@ -947,6 +947,17 @@ static var body_ink_metres: float = 0.018
 const GARMENT_KIT := "kit"
 const GARMENT_FORMAL := "formal"
 
+## Thigh share of total leg length. Slightly over half, which is roughly true and
+## is the ratio that keeps a folded knee reading as a knee.
+##
+## **Owned here rather than in `player_actor_3d.gd`, for the reason
+## `body_ink_metres` is.** The rig splits the leg into two bones on this number,
+## and a garment that covers the leg has to be cut to the same two -- a single
+## shell over both is a rigid tube through a joint that bends. Two copies of the
+## ratio would be two facts that can disagree, and the one that would win is
+## whichever was read first.
+const THIGH_SHARE: float = 0.54
+
 
 ## The full description of one player's body: meshes, attachment points,
 ## colours and cosmetic parts.
@@ -1812,6 +1823,57 @@ static func _clearing_radius(limb_radius: float, narrow: float) -> float:
 	)
 
 
+## The produce's own profile, worn as a shirt.
+static func _produce_singlet(spec: Dictionary, colour: String) -> Dictionary:
+	var torso: Dictionary = spec.get("torso", {})
+	var profile: Array = torso.get("profile", [])
+	if profile.size() < 2 or not torso.has("height"):
+		return {}
+	var half := float(torso.height) * 0.5
+	if half <= 0.0:
+		return {}
+	var widest := 0.0
+	for raw in profile:
+		widest = maxf(widest, float((raw as Vector2).y))
+	if widest <= 0.0:
+		return {}
+	## Where the shape stops being a body and starts being a base.
+	var hem := -0.6
+	for raw in profile:
+		var ring: Vector2 = raw
+		if ring.y >= widest * 0.6:
+			hem = ring.x
+			break
+	var shoulder := Vector2(spec.get("shoulder", Vector2(0.3, 1.3)))
+	var neck := clampf(
+		(shoulder.y - float(spec.get("torso_y", 1.1))) / half, hem + 0.2, 0.95
+	)
+	## One line width off the skin, the same standoff every other garment takes.
+	var clearance := body_ink_metres * 2.0
+	var rings: Array[Vector2] = [
+		Vector2(hem, _torso_radius_at(torso, hem) + clearance)
+	]
+	for raw in profile:
+		var ring: Vector2 = raw
+		if ring.x > hem and ring.x < neck:
+			rings.append(Vector2(ring.x, ring.y + clearance))
+	rings.append(Vector2(neck, _torso_radius_at(torso, neck) + clearance))
+	return {
+		"name": "Singlet", "parent": "BodyPivot", "shape": "profile",
+		"profile": rings,
+		"height": float(torso.height),
+		"radius": float(torso.get("radius", widest)) + clearance,
+		"depth_scale": float(torso.get("depth_scale", 1.0)),
+		"lobes": int(torso.get("lobes", 0)),
+		"lobe_depth": float(torso.get("lobe_depth", 0.0)),
+		"position": Vector3(0.0, float(spec.get("torso_y", 1.1)), 0.0),
+		## The body's line, not a cosmetic's: this is a garment over a torso and
+		## takes the weight the torso takes.
+		"ink": "body",
+		"color": colour,
+	}
+
+
 static func _add_garments(
 	spec: Dictionary, garment: String = GARMENT_KIT
 ) -> Dictionary:
@@ -1857,19 +1919,59 @@ static func _add_garments(
 		## the cuff toward the knee is what buys visible shorts; widening it would
 		## only have made a wider invisible thing.
 		var shorts_radius := _clearing_radius(leg_radius, 1.28)
-		extras.append({
-			"name": "ShortsLeg%s" % side, "parent": "BodyPivot/%sLeg" % side,
-			"shape": "cylinder",
-			## Flared at the hem, which is the difference between shorts and
-			## tights: a leg opening stands off the thigh.
-			"top_radius": shorts_radius * 1.28,
-			"bottom_radius": shorts_radius * 1.40,
-			"height": leg_length * leg_share,
-			"position": Vector3(
-				0.0, -leg_length * (0.18 + (leg_share - 0.39) * 0.5), 0.0
-			),
-			"color": trouser_colour,
-		})
+		if formal:
+			## **A trouser is cut to both bones, because the leg is two.**
+			##
+			## The shorts hang off the thigh bone alone, which is correct for
+			## shorts -- they end above the knee, so nothing of them ever crosses
+			## the joint. A trouser carried the same way is one rigid tube through
+			## a knee that bends: it reads right standing still and wrong the
+			## moment anybody folds a leg, which is why this went unseen until the
+			## kit gained a second class.
+			##
+			## Each half is sized from the radius the bone it covers is drawn at,
+			## and each clears its own limb's outline. The shank's is the leg's
+			## bottom radius, which is exactly what the rig hands the shank mesh.
+			var thigh_length := leg_length * THIGH_SHARE
+			var shank_length := leg_length - thigh_length
+			var shank_radius := _clearing_radius(
+				float(leg.get("bottom_radius", leg_radius * 0.8)), 1.28
+			)
+			extras.append({
+				"name": "TrouserThigh%s" % side,
+				"parent": "BodyPivot/%sLeg" % side, "shape": "cylinder",
+				"top_radius": shorts_radius * 1.28,
+				"bottom_radius": shorts_radius * 1.30,
+				"height": thigh_length * 0.96,
+				"position": Vector3(0.0, -thigh_length * 0.5, 0.0),
+				"color": trouser_colour,
+			})
+			## Stops short of the ankle rather than running to the floor: the
+			## shoe is most of this rig's lower leg, and a trouser drawn over it
+			## is a trouser with no shoe in it.
+			extras.append({
+				"name": "TrouserShank%s" % side,
+				"parent": "BodyPivot/%sLeg/Knee" % side, "shape": "cylinder",
+				"top_radius": shank_radius * 1.28,
+				"bottom_radius": shank_radius * 1.34,
+				"height": shank_length * 0.80,
+				"position": Vector3(0.0, -shank_length * 0.40, 0.0),
+				"color": trouser_colour,
+			})
+		else:
+			extras.append({
+				"name": "ShortsLeg%s" % side, "parent": "BodyPivot/%sLeg" % side,
+				"shape": "cylinder",
+				## Flared at the hem, which is the difference between shorts and
+				## tights: a leg opening stands off the thigh.
+				"top_radius": shorts_radius * 1.28,
+				"bottom_radius": shorts_radius * 1.40,
+				"height": leg_length * leg_share,
+				"position": Vector3(
+					0.0, -leg_length * (0.18 + (leg_share - 0.39) * 0.5), 0.0
+				),
+				"color": trouser_colour,
+			})
 		## **No sock top.** It was built, measured and removed rather than kept.
 		##
 		## The knee sits at y 0.413 and the shoe's own bounds reach 0.388, so this
@@ -1886,6 +1988,25 @@ static func _add_garments(
 	## after this, and passes through the ring rather than being covered by it.
 	var torso: Dictionary = spec.get("torso", {})
 	var neck_radius := float(Dictionary(spec.get("head", {})).get("radius", 0.18))
+	## **A produce wears a shirt cut to the produce.**
+	##
+	## This section has now had three answers and the first two were rejected for
+	## the same reason: a belt and then a collar, both *rings* laid across the one
+	## shape that carries the identity, reading as neither clothing nor body. That
+	## objection is sound and it is an objection to a band, not to a garment. A
+	## singlet has a neckline and a hem -- two garment edges -- and it follows the
+	## produce's own profile, lobes and depth scale, so a pepper's ribs stay ribbed
+	## under it and a tomato stays round. Nothing is cut in two.
+	##
+	## Both edges come off the body rather than being placed. The neckline sits at
+	## the shoulder the produce already declares; the hem sits at the lowest ring
+	## still carrying most of the torso's width, which is where that shape stops
+	## being a body and starts being a base -- and is where a garment would
+	## naturally be cut on it.
+	if str(spec.get("torso_material", "kit")) == "skin":
+		var singlet := _produce_singlet(spec, shirt_colour)
+		if not singlet.is_empty():
+			extras.append(singlet)
 	## NOTE the height is re-seated by `_apply_physical_profile` once the torso has
 	## NOTE its final scale; this is the authored placement, not the drawn one
 	var torso_top := float(spec.get("torso_y", 1.1)) \
