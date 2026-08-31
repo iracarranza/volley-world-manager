@@ -48,6 +48,9 @@ var is_home_team: bool = true
 ## Only a match knows this, because only a match has two clubs in it.
 var club_region: String = ""
 var champion_region: String = ""
+## Preview override for the three recorded kit passes. Gameplay leaves this at
+## -1 and RegionalKits resolves the selected design.
+var kit_design_attempt: int = -1
 var tactical_position: Vector2 = Vector2.ZERO
 var dominant_hand: String = "Right"
 var height_cm: float = 188.0
@@ -486,6 +489,7 @@ func configure(
 	## for the same reason: it is something the view needs in order to draw
 	## this voli that the id cannot tell it.
 	champion_region = str(physical_profile.get("champion_region", ""))
+	kit_design_attempt = clampi(int(physical_profile.get("kit_design_attempt", -1)), -1, 2)
 	## Before the build, not after it. `_build_silhouette` draws the face, so
 	## setting the expression afterwards would build nine boxes twice on every
 	## voli on the court to change the second set.
@@ -3209,7 +3213,7 @@ func set_pose(
 func _build_kit_marks(wears_kit: bool) -> void:
 	for existing in _kit_marks():
 		existing.queue_free()
-	if club_region.is_empty() or not wears_kit or torso == null:
+	if club_region.is_empty() or torso == null:
 		return
 	var trim := trim_colour()
 	## Where a mark actually sits on the shirt.
@@ -3251,27 +3255,74 @@ func _build_kit_marks(wears_kit: bool) -> void:
 	## pose and needs no knowledge of where the garment was built.
 	var arm_spec: Dictionary = silhouette.get("arm", {})
 	var leg_spec: Dictionary = silhouette.get("leg", {})
+	var arm_radius := float(arm_spec.get("top_radius", 0.07))
+	var leg_radius := float(leg_spec.get("top_radius", 0.11))
+	## Marks sit on the garment, not the limb under it. `_add_garments` builds a
+	## flared shell from the clearing radius; using the naked limb radius here
+	## buried every sleeve/shorts motif inside that shell, most visibly on Vegi
+	## where those are the only regional surfaces. Use the middle of each flare,
+	## which is the surface the authored mark spans.
+	var sleeve_surface := BodyTypeModelsScript._clearing_radius(arm_radius, 1.30) * 1.32
+	var shorts_surface := BodyTypeModelsScript._clearing_radius(leg_radius, 1.28) * 1.34
 	var places := {
 		"torso": [[torso, torso_radius]],
 		"sleeves": [
-			[left_arm, float(arm_spec.get("top_radius", 0.07))],
-			[right_arm, float(arm_spec.get("top_radius", 0.07))],
+			[left_arm, sleeve_surface],
+			[right_arm, sleeve_surface],
 		],
 		"legs": [
-			[left_leg, float(leg_spec.get("top_radius", 0.11))],
-			[right_leg, float(leg_spec.get("top_radius", 0.11))],
+			[left_leg, shorts_surface],
+			[right_leg, shorts_surface],
 		],
+	}
+	## RegionalKits authors against the reference cut, while the current body
+	## system changes the cut itself. Scale the drawing in the garment's frame so
+	## a full-height column stays full-height on Avi and Ursi, and an outer panel
+	## stays at the same longitude on narrow and broad torsos. The host node's
+	## later pose/physical scaling is inherited normally; these factors account
+	## only for differences in the authored body geometry.
+	var place_scale := {
+		"torso": Vector2(torso_radius / 0.28, float(torso_spec.get("height", 0.9)) / 0.9),
+		"band": Vector2(torso_radius / 0.28, float(torso_spec.get("height", 0.9)) / 0.9),
+		"sleeves": Vector2(
+			float(arm_spec.get("top_radius", 0.07)) / 0.07,
+			float(arm_spec.get("height", 0.84)) / 0.84
+		),
+		"legs": Vector2(
+			float(leg_spec.get("top_radius", 0.11)) / 0.11,
+			float(leg_spec.get("height", 0.66)) / 0.66
+		),
 	}
 	## A darker relative of the trim, for a rule that has to read *against* the
 	## trim rather than against the shirt -- the edging on a heritage band.
 	var shade := trim.darkened(0.42)
 	var lane := 0
-	for mark in RegionalKitsScript.marks_for(club_region, champion_region):
+	for mark in RegionalKitsScript.marks_for(
+		club_region, champion_region, kit_design_attempt
+	):
 		lane += 1
-		var at: Vector3 = mark[1]
 		var roll := float(mark[2]) if mark.size() > 2 else 0.0
 		var place := str(mark[3]) if mark.size() > 3 else "torso"
 		var profile: Dictionary = mark[4] if mark.size() > 4 else {}
+		## Vegi keep produce as their torso, but their sleeves and shorts are still
+		## garments. Suppress only marks that would paint the produce itself; the
+		## previous early return also erased the real garment marks and made every
+		## regional Vegi identical.
+		if not wears_kit and place in ["torso", "band"]:
+			continue
+		var garment_scale: Vector2 = place_scale.get(place, place_scale["torso"])
+		var source_size: Vector3 = mark[0]
+		var source_at: Vector3 = mark[1]
+		var size := Vector3(
+			source_size.x * garment_scale.x,
+			source_size.y * garment_scale.y,
+			source_size.z,
+		)
+		var at := Vector3(
+			source_at.x * garment_scale.x,
+			source_at.y * garment_scale.y,
+			source_at.z,
+		)
 		var ink := shade if str(profile.get("ink", "trim")) == "shade" else trim
 		## A band rings the whole body, so it is built once rather than per face.
 		if place == "band":
@@ -3282,22 +3333,50 @@ func _build_kit_marks(wears_kit: bool) -> void:
 			## enough to matter reaches into the caps, and a straight-sided ring
 			## there stands off the shirt at its lower edge.
 			var band_semi := float(torso_spec.get("height", 0.9)) * 0.5
-			var half := float(mark[0].y) * 0.5
+			var half := size.y * 0.5
 			ring.mesh = BodyTypeModelsScript.build_mesh({
 				"shape": "cylinder",
-				"top_radius": float(mark[0].z) + BodyTypeModelsScript._torso_radius_at(
+				"top_radius": size.z + BodyTypeModelsScript._torso_radius_at(
 					torso_spec, (at.y + half) / maxf(band_semi, 0.001)
 				),
-				"bottom_radius": float(mark[0].z) + BodyTypeModelsScript._torso_radius_at(
+				"bottom_radius": size.z + BodyTypeModelsScript._torso_radius_at(
 					torso_spec, (at.y - half) / maxf(band_semi, 0.001)
 				),
-				"height": float(mark[0].y),
+				"height": size.y,
 			})
 			ring.position = Vector3(0.0, at.y, 0.0)
 			ring.set_meta("kit_mark", true)
 			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			torso.add_child(ring)
 			_apply_material_color(ring, ink)
+			continue
+		## Limb garments are short, narrow cylinders that rotate aggressively with
+		## the pose. A front/back patch on one has almost no projected area once the
+		## arm turns, and on Vegi that erased the only regional construction they
+		## wear. Wrap limb motifs around the garment instead. Their authored height,
+		## count and spacing still distinguish a cuff rule, a broad sponsor tab, a
+		## stack of Spëddigh pulses and a long Pāwa continuation, while the ring
+		## remains readable from every volleyball pose.
+		if place in ["sleeves", "legs"]:
+			if at.z < 0.0:
+				continue
+			for host in Array(places[place]):
+				var parent := host[0] as Node3D
+				if parent == null:
+					continue
+				var limb_ring := MeshInstance3D.new()
+				limb_ring.mesh = BodyTypeModelsScript.build_mesh({
+					"shape": "cylinder",
+					"top_radius": float(host[1]) + size.z,
+					"bottom_radius": float(host[1]) + size.z,
+					"height": size.y,
+				})
+				limb_ring.position = Vector3(0.0, at.y, 0.0)
+				limb_ring.set_meta("kit_mark", true)
+				limb_ring.set_meta("kit_mark_lane", lane)
+				limb_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				parent.add_child(limb_ring)
+				_apply_material_color(limb_ring, ink)
 			continue
 		## **A mark is a shape down its own length, not one rectangle.**
 		##
@@ -3335,7 +3414,7 @@ func _build_kit_marks(wears_kit: bool) -> void:
 			## curve. None of them was it, and `build_surface_patch` records what
 			## was: a stack of flat boxes stepping down a curved body shows the
 			## top face of every step. The depth is just a depth again.
-			var proud := float(mark[0].z)
+			var proud := size.z
 			var on_torso := place == "torso"
 			var torso_semi := float(torso_spec.get("height", 0.9)) * 0.5
 			## **The angle is fixed once, at the mark's own middle.**
@@ -3376,7 +3455,7 @@ func _build_kit_marks(wears_kit: bool) -> void:
 			## Enough rows that no quad is longer than `PATCH_STEP`, and never fewer
 			## than the profile asked for.
 			var rows := clampi(
-				maxi(segments, int(ceil(float(mark[0].y) / 0.028))), 2, 28
+				maxi(segments, int(ceil(size.y / 0.028))), 2, 28
 			)
 			var patch: Array = []
 			for row in range(rows + 1):
@@ -3395,10 +3474,10 @@ func _build_kit_marks(wears_kit: bool) -> void:
 				var along := float(row) / float(rows)
 				## Symmetric about the middle, for the taper.
 				var from_end := 1.0 - absf(along - 0.5) * 2.0
-				var width := float(mark[0].x) \
+				var width := size.x \
 					* lerpf(1.0, waist, along) \
 					* lerpf(taper, 1.0, from_end)
-				var row_y := at.y + float(mark[0].y) * (0.5 - along)
+				var row_y := at.y + size.y * (0.5 - along)
 				## The radius is read at the row's own height, because the body has
 				## narrowed by the time a long mark reaches its ends and a mark held
 				## at the middle radius would hang off it.
@@ -3408,7 +3487,8 @@ func _build_kit_marks(wears_kit: bool) -> void:
 					) if on_torso else float(host[1])
 				)
 				var theta := asin(clampf(
-					(at.x + bow * along) / maxf(reference_radius, 0.001), -1.0, 1.0
+					(at.x + bow * garment_scale.x * along) \
+						/ maxf(reference_radius, 0.001), -1.0, 1.0
 				))
 				## A roll is a **shear along the surface**, not a slab tipped in
 				## front of it. Rotating the mesh tilted its whole plane off the

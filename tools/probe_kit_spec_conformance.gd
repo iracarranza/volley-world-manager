@@ -148,7 +148,10 @@ func _bompacao() -> void:
 		"bompaçao band centre %",
 		(Vector3(m[0][1]).y + TORSO * 0.5) / TORSO, 0.40, 0.05,
 	)
-	_add("bompaçao extra marks (spec: 0)", float(m.size() - 1), 0.0, 0.0)
+	## The selected third pass carries the platform onto sleeves and shorts. Each
+	## limb entry appears twice in `_front` because it is authored once for each
+	## physical limb; four entries beyond the torso ring is therefore the spec.
+	_add("bompaçao limb marks", float(m.size() - 1), 4.0, 0.0)
 
 
 func _rhen() -> void:

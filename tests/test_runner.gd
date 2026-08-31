@@ -712,6 +712,34 @@ func _test_regional_kits() -> void:
 			region_names.has(str(key)),
 			"kit table names a real region, not %s" % key,
 		)
+	## Each strip has three preserved design passes and an explicit selection.
+	## This is data rather than a review-note claim so deleting an iteration or
+	## adding a fifteenth region without doing the work fails immediately.
+	_check(
+		REGIONAL_KITS_SCRIPT.ITERATIONS.size() == region_names.size(),
+		"all fourteen regional kits preserve their design iterations",
+	)
+	for region_name in region_names:
+		var iteration: Dictionary = REGIONAL_KITS_SCRIPT.ITERATIONS.get(
+			str(region_name), {}
+		)
+		var attempts: Array = iteration.get("attempts", [])
+		var selected := int(iteration.get("selected", -1))
+		_check(
+			attempts.size() >= 3 and selected >= 0 and selected < attempts.size(),
+			"%s has at least three attempts and a valid selection" % region_name,
+		)
+		var first: Array = REGIONAL_KITS_SCRIPT.marks_for(str(region_name), "Xérvu", 0)
+		var second: Array = REGIONAL_KITS_SCRIPT.marks_for(str(region_name), "Xérvu", 1)
+		var third: Array = REGIONAL_KITS_SCRIPT.marks_for(str(region_name), "Xérvu", 2)
+		_check(
+			not first.is_empty() and not second.is_empty() and not third.is_empty(),
+			"%s renders all three design attempts" % region_name,
+		)
+		_check(
+			first != second and second != third,
+			"%s's attempts are distinct geometry, not three labels" % region_name,
+		)
 	## The court surface as `match_court_3d.tscn` sets it. Restated here would be
 	## a second source of truth, and the two drifting apart is what put the kit
 	## palette a whole hue away from the floor it was designed against.
