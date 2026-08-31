@@ -84,16 +84,18 @@ states, that is a finding about the published record -- the same class as every
 seam closed this week -- and the answer is to publish the missing quantity, not
 to invent a constant here.
 
-### Open questions for a decision
+### Decided
 
-1. Does the pre-serve phase get flat unconditionally, or does the passer go
-   poised at the toss? (I would say at the toss: it is the first moment the ball
-   can move.)
-2. Does a voli who is *travelling* have a stance at all, or does the gait own the
-   feet entirely until they arrive? The foot-plant machinery already anchors a
-   stance foot, so this is a question about who wins, not about what exists.
-3. Is "poised" the same posture for all six body types, or does Ursi -- "wide on
-   contact, narrow on movement" -- read differently at rest?
+1. **Poised begins at the toss.** Before it the receiving side is flat; the toss
+   is the first moment the ball can move, and it is what a passer actually reacts
+   to.
+2. **A travelling voli has no stance.** The gait owns the feet until they arrive.
+   The foot-plant machinery still anchors a stance foot -- this only settles who
+   wins when both could speak, and it is the gait.
+3. **One posture for all six body types.** Poised is poised; nothing about Ursi's
+   contact width or Simi's touch axes changes what a body does at rest. The body
+   types differ in what they can *do*, which is the correction §2 records, and a
+   per-type resting pose would be that mistake in another form.
 
 ## 2. How a voli dresses
 
@@ -168,19 +170,44 @@ capable of, not because the typology asked for a portrait.
 - The number becoming the only team signal. It is too small to read at playback
   distance and it is the one part of a kit that is per-voli rather than per-team.
 
-### Open questions for a decision
+### Decided
 
-1. Is there an away kit, and if so does it change hue only or cut as well?
-2. Does the kit carry anything besides club identity -- a captain's mark, a
-   libero's contrasting shirt? The libero is a real rule and a real reason for a
-   second shirt, and it is the one case where the *rules* demand the kit differ.
-3. Does the creator let a manager see their voli in club kit before they have a
-   club? Q1 currently shows a voli in something; whose colours are those?
+1. **The away kit is a hue change only.** Same six cuts, same number placement.
+   Nothing about playing away changes what a body is shaped like, so nothing
+   about it should change the tailoring.
+2. **The libero wears the away kit.** The rules demand a contrasting shirt and
+   this already exists, so it costs one rule and no new garment: the libero is
+   the one player on the home side wearing the away hue.
+3. **The manager does not wear a kit at all.** They wear formal dress.
+
+### Two garment classes, which is the finding in that third answer
+
+Q1 shows a voli in club teal before that manager has a club, and the reason is
+not a missing colour -- it is that **a kit was the only clothing that existed**,
+so anyone who needed dressing got dressed as a player. A manager in a strip is a
+category error a viewer reads instantly, and no palette fixes it.
+
+So the system has two classes over the same six cuts:
+
+- **Kit** -- players. Club hue home, away hue for away fixtures and for the
+  libero. Number. The sleeve and shorts already described.
+- **Formal** -- managers. Not a strip, not club-coloured, and not carrying a
+  number. Whatever a person on the bench who is not playing wears.
+
+They share the tailoring problem and nothing else, which is convenient: the six
+cuts are built once for the body plans and both classes hang off them. Avi's
+wing opening is the same opening in a jacket as in a singlet.
+
+What this leaves open is only what formal *is* -- and that is a question about
+who the manager is, which `CHARACTER_CREATION.md` owns, not this document.
 
 ## 3. What this does not decide
 
-Nothing here says how either is built, and neither should start until §1's
-selector and §2's cut question have answers. Both sections name what must not
-happen precisely because the shortcut in each case -- a hand-set pose flag, a
-whole-body tint -- is quicker than the real thing and would be very hard to
-walk back once every body model depends on it.
+Nothing here says how either is built. Both sections name what must not happen
+precisely because the shortcut in each case -- a hand-set pose flag, a whole-body
+tint -- is quicker than the real thing and would be very hard to walk back once
+every body model depends on it.
+
+One thing genuinely remains open, and it is not this document's: what a formal
+outfit *is*. That follows from who the manager is, which `CHARACTER_CREATION.md`
+owns.
