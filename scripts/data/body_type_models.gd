@@ -892,6 +892,16 @@ static var draw_garments: bool = true
 ## does not need a cycle.
 static var body_ink_metres: float = 0.018
 
+## The two garment classes, over the same six cuts.
+##
+## A kit was the only clothing that existed, so anyone who needed dressing got
+## dressed as a player -- which is why the creator showed a manager in club teal
+## before that manager had a club. A manager in a strip is a category error a
+## viewer reads instantly and no palette fixes it. See
+## `docs/design/THE_VOLI_BODY.md` §2.
+const GARMENT_KIT := "kit"
+const GARMENT_FORMAL := "formal"
+
 
 ## The full description of one player's body: meshes, attachment points,
 ## colours and cosmetic parts.
@@ -956,7 +966,13 @@ static func silhouette(
 		_add_nose(featured), resolved,
 		player_id, chosen_marking(resolved, player_id, choices),
 	)
-	return _add_neck(_add_garments(marked) if draw_garments else marked)
+	## Which of the two garment classes this body is dressed in. Rides `choices`
+	## like every other authored axis, so a manager is dressed by the same call a
+	## player is and nothing downstream has to know which it got.
+	var garment := str(choices.get("garment", GARMENT_KIT))
+	return _add_neck(
+		_add_garments(marked, garment) if draw_garments else marked
+	)
 
 
 ## The three chosen-or-hashed axes, each written once so the picker and the rig
@@ -1751,7 +1767,9 @@ static func _clearing_radius(limb_radius: float, narrow: float) -> float:
 	)
 
 
-static func _add_garments(spec: Dictionary) -> Dictionary:
+static func _add_garments(
+	spec: Dictionary, garment: String = GARMENT_KIT
+) -> Dictionary:
 	var arm: Dictionary = spec.get("arm", {})
 	var leg: Dictionary = spec.get("leg", {})
 	var arm_radius := float(arm.get("top_radius", 0.065))
@@ -1759,6 +1777,16 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 	var leg_radius := float(leg.get("top_radius", 0.105))
 	var leg_length := float(leg.get("height", 0.66))
 	var extras: Array = spec.get("extras", [])
+	## **The same cuts, worn longer.** A formal shirt is the singlet's sleeve
+	## carried to the elbow and trousers are the shorts leg carried past the knee
+	## -- so the tailoring problem is solved once and both classes hang off it,
+	## which is the whole reason the two were separated rather than one being
+	## special-cased. Avi's wing opening is the same opening in a jacket.
+	var formal := garment == GARMENT_FORMAL
+	var sleeve_share := 0.62 if formal else 0.24
+	var leg_share := 0.92 if formal else 0.39
+	var shirt_colour := "formal" if formal else "kit"
+	var trouser_colour := "formal_dark" if formal else "shorts"
 	for side in ["Left", "Right"]:
 		## A sleeve over the top of the upper arm, flaring very slightly so its
 		## hem stands off the limb instead of shrink-wrapping it. Proud of the
@@ -1770,9 +1798,11 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 			"shape": "cylinder",
 			"top_radius": sleeve_radius * 1.30,
 			"bottom_radius": sleeve_radius * 1.34,
-			"height": arm_length * 0.24,
-			"position": Vector3(0.0, -arm_length * 0.10, 0.0),
-			"color": "kit",
+			"height": arm_length * sleeve_share,
+			"position": Vector3(
+				0.0, -arm_length * (0.10 + (sleeve_share - 0.24) * 0.5), 0.0
+			),
+			"color": shirt_colour,
 		})
 		## Longer than the first draft, and the reason is a measurement rather
 		## than taste. The hip sits at y 0.769 and the knee at 0.413, so the cuff
@@ -1789,9 +1819,11 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 			## tights: a leg opening stands off the thigh.
 			"top_radius": shorts_radius * 1.28,
 			"bottom_radius": shorts_radius * 1.40,
-			"height": leg_length * 0.39,
-			"position": Vector3(0.0, -leg_length * 0.18, 0.0),
-			"color": "shorts",
+			"height": leg_length * leg_share,
+			"position": Vector3(
+				0.0, -leg_length * (0.18 + (leg_share - 0.39) * 0.5), 0.0
+			),
+			"color": trouser_colour,
 		})
 		## **No sock top.** It was built, measured and removed rather than kept.
 		##

@@ -139,6 +139,9 @@ var expression: String = FaceExpressionsScript.NEUTRAL
 ## Produce, colourway and coat, when somebody chose them rather than the id
 ## deciding. Empty means the hash, which is every generated voli.
 var appearance: Dictionary = {}
+## Kit or formal -- see `BodyTypeModels.GARMENT_KIT`.
+var garment: String = BodyTypeModelsScript.GARMENT_KIT
+var is_libero: bool = false
 ## Where the actor is currently facing, kept between frames so a change of
 ## heading can be turned into rather than snapped to.
 var facing_yaw: float = 0.0
@@ -287,6 +290,15 @@ const _PLANT_RIGHT: int = 1
 ## `_apply_physical_profile` for why these are under 1.0 and why they differ.
 const JOINT_ARM: float = 0.94
 const JOINT_LEG: float = 0.86
+
+## What a manager wears, and the one colour on the court chosen to be nobody's.
+##
+## A slate the regional kits do not use: `RegionalKits` spends its range on
+## saturated club hues, so a low-chroma cool grey reads as "not a strip" against
+## every one of them without having to be checked against each. Trousers take the
+## same colour darkened, the way the shorts take the shirt's -- one derivation,
+## because two would be two things that can disagree.
+const FORMAL_COLOR := Color("3c4250")
 
 ## How much darker the shorts are than the shirt.
 ##
@@ -456,6 +468,19 @@ func configure(
 	## exactly that. The alternative was a sixth positional argument on a call
 	## made from twenty places, nineteen of which have no region to pass.
 	club_region = str(physical_profile.get("club_region", ""))
+	## **Which garment class this voli wears.** A kit was the only clothing that
+	## existed, so a manager -- who is attached to a club without being one of its
+	## players -- got dressed as one. Defaulted to kit so every roster caller is
+	## unchanged; only somebody who is not playing has to say so.
+	garment = BodyTypeModelsScript.GARMENT_FORMAL \
+		if str(physical_profile.get("garment", "")) \
+			== BodyTypeModelsScript.GARMENT_FORMAL \
+		else BodyTypeModelsScript.GARMENT_KIT
+	## The libero wears a contrasting shirt, which the rules demand and the away
+	## strip already is -- one rule, no second garment. Read from the role rather
+	## than from the shirt number, because the number is a rotation fact and the
+	## role is the one the kit follows.
+	is_libero = str(physical_profile.get("position_role", "")) == "Libero"
 	## Who last won the Sixnet, for the one region whose strip is a pointer
 	## rather than a pattern. Rides the same dictionary as `club_region` and
 	## for the same reason: it is something the view needs in order to draw
@@ -726,6 +751,19 @@ func apply_ui_palette(light_mode: bool) -> void:
 	if not club_region.is_empty():
 		team_color = RegionalKitsScript.kit_for(club_region) if is_home_team \
 			else RegionalKitsScript.away_kit()
+	## The libero, in the one hue on the court that is already guaranteed to
+	## contrast with the home strip. The rules want a shirt a referee can pick
+	## out; the away kit is that shirt and it exists, so this costs one line
+	## rather than a seventh cut.
+	if is_libero and is_home_team:
+		team_color = RegionalKitsScript.away_kit()
+	## **A manager is not wearing a strip.** Formal dress is a neutral that is
+	## deliberately not the club's hue: a manager is attached to a club without
+	## being one of its players, and dressing them in its colour is the category
+	## error a viewer reads instantly. The club appears on them as a mark, which
+	## `_build_kit_marks` still places, rather than as the garment.
+	if garment == BodyTypeModelsScript.GARMENT_FORMAL:
+		team_color = FORMAL_COLOR
 	var accent_color := UIPalette.color(
 		&"accent" if is_home_team else &"ink", light_mode
 	)
@@ -797,6 +835,15 @@ func apply_ui_palette(light_mode: bool) -> void:
 			"shorts":
 				_apply_material_color(
 					cosmetic, shorts_colour(team_color), part_alpha
+				)
+			## A formal shirt and its trousers. Two keys rather than reusing
+			## `kit`/`shorts` because those derive from the club's strip, and the
+			## whole point of formal dress is that it does not.
+			"formal":
+				_apply_material_color(cosmetic, FORMAL_COLOR, part_alpha)
+			"formal_dark":
+				_apply_material_color(
+					cosmetic, FORMAL_COLOR.darkened(0.34), part_alpha
 				)
 			"trim":
 				_apply_material_color(cosmetic, trim_colour(), part_alpha)
@@ -3594,7 +3641,9 @@ func _ensure_node_bindings() -> void:
 ## an aubergine without a branch anywhere in the animation code.
 func _build_silhouette() -> void:
 	_ensure_node_bindings()
-	silhouette = BodyTypeModelsScript.silhouette(body_type, player_id, appearance)
+	var choices := appearance.duplicate()
+	choices["garment"] = garment
+	silhouette = BodyTypeModelsScript.silhouette(body_type, player_id, choices)
 	produce = str(silhouette.get("produce", ""))
 	shoulder_offset = silhouette.get("shoulder", Vector2(0.40, 1.52))
 	hip_offset = silhouette.get("hip", Vector2(0.16, 0.48))

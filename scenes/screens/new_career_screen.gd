@@ -291,8 +291,11 @@ func _build_voli_choices() -> void:
 		_inline_label("Arms"),
 		_slider("arm_ratio", ManagerProfile.ARM_RATIO.x, ManagerProfile.ARM_RATIO.y, 0.005),
 	], false)
+	## Paired with legs for the same reason height is paired with arms: the fold.
 	_row("Legs", [
 		_slider("leg_ratio", ManagerProfile.LEG_RATIO.x, ManagerProfile.LEG_RATIO.y, 0.005),
+		_inline_label("Weight"),
+		_slider("mass_kg", ManagerProfile.MASS_KG.x, ManagerProfile.MASS_KG.y, 1.0),
 	], false)
 
 	_hand_row = HBoxContainer.new()
@@ -384,6 +387,11 @@ func _slider_caption(key: String, value: float) -> String:
 	match key:
 		"height_cm":
 			return "%d cm" % roundi(value)
+		## A weight, so it prints as one. It is also the only slider here that is
+		## not purely a look: mass reaches locomotion speed, floor recovery and
+		## the power term on a swing.
+		"mass_kg":
+			return "%d kg" % roundi(value)
 		"arm_ratio":
 			return "%d cm span" % roundi(float(appearance.height_cm) * value)
 		_:

@@ -206,6 +206,21 @@ const DEFAULT_ARM_RATIO: float = 1.0246
 const LEG_RATIO := Vector2(0.86, 1.16)
 const DEFAULT_LEG_RATIO: float = 1.0
 
+## What a voli weighs, and the range over which weighing it changes anything.
+##
+## **Derived from the models that read `mass_kg`, not chosen.** Three of them do,
+## and each saturates at a different point: `LocomotionModel.mass_factor` lerps
+## speed 1.06 to 0.90 across 55-115 kg, the recovery term varies over 82 +/- 27,
+## and the power bonus over 58 to 130. Below 55 and above 130 every one of them
+## is clamped, so a slider that went further would have ends that look like
+## choices and are not -- which is the failure `FAILURE_MODES.md` §0 opens with.
+##
+## The default is 82, which is `RECOVERY_REFERENCE_MASS_KG` and the power term's
+## own origin, so a manager who never touches the slider sits where the models
+## treat as neutral rather than somewhere arbitrary.
+const MASS_KG := Vector2(55.0, 130.0)
+const DEFAULT_MASS_KG: float = 82.0
+
 const DEFAULT_APPEARANCE := {
 	"body_type": "Vegi",
 	"produce": "Tomato",
@@ -213,6 +228,7 @@ const DEFAULT_APPEARANCE := {
 	"marking": "none",
 	"expression": "neutral",
 	"height_cm": DEFAULT_HEIGHT_CM,
+	"mass_kg": DEFAULT_MASS_KG,
 	"arm_ratio": DEFAULT_ARM_RATIO,
 	"leg_ratio": DEFAULT_LEG_RATIO,
 	"hand": "right",
@@ -246,6 +262,9 @@ static func sanitise_appearance(raw: Dictionary) -> Dictionary:
 	out["height_cm"] = clampf(
 		float(raw.get("height_cm", DEFAULT_HEIGHT_CM)), HEIGHT_CM.x, HEIGHT_CM.y
 	)
+	out["mass_kg"] = clampf(
+		float(raw.get("mass_kg", DEFAULT_MASS_KG)), MASS_KG.x, MASS_KG.y
+	)
 	out["arm_ratio"] = clampf(
 		float(raw.get("arm_ratio", DEFAULT_ARM_RATIO)), ARM_RATIO.x, ARM_RATIO.y
 	)
@@ -269,6 +288,11 @@ static func appearance_profile(appearance: Dictionary) -> Dictionary:
 	return {
 		"body_type": str(body.body_type),
 		"height_cm": height,
+		## Real gameplay, not a look: mass reaches locomotion speed, the recovery
+		## cost of a floor defence and the power term on a swing. It is passed
+		## here for the same reason `height_cm` is -- the rig and the simulator
+		## read the same body.
+		"mass_kg": float(body.mass_kg),
 		"wingspan_cm": height * float(body.arm_ratio),
 		## `_apply_physical_profile` compares this against `height_m * 0.43`, so
 		## multiplying that same expectation by the ratio is what makes the
@@ -277,6 +301,13 @@ static func appearance_profile(appearance: Dictionary) -> Dictionary:
 			height / 100.0 * 0.43 * float(body.leg_ratio), 0.55, 1.15
 		),
 		"expression": str(body.expression),
+		## **A manager does not wear a kit, and this is the one place that can
+		## say so once.** Every caller that dresses a manager comes through here,
+		## so stating it at the call sites would be three copies of a rule with
+		## nothing keeping them in step -- and the one that got forgotten is
+		## exactly how the creator came to show a manager in club teal before
+		## that manager had a club. See `docs/design/THE_VOLI_BODY.md` §2.
+		"garment": BodyTypes.GARMENT_FORMAL,
 		"appearance": {
 			"produce": str(body.produce),
 			"palette_index": int(body.palette_index),

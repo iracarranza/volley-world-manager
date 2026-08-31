@@ -198,8 +198,23 @@ They share the tailoring problem and nothing else, which is convenient: the six
 cuts are built once for the body plans and both classes hang off them. Avi's
 wing opening is the same opening in a jacket as in a singlet.
 
-What this leaves open is only what formal *is* -- and that is a question about
-who the manager is, which `CHARACTER_CREATION.md` owns, not this document.
+### What formal is
+
+A **collared shirt and trousers** over the same six cuts, in a neutral that is
+not the club's hue, carrying no number. The club is present as a small mark
+rather than as the garment's colour.
+
+That last clause is the whole point and is worth stating separately, because it
+is the rule the kit exists to establish read from the other side. A player says
+which club they play for by wearing its colour; a manager is *attached* to a club
+without being one of its eleven, so the club appears on them as a badge would --
+present, small, and not the thing you see first. A manager in club teal was the
+failure this section opened with, and dressing them in a neutral is not a palette
+choice, it is what keeps the two roles legible at playback distance.
+
+Nothing here needs a second tailoring pass: a collar is a ring at the neck
+opening the six cuts already have, and trousers are the shorts cut continued past
+the knee. Avi's wing opening is the same opening in a shirt as in a singlet.
 
 ## 3. What this does not decide
 
@@ -208,6 +223,6 @@ precisely because the shortcut in each case -- a hand-set pose flag, a whole-bod
 tint -- is quicker than the real thing and would be very hard to walk back once
 every body model depends on it.
 
-One thing genuinely remains open, and it is not this document's: what a formal
-outfit *is*. That follows from who the manager is, which `CHARACTER_CREATION.md`
-owns.
+What a formal outfit *is* was the last thing open here and is now answered in §2.
+What it means for who the manager is -- whether they choose it, whether it says
+anything about them -- still belongs to `CHARACTER_CREATION.md`.

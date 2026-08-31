@@ -59,11 +59,19 @@ func _ready() -> void:
 		## A club region so the kit is a real strip rather than the palette's
 		## stand-in teal -- the sleeve is the subject and it has to be the sleeve
 		## a viewer will actually see.
-		actor.configure(5 + index, true, types[index], "Right", {
+		## `--garment formal` dresses the whole sheet as managers, and
+		## `--libero` as liberos, so the three classes are one harness.
+		var profile := {
 			"height_cm": 186.0, "mass_kg": 82.0, "wingspan_cm": 191.0,
 			"body_type": types[index], "club_region": "Landavol",
 			"standing_reach_meters": 2.48, "jumping_reach_meters": 3.20,
-		})
+		}
+		var wear := _argument("--garment")
+		if not wear.is_empty():
+			profile["garment"] = wear
+		if "--libero" in OS.get_cmdline_user_args():
+			profile["position_role"] = "Libero"
+		actor.configure(5 + index, true, types[index], "Right", profile)
 		## Standing, not digging: a bent arm hides the cuff behind the forearm.
 		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 		actor.rotation_degrees = Vector3(0.0, 180.0, 0.0)
