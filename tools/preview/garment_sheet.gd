@@ -41,8 +41,14 @@ func _ready() -> void:
 		types.append(only)
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 6.4 if only.is_empty() else 2.4
-	camera.position = Vector3(0.0, 2.6 if only.is_empty() else 1.30, 6.0)
+	## `--size` and `--eye` frame a detail: the feet want a different window from
+	## the shoulders and neither wants the whole sheet.
+	var framed_size := _argument("--size")
+	var framed_eye := _argument("--eye")
+	camera.size = float(framed_size) if not framed_size.is_empty() \
+		else (6.4 if only.is_empty() else 2.4)
+	camera.position = Vector3(0.0, float(framed_eye) if not framed_eye.is_empty() \
+		else (2.6 if only.is_empty() else 1.30), 6.0)
 	## NOTE `look_at` needs the node in the tree; adding after it silently no-ops
 	add_child(camera)
 	camera.look_at(Vector3(0.0, camera.position.y, 0.0))
@@ -74,7 +80,11 @@ func _ready() -> void:
 		actor.configure(5 + index, true, types[index], "Right", profile)
 		## Standing, not digging: a bent arm hides the cuff behind the forearm.
 		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
-		actor.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+		## `--side` turns the body ninety degrees, which is the only view that can
+		## show whether a foot is pitched forward or back.
+		actor.rotation_degrees = Vector3(
+			0.0, 90.0 if "--side" in OS.get_cmdline_user_args() else 180.0, 0.0
+		)
 
 
 var only_one: bool = false

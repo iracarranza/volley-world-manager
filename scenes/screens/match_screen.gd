@@ -5,6 +5,8 @@ signal close_requested
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
+## NOTE only for `TOSS_START`, which is where the ball first becomes reactable
+const ServeBiomechanicsScript := preload("res://scripts/data/serve_biomechanics.gd")
 
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
 @onready var broadcast_overlay: BroadcastOverlay = %BroadcastOverlay
@@ -814,7 +816,16 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 ## also answers the other half of the report from the opposite direction: the
 ## *serving* team is not that side, so their back row stands and watches the
 ## serve go over instead of crouching for a ball they have no part in.
-func _apply_ready_stances(event: RallyEvent, next_contact: RallyEvent) -> void:
+func _apply_ready_stances(
+	event: RallyEvent, next_contact: RallyEvent, progress: float = 1.0
+) -> void:
+	## Before the server tosses, the ball cannot move and nobody has anything to
+	## be ready for. `TOSS_START` is the serve's own published phase for that
+	## moment, so this reads a boundary the serve already draws rather than
+	## adding one -- see `ReadyStance.choose`.
+	var ball_is_live := true
+	if event != null and int(event.event_type) == RallyEventModel.EventType.SERVE:
+		ball_is_live = progress >= ServeBiomechanicsScript.TOSS_START
 	## The contact that decides who is about to touch the ball. `next_contact` is
 	## null on the rally's last event, and then the current one is the truthful
 	## answer -- the ball is still on the side that just played it.
@@ -829,6 +840,7 @@ func _apply_ready_stances(event: RallyEvent, next_contact: RallyEvent) -> void:
 		match_court_3d.set_player_stance(player_id, ReadyStance.choose(
 			match_court_3d.at_the_net(player_id),
 			match_court_3d.home_player_ids.has(player_id) == playing_side_is_home,
+			ball_is_live,
 		))
 
 
@@ -840,7 +852,7 @@ func _apply_contact_poses(
 	window_seconds: float = 1.0,
 ) -> void:
 	match_court_3d.reset_player_poses()
-	_apply_ready_stances(event, next_contact)
+	_apply_ready_stances(event, next_contact, progress)
 	var event_actor := int(event.actor_id)
 	var event_peak := _event_elevation(event, event_actor)
 	var event_direction := event.end_position - event.start_position
