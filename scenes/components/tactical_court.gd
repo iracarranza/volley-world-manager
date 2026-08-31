@@ -907,6 +907,25 @@ func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionar
 					base, action_target, event_type, slot_number,
 					true, event_side_opponent,
 				)
+	## **The resolver's own answer beats this file's guess.**
+	##
+	## Everything above filled `targets` from `_support_target_for_side`, a table
+	## of lerps that invents where a voli walks when nothing published it -- 35.6%
+	## of voli-legs at the last count. `*_phase_positions` is published on every
+	## event by `_add_event` and says where that side actually stood, which is a
+	## fact the resolver owns; the real phase maps below say where it walked. So
+	## the order is: invented guess, overwritten by the held fact, overwritten by
+	## the stated journey. A voli the simulation never moved is now drawn where
+	## the simulation left them instead of drifting toward the action.
+	for side_key in ["home_phase_positions", "opponent_phase_positions"]:
+		var held: Dictionary = event.metadata.get(side_key, {})
+		for raw_player_id in held:
+			var player_id := int(raw_player_id)
+			if player_id == movement_player_id:
+				continue
+			if players_by_id.has(player_id) \
+					or opponent_players_by_id.has(player_id):
+				targets[player_id] = Vector2(held[raw_player_id])
 	var home_phase_targets: Dictionary = event.metadata.get("home_phase_targets", {})
 	for raw_player_id in home_phase_targets:
 		var player_id := int(raw_player_id)

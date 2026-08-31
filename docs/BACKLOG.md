@@ -488,7 +488,7 @@ Ordered roughly by how much each one changes what a viewer believes.
 	not applied to placement.
 
 	**Measured first, then built from the same posed rig.**
-	`run_ball_contact_presentation_probe.gd` poses a real actor in a real planted dig and
+	`run_platform_offset_probe.gd` poses a real actor in a real planted dig and
 	reads where the forearms land, rather than recomputing the pose's three
 	nested bases out of band. Across the six modelled silhouettes at 1.72, 1.88
 	and 2.06 m the platform sits **0.82 to 1.03 m ahead of the body origin, mean
