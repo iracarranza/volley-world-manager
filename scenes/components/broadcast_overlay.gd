@@ -40,6 +40,13 @@ const ANNOUNCER_SCENE := preload("res://scenes/components/player_actor_3d.tscn")
 @onready var camera_status_label: Label = %CameraStatusLabel
 @onready var close_button: Button = %CloseButton
 
+## The furniture the wide layout needs, in pixels, summed from what it asks for
+## rather than picked: the score bug's 430 and the commentary panel's 390, plus
+## the 24-pixel margin either side and between them. Below this the two overlap,
+## and the announcer portraits either side of the bug are the first thing to eat
+## the picture -- reported as the announcers covering the whole viewable screen.
+const WIDE_LAYOUT_MINIMUM_PX: float = 430.0 + 390.0 + 24.0 * 3.0
+
 var compact := false
 var live_rally := false
 var replay_mode := false
@@ -56,6 +63,8 @@ func _ready() -> void:
 	})
 	set_commentary_placement(commentary_placement)
 	set_live_rally(false)
+	resized.connect(_on_resized)
+	_on_resized()
 
 
 func configure_score(home: String, away: String, home_points: int, away_points: int,
@@ -68,6 +77,21 @@ func configure_score(home: String, away: String, home_points: int, away_points: 
 	away_sets.text = "SETS %d" % away_set_count
 	home_serve.visible = serving_home
 	away_serve.visible = not serving_home
+
+
+## **Compact when there is not room to be wide.**
+##
+## `set_compact` existed and was called from nowhere, so the wide layout ran at
+## every size -- including hosts far narrower than the 892 px it needs, where the
+## bug and the commentary panel overlap and the two announcer portraits cover the
+## court they are supposed to be commenting on.
+##
+## Derived from the host's own width rather than set by whoever embeds this, so a
+## new caller cannot forget it and an existing one does not have to be found.
+func _on_resized() -> void:
+	var wants_compact := size.x < WIDE_LAYOUT_MINIMUM_PX
+	if wants_compact != compact:
+		set_compact(wants_compact)
 
 
 func set_compact(value: bool) -> void:
