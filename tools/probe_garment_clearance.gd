@@ -133,9 +133,17 @@ func _collar(actor: Node3D, body_type: String) -> void:
 	var torso := actor.get_node_or_null("BodyPivot/Torso") as MeshInstance3D
 	if collar == null or torso == null or collar.mesh == null or torso.mesh == null:
 		return
-	var torso_top := _world_top(torso)
+	## In the pivot both hang off, not in the world.
+	##
+	## The world-space reading was a third wrong instrument. `body_pivot` carries
+	## the pose's own pitch and yaw, and under a rotation the highest *AABB
+	## corner* of a wide torso and of a narrow ring are different physical points
+	## -- so the comparison drifted with the pose rather than measuring the two
+	## surfaces. A rigid rotation applied to both cannot create or remove a
+	## coincidence, so the pivot's frame is where the question is well posed.
 	var torso_hull: float = ACTOR_SCRIPT._ink_weight_for(torso)
-	var collar_top := _world_top(collar)
+	var torso_top := _local_top(torso)
+	var collar_top := _local_top(collar)
 	var clear := collar_top - (torso_top + torso_hull)
 	print("%-8s %-16s %8.4f %8.3f %8.4f %9.4f %9.4f   %s" % [
 		body_type, "Collar/top", torso_top, torso_hull, torso_top + torso_hull,
@@ -143,16 +151,11 @@ func _collar(actor: Node3D, body_type: String) -> void:
 	])
 
 
-## The highest point this mesh reaches on the court, same units as the hull.
-func _world_top(mesh_instance: MeshInstance3D) -> float:
+## The highest point this mesh reaches in its own parent's frame.
+func _local_top(mesh_instance: MeshInstance3D) -> float:
 	var aabb := mesh_instance.mesh.get_aabb()
-	var highest := -INF
-	for index in 8:
-		highest = maxf(
-			highest,
-			(mesh_instance.global_transform * aabb.get_endpoint(index)).y,
-		)
-	return highest
+	return mesh_instance.position.y \
+		+ (aabb.position.y + aabb.size.y) * mesh_instance.scale.y
 
 
 func _verdict(clear: float) -> String:

@@ -77,6 +77,70 @@ call for different fixes, so the first table would have bought the wrong one.
 The collar figures are unaffected by either fault -- that comparison is a height
 against a height -- which is why they are the same in all three readings.
 
+## What was done
+
+`BodyTypeModels._clearing_radius` sizes each shell so its narrow end clears the
+limb by one line width, and the ink weight moved to `body_type_models.gd` as
+`body_ink_metres` so the file that authors garments owns the number they have to
+clear. `player_actor_3d.gd` reads it rather than keeping a second copy.
+
+The standoff is one line width because that is the only non-arbitrary distance
+available: a garment sitting exactly `body_ink_metres` off the limb sits *on* the
+outline, which is the coincidence being fixed. The base radius is lifted and both
+of the shell's own multipliers are then applied to it, so the flare that makes a
+cuff read as a cuff is preserved rather than pinched.
+
+The collar is different and is seated in the rig, by `_seat_collar`, for the
+reason the shorts are: `_apply_physical_profile` has just scaled the torso by
+mass girth and squeeze, and the collar hangs off `BodyPivot` so it inherits
+none of that. Two functions both placing it is the correct-then-clobbered shape
+this file has been bitten by repeatedly, so the one that knows the final torso
+owns it.
+
+| body | sleeve | shorts | collar |
+|---|---|---|---|
+| Vegi | −0.0016 → **+0.0178** | +0.0056 → **+0.0178** | −0.0639 → **+0.0180** |
+| Feli | −0.0016 → **+0.0163** | +0.0067 → **+0.0163** | −0.0202 → **+0.0180** |
+| Avi | −0.0050 → **+0.0131** | +0.0014 → **+0.0131** | −0.0200 → **+0.0180** |
+| Cani | +0.0005 → **+0.0156** | +0.0085 → **+0.0156** | −0.0311 → **+0.0180** |
+| Ursi | +0.0064 → **+0.0170** | +0.0144 → **+0.0170** | −0.0413 → **+0.0180** |
+| Simi | +0.0004 → **+0.0225** | +0.0097 → **+0.0225** | −0.0331 → **+0.0180** |
+
+Every collar lands on exactly 0.0180, which is the standoff and not a
+coincidence: `_seat_collar`'s floor binds on all six, so each one is placed at
+precisely one line width and none of them was already clear.
+
+### What it costs, which a table cannot say
+
+`tools/garment_sheet.tscn` renders the six bodies in kit, and `--only <type>`
+frames one. Side by side on Feli: the pale streak running down the inside of each
+sleeve is gone, and so is the dark hairline under the collar -- both were the
+outline showing through. The cost is that the sleeve reads rounder, closer to a
+puffed cap than to a singlet's shoulder. That is the trade the fix is, taken
+deliberately.
+
+**One thing the render found that this pass did not cause.** Pale wedges of the
+backdrop show between the shirt's hem and the tops of the shorts legs, on both
+hips, in the *before* image as well as the after. Logged separately rather than
+folded in here, because a defect that survives a change unchanged is not that
+change's.
+
+## A third wrong instrument, in the probe rather than the code
+
+The collar was still reading negative on Vegi and Ursi after `_seat_collar` was
+in. It was the probe: it compared the highest *world-space AABB corner* of each
+mesh, and `body_pivot` carries the pose's pitch and yaw, so under a rotation the
+highest corner of a wide torso and of a narrow ring are different physical points
+and the comparison drifted with the pose. A rigid rotation applied to both cannot
+create or remove a coincidence, so the pivot's own frame is where the question is
+well posed. Measured there, all six land on the standoff.
+
+That is three instruments wrong on one finding -- the AABB of a flared cylinder,
+the whole-mesh maximum of a lathe, and now a world-space top under a rotation --
+and each one was found by a number that did not make sense rather than by
+inspection. The pattern is worth naming: every one of them was a *coordinate
+frame* or an *extent* question, and every one of them read plausibly.
+
 ## What a fix has to not do
 
 The obvious move is to widen the multipliers until the table goes positive, and

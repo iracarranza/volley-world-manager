@@ -881,6 +881,17 @@ static var type_expression: float = 0.82
 ## argued about. See `_add_garments`.
 static var draw_garments: bool = true
 
+## How far a body part's outline is grown outside it, in metres.
+##
+## **Owned here rather than in `player_actor_3d.gd`, which is where it used to
+## live and where it is still applied.** The rig grows the hull; the body models
+## have to clear it, because a garment authored without knowing the outline's
+## weight is a garment the outline renders through -- measured on every body type
+## and every sleeve in `docs/review/GARMENT_INK_CLEARANCE.md`. The model is the
+## lower layer and the rig already depends on it, so this is the direction that
+## does not need a cycle.
+static var body_ink_metres: float = 0.018
+
 
 ## The full description of one player's body: meshes, attachment points,
 ## colours and cosmetic parts.
@@ -1714,6 +1725,32 @@ static func _add_markings(
 ## *side* of a garment rather than out of the bottom of it. A short kit-coloured
 ## sleeve around the top of each thigh is what a pair of shorts actually is, and
 ## the corner stops being a place a leg comes out of.
+## The radius to build a garment from, so its narrow end clears what it covers.
+##
+## `narrow` is the multiplier the garment's tightest end already uses. Returning
+## a *base* rather than a finished radius is what keeps the flare: the caller
+## applies both of its own multipliers to this, so a shell that was 1.30 at the
+## cuff and 1.34 at the hem stays 1.30 and 1.34 of something slightly larger,
+## rather than being lifted at one end and pinched at the other.
+##
+## **The standoff is one line width, and that is a derivation rather than a
+## taste.** A garment sitting exactly `body_ink_metres` off the limb sits *on*
+## the limb's outline -- two coincident parallel surfaces with no depth bias, a
+## per-pixel coin flip, and the dash that prompted this. The only non-arbitrary
+## distance available is the thickness of the line being cleared, so the garment
+## stands one line clear of it.
+##
+## The `maxf` does not currently bind on any body, and that is worth stating
+## rather than implying otherwise: it lifts whenever the limb is thinner than
+## `2 * body_ink_metres / (narrow - 1)`, which is 0.12 m for a sleeve, and the
+## widest arm in the roster is Ursi's at 0.081. Every body grows. It is kept
+## because it is the correct floor, not because it is currently doing anything.
+static func _clearing_radius(limb_radius: float, narrow: float) -> float:
+	return maxf(
+		limb_radius, (limb_radius + body_ink_metres * 2.0) / maxf(narrow, 0.01)
+	)
+
+
 static func _add_garments(spec: Dictionary) -> Dictionary:
 	var arm: Dictionary = spec.get("arm", {})
 	var leg: Dictionary = spec.get("leg", {})
@@ -1727,10 +1764,12 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 		## hem stands off the limb instead of shrink-wrapping it. Proud of the
 		## arm by a clear margin -- a garment that matches the body's radius is
 		## a paint job again.
+		var sleeve_radius := _clearing_radius(arm_radius, 1.30)
 		extras.append({
 			"name": "Sleeve%s" % side, "parent": "BodyPivot/%sArm" % side,
 			"shape": "cylinder",
-			"top_radius": arm_radius * 1.30, "bottom_radius": arm_radius * 1.34,
+			"top_radius": sleeve_radius * 1.30,
+			"bottom_radius": sleeve_radius * 1.34,
 			"height": arm_length * 0.24,
 			"position": Vector3(0.0, -arm_length * 0.10, 0.0),
 			"color": "kit",
@@ -1742,12 +1781,14 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 		## were nearly the same line, so there was no garment to see. Extending
 		## the cuff toward the knee is what buys visible shorts; widening it would
 		## only have made a wider invisible thing.
+		var shorts_radius := _clearing_radius(leg_radius, 1.28)
 		extras.append({
 			"name": "ShortsLeg%s" % side, "parent": "BodyPivot/%sLeg" % side,
 			"shape": "cylinder",
 			## Flared at the hem, which is the difference between shorts and
 			## tights: a leg opening stands off the thigh.
-			"top_radius": leg_radius * 1.28, "bottom_radius": leg_radius * 1.40,
+			"top_radius": shorts_radius * 1.28,
+			"bottom_radius": shorts_radius * 1.40,
 			"height": leg_length * 0.39,
 			"position": Vector3(0.0, -leg_length * 0.18, 0.0),
 			"color": "shorts",
@@ -1768,6 +1809,8 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 	## after this, and passes through the ring rather than being covered by it.
 	var torso: Dictionary = spec.get("torso", {})
 	var neck_radius := float(Dictionary(spec.get("head", {})).get("radius", 0.18))
+	## NOTE the height is re-seated by `_apply_physical_profile` once the torso has
+	## NOTE its final scale; this is the authored placement, not the drawn one
 	var torso_top := float(spec.get("torso_y", 1.1)) \
 		+ float(torso.get("height", 0.9)) * 0.5
 	extras.append({

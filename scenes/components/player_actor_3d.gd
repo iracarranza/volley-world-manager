@@ -3484,6 +3484,7 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	for part in [torso, head]:
 		part.position.y = hip_y + (part.position.y - hip_offset.y) * squeeze
 	torso.scale = Vector3(mass_girth, squeeze, mass_girth)
+	_seat_collar()
 	for arm in [left_arm, right_arm]:
 		arm.scale = Vector3(limb_girth, 1.0, limb_girth)
 		arm.position.y = hip_y + (arm.position.y - hip_offset.y) * squeeze
@@ -3748,7 +3749,11 @@ func _paint_joint(bone: Node, color: Color) -> void:
 ## `static var` so the two candidates -- drop the die cut, or thicken the line so
 ## it survives the quantiser -- can be rendered against each other rather than
 ## argued about.
-static var ink_metres: float = 0.018
+## NOTE the body weight lives in body_type_models.gd because the garments have to
+## NOTE clear it -- GARMENT_INK_CLEARANCE.md. This is the same number, read.
+static var ink_metres: float:
+	get: return BodyTypeModelsScript.body_ink_metres
+	set(value): BodyTypeModelsScript.body_ink_metres = value
 static var crown_ink_metres: float = 0.030
 const INK_COLOR := Color(0.06, 0.07, 0.10)
 ## Everything else is a cosmetic and takes the heavier line. Named as the body
@@ -3815,6 +3820,42 @@ func _ink_node(node: Node) -> void:
 		heavy = str(mesh_instance.get_meta("ink")) != "body"
 	material.grow_amount = crown_ink_metres if heavy else ink_metres
 	twin.material_override = material
+
+
+## Put the collar on top of the shirt the rig actually drew.
+##
+## `_add_garments` places it from `torso_y + torso.height * 0.5`, which describes
+## a nominal capsule. Two things then move underneath it: a Vegi's torso is a
+## lathed produce whose mesh overshoots that height, and `_apply_physical_profile`
+## has just scaled the torso by mass girth and squeeze, which the collar does not
+## inherit because it hangs off `BodyPivot` rather than off the torso.
+##
+## Measured before this existed: the collar's top sat 20 mm inside the drawn
+## torso on Feli and 64 mm inside on Vegi, well below where that torso's 0.018 m
+## outline reaches -- the neckline dashing in
+## `docs/review/GARMENT_INK_CLEARANCE.md`.
+##
+## Owned here for the reason the shorts are: the function that knows the final
+## torso is the one that may place things against it, and two functions both
+## placing the collar is the correct-then-clobbered shape this file has been
+## bitten by repeatedly.
+func _seat_collar() -> void:
+	if torso == null or torso.mesh == null:
+		return
+	var collar := body_pivot.get_node_or_null("Collar") as MeshInstance3D
+	if collar == null or collar.mesh == null:
+		return
+	var torso_bounds := torso.mesh.get_aabb()
+	var torso_top := torso.position.y \
+		+ (torso_bounds.position.y + torso_bounds.size.y) * torso.scale.y
+	var collar_bounds := collar.mesh.get_aabb()
+	var above_origin := collar_bounds.position.y + collar_bounds.size.y
+	## One line width clear of the torso's outline, the same standoff and the
+	## same hull `BodyTypeModels._clearing_radius` sizes the sleeves against.
+	collar.position.y = maxf(
+		collar.position.y,
+		torso_top + BodyTypeModelsScript.body_ink_metres * 2.0 - above_origin,
+	)
 
 
 ## A ball at a joint, so two segments read as one limb bending.
