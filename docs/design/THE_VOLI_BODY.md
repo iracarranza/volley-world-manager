@@ -145,20 +145,27 @@ Two ways to go, and I would take the second:
 The second is more work up front and is also how actual kit works, which is
 usually the sign it is right.
 
-**A correction to an earlier draft of this section, because getting it backwards
-matters.** That draft said a kit must not flatten silhouettes because
-`BODY_TYPES.md` needs a Cani setter and a Feli setter to differ *visibly*. It
-does not. That document is about **playstyle and attributes** -- a Cani setter is
-grounded and chases a bad pass down; an Avi setter reaches a higher ball and
-opens hitting geometry a Cani cannot. The difference is what they can do, not
-what they look like.
+**A sharper reason than the one an earlier draft used.** That draft said a kit
+must not flatten silhouettes because `BODY_TYPES.md` needs a Cani setter and a
+Feli setter to differ *visibly*. That is true -- `BODY_TYPES.md` §9 argues
+exactly it, that "a light long-limbed Avi and a broad heavy Ursi are
+distinguishable as thumbnails" and that body type is "the at-a-glance read that
+the attribute wheel then confirms or subverts". It is simply the weaker of the
+two reasons available, and borrowing it made the kit rule look like a favour to
+another document.
 
-So the silhouette argument stands on its own feet rather than borrowing that
-one. A viewer who cannot tell an Avi setter from a Cani setter cannot predict
-which balls this team can still run an offence from, and that is a *gameplay*
-legibility loss -- the same currency `READABLE_BODIES.md` deals in. The kit must
-not flatten the body because the body is telling the viewer what the setter is
-capable of, not because the typology asked for a portrait.
+The stronger one stands on its own feet. A Cani setter is grounded and chases a
+bad pass down; an Avi setter reaches a higher ball and opens hitting geometry a
+Cani cannot. A viewer who cannot tell them apart cannot predict which balls this
+team can still run an offence from, and that is a *gameplay* legibility loss --
+the same currency `READABLE_BODIES.md` deals in. The kit must not flatten the
+body because the body is telling the viewer what the setter is capable of; that
+it also satisfies the typology is a consequence, not the argument.
+
+*An intermediate draft of this passage asserted that `BODY_TYPES.md` is about
+playstyle rather than appearance and that the visible-difference claim was
+backwards. It is not; §9 of that document makes the claim directly. Recorded
+because a correction that is itself wrong is worse than the thing it corrected.*
 
 ### What must not happen
 

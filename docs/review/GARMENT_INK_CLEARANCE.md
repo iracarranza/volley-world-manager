@@ -155,3 +155,49 @@ derivable there -- but the hull weight lives in `player_actor_3d.gd` and the two
 files have never had to agree. That is the seam, and it is the same shape as
 every published-record seam closed this month: two halves of one fact, each
 correct alone.
+
+## Re-measured on the new bodies, and a fourth instrument problem
+
+`THE_VOLI_BODY.md` §0 marks the published tables provisional until re-run on the
+bodies as they actually stand. Re-run at `HEAD` on macOS/Metal under
+`gl_compatibility`, after the Stalk was rebuilt from a smooth shaft into a leek:
+
+| body | sleeve / shorts clear | collar |
+|---|---:|---:|
+| Vegi | 0.0178 | 0.0180 |
+| Feli | 0.0163 | 0.0180 |
+| Avi | **0.0131** | 0.0180 |
+| Cani | 0.0156 | 0.0180 |
+| Ursi | 0.0170 | 0.0180 |
+| Simi | **0.0225** | 0.0180 |
+
+Every row positive, every collar on the standoff exactly. The band is 13.1 mm to
+**22.5 mm**, so the "13-22 mm" quoted previously wants its upper bound stated as
+23 -- Simi sits a half-millimetre above it and always did; nothing regressed.
+
+**The fourth instrument problem is coverage, not arithmetic.**
+`probe_garment_clearance.gd:36` iterates `BODY_TYPES` -- the six *types* -- and
+passes only `body_type`, so the single "Vegi" row is whatever
+`produce_for(player_id)` returns for the probe's id of 1. That is **Pepper**. The
+other four produce are never built, and the table above has been read as
+covering Vegi when it covers one fifth of it.
+
+For sleeves and shorts this costs nothing, and the reason is worth writing down
+rather than rediscovering: those shells are sized from the **limb** spec, and
+`arm`/`leg` are fixed constants shared by every produce. Sleeve clearance is
+produce-invariant by construction, so no produce change can move it.
+
+**The collar is the exposure.** `_seat_collar` reads the *drawn torso*, which is
+exactly what differs per produce -- and this pass replaced the Stalk's torso
+outright: a bulb over a parallel-sided shaft with a flat cut top, where it was a
+convex spindle tapering to a rounded tip. A Stalk collar has therefore never been
+measured, by this probe or any other. It is very likely fine, because
+`_seat_collar` derives the seat rather than assuming it, and that is the whole
+point of the design. But "very likely fine" is the sentence this document exists
+to refuse.
+
+The fix is one line in the probe -- iterate `Bodies.PRODUCE` for the Vegi row and
+pass `produce` through `configure` -- and it is deliberately **not** done here,
+because the probe arrived in this branch from a parallel session and silently
+changing another author's instrument mid-merge is how a record stops being
+comparable. Recorded instead, for whoever owns that probe next.
