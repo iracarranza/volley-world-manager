@@ -142,14 +142,15 @@ func _draw_seams(light: bool) -> void:
 func _draw_region_labels(light: bool) -> void:
 	var font := get_theme_default_font()
 	for region_name in Politics.all_regions():
-		var anchor := Politics.label_anchor(region_name)
+		var name := String(region_name)
+		var anchor := Politics.label_anchor(name)
 		if anchor.is_empty():
 			continue
 		var pos := _flat_to_screen(Mapper.panel_uv_to_flat(
 			String(anchor.get("panel", "")), Vector2(anchor.get("uv", Vector2.ZERO))
 		))
-		var selected := region_name == _selected_region
-		var hovered := region_name == _hover_region
+		var selected: bool = name == _selected_region
+		var hovered: bool = name == _hover_region
 		var dot_color := Palette.color(&"accent", light) if selected \
 			else Palette.color(&"accent_alt", light) if hovered \
 			else Palette.color(&"ink", light)
@@ -159,7 +160,7 @@ func _draw_region_labels(light: bool) -> void:
 		draw_circle(pos, 3.6 if selected else 2.5, dot_color)
 		var font_size := 14 if selected else 12
 		draw_string(
-			font, pos + Vector2(-72, -7), region_name,
+			font, pos + Vector2(-72, -7), name,
 			HORIZONTAL_ALIGNMENT_CENTER, 144.0, font_size, text_color
 		)
 
