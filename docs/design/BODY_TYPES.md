@@ -335,8 +335,20 @@ two separate constraints:
 >
 > An **animal** inflection is a *standing property* — it changes how the body
 > works, on every contact, always.
-> A **produce** inflection is *situational* — it names a circumstance, and does
-> nothing outside it.
+> A **produce** inflection is *contingent* — it names an **event that may or may
+> not occur in a given rally**, and does nothing outside it.
+
+**A category of contact is not an event.** This is the distinction the first
+draft of the rule missed, and it is where "a wider platform base on forearm
+contacts" fails: `PLATFORM_CONTACT.md` covers serve reception, controlled dig,
+emergency dig and coverage, and **serve reception happens in every rally**.
+Restricting an effect to the forearms narrows *which* contacts it touches
+without making it contingent on anything — a receiving voli gets it every rally,
+which is a standing property wearing a situation's clothes. It is the standing
+reach failure at smaller scope.
+
+Test it by asking: *can this rally happen, with this player on court, and the
+inflection never fire?* If not, it is standing.
 
 Under the off-grid rule, anything resembling another type's axis was rejected.
 Under the frequency rule, the real defect in the rejected proposals becomes
@@ -360,15 +372,20 @@ not share a read.
 
 Grounded in the geometry. `PRODUCE_BODIES` torso radius × height:
 
-| produce | radius | height | ratio | shoulder |
-| --- | ---: | ---: | ---: | ---: |
-| Tomato | 0.36 | 0.70 | **0.51** | 0.31 |
-| Pepper | 0.34 | 0.76 | 0.45 | **0.34** |
-| Pear | 0.37 | 0.92 | 0.40 | 0.26 |
-| Aubergine | 0.285 | 1.12 | 0.25 | 0.27 |
-| Stalk | **0.19** | 1.36 | **0.14** | 0.22 |
+| produce | radius | height | ratio | shoulder | base − shoulder | inflection |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Tomato | 0.36 | 0.70 | **0.51** | 0.31 | 0.05 | off the floor first |
+| Pepper | 0.34 | 0.76 | 0.45 | **0.34** | 0.00 | — (cost only) |
+| Pear | 0.37 | 0.92 | 0.40 | 0.26 | **0.11** | turns cheaply when behind |
+| Aubergine | 0.285 | 1.12 | 0.25 | 0.27 | 0.015 | takes the contested ball |
+| Stalk | **0.19** | 1.36 | **0.14** | 0.22 | −0.03 | less room in traffic |
 
-**Tomato — off the floor first.** *Situation: after the body has gone down.*
+Each inflection is drawn from the number that produce owns outright: Tomato the
+ratio, Stalk the radius, Pear the base-to-shoulder drop, Pepper the shoulder.
+Aubergine owns no extreme, which is why its inflection comes from the one
+qualitative thing in the silhouette list instead — the waist.
+
+**Tomato — off the floor first.** *Event: the body has gone down.*
 The roundest and lowest-shouldered of the five. Seam:
 `live_reception_integrator.gd:59` is a bare
 `0.34 if emergency else 0.16` that reads nothing about the player. The state it
@@ -378,7 +395,7 @@ real: **a Tomato is the defender you can afford to spend early.** Dig-first
 defensive systems get cheaper with one on the floor. Magnitude: 0.34 → ~0.30. No
 new state, just less time in an expensive one.
 
-**Stalk — less room in traffic.** *Situation: another body on the path.*
+**Stalk — less room in traffic.** *Event: another body on the path.*
 Radius 0.19, half of Pear's. Seam: `OBSTRUCTION_CLEARANCE_M = 0.715` and
 `_berth_scale()`, which already returns a per-player 0.72–1.24. **A Stalk is who
 you stack in a crowded seam** — the middle of a five-person receive, a defensive
@@ -387,29 +404,53 @@ reads `ego`, cohesion and pair familiarity. It is a **social** quantity today,
 and adding a physical term changes what the function means. Deliberate decision,
 not a smuggled one.
 
-**Pepper — a wider platform base.** *Situation: forearm contacts only.*
-The widest shoulder in the set at 0.34, equal to its own torso radius — square,
-where every other produce narrows. This is the **Manipulate** axis at low
-amplitude, restricted to reception and dig, and it is legal precisely because
-the frequency rule replaced the off-grid rule; the earlier draft rejected it for
-sharing Simi's axis. Note the cost that comes with the same geometry: a square
-body needs *more* berth, which is Stalk's benefit inverted. Two-sided by
-construction, which is what an inflection should be.
+**Pear — turns cheaply when the ball is behind.** *Event: the ball arrives
+outside the player's facing.* Pear's own number is not its mass — it is the
+**base-to-shoulder drop**, 0.37 down to 0.26, the largest in the set. A wide
+base under narrow shoulders puts the upper mass on the vertical axis, and a body
+whose mass is on the axis rotates about it cheaply. Axis: **Switch**, low
+amplitude. Seam: `rally_movement_system.gd:604`–`:608` computes
+`facing_fit = (facing · direction + 1) / 2`, and `:619` passes it into
+`_turn_delay(actor.player, mode, facing_fit, …)` against a
+`TURN_DELAY_WORST_SECONDS` of 0.20 and a best of 0.02. The function **already
+takes the player**, so an inflection has somewhere to enter without a signature
+change. Compress only the worst end — 0.20 → ~0.18 — so it does nothing whenever
+the ball is in front. The decision: **a Pear is who you leave where the play
+comes from behind** — deep behind the block, or a back-row voli covering a tip
+they have turned away from.
 
-**Pear — nothing, and this is the test working.** Radius 0.37, the widest, and
-`body_type_models.gd:55` already calls it "the massive one among the produce".
-Anything built from that mass is Anchor, and at any amplitude a mass-derived
-Pear inflection collides with Ursi's *read*, not merely its axis — which is the
-silhouette rule, which still bites.
+The important part is what this is *not* built from. Every previous attempt at
+Pear started from its mass, and mass is Ursi's read, not merely Ursi's axis — so
+the silhouette rule killed it every time. Routing through the shoulder drop
+reaches a different body property and lands clear.
 
-**Aubergine — nothing, for now.** 0.285 × 1.12, no extreme on any axis. Not
-invented for symmetry; see below.
+**Aubergine — takes the contested ball.** *Event: a seam ball, where two
+players have equal claim.* Aubergine is the median produce on every axis
+(0.285 × 1.12, no extreme) with one thing of its own: it is the **waisted** one,
+and a waist is what lets a body play a ball across itself without squaring the
+feet to it — which is the defining awkwardness of a ball that is nobody's.
+Seam: `coverage_calculator.gd:406` raises `seam_conflict` when
+`support_count > 0 and best_priority == second_priority`, and
+`rally_simulator.gd:1236` is a bare `var seam_penalty := 0.09 if seam_conflict
+else 0.0` reading nothing about the player. 0.09 → ~0.07 for an Aubergine. The
+decision: **an Aubergine is who you place next to another claimant** — the
+overlap between two passers, rather than a lane of their own.
+
+**Pepper — nothing, and it is the tightened test that emptied it.** The widest
+shoulder in the set at 0.34, equal to its own torso radius. The earlier draft
+gave it a wider platform base on forearm contacts; that fails the contingency
+rule above, because serve reception happens every rally. What the geometry does
+still say is a **cost**: a square body needs more berth, which is Stalk's
+benefit inverted. An honest asymmetry, left standing without a compensating
+benefit bolted beside it.
 
 ### Do not fill all five
 
-Three inflections across five produce is better than five. Not because five is
-too much work — because **a Vegi who is genuinely unremarkable is the type
-working.** Fill every slot and this becomes the suite the design keeps warning
+Four inflections across five produce, and the fifth slot stays open. The rule
+was never a quota — it is **do not invent to fill.** Four that each name a
+contingent event and point at a bare constant in the simulation are not the same
+thing as five reached for out of symmetry, and **a Vegi who is genuinely
+unremarkable is the type working.** Fill every slot and this becomes the suite the design keeps warning
 about: six body types wearing a seventh's clothes. An incomplete set reads as
 "some Vegi have a thing"; a complete one reads as "Vegi is the type that has
 things", and only the first leaves the all-rounder intact.
