@@ -776,44 +776,96 @@ static func _produce_crown(body: Dictionary) -> Array:
 				},
 			]
 		"blades":
-			## Stalk, as a leek: broad flat flag leaves fanning out *wider than
-			## any other produce's body*.
+			## A forked pair of tubular shoots.
 			##
-			## This is the load-bearing element. The bad read is a body that
-			## tapers to a narrow rounded tip, and the most direct inversion of
-			## it is to put the widest part of the silhouette at the **top**.
-			## Two earlier versions were a tuft -- three blades of 0.30 at
-			## +/-16 degrees, then five of 0.38 at +/-62 -- and neither was a
-			## fraction of the body big enough to terminate it. A timid fan puts
-			## the whole shape straight back.
+			## The primary rises from the stalk, then bends up-left.
+			## A smaller secondary shoot begins at that exact bend and travels
+			## up-right. Unlike the former blade crown, neither shoot is a flat leaf:
+			## both are continuations of the stalk's tubular growth.
+
+			var shaft_top := float(body.torso_y) \
+				+ float(body.torso.get("height", 1.36)) * 0.5
+
+			var shoot_radius := float(body.head_radius) * 0.20
+			var fork_yaw := 15.0
+			var fork_yaw_radians := deg_to_rad(fork_yaw)
+
+			var shoots: Array = []
+
+			## Shared upright portion of the primary.
+			var stem_length := 0.22
+			var stem_base := Vector3(0.0, shaft_top - 0.08, 0.0)
+			var bend_point := stem_base + Vector3.UP * stem_length
+
+			shoots.append({
+				"name": "PrimaryShootStem",
+				"parent": "BodyPivot",
+				"shape": "cylinder",
+				"radius": shoot_radius,
+				"height": stem_length,
+				"position": stem_base + Vector3.UP * stem_length * 0.5,
+				"rotation": Vector3(0.0, fork_yaw, 0.0),
+				"color": "crown",
+			})
+
+			## PRIMARY
 			##
-			## Each leaf pivots about its own base rather than its centre, so
-			## all six emerge from one point and the fan reads as a fan.
-			## Deliberately irregular. An evenly spaced fan reads as a starburst
-			## rather than as foliage, and the outermost pair going past about 65
-			## degrees reads as a palm.
-			const LEAF_LENGTH := 0.76
-			const LEAF_LEANS: Array[float] = [-64.0, -39.0, -12.0, 15.0, 43.0, 67.0]
-			var blades: Array = []
-			for index in range(LEAF_LEANS.size()):
-				var lean: float = LEAF_LEANS[index]
-				var radians := deg_to_rad(lean)
-				## Outer leaves are longer and droop; the inner pair stands up.
-				var length := LEAF_LENGTH * lerpf(0.80, 1.0, absf(lean) / 67.0) \
-					* (0.94 if index % 2 == 0 else 1.0)
-				var droop := -16.0 * (absf(lean) / 67.0)
-				blades.append({
-					"name": "Blade%d" % index, "parent": "BodyPivot",
-					"shape": "box",
-					"size": Vector3(0.098, length, 0.019),
-					"position": Vector3(
-						-sin(radians) * length * 0.5,
-						top - 0.04 + cos(radians) * length * 0.5,
-						lerpf(0.05, -0.05, float(index) / 5.0),
-					),
-					"rotation": Vector3(droop, 0.0, lean), "color": "crown",
-				})
-			return blades
+			## Cylinder begins aligned to +Y.
+			## Rotating +45 degrees around Z points it up-left:
+			##
+			##       ↖
+			##        \
+			##         bend
+			var primary_lean := 55.0
+			var primary_length := 0.32
+			var primary_radians := deg_to_rad(primary_lean)
+
+			var primary_direction := Vector3(
+				-sin(primary_radians),
+				cos(primary_radians),
+				0.0
+			).rotated(Vector3.UP, fork_yaw_radians)
+
+			shoots.append({
+				"name": "PrimaryShoot",
+				"parent": "BodyPivot",
+				"shape": "cylinder",
+				"radius": shoot_radius,
+				"height": primary_length,
+				"position": bend_point \
+					+ primary_direction * primary_length * 0.5,
+				"rotation": Vector3(0.0, fork_yaw, primary_lean),
+				"color": "crown",
+			})
+
+			## SECONDARY
+			##
+			## Starts at precisely the primary bend.
+			## -45 degrees around Z gives the opposite upward diagonal.
+			var secondary_lean := -55.0
+			var secondary_length := 0.28
+			var secondary_radius := 0.78
+			var secondary_radians := deg_to_rad(secondary_lean)
+
+			var secondary_direction := Vector3(
+				-sin(secondary_radians),
+				cos(secondary_radians),
+				0.0
+			).rotated(Vector3.UP, fork_yaw_radians)
+
+			shoots.append({
+				"name": "SecondaryShoot",
+				"parent": "BodyPivot",
+				"shape": "cylinder",
+				"radius": secondary_radius,
+				"height": secondary_length,
+				"position": bend_point \
+					+ secondary_direction * secondary_length * 0.5,
+				"rotation": Vector3(0.0, fork_yaw, secondary_lean),
+				"color": "crown",
+			})
+
+			return shoots
 		"cap":
 			## Pepper. A flat cap disc with a short thick stem through it.
 			return [
