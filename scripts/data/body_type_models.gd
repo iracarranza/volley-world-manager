@@ -776,45 +776,110 @@ static func _produce_crown(body: Dictionary) -> Array:
 				},
 			]
 		"blades":
-			## Stalk, as a leek: broad flat flag leaves fanning out *wider than
-			## any other produce's body*.
+			## Stalk, as a leek: two primaries that **bend over**, and two shorter
+			## secondaries, all emerging at staggered heights up the shaft.
 			##
-			## This is the load-bearing element. The bad read is a body that
-			## tapers to a narrow rounded tip, and the most direct inversion of
-			## it is to put the widest part of the silhouette at the **top**.
-			## Two earlier versions were a tuft -- three blades of 0.30 at
-			## +/-16 degrees, then five of 0.38 at +/-62 -- and neither was a
-			## fraction of the body big enough to terminate it. A timid fan puts
-			## the whole shape straight back.
+			## Four earlier versions failed and each failed differently, which is why
+			## this one is authored rather than generated.
 			##
-			## Each leaf pivots about its own base rather than its centre, so
-			## all six emerge from one point and the fan reads as a fan.
+			## 1. Three blades of 0.30 at +/-16 degrees -- a tuft.
+			## 2. Five of 0.38 at +/-62 -- a starburst.
+			## 3. Six of 0.76 at irregular leans -- reported as "a stalk with a fan
+			##    headdress", and correctly: every blade emerged from one point, and a
+			##    ring of similar things around one origin is a rosette.
+			## 4. Two primaries plus three secondaries, staggered heights, +/-51-56
+			##    degrees -- read as **antlers**. Staggering fixed the origin and did
+			##    not fix the splay: a wide symmetric V of straight straps is a palm or
+			##    a yucca. A leek's blades go mostly *up*.
 			##
-			## NOTE one shared emergence point reads as a headdress, not a leek --
-			## staggered heights and two ranked primaries, BACKLOG.md
-			## Deliberately irregular. An evenly spaced fan reads as a starburst
-			## rather than as foliage, and the outermost pair going past about 65
-			## degrees reads as a palm.
-			const LEAF_LENGTH := 0.76
-			const LEAF_LEANS: Array[float] = [-64.0, -39.0, -12.0, 15.0, 43.0, 67.0]
+			## The thing all four lacked is a **bend**. A leaf leaves the shaft near
+			## upright and folds outward along its length; a straight box cannot, at
+			## any angle, which is why every attempt to buy width with lean bought a
+			## spike instead. So each primary is two segments -- a near-upright lower
+			## and a folded upper hinged off its tip -- and the width comes from the
+			## fold rather than from the splay.
+			##
+			## The tip of a segment is `base + (-sin, cos) * length`, so an upper
+			## segment's base is its lower's tip and the two read as one leaf.
+			##
+			## What this must not lose, and does not: the widest point of the
+			## silhouette stays at the top -- that is what removed the original read
+			## (BODY_TYPES.md section 3). The folded uppers reach further than the old
+			## straight blades did, because a fold spends its length sideways.
+			## `yaw` turns each leaf's whole bend plane about the shaft, and it is
+			## not decoration. With every blade folding in one plane the bundle is
+			## flat: head-on it reads, and at the portfolio's authored yaw of 70
+			## degrees it collapses to vertical spikes. `run_voli_portfolio.gd`
+			## states the rule it was breaking -- "a pose that only works head-on
+			## is a pose that does not work" -- and a silhouette owes the same.
+			const LEAVES: Array[Dictionary] = [
+				{"n": "L", "y": -0.20, "lower": [-19.0, 0.42], "upper": [-67.0, 0.44],
+					"w": 0.128, "droop": -14.0, "yaw": -37.0},
+				{"n": "R", "y": -0.07, "lower": [15.0, 0.38], "upper": [62.0, 0.40],
+					"w": 0.120, "droop": -11.0, "yaw": 29.0},
+			]
+			const SECONDARIES: Array[Dictionary] = [
+				{"n": "SecondL", "y": 0.04, "lean": -30.0, "len": 0.40,
+					"w": 0.070, "droop": -6.0, "yaw": 64.0},
+				{"n": "SecondR", "y": 0.12, "lean": 11.0, "len": 0.32,
+					"w": 0.062, "droop": -3.0, "yaw": -71.0},
+			]
 			var blades: Array = []
-			for index in range(LEAF_LEANS.size()):
-				var lean: float = LEAF_LEANS[index]
-				var radians := deg_to_rad(lean)
-				## Outer leaves are longer and droop; the inner pair stands up.
-				var length := LEAF_LENGTH * lerpf(0.80, 1.0, absf(lean) / 67.0) \
-					* (0.94 if index % 2 == 0 else 1.0)
-				var droop := -16.0 * (absf(lean) / 67.0)
+			for leaf in LEAVES:
+				var width := float(leaf.w)
+				var lower: Array = leaf.lower
+				var upper: Array = leaf.upper
+				var lower_lean := float(lower[0])
+				var lower_length := float(lower[1])
+				var lower_radians := deg_to_rad(lower_lean)
+				var yaw := float(leaf.yaw)
+				var yaw_radians := deg_to_rad(yaw)
+				var base := Vector3(0.0, top + float(leaf.y), 0.0)
+				var lower_direction := Vector3(
+					-sin(lower_radians), cos(lower_radians), 0.0
+				).rotated(Vector3.UP, yaw_radians)
 				blades.append({
-					"name": "Blade%d" % index, "parent": "BodyPivot",
+					"name": "Blade%sLower" % str(leaf.n), "parent": "BodyPivot",
 					"shape": "box",
-					"size": Vector3(0.098, length, 0.019),
+					"size": Vector3(width, lower_length, 0.019),
+					"position": base + lower_direction * lower_length * 0.5,
+					"rotation": Vector3(float(leaf.droop) * 0.4, yaw, lower_lean),
+					"color": "crown",
+				})
+				var upper_lean := float(upper[0])
+				var upper_length := float(upper[1])
+				var upper_radians := deg_to_rad(upper_lean)
+				var hinge := base + lower_direction * lower_length
+				var upper_direction := Vector3(
+					-sin(upper_radians), cos(upper_radians), 0.0
+				).rotated(Vector3.UP, yaw_radians)
+				blades.append({
+					"name": "Blade%sUpper" % str(leaf.n), "parent": "BodyPivot",
+					"shape": "box",
+					"size": Vector3(width * 0.86, upper_length, 0.018),
+					"position": hinge + upper_direction * upper_length * 0.5,
+					"rotation": Vector3(float(leaf.droop), yaw, upper_lean),
+					"color": "crown",
+				})
+			for leaf in SECONDARIES:
+				var lean := float(leaf.lean)
+				var radians := deg_to_rad(lean)
+				var length := float(leaf.len)
+				var yaw := float(leaf.yaw)
+				var offset := Vector3(
+					-sin(radians) * length * 0.5, 0.0, 0.0
+				).rotated(Vector3.UP, deg_to_rad(yaw))
+				blades.append({
+					"name": "Blade%s" % str(leaf.n), "parent": "BodyPivot",
+					"shape": "box",
+					"size": Vector3(float(leaf.w), length, 0.018),
 					"position": Vector3(
-						-sin(radians) * length * 0.5,
-						top - 0.04 + cos(radians) * length * 0.5,
-						lerpf(0.05, -0.05, float(index) / 5.0),
+						offset.x,
+						top + float(leaf.y) + cos(radians) * length * 0.5,
+						offset.z,
 					),
-					"rotation": Vector3(droop, 0.0, lean), "color": "crown",
+					"rotation": Vector3(float(leaf.droop), yaw, lean),
+					"color": "crown",
 				})
 			return blades
 		"cap":
