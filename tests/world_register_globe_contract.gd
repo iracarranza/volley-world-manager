@@ -29,6 +29,7 @@ func _run() -> void:
 	await process_frame
 	_check(globe is WorldRegisterGlobe, "component must instantiate as WorldRegisterGlobe")
 	_check(Globe.canonical_panel_count() == Topology.EXPECTED_PANEL_COUNT, "globe must use canonical 18-panel count")
+	_check(Globe.terrain_front_faces_are_outward(), "terrain must expose the near hemisphere, not the inside of the far shell")
 
 	var counts := Globe.panel_vertex_counts()
 	_check(counts.size() == Topology.EXPECTED_PANEL_COUNT, "every canonical panel must have a geometry record")

@@ -175,6 +175,22 @@ static func unique_seam_count() -> int:
 	return _unique_panel_edges_cache.size()
 
 
+static func terrain_front_faces_are_outward() -> bool:
+	_ensure_cached_geometry()
+	var arrays := _terrain_mesh_cache.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	for index in range(0, vertices.size(), 3):
+		var a := vertices[index]
+		var b := vertices[index + 1]
+		var c := vertices[index + 2]
+		## Godot's spatial front face is clockwise. From outside the sphere that
+		## means the mathematical cross product points inward (negative radial
+		## dot), while the authored vertex normals still point outward for light.
+		if (b - a).cross(c - a).dot(a + b + c) >= -0.000001:
+			return false
+	return true
+
+
 static func seam_sample_directions() -> Array[Vector3]:
 	_ensure_cached_geometry()
 	var result: Array[Vector3] = []
@@ -597,7 +613,10 @@ static func _add_oriented_triangle(
 	ca: Color, cb: Color, cc: Color,
 	radius: float
 ) -> void:
-	if (b - a).cross(c - a).dot(a + b + c) < 0.0:
+	## Godot culls counter-clockwise spatial faces. Keep the visible front face
+	## clockwise when viewed from outside the sphere; the previous comparison did
+	## the opposite and rendered the far hemisphere through an invisible shell.
+	if (b - a).cross(c - a).dot(a + b + c) > 0.0:
 		_add_surface_vertex(tool, a, ca, radius)
 		_add_surface_vertex(tool, c, cc, radius)
 		_add_surface_vertex(tool, b, cb, radius)
@@ -615,7 +634,10 @@ static func _add_surface_vertex(tool: SurfaceTool, direction: Vector3, color: Co
 
 static func _add_position_triangle(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
 	var normal := (a + b + c).normalized()
-	for point in [a, b, c]:
+	var points := [a, b, c]
+	if (b - a).cross(c - a).dot(a + b + c) > 0.0:
+		points = [a, c, b]
+	for point in points:
 		tool.set_normal(normal)
 		tool.set_color(color)
 		tool.add_vertex(point)
