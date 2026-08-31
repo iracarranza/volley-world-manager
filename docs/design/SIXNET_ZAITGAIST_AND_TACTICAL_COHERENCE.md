@@ -185,6 +185,27 @@ Zaitgaist should therefore produce newsworthy long-term cycles even when the hum
 
 The manager does not necessarily need direct control over which region Zaitgaist copies. The more interesting player problem may be **what to do with the people this unstable institution produced**.
 
+### If Zaitgaist wins the Sixnet
+
+A Zaitgaist championship should resolve the otherwise self-referential question of which successful region the next developmental cohort copies: **Zaitgaist copies itself**.
+
+The championship system becomes the next cohort's formative reference. For the first time, Zaitgaist can produce volis raised under a coherent Zaitgaister synthesis rather than another imported regional model. This creates a natural progression:
+
+```text
+foreign inheritance
+→ accumulation
+→ contradiction
+→ synthesis
+→ Zaitgaist Sixnet championship
+→ native inheritance
+```
+
+One championship should not permanently solve Zaitgaist. It creates the beginning of an indigenous tradition, not an irreversible state change. Older volis still carry the imported traditions that produced the synthesis, and later cohorts may still be pulled toward newly successful foreign models.
+
+The important long-term consequence is institutional confidence. Sustained Zaitgaist success should make the developmental establishment increasingly willing to use its own successful volleyball as the next generation's reference. If that success proves temporary, the establishment may eventually lose confidence and resume its historical pattern of emulating foreign winners.
+
+This gives a Zaitgaist save an emergent long-term objective without requiring a `found national style` button: repeated successful synthesis can gradually turn a region defined by copying volleyball into a region capable of sustaining, developing, and eventually exporting a tradition of its own.
+
 ## 6. Tactical vocabulary
 
 The current concepts need to be separated explicitly.
