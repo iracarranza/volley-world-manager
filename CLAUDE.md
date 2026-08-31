@@ -257,6 +257,7 @@ Then, by subject:
 | Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`, `REGIONAL_DIFFERENTIATION_SPEC.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
 | Player generation, bodies | `docs/design/ATTRIBUTE_FIRST_GENERATION.md`, `BODY_TYPES.md` |
+| How a voli stands and dresses -- ready stance, kits | `docs/design/THE_VOLI_BODY.md` |
 | Setting, regions, naming | `docs/world/` |
 | What is designed but unbuilt | `docs/BACKLOG.md` |
 
