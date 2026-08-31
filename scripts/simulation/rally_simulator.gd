@@ -4581,8 +4581,12 @@ func _resolve_opponent_transition(
 		opponent_setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE),
 		opponent_set_quality,
 	)
-	var opponent_set_contact_time := rally_clock \
-		+ opponent_second_contact_window + opponent_release_interval
+	## NOTE the moment a body met the ball, not the narrative clock -- the home
+	## NOTE side has read it this way all along and this side never did
+	var opponent_set_contact_time := (
+		float(physical_choice.contact_time) + opponent_release_interval
+	) if not physical_choice.is_empty() \
+		else rally_clock + opponent_second_contact_window + opponent_release_interval
 	## **The set begins where the setter actually touched the ball.**
 	## `dig_position` is where the feeding contact was *aimed*; under a physical
 	## interception `opponent_setter_position` is where a body actually met the
