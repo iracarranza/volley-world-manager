@@ -37,6 +37,19 @@ const TERRAIN_COLORS := {
 	"temperate": Color("718a6d"),
 }
 
+## Presentation offsets only. Political anchors remain canonical and clickable;
+## these keep neighboring names legible on the compact flat projection without
+## moving any territory or encoding a second geography.
+const LABEL_OFFSETS := {
+	"Landavol": Vector2(-38, -22),
+	"Zaitgaist": Vector2(40, 15),
+	"Rhėn Tempaol": Vector2(-10, -14),
+	"Spëddigh": Vector2(14, 14),
+	"Tãul ys Feynt": Vector2(-34, -18),
+	"Taktikã": Vector2(42, 10),
+	"Lo-ong Ralī": Vector2(-12, 0),
+}
+
 var _mode: StringName = MODE_REGIONS
 var _selected_region := "Landavol"
 var _hover_region := ""
@@ -149,6 +162,7 @@ func _draw_region_labels(light: bool) -> void:
 		var pos := _flat_to_screen(Mapper.panel_uv_to_flat(
 			String(anchor.get("panel", "")), Vector2(anchor.get("uv", Vector2.ZERO))
 		))
+		var label_pos := pos + Vector2(LABEL_OFFSETS.get(name, Vector2.ZERO))
 		var selected: bool = name == _selected_region
 		var hovered: bool = name == _hover_region
 		var dot_color := Palette.color(&"accent", light) if selected \
@@ -158,9 +172,9 @@ func _draw_region_labels(light: bool) -> void:
 		if not selected and not hovered:
 			text_color.a = 0.88
 		draw_circle(pos, 3.6 if selected else 2.5, dot_color)
-		var font_size := 14 if selected else 12
+		var font_size := 14 if selected else 11
 		draw_string(
-			font, pos + Vector2(-72, -7), name,
+			font, label_pos + Vector2(-72, -7), name,
 			HORIZONTAL_ALIGNMENT_CENTER, 144.0, font_size, text_color
 		)
 
