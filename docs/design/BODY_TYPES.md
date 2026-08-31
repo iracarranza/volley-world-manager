@@ -375,7 +375,7 @@ Grounded in the geometry. `PRODUCE_BODIES` torso radius × height:
 | produce | radius | height | ratio | shoulder | base − shoulder | inflection |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | Tomato | 0.36 | 0.70 | **0.51** | 0.31 | 0.05 | off the floor first |
-| Pepper | 0.34 | 0.76 | 0.45 | **0.34** | 0.00 | — (cost only) |
+| Pepper | 0.34 | 0.76 | 0.45 | **0.34** | 0.00 | lands square |
 | Pear | 0.37 | 0.92 | 0.40 | 0.26 | **0.11** | turns cheaply when behind |
 | Aubergine | 0.285 | 1.12 | 0.25 | 0.27 | 0.015 | takes the contested ball |
 | Stalk | **0.19** | 1.36 | **0.14** | 0.22 | −0.03 | less room in traffic |
@@ -436,24 +436,59 @@ else 0.0` reading nothing about the player. 0.09 → ~0.07 for an Aubergine. The
 decision: **an Aubergine is who you place next to another claimant** — the
 overlap between two passers, rather than a lane of their own.
 
-**Pepper — nothing, and it is the tightened test that emptied it.** The widest
-shoulder in the set at 0.34, equal to its own torso radius. The earlier draft
-gave it a wider platform base on forearm contacts; that fails the contingency
-rule above, because serve reception happens every rally. What the geometry does
-still say is a **cost**: a square body needs more berth, which is Stalk's
-benefit inverted. An honest asymmetry, left standing without a compensating
-benefit bolted beside it.
+**Pepper — lands square.** *Event: the body has left the floor.* The widest
+shoulder in the set at 0.34, exactly equal to its own torso radius, over the
+second-shortest torso — broad and low, which is what a stable landing base is.
+Seam: two bare constants, neither reading anything about the player —
+`live_block_integrator.gd:160` is `0.36 if airborne else 0.20` under a comment
+calling a block landing "the most expensive recovery a front-row player makes",
+and `live_attack_integrator.gd:32` is `0.34 if AIRBORNE else 0.18`. Contingent
+on having jumped, which most back-row rallies never are. The decision: **a
+Pepper is who you want blocking in a fast transition** — the front-row voli who
+is available for the counter-attack a beat sooner.
 
-### Do not fill all five
+*The weakest thing about the set, stated plainly:* Tomato and Pepper are both
+"recovers sooner from a lost posture", separated by which posture (floor after a
+dig; air after a block) and therefore by which row. That is two of five drawing
+on one idea. Defensible because the events, the seams and the positions differ —
+and worth revisiting if a fifth idea turns up before this is built.
 
-Four inflections across five produce, and the fifth slot stays open. The rule
-was never a quota — it is **do not invent to fill.** Four that each name a
-contingent event and point at a bare constant in the simulation are not the same
-thing as five reached for out of symmetry, and **a Vegi who is genuinely
-unremarkable is the type working.** Fill every slot and this becomes the suite the design keeps warning
+**An earlier draft gave Pepper a cost and no benefit** — a square body needs
+more berth, Stalk's benefit inverted — on the grounds that this was an honest
+asymmetry. It was not. Produce is assigned at random, so a cost-only produce is
+one player in thirty made strictly worse by nothing they chose, and defined
+entirely by another produce's axis. The error was assuming the geometry had to
+be modelled symmetrically. **Berth deviation is Stalk's inflection; everyone
+else is baseline.** Pepper needs no penalty for not being thin, exactly as
+Tomato needs none for not being tall.
+
+### Five slots, and why that is not a quota met
+
+All five produce now carry one, which is more than earlier drafts of this
+section argued for. The rule was never a quota, in either direction — it is
+**do not invent to fill.** Five that each name a contingent event and point at a
+bare constant already in the simulation are not the same thing as five reached
+for out of symmetry, and the moment one of them stops meeting that bar it should
+go back to nothing: **a Vegi who is genuinely unremarkable is the type
+working**, and an empty slot is a better outcome than a decorative one. Fill every slot and this becomes the suite the design keeps warning
 about: six body types wearing a seventh's clothes. An incomplete set reads as
 "some Vegi have a thing"; a complete one reads as "Vegi is the type that has
 things", and only the first leaves the all-rounder intact.
+
+### Minor inflections carry no paired cost
+
+An inflection is a bend rather than a buff, and for an **animal** that means a
+two-sided trade: the major commitment is strong in its situation and weak
+outside it. **For a produce it does not.** At minor amplitude the directionality
+lives at the type level, not the produce level — the cost of being a Vegi is
+*having a minor inflection where an animal has a major one*, and that price is
+paid once, by the type.
+
+So none of the five produce is penalised against the others. They are not a
+zero-sum set among themselves; they are five small variations on a body that has
+already given up the major bend. Pricing them against each other produces
+exactly one outcome, which the withdrawn Pepper cost above demonstrates: a produce with a
+cost and no benefit, strictly dominated, in a layer nobody chooses.
 
 Two further lines to hold:
 
