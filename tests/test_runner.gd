@@ -127,6 +127,9 @@ const ATTEMPT_JUDGMENT_SCRIPT := preload(
 const RALLY_SIMULATOR_SCRIPT := preload(
 	"res://scripts/simulation/rally_simulator.gd"
 )
+const SCRIPTED_RALLY_DRIVER_SCRIPT := preload(
+	"res://scripts/simulation/scripted_rally_driver.gd"
+)
 const PLAYER_OBSERVATION_SCRIPT := preload(
 	"res://scripts/models/player_observation.gd"
 )
@@ -225,6 +228,11 @@ func _initialize() -> void:
 		_test_career_opponent_reception_authority()
 		_finish_test_run()
 		return
+	if "--scripted-rally-only" in OS.get_cmdline_user_args():
+		_test_scripted_rally_intent_boundary()
+		_finish_test_run()
+		return
+	_test_scripted_rally_intent_boundary()
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
@@ -23989,3 +23997,204 @@ func _test_a_missed_contact_has_no_follow_through() -> void:
 		families.size() >= 2,
 		"more than one contact family reaches without arriving",
 	)
+
+
+func _scripted_fixture(manager: Object) -> Dictionary:
+	var state: RallyState = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(), manager.current_defensive_plan(),
+		manager.opponent_team, null, false, 16,
+	)
+	var positions := {}
+	for raw_id in state.home_players:
+		positions[int(raw_id)] = state.home_players[raw_id].position
+	for raw_id in state.opponent_players:
+		positions[int(raw_id)] = state.opponent_players[raw_id].position
+	positions[6] = Vector2(0.45, 0.84)
+	positions[102] = Vector2(0.50, 0.44)
+	positions[103] = Vector2(0.82, 0.16)
+	positions[104] = Vector2(0.36, 0.44)
+	return {
+		"serving_side": "opponent",
+		"initial_positions": positions,
+		"actions": [
+			{
+				"actor": 105, "action": "serve", "intent_time": 0.0,
+				"target": Vector2(0.45, 0.92), "serve_type": "Standing",
+				"aggression": 1.0,
+			},
+			{
+				"actor": 6, "action": "receive", "intent_time": 0.0,
+				"target": manager.current_lineup().active_setter_id(),
+				"attempted_action": "platform pass",
+			},
+			{
+				"actor": manager.current_lineup().active_setter_id(),
+				"action": "set", "intent_time": 0.20,
+				"target": manager.current_lineup().player_at_slot(4),
+				"set_family": "outside", "tempo": 2,
+			},
+			{
+				"actor": manager.current_lineup().player_at_slot(4),
+				"action": "attack", "intent_time": 0.50,
+				"target": Vector2(0.28, 0.22), "attack_action": "Power swing",
+				"course": "line", "aggression": 0.72,
+			},
+		],
+	}
+
+
+func _scripted_fingerprint(result: Resource) -> String:
+	var rows: Array[String] = []
+	if result == null:
+		return "null"
+	for event in result.events:
+		rows.append(str(event.to_dict()))
+	rows.append(str(result.analysis.get("scripted_intents", [])))
+	return "\n".join(rows)
+
+
+## Authored marks are intentions; the production body/ball intersection is the
+## only route to the physical record.
+func _test_scripted_rally_intent_boundary() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var fixture := _scripted_fixture(manager)
+	var old_time := fixture.duplicate(true)
+	old_time.actions[0]["time"] = old_time.actions[0].intent_time
+	old_time.actions[0].erase("intent_time")
+	_check(
+		"unknown key 'time'" in SCRIPTED_RALLY_DRIVER_SCRIPT.validate(old_time),
+		"scripted actions reject the retired contact-time field",
+	)
+	var authored_height := fixture.duplicate(true)
+	authored_height.actions[1]["contact_height_m"] = 1.0
+	_check(
+		"contact_height_m" in SCRIPTED_RALLY_DRIVER_SCRIPT.validate(authored_height),
+		"scripted actions cannot author physical contact height",
+	)
+	var first_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var first: Resource = first_driver.resolve_script(
+		fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	var repeated_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var repeated: Resource = repeated_driver.resolve_script(
+		fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		first != null and first.events.size() == 4 and first_driver.last_refusal.is_empty(),
+		"serve, receive, set, and attack reach production resolvers",
+	)
+	_check(
+		_scripted_fingerprint(first) == _scripted_fingerprint(repeated),
+		"a fixed scripted-rally seed repeats the exact resolved record",
+	)
+	var alternate_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var alternate: Resource = alternate_driver.resolve_script(
+		fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 118,
+	)
+	_check(
+		_scripted_fingerprint(first) != _scripted_fingerprint(alternate),
+		"reseeding preserves intentions while production execution varies",
+	)
+	var physical_fields := first != null
+	if first != null:
+		for event in first.events:
+			physical_fields = physical_fields \
+				and event.metadata.has("intent_time") \
+				and event.metadata.has("resolved_contact_time") \
+				and event.metadata.has("contact_height_meters")
+	_check(physical_fields, "every realised scripted contact states intent time, contact time, and height")
+	_check(
+		first != null and SCRIPTED_RALLY_DRIVER_SCRIPT.seam_census(first.events).is_empty(),
+		"scripted contact events preserve the authoritative one-ball seam",
+	)
+	var missed := fixture.duplicate(true)
+	missed.actions.resize(2)
+	missed.actions[1].intent_time = 9.0
+	var miss_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var miss_result: Resource = miss_driver.resolve_script(
+		missed, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	var miss_ledger: Array = miss_result.analysis.get("scripted_intents", [])
+	_check(
+		miss_result.events.size() == 1 and miss_ledger.size() == 2 \
+			and str(Dictionary(miss_ledger[1]).status) == "missed",
+		"a late intention misses without manufacturing a contact",
+	)
+	var wrong_server := fixture.duplicate(true)
+	wrong_server.actions[0].actor = 6
+	var side_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var side_result = side_driver.resolve_script(
+		wrong_server, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		side_result == null and side_driver.last_refusal == "serve actor is not on serving_side",
+		"the serve actor must belong to the declared serving side",
+	)
+	var block_fixture := fixture.duplicate(true)
+	block_fixture.actions.append({
+		"actor": 102, "action": "block", "intent_time": 2.20,
+		"target": Vector2(0.50, 0.50), "block_intent": "Seal",
+	})
+	block_fixture.actions.append({
+		"actor": 104, "action": "block", "intent_time": 2.20,
+		"target": Vector2(0.36, 0.50), "block_intent": "Seal",
+	})
+	var block_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var blocked: Resource = block_driver.resolve_script(
+		block_fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 118,
+	)
+	var touched_blocks := 0
+	for event in blocked.events:
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+				and bool(event.metadata.get("physical_contact", false)):
+			touched_blocks += 1
+			_check(
+				is_equal_approx(
+					float(event.metadata.contact_height_meters),
+					float(Dictionary(event.metadata.incoming_trajectory).end_height_meters)),
+				"a scripted block publishes the ball's resolved intersection height",
+			)
+	_check(touched_blocks == 1, "block intentions can miss or touch without guaranteeing either outcome")
+	var dig_fixture := fixture.duplicate(true)
+	dig_fixture.actions.append({
+		"actor": 102, "action": "block", "intent_time": 2.20,
+		"target": Vector2(0.50, 0.50), "block_intent": "Seal",
+	})
+	dig_fixture.actions.append({
+		"actor": 103, "action": "dig", "intent_time": 2.20,
+		"target": 101, "attempted_action": "platform dig",
+	})
+	var dig_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var dug: Resource = dig_driver.resolve_script(
+		dig_fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		dug.events.size() == 6 \
+			and int(dug.events[-1].event_type) == RALLY_EVENT_SCRIPT.EventType.DIG \
+			and bool(dug.events[-1].metadata.get("physical_contact", false)),
+		"a dig intention reaches the shared production platform resolver only when reachable",
+	)
+	var illegal_cover := dig_fixture.duplicate(true)
+	illegal_cover.actions[-1] = {
+		"actor": 2, "action": "cover", "intent_time": 2.20,
+		"target": 1, "attempted_action": "block coverage",
+	}
+	var cover_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var uncovered: Resource = cover_driver.resolve_script(
+		illegal_cover, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	var cover_ledger: Array = uncovered.analysis.get("scripted_intents", [])
+	_check(
+		uncovered.events.size() == 5 and str(Dictionary(cover_ledger[-1]).status) == "failed",
+		"coverage intent is not manufactured without a resolved own-side block rebound",
+	)
+	manager.free()

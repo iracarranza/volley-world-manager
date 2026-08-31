@@ -2691,8 +2691,11 @@ func _platform_surface(event: RallyEvent) -> Dictionary:
 	var surface := {"valid": false}
 	var incoming: Dictionary = event.metadata.get("incoming_trajectory", {})
 	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
-	var events: Array[Resource] = active_result.events if active_result != null \
-		else [] as Array[Resource]
+	var events: Array[Resource] = []
+	if active_result != null:
+		for candidate in active_result.events:
+			if candidate is Resource:
+				events.append(candidate)
 	var index := events.find(event)
 	if index >= 0 and not incoming.is_empty() and not outgoing.is_empty():
 		## The contact that sent this ball and the one that takes it away. Both
