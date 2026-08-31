@@ -17,15 +17,23 @@ const SEA_LEVEL := 0.0
 ## nothing here says that the corresponding political region owns the whole
 ## system.
 const LANDFORM_LOBES := [
-	# Landavol drainage basin: broad, low and connected across L1-L3.
-	{"system":"landavol_basin","panel":"L1","uv":Vector2(0.72,0.48),"radius":0.58,"elev":0.60,"moisture":0.06,"temp":0.00},
-	{"system":"landavol_basin","panel":"L2","uv":Vector2(0.50,0.50),"radius":0.72,"elev":0.72,"moisture":0.08,"temp":0.00},
-	{"system":"landavol_basin","panel":"L3","uv":Vector2(0.28,0.48),"radius":0.58,"elev":0.62,"moisture":0.04,"temp":0.01},
+	# Landavol drainage basin: broad, low and connected across L1-L3. These are
+	# intentionally lower than the Xérvu/Taktikã uplifts; overlap creates broad
+	# plains rather than an accidental central mountain mass.
+	{"system":"landavol_basin","panel":"L1","uv":Vector2(0.72,0.48),"radius":0.58,"elev":0.42,"moisture":0.06,"temp":0.00},
+	{"system":"landavol_basin","panel":"L2","uv":Vector2(0.50,0.50),"radius":0.72,"elev":0.50,"moisture":0.08,"temp":0.00},
+	{"system":"landavol_basin","panel":"L3","uv":Vector2(0.28,0.48),"radius":0.58,"elev":0.44,"moisture":0.04,"temp":0.01},
 
 	# Spëddigh: glaciated uplands opening into a maritime corridor and storm sea.
 	{"system":"speddigh_fjords","panel":"S1","uv":Vector2(0.50,0.55),"radius":0.70,"elev":0.76,"moisture":0.28,"temp":-0.30},
 	{"system":"speddigh_maritime","panel":"S2","uv":Vector2(0.42,0.48),"radius":0.34,"elev":0.24,"moisture":0.20,"temp":-0.08},
+	{"system":"rhen_island","panel":"S2","uv":Vector2(0.17,0.30),"radius":0.09,"elev":0.66,"moisture":0.12,"temp":0.01},
 	{"system":"speddigh_storm_sea","panel":"S3","uv":Vector2(0.48,0.44),"radius":0.18,"elev":0.30,"moisture":0.22,"temp":-0.06},
+	# Ĭspayk is a tiny polity, but its three storm-track volcanic islands still
+	# need literal land beneath the political footprint.
+	{"system":"ispayk_volcanic_islands","panel":"S3","uv":Vector2(0.38,0.30),"radius":0.08,"elev":0.64,"moisture":0.12,"temp":-0.02},
+	{"system":"ispayk_volcanic_islands","panel":"S3","uv":Vector2(0.53,0.43),"radius":0.08,"elev":0.66,"moisture":0.12,"temp":-0.02},
+	{"system":"ispayk_volcanic_islands","panel":"S3","uv":Vector2(0.64,0.58),"radius":0.075,"elev":0.64,"moisture":0.12,"temp":-0.02},
 
 	# Blôc/Bompaçao physical system: low shelf, tidal country, then delta.
 	{"system":"bloc_shelf","panel":"B1","uv":Vector2(0.50,0.54),"radius":0.70,"elev":0.56,"moisture":0.30,"temp":0.00},
@@ -147,7 +155,7 @@ static func _terrain_class(elevation:float, moisture:float, temperature:float, r
 		return "deep_ocean"
 	if elevation <= SEA_LEVEL:
 		return "shelf"
-	if float(weights.get("pawa_arc", 0.0)) > 0.44:
+	if float(weights.get("pawa_arc", 0.0)) > 0.44 or float(weights.get("ispayk_volcanic_islands", 0.0)) > 0.44:
 		return "volcanic"
 	if temperature < 0.23 and moisture > 0.52:
 		return "glacial"
