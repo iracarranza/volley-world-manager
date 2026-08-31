@@ -141,15 +141,28 @@ Two ways to go, and I would take the second:
    for the wing the way a real garment would be made for a body that shape.
 
 The second is more work up front and is also how actual kit works, which is
-usually the sign it is right. It also keeps each body type's silhouette intact,
-which `BODY_TYPES.md` needs: its whole premise is that a Cani setter and a Feli
-setter should differ visibly, and a kit that flattens them into one outline
-would undo that.
+usually the sign it is right.
+
+**A correction to an earlier draft of this section, because getting it backwards
+matters.** That draft said a kit must not flatten silhouettes because
+`BODY_TYPES.md` needs a Cani setter and a Feli setter to differ *visibly*. It
+does not. That document is about **playstyle and attributes** -- a Cani setter is
+grounded and chases a bad pass down; an Avi setter reaches a higher ball and
+opens hitting geometry a Cani cannot. The difference is what they can do, not
+what they look like.
+
+So the silhouette argument stands on its own feet rather than borrowing that
+one. A viewer who cannot tell an Avi setter from a Cani setter cannot predict
+which balls this team can still run an offence from, and that is a *gameplay*
+legibility loss -- the same currency `READABLE_BODIES.md` deals in. The kit must
+not flatten the body because the body is telling the viewer what the setter is
+capable of, not because the typology asked for a portrait.
 
 ### What must not happen
 
 - A kit that hides the body type. If a viewer cannot tell Ursi from Avi at a
-  glance in kit, the kit is wrong, not the body.
+  glance in kit, the kit is wrong, not the body -- because the silhouette is
+  what says which balls this voli can still play.
 - Team colour applied by tinting the whole voli. That is the current failure
   with more steps.
 - The number becoming the only team signal. It is too small to read at playback
