@@ -103,38 +103,40 @@ const PRODUCE_BODIES := {
 	## the whole read, which is why it is the tallest and the thinnest at once.
 	"Stalk": {
 		"skin": Color("9dbf5c"), "crown": Color("cfe08a"),
-		## Widest at the very base and narrowing all the way up, with a step at
-		## the sheath. The profile used to bulge below mid-height and taper to a
-		## rounded top of exactly `head_radius` -- a smooth convex shaft with a
-		## continuous tip, which reads as one obvious thing and not as a plant.
-		## Max radius is unchanged at 0.19 so the traffic inflection still keys
-		## off the same number; what changed is where it sits and what follows it.
+		## A leek: a bulb at the base, a **parallel-sided** shaft above it, and a
+		## flat cut top where the leaves come out.
+		##
+		## Two earlier profiles both tapered to a narrow rounded top, which is
+		## the whole of the bad read -- the first bulged below mid-height, and
+		## the replacement narrowed monotonically to 0.05. Neither is a plant.
+		## Parallel sides plus a flat termination is, and it is the taper that
+		## was doing the damage rather than the thinness. Max radius stays 0.19
+		## so the traffic inflection still keys off the same number.
 		"torso": {"shape": "profile", "radius": 0.19, "height": 1.36,
-			"profile": [Vector2(-1.0, 0.19), Vector2(-0.80, 0.175),
-				Vector2(-0.76, 0.135), Vector2(-0.25, 0.125),
-				Vector2(0.35, 0.105), Vector2(0.78, 0.085),
-				Vector2(1.0, 0.05)], "depth_scale": 0.78},
+			"profile": [Vector2(-1.0, 0.165), Vector2(-0.88, 0.19),
+				Vector2(-0.70, 0.148), Vector2(-0.20, 0.145),
+				Vector2(0.40, 0.145), Vector2(0.80, 0.147),
+				Vector2(1.0, 0.145)], "depth_scale": 0.86},
 		"torso_y": 1.24, "head_y": 1.92, "head_radius": 0.105,
 		"shoulder": Vector2(0.22, 1.60), "rig_height": 2.12,
-		## Two sheath collars across the body and short bundling low on it.
-		##
-		## These used to be three capsules of height 0.78-0.94 running the upper
-		## two thirds of a 1.36 shaft, added so a thin cylinder "does not read as
-		## a pipe". They fixed pipe by making every element vertical, on a body
-		## whose problem was that it was already too vertical. The collars are
-		## the load-bearing part now: a horizontal break is the only thing in
-		## this vocabulary that interrupts a long upright silhouette. The short
-		## ribs stay because a stalk does bundle -- but low, at the heart, where
-		## celery actually does it, and at a third of the length.
+		## Three sheath collars lying across the shaft, low, where a leek's
+		## layers actually overlap. Horizontal is the point: it is the only
+		## element in this vocabulary that interrupts a long upright silhouette,
+		## and every previous version of these ribs ran vertically on a body
+		## whose problem was that it was already too vertical.
 		"ribs": [
-			{"x": 0.0, "y": 0.86, "height": 0.30, "thickness": 0.036},
-			{"x": 0.0, "y": 1.02, "height": 0.34, "thickness": 0.052,
+			{"x": 0.0, "y": 0.86, "height": 0.36, "thickness": 0.050,
 				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
-			{"x": -0.055, "y": 0.78, "height": 0.26, "thickness": 0.030},
-			{"x": 0.055, "y": 0.82, "height": 0.24, "thickness": 0.030},
-			{"x": 0.0, "y": 1.46, "height": 0.30, "thickness": 0.044,
+			{"x": 0.0, "y": 1.04, "height": 0.33, "thickness": 0.044,
+				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
+			{"x": 0.0, "y": 1.21, "height": 0.31, "thickness": 0.038,
 				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
 		],
+		## The white base. `blush` was built for Turnip -- white below, purple on
+		## the shoulder -- and went unused when Turnip was cut. A leek is the same
+		## mechanism the other way up, and a hard horizontal colour break is the
+		## cheapest silhouette-breaker there is.
+		"blush": Color("edf2de"), "blush_y": -0.40, "blush_height": 0.46,
 		"crown_shape": "blades",
 	},
 	## Square-shouldered and lobed, which is a shape none of the other four
@@ -774,22 +776,42 @@ static func _produce_crown(body: Dictionary) -> Array:
 				},
 			]
 		"blades":
-			## Stalk. A fan of leaves that splays *wider than the body*, which is
-			## the one silhouette cue that reads as plant from across the court.
-			## They used to lean +/-16 degrees, which is a tuft on top of a shaft
-			## rather than a termination of it.
+			## Stalk, as a leek: broad flat flag leaves fanning out *wider than
+			## any other produce's body*.
+			##
+			## This is the load-bearing element. The bad read is a body that
+			## tapers to a narrow rounded tip, and the most direct inversion of
+			## it is to put the widest part of the silhouette at the **top**.
+			## Two earlier versions were a tuft -- three blades of 0.30 at
+			## +/-16 degrees, then five of 0.38 at +/-62 -- and neither was a
+			## fraction of the body big enough to terminate it. A timid fan puts
+			## the whole shape straight back.
+			##
+			## Each leaf pivots about its own base rather than its centre, so
+			## all six emerge from one point and the fan reads as a fan.
+			## Deliberately irregular. An evenly spaced fan reads as a starburst
+			## rather than as foliage, and the outermost pair going past about 65
+			## degrees reads as a palm.
+			const LEAF_LENGTH := 0.76
+			const LEAF_LEANS: Array[float] = [-64.0, -39.0, -12.0, 15.0, 43.0, 67.0]
 			var blades: Array = []
-			for index in range(5):
-				var fraction := float(index) / 4.0
-				var lean := -62.0 + 31.0 * float(index)
+			for index in range(LEAF_LEANS.size()):
+				var lean: float = LEAF_LEANS[index]
+				var radians := deg_to_rad(lean)
+				## Outer leaves are longer and droop; the inner pair stands up.
+				var length := LEAF_LENGTH * lerpf(0.80, 1.0, absf(lean) / 67.0) \
+					* (0.94 if index % 2 == 0 else 1.0)
+				var droop := -16.0 * (absf(lean) / 67.0)
 				blades.append({
 					"name": "Blade%d" % index, "parent": "BodyPivot",
-					"shape": "box", "size": Vector3(0.05, 0.38, 0.020),
+					"shape": "box",
+					"size": Vector3(0.098, length, 0.019),
 					"position": Vector3(
-						lerpf(-0.075, 0.075, fraction), top + 0.11,
-						lerpf(0.02, -0.02, fraction)
+						-sin(radians) * length * 0.5,
+						top - 0.04 + cos(radians) * length * 0.5,
+						lerpf(0.05, -0.05, float(index) / 5.0),
 					),
-					"rotation": Vector3(0.0, 0.0, lean), "color": "crown",
+					"rotation": Vector3(droop, 0.0, lean), "color": "crown",
 				})
 			return blades
 		"cap":
@@ -2107,8 +2129,13 @@ static func _vegi(produce: String) -> Dictionary:
 		extras.append({
 			"name": "Blush", "parent": "BodyPivot", "shape": "sphere",
 			"radius": float(torso.get("radius", 0.42)) * 1.04,
-			"height": float(torso.get("height", 0.80)) * 0.58,
-			"position": Vector3(0.0, float(body.torso_y) + 0.20, 0.0),
+			"height": float(torso.get("height", 0.80)) \
+				* float(body.get("blush_height", 0.58)),
+			## Turnip wore this on the shoulder; a leek wears it at the base, so
+			## the anchor is per-body rather than the +0.20 that was hardcoded.
+			"position": Vector3(
+				0.0, float(body.torso_y) + float(body.get("blush_y", 0.20)), 0.0
+			),
 			"color_value": body.blush,
 		})
 	return {
