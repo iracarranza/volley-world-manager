@@ -44,7 +44,49 @@ func _ready() -> void:
 		_walk(actor, body_type)
 		actor.queue_free()
 	print("\nratio = thinnest dimension / (hull * 2)")
+	print("\n=== where a hull lands on a neighbour's surface ===")
+	print("%-8s %-22s %8s %7s %9s %9s   %s" % [
+		"body", "limb / joint", "limb r", "hull", "limb+hull", "ball r", "gap",
+	])
+	for body_type in BODY_TYPES:
+		var actor: Node3D = ACTOR.instantiate()
+		add_child(actor)
+		actor.configure(1, true, "Probe", "Right", {
+			"height_cm": 186.0, "mass_kg": 82.0, "wingspan_cm": 191.0,
+			"body_type": body_type,
+		})
+		await get_tree().process_frame
+		_joints(actor, body_type)
+		actor.queue_free()
+	print("\ngap = ball radius - (limb radius + hull). Near zero means the")
+	print("ball's surface sits on the limb's outline: coincident, parallel, and")
+	print("with no depth bias anywhere in the material, a per-pixel coin flip.")
 	get_tree().quit()
+
+
+## Every limb whose joint ball caps it, and how close that ball sits to the
+## limb's own grown outline.
+func _joints(node: Node, body_type: String) -> void:
+	for child in node.get_children():
+		_joints(child, body_type)
+	var joint := node as MeshInstance3D
+	if joint == null or joint.name != "Joint" or joint.mesh == null:
+		return
+	var bone := joint.get_parent()
+	if bone == null:
+		return
+	var limb := bone.get_node_or_null("Mesh") as MeshInstance3D
+	if limb == null or limb.mesh == null:
+		return
+	var limb_r := maxf(limb.mesh.get_aabb().size.x, limb.mesh.get_aabb().size.z) * 0.5
+	var ball_r := joint.mesh.get_aabb().size.x * 0.5
+	var hull: float = ACTOR_SCRIPT._ink_weight_for(limb)
+	var gap := ball_r - (limb_r + hull)
+	print("%-8s %-22s %8.4f %7.3f %9.4f %9.4f   %+8.4f%s" % [
+		body_type, str(bone.name) + " / " + str(joint.name),
+		limb_r, hull, limb_r + hull, ball_r, gap,
+		"  <-- COINCIDENT" if absf(gap) < 0.006 else "",
+	])
 
 
 func _walk(node: Node, body_type: String) -> void:

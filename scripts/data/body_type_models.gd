@@ -723,9 +723,18 @@ static func _produce_crown(body: Dictionary) -> Array:
 					"rotation": Vector3(-16.0, 0.0, 0.0), "color": "crown",
 				},
 				{
+					## **A stem grows out of its own calyx, not beside it.**
+					##
+					## The hood is tilted -16 degrees and offset 0.03 forward;
+					## this stood upright at 0.02, so the cone pointed one way and
+					## the stalk left from a different spot on a different axis.
+					## Reading as off-centre is exactly what two parts that should
+					## share an axis and do not look like. Both numbers now come
+					## from the hood above rather than being stated twice.
 					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
 					"top_radius": 0.03, "bottom_radius": 0.042, "height": 0.13,
-					"position": Vector3(0.0, top + 0.15, 0.02), "color": "crown",
+					"position": Vector3(0.0, top + 0.15, 0.03),
+					"rotation": Vector3(-16.0, 0.0, 0.0), "color": "crown",
 				},
 			]
 		"twig":
@@ -733,10 +742,17 @@ static func _produce_crown(body: Dictionary) -> Array:
 			## produce whose silhouette is already doing enough work.
 			return [
 				{
+					## **The lean stays, the list does not.** A pear stalk leans,
+					## which is the -9 degrees of pitch. The 6 degrees of *roll*
+					## tipped it sideways off the body's own axis, and with no
+					## crown here for it to belong to there is nothing that offset
+					## is relative to -- every other produce puts its crown at
+					## exactly 0.0. Roll and the 0.01 shift removed; the pitch is
+					## character and is kept.
 					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
 					"top_radius": 0.022, "bottom_radius": 0.038, "height": 0.26,
-					"position": Vector3(0.0, top + 0.11, 0.01),
-					"rotation": Vector3(-9.0, 0.0, 6.0), "color": "crown",
+					"position": Vector3(0.0, top + 0.11, 0.0),
+					"rotation": Vector3(-9.0, 0.0, 0.0), "color": "crown",
 				},
 			]
 		"blades":
