@@ -590,6 +590,64 @@ static func build_wedge(
 ## Swept along -y from the root, because that is the direction a limb hangs in
 ## the rig and the fan is parented to a limb. `sweep` trails the tip backward in
 ## +z so the trailing edge rakes instead of squaring off; zero is a straight fan.
+## A blade still wrapped around the thing it grew out of.
+##
+## A leek's shaft *is* the rolled bundle of its blade bases: each blade is a
+## C-shaped sheath enclosing the ones inside it, and only its upper length peels
+## away and flattens. Four versions of the crown drew every blade as a flat box,
+## which is why they read as protrusions stuck on a stem rather than as leaves --
+## a plank cannot enclose anything.
+##
+## The arc is centred on local +X and swept about local +Y, so a sheath is placed
+## on the shaft axis rather than beside it, and `yaw` turns which way it opens.
+## Nesting is then just a radius: an outer blade at a larger radius encloses an
+## inner one at a smaller, the way the vegetable does it.
+static func build_sheath(
+	radius: float,
+	arc_degrees: float,
+	height: float,
+	thickness: float,
+	taper: float = 1.0,
+) -> ArrayMesh:
+	var arc_steps := 8
+	var half := maxf(thickness, 0.001) * 0.5
+	var half_height := height * 0.5
+	var outer: Array = [[], []]
+	var inner: Array = [[], []]
+	for level in range(2):
+		var y := -half_height if level == 0 else half_height
+		## The mouth of the sheath opens as it rises, which is the taper.
+		var level_arc := deg_to_rad(arc_degrees) * (1.0 if level == 0 else taper)
+		for index in range(arc_steps + 1):
+			var angle := -level_arc * 0.5 \
+				+ level_arc * float(index) / float(arc_steps)
+			var direction := Vector3(cos(angle), 0.0, sin(angle))
+			outer[level].append(direction * (radius + half) + Vector3(0.0, y, 0.0))
+			inner[level].append(direction * (radius - half) + Vector3(0.0, y, 0.0))
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index in range(arc_steps):
+		var step := index + 1
+		## Convex face outward, concave face inward, wound opposite ways.
+		_patch_quad(tool, 1.0,
+			outer[0][index], outer[0][step], outer[1][step], outer[1][index])
+		_patch_quad(tool, 1.0,
+			inner[1][index], inner[1][step], inner[0][step], inner[0][index])
+		## The rims, which are the edges a viewer actually reads the curl from.
+		_patch_quad(tool, 1.0,
+			outer[1][index], outer[1][step], inner[1][step], inner[1][index])
+		_patch_quad(tool, 1.0,
+			inner[0][index], inner[0][step], outer[0][step], outer[0][index])
+	var last := arc_steps
+	## The two cut sides, so the shell has a visible thickness where it ends.
+	_patch_quad(tool, 1.0,
+		outer[0][0], inner[0][0], inner[1][0], outer[1][0])
+	_patch_quad(tool, 1.0,
+		inner[0][last], outer[0][last], outer[1][last], inner[1][last])
+	tool.generate_normals()
+	return tool.commit()
+
+
 static func build_fan(
 	root_chord: float,
 	tip_chord: float,
@@ -776,90 +834,117 @@ static func _produce_crown(body: Dictionary) -> Array:
 				},
 			]
 		"blades":
-			## Stalk, as a leek: four wide blades that **nest**, each emerging at full
-			## shaft width, the exterior pair lowest and the interior pair inside and
-			## above them.
+			## Stalk, as a leek: four blades, each a **sheath wrapped round the ones
+			## inside it** for its lower length and a flattened leaf above that.
 			##
-			## Six versions now. Recorded because each failed for its own reason and
-			## the reasons do not survive in the code that replaced them.
+			## Seven versions. Recorded because each failed for its own reason and none
+			## of the reasons survives in the code that replaced it.
 			##
 			## 1. Three blades of 0.30 at +/-16 degrees -- a tuft.
 			## 2. Five of 0.38 at +/-62 -- a starburst.
-			## 3. Six of 0.76 at irregular leans -- "a stalk with a fan headdress".
-			##    Every blade emerged from one point, and a ring of similar things
-			##    around one origin is a rosette however large or uneven.
-			## 4. Staggered heights, two ranked primaries, +/-51 to 56 -- antlers.
-			##    Staggering fixed the origin and did nothing about the splay.
-			## 5. Folded primaries, bend planes turned about the shaft -- held up from
-			##    every angle, and still read as straps rather than leaves.
-			## 6. This one.
+			## 3. Six of 0.76, irregular leans -- "a stalk with a fan headdress". Every
+			##    blade emerged from one point, and a ring of similar things around one
+			##    origin is a rosette however large or uneven.
+			## 4. Staggered heights, ranked sizes -- antlers. Staggering fixed the
+			##    origin and did nothing about the splay.
+			## 5. Folded in two segments, bend planes turned about the shaft -- held up
+			##    from every angle, still read as straps.
+			## 6. Widened to full shaft width, nested by radial inset -- broad enough
+			##    at last, and still only *protruding*: every blade was a flat box, and
+			##    a plank cannot enclose anything. Six attempts all drew a leaf as a
+			##    plate stuck on a stem.
+			## 7. This one, which stops doing that.
 			##
-			## What five got wrong, from a photograph: **the blades were a third of
-			## their width.** A leek's shaft *is* the rolled bundle of its blade bases,
-			## so a blade begins at the full width of the shaft it leaves and stays
-			## broad and flat for its length. Version 5 used 0.128 against a shaft
-			## 0.38 across. Narrow blades cannot read as foliage at any length, lean or
-			## fold, because a narrow blade is a strap and a strap is a spike.
+			## A leek's shaft **is** the rolled bundle of its blade bases. So the lower
+			## length of each blade is not attached to the shaft, it *is* the shaft --
+			## a C-shaped shell enclosing the shells inside it -- and only the upper
+			## length peels away and flattens out. `build_sheath` is that shell, and
+			## nesting is then simply a radius: outer blades enclose inner ones.
 			##
-			## Width is therefore **derived from the head** rather than authored, so it
-			## cannot drift away from the body again.
+			## Which also gives the stagger its anatomy rather than an authored table.
+			## The outermost blade is the oldest, so it peels away **lowest** and its
+			## sheath is the **shortest**; each inner blade stays wrapped for longer.
+			## The hinge height is therefore a consequence of the sheath length, not a
+			## number chosen beside it.
 			##
-			## And the stagger is in two axes, not one. Version 4 raised each blade's
-			## emergence *height*; a leek also nests them **inward** -- concentric
-			## shells, the outermost peeling away first and lowest, each inner blade
-			## attaching higher and sitting inside the one outside it. `inset` is that
-			## second axis: the radial offset of the blade's base from the shaft
-			## centreline, measured along its own yaw.
-			##
-			## Because they overlap in projection, four wide blades read as a bundle
-			## where six narrow ones read as a fan.
-			##
-			## Kept from version 5, both of which were verified rather than assumed:
-			## each blade folds in two segments, because a straight box is a spike at
-			## any angle; and each bend plane is turned about the shaft, because with
-			## one shared plane the bundle is flat and collapses to vertical spikes at
-			## the portfolio's authored yaw of 70 degrees.
+			## Kept from earlier versions, both verified rather than assumed: the leaf
+			## above the hinge folds in two segments, because a straight box is a spike
+			## at any angle; and each blade's plane is turned about the shaft, because
+			## with one shared plane the bundle is flat and collapses into vertical
+			## spikes at the portfolio's authored yaw of 70 degrees.
+			var shaft_top := float(body.torso_y) \
+				+ float(body.torso.get("height", 1.36)) * 0.5
 			var blade_width := float(body.head_radius) * 2.0
+			## Two constraints the vegetable does not have to satisfy and this
+			## body does, both found by rendering it:
+			##
+			## - **A sheath must not reach the head.** The head spans
+			##   `head_y +/- head_radius`, and a sheath tall enough to look like a
+			##   real leek's encloses it. So they stay under it and the leaves rise
+			##   past it instead.
+			## - **The yaws spread the whole way round, and must.** An attempt to
+			##   protect the face by clustering every arc behind the body hid the
+			##   wrap instead: from the front there was a head and two leaves and
+			##   no bundle. It is not needed -- a sheath that stops below the head
+			##   cannot occlude a face however it is turned -- and the nesting is
+			##   only legible if the shells are seen from more than one side.
 			const LEAVES: Array[Dictionary] = [
-				## exterior pair: lowest, longest, folds furthest, sits furthest out
-				{"n": "OuterL", "y": -0.24, "inset": 0.082, "yaw": -34.0,
-					"lower": [-26.0, 0.44], "upper": [-58.0, 0.46],
-					"width": 1.00, "droop": -15.0},
-				{"n": "OuterR", "y": -0.16, "inset": 0.074, "yaw": 27.0,
-					"lower": [21.0, 0.40], "upper": [52.0, 0.42],
-					"width": 0.96, "droop": -12.0},
-				## interior pair: higher, shorter, more upright, nested inside
-				{"n": "InnerL", "y": -0.05, "inset": 0.034, "yaw": 68.0,
-					"lower": [-13.0, 0.34], "upper": [-33.0, 0.32],
-					"width": 0.88, "droop": -7.0},
-				{"n": "InnerR", "y": 0.05, "inset": 0.012, "yaw": -74.0,
-					"lower": [9.0, 0.28], "upper": [21.0, 0.26],
-					"width": 0.80, "droop": -4.0},
+				## radius nests inward; sheath grows taller as it does, so the peel
+				## points climb. lower/upper are the folded leaf above the hinge.
+				{"n": "Outer1", "radius": 0.156, "sheath": 0.14, "arc": 152.0,
+					"yaw": -42.0, "lower": [-29.0, 0.42], "upper": [-61.0, 0.46],
+					"width": 1.00, "droop": -16.0},
+				{"n": "Outer2", "radius": 0.138, "sheath": 0.20, "arc": 140.0,
+					"yaw": 58.0, "lower": [24.0, 0.38], "upper": [55.0, 0.42],
+					"width": 0.95, "droop": -13.0},
+				{"n": "Inner1", "radius": 0.120, "sheath": 0.25, "arc": 128.0,
+					"yaw": 152.0, "lower": [-13.0, 0.32], "upper": [-31.0, 0.32],
+					"width": 0.88, "droop": -8.0},
+				{"n": "Inner2", "radius": 0.102, "sheath": 0.30, "arc": 116.0,
+					"yaw": -132.0, "lower": [11.0, 0.26], "upper": [23.0, 0.26],
+					"width": 0.80, "droop": -5.0},
 			]
 			var blades: Array = []
 			for leaf in LEAVES:
 				var yaw := float(leaf.yaw)
 				var yaw_radians := deg_to_rad(yaw)
+				var radius := float(leaf.radius)
+				var sheath_height := float(leaf.sheath)
+				## The sheath sits on the shaft axis and rises from just below its top,
+				## so the wrap overlaps the shaft rather than balancing on it.
+				var sheath_base := shaft_top - 0.42
+				blades.append({
+					"name": "Sheath%s" % str(leaf.n), "parent": "BodyPivot",
+					"shape": "sheath",
+					"radius": radius,
+					"arc": float(leaf.arc),
+					"height": sheath_height,
+					"thickness": 0.017,
+					"taper": 1.12,
+					"position": Vector3(
+						0.0, sheath_base + sheath_height * 0.5, 0.0
+					),
+					"rotation": Vector3(0.0, yaw, 0.0),
+					"color": "crown",
+				})
+				## The leaf hinges off the top of its own sheath, on the arc's centre
+				## line, which is why a later peel starts higher without being told to.
 				var width := blade_width * float(leaf.width)
 				var lower: Array = leaf.lower
 				var upper: Array = leaf.upper
 				var lower_lean := float(lower[0])
 				var lower_length := float(lower[1])
 				var lower_radians := deg_to_rad(lower_lean)
-				## The base is pushed out along its own yaw by `inset`, which is what
-				## makes an outer blade sit outside an inner one rather than through it.
 				var base := Vector3(
-					0.0, top + float(leaf.y), 0.0
-				) + Vector3(
-					-float(leaf.inset), 0.0, 0.0
-				).rotated(Vector3.UP, yaw_radians)
+					0.0, sheath_base + sheath_height, 0.0
+				) + Vector3(radius, 0.0, 0.0).rotated(Vector3.UP, yaw_radians)
 				var lower_direction := Vector3(
 					-sin(lower_radians), cos(lower_radians), 0.0
 				).rotated(Vector3.UP, yaw_radians)
 				blades.append({
 					"name": "Blade%sLower" % str(leaf.n), "parent": "BodyPivot",
 					"shape": "box",
-					"size": Vector3(width, lower_length, 0.020),
+					"size": Vector3(width, lower_length, 0.019),
 					"position": base + lower_direction * lower_length * 0.5,
 					"rotation": Vector3(float(leaf.droop) * 0.4, yaw, lower_lean),
 					"color": "crown",
@@ -874,7 +959,7 @@ static func _produce_crown(body: Dictionary) -> Array:
 				blades.append({
 					"name": "Blade%sUpper" % str(leaf.n), "parent": "BodyPivot",
 					"shape": "box",
-					"size": Vector3(width * 0.90, upper_length, 0.019),
+					"size": Vector3(width * 0.90, upper_length, 0.018),
 					"position": hinge + upper_direction * upper_length * 0.5,
 					"rotation": Vector3(float(leaf.droop), yaw, upper_lean),
 					"color": "crown",
@@ -2733,6 +2818,14 @@ static func build_mesh(spec: Dictionary) -> Mesh:
 				float(spec.get("depth", 0.12)),
 				clampf(float(spec.get("taper_width", 0.66)), 0.05, 1.0),
 				clampf(float(spec.get("taper_height", 0.72)), 0.05, 1.0),
+			)
+		"sheath":
+			return build_sheath(
+				float(spec.get("radius", 0.14)),
+				float(spec.get("arc", 170.0)),
+				float(spec.get("height", 0.3)),
+				float(spec.get("thickness", 0.018)),
+				clampf(float(spec.get("taper", 1.0)), 0.05, 1.4),
 			)
 		"fan":
 			return build_fan(

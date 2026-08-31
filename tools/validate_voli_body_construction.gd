@@ -114,7 +114,11 @@ func _run() -> void:
 		str(_part(face_parts, "Mouth").get("shape", "")) == "stroke",
 		"mouth is still assembled from legacy boxes",
 	)
-	_check(str(face_parts[2].get("ink", "")) == "none", "mouth stroke receives a second outline")
+	## NOTE arrived indexing [2] as the mouth, which is EyeR -- keyed by name
+	_check(
+		str(_part(face_parts, "Mouth").get("ink", "")) == "none",
+		"mouth stroke receives a second outline",
+	)
 
 	var actor := ActorScene.instantiate() as PlayerActor3D
 	root.add_child(actor)
