@@ -789,6 +789,9 @@ static func _produce_crown(body: Dictionary) -> Array:
 			##
 			## Each leaf pivots about its own base rather than its centre, so
 			## all six emerge from one point and the fan reads as a fan.
+			##
+			## NOTE one shared emergence point reads as a headdress, not a leek --
+			## staggered heights and two ranked primaries, BACKLOG.md
 			## Deliberately irregular. An evenly spaced fan reads as a starburst
 			## rather than as foliage, and the outermost pair going past about 65
 			## degrees reads as a palm.
