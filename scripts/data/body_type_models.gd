@@ -834,137 +834,96 @@ static func _produce_crown(body: Dictionary) -> Array:
 				},
 			]
 		"blades":
-			## Stalk, as a leek: four blades, each a **sheath wrapped round the ones
-			## inside it** for its lower length and a flattened leaf above that.
+			## A forked pair of tubular shoots.
 			##
-			## Seven versions. Recorded because each failed for its own reason and none
-			## of the reasons survives in the code that replaced it.
-			##
-			## 1. Three blades of 0.30 at +/-16 degrees -- a tuft.
-			## 2. Five of 0.38 at +/-62 -- a starburst.
-			## 3. Six of 0.76, irregular leans -- "a stalk with a fan headdress". Every
-			##    blade emerged from one point, and a ring of similar things around one
-			##    origin is a rosette however large or uneven.
-			## 4. Staggered heights, ranked sizes -- antlers. Staggering fixed the
-			##    origin and did nothing about the splay.
-			## 5. Folded in two segments, bend planes turned about the shaft -- held up
-			##    from every angle, still read as straps.
-			## 6. Widened to full shaft width, nested by radial inset -- broad enough
-			##    at last, and still only *protruding*: every blade was a flat box, and
-			##    a plank cannot enclose anything. Six attempts all drew a leaf as a
-			##    plate stuck on a stem.
-			## 7. This one, which stops doing that.
-			##
-			## A leek's shaft **is** the rolled bundle of its blade bases. So the lower
-			## length of each blade is not attached to the shaft, it *is* the shaft --
-			## a C-shaped shell enclosing the shells inside it -- and only the upper
-			## length peels away and flattens out. `build_sheath` is that shell, and
-			## nesting is then simply a radius: outer blades enclose inner ones.
-			##
-			## Which also gives the stagger its anatomy rather than an authored table.
-			## The outermost blade is the oldest, so it peels away **lowest** and its
-			## sheath is the **shortest**; each inner blade stays wrapped for longer.
-			## The hinge height is therefore a consequence of the sheath length, not a
-			## number chosen beside it.
-			##
-			## Kept from earlier versions, both verified rather than assumed: the leaf
-			## above the hinge folds in two segments, because a straight box is a spike
-			## at any angle; and each blade's plane is turned about the shaft, because
-			## with one shared plane the bundle is flat and collapses into vertical
-			## spikes at the portfolio's authored yaw of 70 degrees.
+			## The primary rises from the stalk, then bends up-left.
+			## A smaller secondary shoot begins at that exact bend and travels
+			## up-right. Unlike the former blade crown, neither shoot is a flat leaf:
+			## both are continuations of the stalk's tubular growth.
+
 			var shaft_top := float(body.torso_y) \
 				+ float(body.torso.get("height", 1.36)) * 0.5
-			var blade_width := float(body.head_radius) * 2.0
-			## Two constraints the vegetable does not have to satisfy and this
-			## body does, both found by rendering it:
+
+			var shoot_radius := float(body.head_radius) * 0.20
+			var fork_yaw := 15.0
+			var fork_yaw_radians := deg_to_rad(fork_yaw)
+
+			var shoots: Array = []
+
+			## Shared upright portion of the primary.
+			var stem_length := 0.22
+			var stem_base := Vector3(0.0, shaft_top - 0.08, 0.0)
+			var bend_point := stem_base + Vector3.UP * stem_length
+
+			shoots.append({
+				"name": "PrimaryShootStem",
+				"parent": "BodyPivot",
+				"shape": "cylinder",
+				"radius": shoot_radius,
+				"height": stem_length,
+				"position": stem_base + Vector3.UP * stem_length * 0.5,
+				"rotation": Vector3(0.0, fork_yaw, 0.0),
+				"color": "crown",
+			})
+
+			## PRIMARY
 			##
-			## - **A sheath must not reach the head.** The head spans
-			##   `head_y +/- head_radius`, and a sheath tall enough to look like a
-			##   real leek's encloses it. So they stay under it and the leaves rise
-			##   past it instead.
-			## - **The yaws spread the whole way round, and must.** An attempt to
-			##   protect the face by clustering every arc behind the body hid the
-			##   wrap instead: from the front there was a head and two leaves and
-			##   no bundle. It is not needed -- a sheath that stops below the head
-			##   cannot occlude a face however it is turned -- and the nesting is
-			##   only legible if the shells are seen from more than one side.
-			const LEAVES: Array[Dictionary] = [
-				## radius nests inward; sheath grows taller as it does, so the peel
-				## points climb. lower/upper are the folded leaf above the hinge.
-				{"n": "Outer1", "radius": 0.156, "sheath": 0.14, "arc": 152.0,
-					"yaw": -42.0, "lower": [-29.0, 0.42], "upper": [-61.0, 0.46],
-					"width": 1.00, "droop": -16.0},
-				{"n": "Outer2", "radius": 0.138, "sheath": 0.20, "arc": 140.0,
-					"yaw": 58.0, "lower": [24.0, 0.38], "upper": [55.0, 0.42],
-					"width": 0.95, "droop": -13.0},
-				{"n": "Inner1", "radius": 0.120, "sheath": 0.25, "arc": 128.0,
-					"yaw": 152.0, "lower": [-13.0, 0.32], "upper": [-31.0, 0.32],
-					"width": 0.88, "droop": -8.0},
-				{"n": "Inner2", "radius": 0.102, "sheath": 0.30, "arc": 116.0,
-					"yaw": -132.0, "lower": [11.0, 0.26], "upper": [23.0, 0.26],
-					"width": 0.80, "droop": -5.0},
-			]
-			var blades: Array = []
-			for leaf in LEAVES:
-				var yaw := float(leaf.yaw)
-				var yaw_radians := deg_to_rad(yaw)
-				var radius := float(leaf.radius)
-				var sheath_height := float(leaf.sheath)
-				## The sheath sits on the shaft axis and rises from just below its top,
-				## so the wrap overlaps the shaft rather than balancing on it.
-				var sheath_base := shaft_top - 0.42
-				blades.append({
-					"name": "Sheath%s" % str(leaf.n), "parent": "BodyPivot",
-					"shape": "sheath",
-					"radius": radius,
-					"arc": float(leaf.arc),
-					"height": sheath_height,
-					"thickness": 0.017,
-					"taper": 1.12,
-					"position": Vector3(
-						0.0, sheath_base + sheath_height * 0.5, 0.0
-					),
-					"rotation": Vector3(0.0, yaw, 0.0),
-					"color": "crown",
-				})
-				## The leaf hinges off the top of its own sheath, on the arc's centre
-				## line, which is why a later peel starts higher without being told to.
-				var width := blade_width * float(leaf.width)
-				var lower: Array = leaf.lower
-				var upper: Array = leaf.upper
-				var lower_lean := float(lower[0])
-				var lower_length := float(lower[1])
-				var lower_radians := deg_to_rad(lower_lean)
-				var base := Vector3(
-					0.0, sheath_base + sheath_height, 0.0
-				) + Vector3(radius, 0.0, 0.0).rotated(Vector3.UP, yaw_radians)
-				var lower_direction := Vector3(
-					-sin(lower_radians), cos(lower_radians), 0.0
-				).rotated(Vector3.UP, yaw_radians)
-				blades.append({
-					"name": "Blade%sLower" % str(leaf.n), "parent": "BodyPivot",
-					"shape": "box",
-					"size": Vector3(width, lower_length, 0.019),
-					"position": base + lower_direction * lower_length * 0.5,
-					"rotation": Vector3(float(leaf.droop) * 0.4, yaw, lower_lean),
-					"color": "crown",
-				})
-				var upper_lean := float(upper[0])
-				var upper_length := float(upper[1])
-				var upper_radians := deg_to_rad(upper_lean)
-				var hinge := base + lower_direction * lower_length
-				var upper_direction := Vector3(
-					-sin(upper_radians), cos(upper_radians), 0.0
-				).rotated(Vector3.UP, yaw_radians)
-				blades.append({
-					"name": "Blade%sUpper" % str(leaf.n), "parent": "BodyPivot",
-					"shape": "box",
-					"size": Vector3(width * 0.90, upper_length, 0.018),
-					"position": hinge + upper_direction * upper_length * 0.5,
-					"rotation": Vector3(float(leaf.droop), yaw, upper_lean),
-					"color": "crown",
-				})
-			return blades
+			## Cylinder begins aligned to +Y.
+			## Rotating +45 degrees around Z points it up-left:
+			##
+			##       ↖
+			##        \
+			##         bend
+			var primary_lean := 55.0
+			var primary_length := 0.32
+			var primary_radians := deg_to_rad(primary_lean)
+
+			var primary_direction := Vector3(
+				-sin(primary_radians),
+				cos(primary_radians),
+				0.0
+			).rotated(Vector3.UP, fork_yaw_radians)
+
+			shoots.append({
+				"name": "PrimaryShoot",
+				"parent": "BodyPivot",
+				"shape": "cylinder",
+				"radius": shoot_radius,
+				"height": primary_length,
+				"position": bend_point \
+					+ primary_direction * primary_length * 0.5,
+				"rotation": Vector3(0.0, fork_yaw, primary_lean),
+				"color": "crown",
+			})
+
+			## SECONDARY
+			##
+			## Starts at precisely the primary bend.
+			## -45 degrees around Z gives the opposite upward diagonal.
+			var secondary_lean := -55.0
+			var secondary_length := 0.28
+			var secondary_radius := 0.78
+			var secondary_radians := deg_to_rad(secondary_lean)
+
+			var secondary_direction := Vector3(
+				-sin(secondary_radians),
+				cos(secondary_radians),
+				0.0
+			).rotated(Vector3.UP, fork_yaw_radians)
+
+			shoots.append({
+				"name": "SecondaryShoot",
+				"parent": "BodyPivot",
+				"shape": "cylinder",
+				"radius": secondary_radius,
+				"height": secondary_length,
+				"position": bend_point \
+					+ secondary_direction * secondary_length * 0.5,
+				"rotation": Vector3(0.0, fork_yaw, secondary_lean),
+				"color": "crown",
+			})
+
+			return shoots
 		"cap":
 			## Pepper. A flat cap disc with a short thick stem through it.
 			return [
