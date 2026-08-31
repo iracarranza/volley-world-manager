@@ -115,6 +115,73 @@ const BUILD := {
 	"Zaitgaist": {"pattern": "borrowed", "trim": 0.33},
 }
 
+## Three deliberate passes for every regional strip.
+##
+## These are kept beside the selected construction because iteration is part of
+## the design's provenance. Without it, a later simplification cannot tell an
+## abandoned idea from an accidental omission. Pass 1 preserves the original
+## read, pass 2 fits it to the separated shirt/sleeve/shorts garment system, and
+## pass 3 pushes the region's gesture far enough to survive match distance and
+## the full Voli proportion range. `selected` is an index into `attempts`.
+const ITERATIONS := {
+	"Landavol": {
+		"attempts": ["Quiet placket", "Collar-and-cuff canon", "Architect's baseline"],
+		"selected": 2,
+	},
+	"Spëddigh": {
+		"attempts": ["Twin tick rows", "Compressed yoke", "Full-kit pulse"],
+		"selected": 2,
+	},
+	"Pāwa Hitō": {
+		"attempts": ["Straight side bars", "Shoulder-to-hem panels", "Kinetic sweep"],
+		"selected": 2,
+	},
+	"Blôc du Larg": {
+		"attempts": ["Three columns", "Seven structural bays", "Nine-pier facade"],
+		"selected": 2,
+	},
+	"Xérvu": {
+		"attempts": ["Uneven chest beats", "Vertical syncopation", "Struck rhythm"],
+		"selected": 2,
+	},
+	"Taktikã": {
+		"attempts": ["Fine centre seam", "Measured grid", "Court schematic"],
+		"selected": 2,
+	},
+	"Ĭspayk": {
+		"attempts": ["Chest stripe", "Heritage ring", "Bound archive band"],
+		"selected": 2,
+	},
+	"A'ace": {
+		"attempts": ["Sponsor plaque", "Paid patchwork", "Broadcast billboard"],
+		"selected": 2,
+	},
+	"Tãul ys Feynt": {
+		"attempts": ["Angled seams", "Redirected pairs", "Double feint"],
+		"selected": 2,
+	},
+	"Lo-ong Ralī": {
+		"attempts": ["Long torso rails", "Waist-spanning rails", "Unbroken circuit"],
+		"selected": 2,
+	},
+	"Bompaçao": {
+		"attempts": ["Low stripe", "Platform ring", "Load-bearing base"],
+		"selected": 2,
+	},
+	"Rhėn Tempaol": {
+		"attempts": ["Shoulder rays", "Descending fan", "First-tempo burst"],
+		"selected": 2,
+	},
+	"Kutré Lyn": {
+		"attempts": ["Split seam", "Hard three-way fork", "Decision tree"],
+		"selected": 2,
+	},
+	"Zaitgaist": {
+		"attempts": ["Whole champion copy", "Single quoted mark", "Two-motif remix"],
+		"selected": 2,
+	},
+}
+
 ## The default a region without its own construction falls back to.
 ##
 ## **Named, rather than silently borrowed.** Six minor regions have no drawn
@@ -157,6 +224,7 @@ const MARKS := {
 		[Vector3(0.024, 0.030, 0.012), Vector3(0.0, 0.365, 0.112)],
 		## Piping at the sleeve hem, which the canon has and nothing else does.
 		[Vector3(0.11, 0.016, 0.012), Vector3(0.0, -0.11, 0.0), 0.0, "sleeves"],
+		[Vector3(0.12, 0.014, 0.012), Vector3(0.0, -0.24, 0.0), 0.0, "legs"],
 	],
 	## Two broad panels running the full height of the shirt, set out near the
 	## side seams and carried onto the thigh so the sweep reads shoulder to hem.
@@ -183,6 +251,7 @@ const MARKS := {
 		[Vector3(0.38, 0.012, 0.010), Vector3(0.0, -0.13, 0.112)],
 		[Vector3(0.012, 0.50, 0.010), Vector3(0.0, 0.0, 0.112)],
 		[Vector3(0.08, 0.010, 0.010), Vector3(0.0, -0.03, 0.0), 0.0, "sleeves"],
+		[Vector3(0.010, 0.34, 0.010), Vector3(0.0, -0.10, 0.0), 0.0, "legs"],
 	],
 	## Immaculate and covered in the people who paid for it. Blocks only -- the
 	## wordmarks the sheets show are deliberately not here, because a kit carries
@@ -193,6 +262,7 @@ const MARKS := {
 		[Vector3(0.13, 0.065, 0.012), Vector3(0.17, 0.05, 0.112)],
 		[Vector3(0.28, 0.055, 0.012), Vector3(0.0, -0.16, 0.112)],
 		[Vector3(0.09, 0.045, 0.012), Vector3(0.0, -0.02, 0.0), 0.0, "sleeves"],
+		[Vector3(0.11, 0.070, 0.012), Vector3(0.0, -0.12, 0.0), 0.0, "legs"],
 	],
 	## One broad chest band, right round the body. A ring rather than a plaque:
 	## the old version stopped at 0.40 across and left the flanks bare, which is
@@ -210,6 +280,8 @@ const MARKS := {
 			Vector3(0.0, 0.012, 0.016), Vector3(0.0, -0.016, 0.112), 0.0, "band",
 			{"ink": "shade"},
 		],
+		[Vector3(0.12, 0.080, 0.014), Vector3(0.0, -0.08, 0.0), 0.0, "sleeves"],
+		[Vector3(0.14, 0.080, 0.014), Vector3(0.0, -0.18, 0.0), 0.0, "legs"],
 	],
 	## Angled seams in pairs, the second of each continuing the first at a
 	## different angle. That redirection is the pattern -- a straight line at 18
@@ -221,6 +293,7 @@ const MARKS := {
 		[Vector3(0.016, 0.250, 0.010), Vector3(0.18, -0.04, 0.112), -18.0],
 		[Vector3(0.016, 0.18, 0.010), Vector3(0.11, -0.25, 0.112), 20.0],
 		[Vector3(0.012, 0.16, 0.010), Vector3(0.0, -0.04, 0.0), 24.0, "sleeves"],
+		[Vector3(0.014, 0.28, 0.010), Vector3(0.0, -0.12, 0.0), -28.0, "legs"],
 	],
 	## Two lines, each the full height of the shirt, each carrying on down the
 	## shorts. The count stays low on purpose: what says endurance is that
@@ -232,6 +305,7 @@ const MARKS := {
 		## line a viewer follows across the waist is the same line.
 		[Vector3(0.014, 0.44, 0.010), Vector3(-0.035, -0.10, 0.0), 0.0, "legs"],
 		[Vector3(0.014, 0.44, 0.010), Vector3(0.035, -0.10, 0.0), 0.0, "legs"],
+		[Vector3(0.014, 0.20, 0.010), Vector3(0.0, -0.06, 0.0), 0.0, "sleeves"],
 	],
 	## Low and broad, and a ring for the same reason as Ĭspayk's: a platform that
 	## stops at the flanks is not a platform. Ĭspayk sits at +0.09 and reads as a
@@ -239,6 +313,8 @@ const MARKS := {
 	## shape saying a different thing purely by where it is.
 	"platform": [
 		[Vector3(0.0, 0.229, 0.014), Vector3(0.0, -0.11, 0.112), 0.0, "band"],
+		[Vector3(0.13, 0.105, 0.014), Vector3(0.0, -0.19, 0.0), 0.0, "legs"],
+		[Vector3(0.11, 0.028, 0.012), Vector3(0.0, -0.12, 0.0), 0.0, "sleeves"],
 	],
 	## A fan off one shoulder, spreading as it falls, every line stopping above
 	## mid-chest. **The only asymmetric pattern here**, and it survives mirroring
@@ -253,6 +329,7 @@ const MARKS := {
 		[Vector3(0.014, 0.21, 0.010), Vector3(-0.105, 0.08, 0.112), 20.0],
 		[Vector3(0.014, 0.17, 0.010), Vector3(-0.070, 0.07, 0.112), 15.0],
 		[Vector3(0.012, 0.14, 0.010), Vector3(0.0, 0.0, 0.0), 30.0, "sleeves"],
+		[Vector3(0.014, 0.22, 0.010), Vector3(0.0, -0.10, 0.0), 34.0, "legs"],
 	],
 	## One seam down from the shoulder that splits in two, plus a single
 	## unbranched line on the other side so the halves do not answer each other.
@@ -263,6 +340,8 @@ const MARKS := {
 		[Vector3(0.015, 0.26, 0.010), Vector3(-0.215, 0.007, 0.112), 44.0],
 		[Vector3(0.015, 0.26, 0.010), Vector3(-0.07, 0.007, 0.112), -44.0],
 		[Vector3(0.015, 0.20, 0.010), Vector3(0.19, 0.08, 0.112), -14.0],
+		[Vector3(0.014, 0.18, 0.010), Vector3(0.0, -0.06, 0.0), 36.0, "sleeves"],
+		[Vector3(0.014, 0.26, 0.010), Vector3(0.0, -0.12, 0.0), -40.0, "legs"],
 	],
 }
 
@@ -323,8 +402,12 @@ static func trim_colour(region: String) -> Color:
 ## The two repeating patterns are generated rather than listed, because their
 ## whole character is a count and a spacing -- writing out eight tick positions
 ## invites one of them being edited and the rhythm quietly breaking.
-static func marks_for(region: String, champion: String = "") -> Array:
+static func marks_for(region: String, champion: String = "", attempt: int = -1) -> Array:
 	var pattern := pattern_for(region, champion)
+	var chosen_attempt := attempt
+	if chosen_attempt < 0:
+		chosen_attempt = int(Dictionary(ITERATIONS.get(region, {})).get("selected", 2))
+	chosen_attempt = clampi(chosen_attempt, 0, 2)
 	var front: Array = []
 	match pattern:
 		"ticks":
@@ -382,6 +465,11 @@ static func marks_for(region: String, champion: String = "") -> Array:
 					Vector3(0.0092, 0.42, 0.011),
 					Vector3(-0.065 + float(col) * 0.0431, -0.10, 0.0), 0.0, "legs",
 				])
+			for col in range(3):
+				front.append([
+					Vector3(0.0085, 0.18, 0.011),
+					Vector3(-0.035 + float(col) * 0.035, -0.05, 0.0), 0.0, "sleeves",
+				])
 		"rhythm":
 			## **Vertical, not horizontal.** The strokes used to run across the
 			## chest at uneven heights, which is a rhythm read top to bottom; the
@@ -410,8 +498,14 @@ static func marks_for(region: String, champion: String = "") -> Array:
 				Vector3(0.024, 0.40, 0.011),
 				Vector3(-0.02, -0.10, 0.0), 0.0, "legs",
 			])
+			front.append([
+				Vector3(0.018, 0.18, 0.011),
+				Vector3(0.018, -0.05, 0.0), 0.0, "sleeves",
+				{"segments": 8, "taper": 0.30},
+			])
 		_:
 			front = Array(MARKS.get(pattern, MARKS[FALLBACK_PATTERN]))
+	front = _attempt_marks(front, chosen_attempt)
 	## A borrower takes **one or two motifs, not the whole shirt**.
 	##
 	## Wearing every mark of the champion's build would not read as borrowing, it
@@ -419,7 +513,18 @@ static func marks_for(region: String, champion: String = "") -> Array:
 	## as the same team twice. Two front marks is enough to quote a construction
 	## and not enough to reproduce it.
 	if str(Dictionary(BUILD.get(region, {})).get("pattern", "")) == BORROWED_PATTERN:
-		front = front.slice(0, mini(2, front.size()))
+		## The three Zaitgaist attempts are the borrowing argument itself: a full
+		## copy, one quotation, then the selected two-motif remix.
+		if chosen_attempt == 1:
+			front = front.slice(0, mini(1, front.size()))
+		elif chosen_attempt == 2:
+			var remixed: Array = front.slice(0, mini(1, front.size()))
+			for mark in front:
+				var place := str(mark[3]) if mark.size() > 3 else "torso"
+				if place not in ["torso", "band"]:
+					remixed.append(mark)
+					break
+			front = remixed
 	var both: Array = []
 	for mark in front:
 		var size: Vector3 = mark[0]
@@ -443,6 +548,39 @@ static func marks_for(region: String, champion: String = "") -> Array:
 				_mirror_profile(profile, face),
 			])
 	return both
+
+
+## Turn the selected full-volume drawing back into its two earlier passes.
+##
+## Pass 0 is the old torso-only idea at restrained scale. Pass 1 proves the
+## construction on the separated garment pieces but keeps it quieter. Pass 2
+## is the selected match-distance version exactly as authored above. Deriving
+## the earlier passes from the selected geometry keeps all three compatible
+## with later fixes to curved patches, bands, sleeves and shorts.
+static func _attempt_marks(source: Array, attempt: int) -> Array:
+	if attempt >= 2:
+		return source
+	var result: Array = []
+	var scale := 0.72 if attempt == 0 else 0.88
+	for raw in source:
+		var mark: Array = raw
+		var place := str(mark[3]) if mark.size() > 3 else "torso"
+		if attempt == 0 and place not in ["torso", "band"]:
+			continue
+		var size: Vector3 = mark[0]
+		var at: Vector3 = mark[1]
+		var roll := float(mark[2]) if mark.size() > 2 else 0.0
+		var profile: Dictionary = mark[4].duplicate() if mark.size() > 4 else {}
+		if profile.has("bow"):
+			profile["bow"] = float(profile.bow) * scale
+		result.append([
+			Vector3(size.x * scale, size.y * scale, size.z),
+			Vector3(at.x * scale, at.y * scale, at.z),
+			roll * scale,
+			place,
+			profile,
+		])
+	return result
 
 
 static func _mirror_profile(profile: Dictionary, face: float) -> Dictionary:

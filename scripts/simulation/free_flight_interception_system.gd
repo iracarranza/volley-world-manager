@@ -30,6 +30,20 @@ static func from_launch(
 	launch_velocity_mps: Vector3,
 	start_time: float,
 	flight_id: String,
+	## **What this ball falls under, because not every ball falls the same.**
+	##
+	## `height_at_time` and `velocity_at_time` have always read
+	## `launch_gravity_mps2` off the flight rather than assuming it, so the
+	## evaluation half of this system was already able to fly a topspin ball. This
+	## function was the half that could not state one: it dropped `solve_flight`'s
+	## gravity argument and then stamped the default as though it were a fact.
+	##
+	## That was harmless while only platform contacts minted flights -- a passed
+	## ball genuinely falls at 9.8, and the reception's own record checks out to
+	## 0.000 m against its launch. It is not harmless for a serve, which flies at
+	## 21.009 in this build. Defaulted, so every existing caller keeps the exact
+	## number it was already getting.
+	gravity_mps2: float = BallFlight.DEFAULT_GRAVITY_MPS2,
 ) -> Dictionary:
 	var speed := launch_velocity_mps.length()
 	if speed <= BallFlight.MIN_SPEED_MPS or contact_height_meters <= 0.0:
@@ -41,7 +55,7 @@ static func from_launch(
 		launch_velocity_mps.y / speed, -1.0, 1.0
 	)))
 	var solved := BallFlight.solve_flight(
-		speed, angle, contact_height_meters
+		speed, angle, contact_height_meters, gravity_mps2
 	)
 	var duration := float(solved.duration_seconds)
 	var floor_position := _court_position(
@@ -70,7 +84,7 @@ static func from_launch(
 	trajectory["launch_angle_degrees"] = angle
 	trajectory["launch_horizontal_mps"] = horizontal.length()
 	trajectory["launch_vertical_mps"] = launch_velocity_mps.y
-	trajectory["launch_gravity_mps2"] = BallFlight.DEFAULT_GRAVITY_MPS2
+	trajectory["launch_gravity_mps2"] = gravity_mps2
 	trajectory["launch_velocity_mps"] = launch_velocity_mps
 	trajectory["natural_end_position"] = floor_position
 	trajectory["natural_end_time"] = start_time + duration
@@ -178,6 +192,14 @@ static func realised_prefix(
 		"launch_source", "launch_speed_mps", "launch_angle_degrees",
 		"launch_horizontal_mps", "launch_vertical_mps",
 		"launch_gravity_mps2", "launch_velocity_mps",
+		## **The bearing was the one launch field that did not survive a slice.**
+		## `from_launch` derives elevation from the velocity but has no court
+		## sense to derive a bearing from, so a family that knows its own bearing
+		## stamps it after minting -- and this list is what carries it onto the
+		## played segment. Without it a consumer re-flying the record sends the
+		## ball down the x axis, which is what a serve leg's landing check found
+		## the moment the serve began publishing a prefix.
+		"launch_bearing_degrees",
 	]:
 		if free_flight.has(key):
 			segment[key] = free_flight[key]
@@ -191,6 +213,66 @@ static func realised_prefix(
 		"natural_end_reason", "floor"
 	))
 	return segment
+
+
+## When this flight comes down through a given height, and where it is then.
+##
+## **The question a serve receive has to ask and had no way to.** A passer meets
+## a descending ball at their platform, which happens strictly before the ball
+## reaches the floor -- so a contact stamped at the flight's end is a contact at
+## ground level, and reading that end under the wrong gravity was the only thing
+## making it look like a height at all. See
+## `docs/review/SERVE_RECEPTION_HEIGHT_SEAM.md`.
+##
+## This is not a second interception authority. `opportunities` answers "who can
+## get there", which is a question about bodies; this answers "when is the ball
+## at this height", which is a question about one flight and is evaluated by that
+## flight's own `height_at_time`. Bisection on the descending branch, because the
+## height is monotonic after the apex and the apex is on the record.
+##
+## Empty when the flight never reaches the height on the way down -- a ball that
+## is already below it at launch, or one whose whole arc stays above it.
+static func descent_to_height(
+	free_flight: Dictionary,
+	height_meters: float,
+) -> Dictionary:
+	if str(free_flight.get("trajectory_role", "")) \
+			!= "authoritative_free_flight":
+		return {}
+	var start_time := float(free_flight.get("start_time", 0.0))
+	var duration := float(free_flight.get("duration", 0.0))
+	var launch_vertical := float(free_flight.get("launch_vertical_mps", 0.0))
+	var gravity := maxf(float(free_flight.get(
+		"launch_gravity_mps2", BallFlight.DEFAULT_GRAVITY_MPS2
+	)), 0.1)
+	## The apex bounds the descending branch. A launch already falling has its
+	## apex at the contact, which makes the whole flight the descending branch.
+	var apex_elapsed := clampf(launch_vertical / gravity, 0.0, duration)
+	if height_at_time(free_flight, start_time + apex_elapsed) < height_meters:
+		return {}
+	if height_at_time(free_flight, start_time + duration) > height_meters:
+		return {}
+	var low := apex_elapsed
+	var high := duration
+	for _step in range(REFINE_STEPS):
+		var mid := (low + high) * 0.5
+		if height_at_time(free_flight, start_time + mid) > height_meters:
+			low = mid
+		else:
+			high = mid
+	var elapsed := (low + high) * 0.5
+	var at_time := start_time + elapsed
+	return {
+		"available": true,
+		"contact_time": at_time,
+		"contact_position": position_at_time(free_flight, at_time),
+		"contact_height_meters": height_at_time(free_flight, at_time),
+		"incoming_velocity_mps": velocity_at_time(free_flight, at_time),
+		## How much of the flight is being given up by meeting it here rather
+		## than letting it land, which is what a caller needs to know it moved
+		## the contact rather than left it where it was.
+		"seconds_before_floor": maxf(duration - elapsed, 0.0),
+	}
 
 
 static func position_at_time(free_flight: Dictionary, at_time: float) -> Vector2:

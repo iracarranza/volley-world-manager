@@ -247,6 +247,10 @@ static func resolve(
 	var run_blend := float(shape.run_blend)
 	var gait_blend := float(shape.gait_blend)
 	var ready_blend := float(shape.ready_blend)
+	## What the ankle has to do for this stance's foot to sit under the body. The
+	## same cancellation the walk's stance phase performs, read off the stance
+	## rather than off the stride.
+	var ready_ankle := -(floor_hip + floor_knee)
 	var stance_share := float(shape.stance_share)
 	var hip_amplitude := float(shape.hip_amplitude_degrees)
 	var stance_knee := float(shape.stance_knee_degrees)
@@ -308,11 +312,24 @@ static func resolve(
 		"right_knee_degrees": floor_knee * ready_blend + right.y * gait_blend,
 		"left_hip_degrees": floor_hip * ready_blend + left.x * gait_blend,
 		"left_knee_degrees": floor_knee * ready_blend + left.y * gait_blend,
-		## The ankles fade out with the rest of the gait: a voli standing still
-		## has their feet flat because the sole and the floor are already
-		## parallel, and blending toward zero is what says so.
-		"right_ankle_degrees": lerpf(0.0, right.z, gait_blend),
-		"left_ankle_degrees": lerpf(0.0, left.z, gait_blend),
+		## **A zero ankle is aligned with the shank, not flat on the floor.**
+		##
+		## These read `lerpf(0.0, ...)`, on the stated reasoning that a voli
+		## standing still "has their feet flat because the sole and the floor are
+		## already parallel". They are not. The shoe hangs off `Knee` and so
+		## inherits the whole leg chain: with the defending stance's hip 16 and
+		## knee -54 the foot comes out **53.7 degrees** onto its toe, measured by
+		## `tools/sole_contact.tscn` on every one of the six bodies, with the other
+		## two stances near 19. That is the report that the ready stance looks
+		## unbalanced with the volis up on their toes.
+		##
+		## The fix is the expression this file already uses for the walk's stance
+		## phase -- the ankle cancels hip and knee exactly -- applied to the ready
+		## stance's own joints and blended on `ready_blend`, so it arrives exactly
+		## as the gait's own ankle leaves. No new angle: the stance says what the
+		## leg does and the foot follows from it.
+		"right_ankle_degrees": ready_ankle * ready_blend + right.z * gait_blend,
+		"left_ankle_degrees": ready_ankle * ready_blend + left.z * gait_blend,
 		## Which foot is down. `fposmod(cycle, 1.0) < stance_share` for the right
 		## and the half-stride offset for the left -- recomputed here rather than
 		## carried through the Vector3, because a bool in a float is the kind of

@@ -136,7 +136,26 @@ const NET_BAND_METERS: float = 1.6
 ## The order is the precedence, and the first rule is the one that outranks the
 ## other two: being at the net with the ball on the far side of it is a job, and
 ## it beats the general-purpose crouch that was previously the only answer.
-static func choose(at_the_net: bool, plays_the_ball_next: bool) -> String:
+## **Poised begins at the toss, and before it nobody is poised.** Reported as the
+## ready stance reading unbalanced, with the volis up on their toes -- and the
+## side view says why: `defending` rakes the shin about 36 degrees forward, so the
+## foot is not under the body and the weight line falls behind it. That is a real
+## posture, but it is the instant before a movement rather than a thing a body
+## holds, and holding it through a server's whole routine is what reads as a
+## permanent flinch.
+##
+## `ball_is_live` is false only before the server tosses. It is not a new
+## threshold: `ServeBiomechanics.TOSS_START` is where the toss already begins,
+## and the toss is the first moment the ball can move and therefore the first
+## thing a passer has to react to. The stance a body wears until then is
+## `watching` -- which exists, is authored for "a voli watching a ball that is not
+## theirs", and before the toss the ball is nobody's. Authoring a fourth set of
+## angles for it would be inventing what this file already says it will not.
+static func choose(
+	at_the_net: bool, plays_the_ball_next: bool, ball_is_live: bool = true
+) -> String:
+	if not ball_is_live:
+		return "watching"
 	if at_the_net and not plays_the_ball_next:
 		return "blocking"
 	if plays_the_ball_next:

@@ -65,14 +65,22 @@ const PRODUCE_BODIES := {
 	"Tomato": {
 		"skin": Color("d63b2a"), "crown": Color("3f7a35"),
 		"crown_shape": "calyx",
-		"torso": {"shape": "sphere", "radius": 0.33, "height": 0.66},
+		"torso": {"shape": "profile", "radius": 0.36, "height": 0.70,
+			"profile": [Vector2(-1.0, 0.10), Vector2(-0.72, 0.29),
+				Vector2(-0.20, 0.36), Vector2(0.28, 0.355),
+				Vector2(0.72, 0.29), Vector2(1.0, 0.10)],
+			"depth_scale": 0.90, "lobes": 6, "lobe_depth": 0.075},
 		"torso_y": 1.02, "head_y": 1.46, "head_radius": 0.13,
 		"shoulder": Vector2(0.31, 1.28), "rig_height": 1.80,
 	},
 	"Aubergine": {
 		"skin": Color("54307a"), "crown": Color("4e8a3a"),
 		"crown_shape": "hood",
-		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
+		"torso": {"shape": "profile", "radius": 0.285, "height": 1.12,
+			"profile": [Vector2(-1.0, 0.08), Vector2(-0.78, 0.20),
+				Vector2(-0.35, 0.285), Vector2(0.08, 0.265),
+				Vector2(0.58, 0.205), Vector2(1.0, 0.09)],
+			"depth_scale": 0.82, "lobes": 5, "lobe_depth": 0.04},
 		"torso_y": 1.16, "head_y": 1.78, "head_radius": 0.12,
 		"shoulder": Vector2(0.27, 1.52), "rig_height": 2.06,
 	},
@@ -81,7 +89,10 @@ const PRODUCE_BODIES := {
 		"crown_shape": "twig",
 		## A pear is two masses, so it is the one produce with a second torso
 		## lobe rather than a single scaled primitive -- the waist is the shape.
-		"torso": {"shape": "sphere", "radius": 0.32, "height": 0.60},
+		"torso": {"shape": "profile", "radius": 0.37, "height": 0.92,
+			"profile": [Vector2(-1.0, 0.10), Vector2(-0.78, 0.27),
+				Vector2(-0.38, 0.385), Vector2(0.05, 0.34),
+				Vector2(0.55, 0.185), Vector2(1.0, 0.075)], "depth_scale": 0.88},
 		"torso_y": 0.94, "head_y": 1.62, "head_radius": 0.12,
 		"shoulder": Vector2(0.26, 1.40), "rig_height": 1.92,
 		"extra_lobe": {"radius": 0.22, "height": 0.48, "y": 1.36},
@@ -92,17 +103,40 @@ const PRODUCE_BODIES := {
 	## the whole read, which is why it is the tallest and the thinnest at once.
 	"Stalk": {
 		"skin": Color("9dbf5c"), "crown": Color("cfe08a"),
-		"torso": {"shape": "capsule", "radius": 0.165, "height": 1.34},
+		## A leek: a bulb at the base, a **parallel-sided** shaft above it, and a
+		## flat cut top where the leaves come out.
+		##
+		## Two earlier profiles both tapered to a narrow rounded top, which is
+		## the whole of the bad read -- the first bulged below mid-height, and
+		## the replacement narrowed monotonically to 0.05. Neither is a plant.
+		## Parallel sides plus a flat termination is, and it is the taper that
+		## was doing the damage rather than the thinness. Max radius stays 0.19
+		## so the traffic inflection still keys off the same number.
+		"torso": {"shape": "profile", "radius": 0.19, "height": 1.36,
+			"profile": [Vector2(-1.0, 0.165), Vector2(-0.88, 0.19),
+				Vector2(-0.70, 0.148), Vector2(-0.20, 0.145),
+				Vector2(0.40, 0.145), Vector2(0.80, 0.147),
+				Vector2(1.0, 0.145)], "depth_scale": 0.86},
 		"torso_y": 1.24, "head_y": 1.92, "head_radius": 0.105,
 		"shoulder": Vector2(0.22, 1.60), "rig_height": 2.12,
-		## Ribs, so a thin cylinder does not read as a pipe. Offset in pairs
-		## down the length rather than spaced evenly, which is closer to how a
-		## stalk actually bundles.
+		## Three sheath collars lying across the shaft, low, where a leek's
+		## layers actually overlap. Horizontal is the point: it is the only
+		## element in this vocabulary that interrupts a long upright silhouette,
+		## and every previous version of these ribs ran vertically on a body
+		## whose problem was that it was already too vertical.
 		"ribs": [
-			{"x": -0.10, "y": 1.44, "height": 0.86},
-			{"x": 0.10, "y": 1.40, "height": 0.78},
-			{"x": 0.0, "y": 1.34, "height": 0.94},
+			{"x": 0.0, "y": 0.86, "height": 0.36, "thickness": 0.050,
+				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
+			{"x": 0.0, "y": 1.04, "height": 0.33, "thickness": 0.044,
+				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
+			{"x": 0.0, "y": 1.21, "height": 0.31, "thickness": 0.038,
+				"rotation": Vector3(0.0, 0.0, 90.0), "z": 0.0},
 		],
+		## The white base. `blush` was built for Turnip -- white below, purple on
+		## the shoulder -- and went unused when Turnip was cut. A leek is the same
+		## mechanism the other way up, and a hard horizontal colour break is the
+		## cheapest silhouette-breaker there is.
+		"blush": Color("edf2de"), "blush_y": -0.40, "blush_height": 0.46,
 		"crown_shape": "blades",
 	},
 	## Square-shouldered and lobed, which is a shape none of the other four
@@ -133,7 +167,12 @@ const PRODUCE_BODIES := {
 		## longer the shape: it is what the kit, the shorts and the arms are
 		## measured off, and the lobes are what anybody sees. Left at a radius the
 		## lobes comfortably swallow, so it cannot poke out between two of them.
-		"torso": {"shape": "sphere", "radius": 0.275, "height": 0.72},
+		"torso": {"shape": "profile", "radius": 0.34, "height": 0.76,
+			"profile": [Vector2(-1.0, 0.16), Vector2(-0.72, 0.27),
+				Vector2(-0.15, 0.325), Vector2(0.48, 0.34),
+				Vector2(0.82, 0.29), Vector2(1.0, 0.16)],
+			"sides": 32, "lobes": 4, "lobe_depth": 0.24,
+			"depth_scale": 0.92},
 		"torso_y": 1.04, "head_y": 1.56, "head_radius": 0.128,
 		"shoulder": Vector2(0.34, 1.34), "rig_height": 1.88,
 		## Rounder and shorter than the first cut, which flared. At height 0.76
@@ -143,10 +182,6 @@ const PRODUCE_BODIES := {
 		## else had taken its place. A pepper is widest at the shoulder and *blunt*
 		## underneath, so the lobes are wider across, shorter, and no longer pushed
 		## out along the radius at all.
-		"lobes": {
-			"count": 4, "offset": 0.145, "radius": 0.225, "height": 0.60,
-			"y": 1.075, "across": 0.94, "out": 1.0,
-		},
 		"crown_shape": "cap",
 	},
 }
@@ -305,6 +340,17 @@ static func palette_for(body_key: String, player_id: int) -> Dictionary:
 static func _torso_radius_at(torso: Dictionary, up: float) -> float:
 	var radius := float(torso.get("radius", 0.32))
 	var shape := str(torso.get("shape", "sphere"))
+	if shape == "profile":
+		var profile: Array = torso.get("profile", [])
+		if profile.is_empty():
+			return radius
+		var normalized := clampf(up, -1.0, 1.0)
+		for index in range(profile.size() - 1):
+			var lower: Vector2 = profile[index]
+			var upper: Vector2 = profile[index + 1]
+			if normalized <= upper.x:
+				return lerpf(lower.y, upper.y, inverse_lerp(lower.x, upper.x, normalized))
+		return float((profile.back() as Vector2).y)
 	if shape == "capsule":
 		var semi := float(torso.get("height", 1.0)) * 0.5
 		## Where the cylinder ends and the cap begins.
@@ -697,9 +743,18 @@ static func _produce_crown(body: Dictionary) -> Array:
 					"rotation": Vector3(-16.0, 0.0, 0.0), "color": "crown",
 				},
 				{
+					## **A stem grows out of its own calyx, not beside it.**
+					##
+					## The hood is tilted -16 degrees and offset 0.03 forward;
+					## this stood upright at 0.02, so the cone pointed one way and
+					## the stalk left from a different spot on a different axis.
+					## Reading as off-centre is exactly what two parts that should
+					## share an axis and do not look like. Both numbers now come
+					## from the hood above rather than being stated twice.
 					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
 					"top_radius": 0.03, "bottom_radius": 0.042, "height": 0.13,
-					"position": Vector3(0.0, top + 0.15, 0.02), "color": "crown",
+					"position": Vector3(0.0, top + 0.15, 0.03),
+					"rotation": Vector3(-16.0, 0.0, 0.0), "color": "crown",
 				},
 			]
 		"twig":
@@ -707,24 +762,56 @@ static func _produce_crown(body: Dictionary) -> Array:
 			## produce whose silhouette is already doing enough work.
 			return [
 				{
+					## **The lean stays, the list does not.** A pear stalk leans,
+					## which is the -9 degrees of pitch. The 6 degrees of *roll*
+					## tipped it sideways off the body's own axis, and with no
+					## crown here for it to belong to there is nothing that offset
+					## is relative to -- every other produce puts its crown at
+					## exactly 0.0. Roll and the 0.01 shift removed; the pitch is
+					## character and is kept.
 					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
 					"top_radius": 0.022, "bottom_radius": 0.038, "height": 0.26,
-					"position": Vector3(0.0, top + 0.11, 0.01),
-					"rotation": Vector3(-9.0, 0.0, 6.0), "color": "crown",
+					"position": Vector3(0.0, top + 0.11, 0.0),
+					"rotation": Vector3(-9.0, 0.0, 0.0), "color": "crown",
 				},
 			]
 		"blades":
-			## Stalk. A fan of upright leaves, which is what a stalk's top is.
+			## Stalk, as a leek: broad flat flag leaves fanning out *wider than
+			## any other produce's body*.
+			##
+			## This is the load-bearing element. The bad read is a body that
+			## tapers to a narrow rounded tip, and the most direct inversion of
+			## it is to put the widest part of the silhouette at the **top**.
+			## Two earlier versions were a tuft -- three blades of 0.30 at
+			## +/-16 degrees, then five of 0.38 at +/-62 -- and neither was a
+			## fraction of the body big enough to terminate it. A timid fan puts
+			## the whole shape straight back.
+			##
+			## Each leaf pivots about its own base rather than its centre, so
+			## all six emerge from one point and the fan reads as a fan.
+			## Deliberately irregular. An evenly spaced fan reads as a starburst
+			## rather than as foliage, and the outermost pair going past about 65
+			## degrees reads as a palm.
+			const LEAF_LENGTH := 0.76
+			const LEAF_LEANS: Array[float] = [-64.0, -39.0, -12.0, 15.0, 43.0, 67.0]
 			var blades: Array = []
-			for index in range(3):
-				var lean := -16.0 + 16.0 * float(index)
+			for index in range(LEAF_LEANS.size()):
+				var lean: float = LEAF_LEANS[index]
+				var radians := deg_to_rad(lean)
+				## Outer leaves are longer and droop; the inner pair stands up.
+				var length := LEAF_LENGTH * lerpf(0.80, 1.0, absf(lean) / 67.0) \
+					* (0.94 if index % 2 == 0 else 1.0)
+				var droop := -16.0 * (absf(lean) / 67.0)
 				blades.append({
 					"name": "Blade%d" % index, "parent": "BodyPivot",
-					"shape": "box", "size": Vector3(0.055, 0.30, 0.022),
+					"shape": "box",
+					"size": Vector3(0.098, length, 0.019),
 					"position": Vector3(
-						-0.05 + 0.05 * float(index), top + 0.14, 0.0
+						-sin(radians) * length * 0.5,
+						top - 0.04 + cos(radians) * length * 0.5,
+						lerpf(0.05, -0.05, float(index) / 5.0),
 					),
-					"rotation": Vector3(0.0, 0.0, lean), "color": "crown",
+					"rotation": Vector3(droop, 0.0, lean), "color": "crown",
 				})
 			return blades
 		"cap":
@@ -832,12 +919,44 @@ const UNIVERSAL_RATIOS := {
 ## can, because every type *is* authored as a full skeleton and then pulled toward
 ## the shared one. Turning this up does not invent anything; it stops discarding
 ## what each type already says about itself.
-static var type_expression: float = 0.45
+static var type_expression: float = 0.82
 
 ## Whether the kit is drawn as garments with edges, or stays paint on the
 ## body. Same reason as the flag above: two candidates, rendered rather than
 ## argued about. See `_add_garments`.
 static var draw_garments: bool = true
+
+## How far a body part's outline is grown outside it, in metres.
+##
+## **Owned here rather than in `player_actor_3d.gd`, which is where it used to
+## live and where it is still applied.** The rig grows the hull; the body models
+## have to clear it, because a garment authored without knowing the outline's
+## weight is a garment the outline renders through -- measured on every body type
+## and every sleeve in `docs/review/GARMENT_INK_CLEARANCE.md`. The model is the
+## lower layer and the rig already depends on it, so this is the direction that
+## does not need a cycle.
+static var body_ink_metres: float = 0.018
+
+## The two garment classes, over the same six cuts.
+##
+## A kit was the only clothing that existed, so anyone who needed dressing got
+## dressed as a player -- which is why the creator showed a manager in club teal
+## before that manager had a club. A manager in a strip is a category error a
+## viewer reads instantly and no palette fixes it. See
+## `docs/design/THE_VOLI_BODY.md` §2.
+const GARMENT_KIT := "kit"
+const GARMENT_FORMAL := "formal"
+
+## Thigh share of total leg length. Slightly over half, which is roughly true and
+## is the ratio that keeps a folded knee reading as a knee.
+##
+## **Owned here rather than in `player_actor_3d.gd`, for the reason
+## `body_ink_metres` is.** The rig splits the leg into two bones on this number,
+## and a garment that covers the leg has to be cut to the same two -- a single
+## shell over both is a rigid tube through a joint that bends. Two copies of the
+## ratio would be two facts that can disagree, and the one that would win is
+## whichever was read first.
+const THIGH_SHARE: float = 0.54
 
 
 ## The full description of one player's body: meshes, attachment points,
@@ -903,7 +1022,13 @@ static func silhouette(
 		_add_nose(featured), resolved,
 		player_id, chosen_marking(resolved, player_id, choices),
 	)
-	return _add_neck(_add_garments(marked) if draw_garments else marked)
+	## Which of the two garment classes this body is dressed in. Rides `choices`
+	## like every other authored axis, so a manager is dressed by the same call a
+	## player is and nothing downstream has to know which it got.
+	var garment := str(choices.get("garment", GARMENT_KIT))
+	return _add_neck(
+		_add_garments(marked, garment) if draw_garments else marked
+	)
 
 
 ## The three chosen-or-hashed axes, each written once so the picker and the rig
@@ -1190,7 +1315,16 @@ static func _apply_features(spec: Dictionary, features: Dictionary) -> Dictionar
 		var torso: Dictionary = Dictionary(featured.get("torso", {}))
 		if torso.has("radius"):
 			torso["radius"] = float(torso.radius) * girth
-			featured["torso"] = torso
+		## Purpose-built bodies use a vertical radius profile instead of one
+		## primitive radius. Scale every section so build remains an independent
+		## axis after the authored silhouettes replaced capsules and spheres.
+		if torso.has("profile"):
+			var scaled_profile: Array[Vector2] = []
+			for raw_section in Array(torso.profile):
+				var section: Vector2 = raw_section
+				scaled_profile.append(Vector2(section.x, section.y * girth))
+			torso["profile"] = scaled_profile
+		featured["torso"] = torso
 		## **The `shorts` box in every body spec is never drawn**, so nothing is
 		## scaled here. `_build_silhouette` builds a mesh from it and
 		## `_apply_physical_profile` immediately replaces that mesh with a section
@@ -1280,11 +1414,18 @@ static func _featured_ear(
 	part: Dictionary, ears: Dictionary, head_centre: Vector3
 ) -> Dictionary:
 	var position: Vector3 = part.get("position", Vector3.ZERO)
-	if str(part.get("shape", "sphere")) == "cone":
+	var ear_shape := str(part.get("shape", "sphere"))
+	if ear_shape in ["cone", "profile"]:
 		var authored_height := float(part.get("height", 0.22))
 		var height := authored_height * float(ears.length)
 		part["height"] = height
 		part["radius"] = float(part.get("radius", 0.08)) * float(ears.width)
+		if ear_shape == "profile":
+			var widened: Array[Vector2] = []
+			for raw_point in part.get("profile", []):
+				var point: Vector2 = raw_point
+				widened.append(Vector2(point.x, point.y * float(ears.width)))
+			part["profile"] = widened
 		var rotation: Vector3 = part.get("rotation", Vector3.ZERO)
 		var splay := float(ears.splay)
 		var turned := rotation.z + (splay if rotation.z >= 0.0 else -splay)
@@ -1540,6 +1681,12 @@ static func _add_markings(
 					_mark_on_arm(spec, index, 0.34 + float(index / 2) * 0.22, 1.5),
 					ink, 0.0, Vector3(1.25, 0.26, 0.50)
 				))
+			for cheek in [-1.0, 1.0]:
+				extras.append(_mark(
+					"TabbyCheek%s" % ("Left" if cheek < 0.0 else "Right"),
+					_mark_on_face(spec, cheek * 0.72, -0.16, 0.52), ink,
+					cheek * 24.0, Vector3(1.2, 0.20, 0.30)
+				))
 		"spots":
 			for index in range(6):
 				extras.append(_mark(
@@ -1650,7 +1797,86 @@ static func _add_markings(
 ## *side* of a garment rather than out of the bottom of it. A short kit-coloured
 ## sleeve around the top of each thigh is what a pair of shorts actually is, and
 ## the corner stops being a place a leg comes out of.
-static func _add_garments(spec: Dictionary) -> Dictionary:
+## The radius to build a garment from, so its narrow end clears what it covers.
+##
+## `narrow` is the multiplier the garment's tightest end already uses. Returning
+## a *base* rather than a finished radius is what keeps the flare: the caller
+## applies both of its own multipliers to this, so a shell that was 1.30 at the
+## cuff and 1.34 at the hem stays 1.30 and 1.34 of something slightly larger,
+## rather than being lifted at one end and pinched at the other.
+##
+## **The standoff is one line width, and that is a derivation rather than a
+## taste.** A garment sitting exactly `body_ink_metres` off the limb sits *on*
+## the limb's outline -- two coincident parallel surfaces with no depth bias, a
+## per-pixel coin flip, and the dash that prompted this. The only non-arbitrary
+## distance available is the thickness of the line being cleared, so the garment
+## stands one line clear of it.
+##
+## The `maxf` does not currently bind on any body, and that is worth stating
+## rather than implying otherwise: it lifts whenever the limb is thinner than
+## `2 * body_ink_metres / (narrow - 1)`, which is 0.12 m for a sleeve, and the
+## widest arm in the roster is Ursi's at 0.081. Every body grows. It is kept
+## because it is the correct floor, not because it is currently doing anything.
+static func _clearing_radius(limb_radius: float, narrow: float) -> float:
+	return maxf(
+		limb_radius, (limb_radius + body_ink_metres * 2.0) / maxf(narrow, 0.01)
+	)
+
+
+## The produce's own profile, worn as a shirt.
+static func _produce_singlet(spec: Dictionary, colour: String) -> Dictionary:
+	var torso: Dictionary = spec.get("torso", {})
+	var profile: Array = torso.get("profile", [])
+	if profile.size() < 2 or not torso.has("height"):
+		return {}
+	var half := float(torso.height) * 0.5
+	if half <= 0.0:
+		return {}
+	var widest := 0.0
+	for raw in profile:
+		widest = maxf(widest, float((raw as Vector2).y))
+	if widest <= 0.0:
+		return {}
+	## Where the shape stops being a body and starts being a base.
+	var hem := -0.6
+	for raw in profile:
+		var ring: Vector2 = raw
+		if ring.y >= widest * 0.6:
+			hem = ring.x
+			break
+	var shoulder := Vector2(spec.get("shoulder", Vector2(0.3, 1.3)))
+	var neck := clampf(
+		(shoulder.y - float(spec.get("torso_y", 1.1))) / half, hem + 0.2, 0.95
+	)
+	## One line width off the skin, the same standoff every other garment takes.
+	var clearance := body_ink_metres * 2.0
+	var rings: Array[Vector2] = [
+		Vector2(hem, _torso_radius_at(torso, hem) + clearance)
+	]
+	for raw in profile:
+		var ring: Vector2 = raw
+		if ring.x > hem and ring.x < neck:
+			rings.append(Vector2(ring.x, ring.y + clearance))
+	rings.append(Vector2(neck, _torso_radius_at(torso, neck) + clearance))
+	return {
+		"name": "Singlet", "parent": "BodyPivot", "shape": "profile",
+		"profile": rings,
+		"height": float(torso.height),
+		"radius": float(torso.get("radius", widest)) + clearance,
+		"depth_scale": float(torso.get("depth_scale", 1.0)),
+		"lobes": int(torso.get("lobes", 0)),
+		"lobe_depth": float(torso.get("lobe_depth", 0.0)),
+		"position": Vector3(0.0, float(spec.get("torso_y", 1.1)), 0.0),
+		## The body's line, not a cosmetic's: this is a garment over a torso and
+		## takes the weight the torso takes.
+		"ink": "body",
+		"color": colour,
+	}
+
+
+static func _add_garments(
+	spec: Dictionary, garment: String = GARMENT_KIT
+) -> Dictionary:
 	var arm: Dictionary = spec.get("arm", {})
 	var leg: Dictionary = spec.get("leg", {})
 	var arm_radius := float(arm.get("top_radius", 0.065))
@@ -1658,18 +1884,32 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 	var leg_radius := float(leg.get("top_radius", 0.105))
 	var leg_length := float(leg.get("height", 0.66))
 	var extras: Array = spec.get("extras", [])
+	## **The same cuts, worn longer.** A formal shirt is the singlet's sleeve
+	## carried to the elbow and trousers are the shorts leg carried past the knee
+	## -- so the tailoring problem is solved once and both classes hang off it,
+	## which is the whole reason the two were separated rather than one being
+	## special-cased. Avi's wing opening is the same opening in a jacket.
+	var formal := garment == GARMENT_FORMAL
+	var sleeve_share := 0.62 if formal else 0.24
+	var leg_share := 0.92 if formal else 0.39
+	var shirt_colour := "formal" if formal else "kit"
+	var trouser_colour := "formal_dark" if formal else "shorts"
 	for side in ["Left", "Right"]:
 		## A sleeve over the top of the upper arm, flaring very slightly so its
 		## hem stands off the limb instead of shrink-wrapping it. Proud of the
 		## arm by a clear margin -- a garment that matches the body's radius is
 		## a paint job again.
+		var sleeve_radius := _clearing_radius(arm_radius, 1.30)
 		extras.append({
 			"name": "Sleeve%s" % side, "parent": "BodyPivot/%sArm" % side,
 			"shape": "cylinder",
-			"top_radius": arm_radius * 1.30, "bottom_radius": arm_radius * 1.34,
-			"height": arm_length * 0.24,
-			"position": Vector3(0.0, -arm_length * 0.10, 0.0),
-			"color": "kit",
+			"top_radius": sleeve_radius * 1.30,
+			"bottom_radius": sleeve_radius * 1.34,
+			"height": arm_length * sleeve_share,
+			"position": Vector3(
+				0.0, -arm_length * (0.10 + (sleeve_share - 0.24) * 0.5), 0.0
+			),
+			"color": shirt_colour,
 		})
 		## Longer than the first draft, and the reason is a measurement rather
 		## than taste. The hip sits at y 0.769 and the knee at 0.413, so the cuff
@@ -1678,16 +1918,60 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 		## were nearly the same line, so there was no garment to see. Extending
 		## the cuff toward the knee is what buys visible shorts; widening it would
 		## only have made a wider invisible thing.
-		extras.append({
-			"name": "ShortsLeg%s" % side, "parent": "BodyPivot/%sLeg" % side,
-			"shape": "cylinder",
-			## Flared at the hem, which is the difference between shorts and
-			## tights: a leg opening stands off the thigh.
-			"top_radius": leg_radius * 1.28, "bottom_radius": leg_radius * 1.40,
-			"height": leg_length * 0.39,
-			"position": Vector3(0.0, -leg_length * 0.18, 0.0),
-			"color": "shorts",
-		})
+		var shorts_radius := _clearing_radius(leg_radius, 1.28)
+		if formal:
+			## **A trouser is cut to both bones, because the leg is two.**
+			##
+			## The shorts hang off the thigh bone alone, which is correct for
+			## shorts -- they end above the knee, so nothing of them ever crosses
+			## the joint. A trouser carried the same way is one rigid tube through
+			## a knee that bends: it reads right standing still and wrong the
+			## moment anybody folds a leg, which is why this went unseen until the
+			## kit gained a second class.
+			##
+			## Each half is sized from the radius the bone it covers is drawn at,
+			## and each clears its own limb's outline. The shank's is the leg's
+			## bottom radius, which is exactly what the rig hands the shank mesh.
+			var thigh_length := leg_length * THIGH_SHARE
+			var shank_length := leg_length - thigh_length
+			var shank_radius := _clearing_radius(
+				float(leg.get("bottom_radius", leg_radius * 0.8)), 1.28
+			)
+			extras.append({
+				"name": "TrouserThigh%s" % side,
+				"parent": "BodyPivot/%sLeg" % side, "shape": "cylinder",
+				"top_radius": shorts_radius * 1.28,
+				"bottom_radius": shorts_radius * 1.30,
+				"height": thigh_length * 0.96,
+				"position": Vector3(0.0, -thigh_length * 0.5, 0.0),
+				"color": trouser_colour,
+			})
+			## Stops short of the ankle rather than running to the floor: the
+			## shoe is most of this rig's lower leg, and a trouser drawn over it
+			## is a trouser with no shoe in it.
+			extras.append({
+				"name": "TrouserShank%s" % side,
+				"parent": "BodyPivot/%sLeg/Knee" % side, "shape": "cylinder",
+				"top_radius": shank_radius * 1.28,
+				"bottom_radius": shank_radius * 1.34,
+				"height": shank_length * 0.80,
+				"position": Vector3(0.0, -shank_length * 0.40, 0.0),
+				"color": trouser_colour,
+			})
+		else:
+			extras.append({
+				"name": "ShortsLeg%s" % side, "parent": "BodyPivot/%sLeg" % side,
+				"shape": "cylinder",
+				## Flared at the hem, which is the difference between shorts and
+				## tights: a leg opening stands off the thigh.
+				"top_radius": shorts_radius * 1.28,
+				"bottom_radius": shorts_radius * 1.40,
+				"height": leg_length * leg_share,
+				"position": Vector3(
+					0.0, -leg_length * (0.18 + (leg_share - 0.39) * 0.5), 0.0
+				),
+				"color": trouser_colour,
+			})
 		## **No sock top.** It was built, measured and removed rather than kept.
 		##
 		## The knee sits at y 0.413 and the shoe's own bounds reach 0.388, so this
@@ -1704,6 +1988,27 @@ static func _add_garments(spec: Dictionary) -> Dictionary:
 	## after this, and passes through the ring rather than being covered by it.
 	var torso: Dictionary = spec.get("torso", {})
 	var neck_radius := float(Dictionary(spec.get("head", {})).get("radius", 0.18))
+	## **A produce wears a shirt cut to the produce.**
+	##
+	## This section has now had three answers and the first two were rejected for
+	## the same reason: a belt and then a collar, both *rings* laid across the one
+	## shape that carries the identity, reading as neither clothing nor body. That
+	## objection is sound and it is an objection to a band, not to a garment. A
+	## singlet has a neckline and a hem -- two garment edges -- and it follows the
+	## produce's own profile, lobes and depth scale, so a pepper's ribs stay ribbed
+	## under it and a tomato stays round. Nothing is cut in two.
+	##
+	## Both edges come off the body rather than being placed. The neckline sits at
+	## the shoulder the produce already declares; the hem sits at the lowest ring
+	## still carrying most of the torso's width, which is where that shape stops
+	## being a body and starts being a base -- and is where a garment would
+	## naturally be cut on it.
+	if str(spec.get("torso_material", "kit")) == "skin":
+		var singlet := _produce_singlet(spec, shirt_colour)
+		if not singlet.is_empty():
+			extras.append(singlet)
+	## NOTE the height is re-seated by `_apply_physical_profile` once the torso has
+	## NOTE its final scale; this is the authored placement, not the drawn one
 	var torso_top := float(spec.get("torso_y", 1.1)) \
 		+ float(torso.get("height", 0.9)) * 0.5
 	extras.append({
@@ -1932,6 +2237,10 @@ static func _vegi(produce: String) -> Dictionary:
 				"position": Vector3(
 					float(rib.x), float(rib.y), float(rib.get("z", 0.04))
 				),
+				## Capsules stand on Y unless told otherwise. A collar lying
+				## across the body is the one element that breaks a long
+				## vertical silhouette, and nothing else in the vocabulary does.
+				"rotation": rib.get("rotation", Vector3.ZERO),
 				"color": "crown",
 			})
 	if body.has("blush"):
@@ -1941,8 +2250,13 @@ static func _vegi(produce: String) -> Dictionary:
 		extras.append({
 			"name": "Blush", "parent": "BodyPivot", "shape": "sphere",
 			"radius": float(torso.get("radius", 0.42)) * 1.04,
-			"height": float(torso.get("height", 0.80)) * 0.58,
-			"position": Vector3(0.0, float(body.torso_y) + 0.20, 0.0),
+			"height": float(torso.get("height", 0.80)) \
+				* float(body.get("blush_height", 0.58)),
+			## Turnip wore this on the shoulder; a leek wears it at the base, so
+			## the anchor is per-body rather than the +0.20 that was hardcoded.
+			"position": Vector3(
+				0.0, float(body.torso_y) + float(body.get("blush_y", 0.20)), 0.0
+			),
 			"color_value": body.blush,
 		})
 	return {
@@ -1973,7 +2287,10 @@ static func _vegi(produce: String) -> Dictionary:
 ## the eye something to track when they change direction.
 static func _feli() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.27, "height": 0.94},
+		"torso": {"shape": "profile", "radius": 0.29, "height": 0.94,
+			"profile": [Vector2(-1.0, 0.13), Vector2(-0.72, 0.22),
+				Vector2(-0.05, 0.245), Vector2(0.55, 0.29),
+				Vector2(1.0, 0.14)], "depth_scale": 0.72},
 		"torso_y": 1.10,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.50, 0.22, 0.34)},
@@ -2076,7 +2393,10 @@ static func _feli() -> Dictionary:
 ## rather than as two thin sticks.
 static func _avi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
+		"torso": {"shape": "profile", "radius": 0.27, "height": 1.10,
+			"profile": [Vector2(-1.0, 0.10), Vector2(-0.70, 0.17),
+				Vector2(-0.12, 0.20), Vector2(0.54, 0.27),
+				Vector2(1.0, 0.11)], "depth_scale": 0.58},
 		"torso_y": 1.20,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.44, 0.20, 0.32)},
@@ -2253,8 +2573,49 @@ static func _limb_mesh(
 	return surface.commit()
 
 
+## A deliberately authored body contour. The profile is a sequence of
+## Vector2(vertical fraction, radius) rings from -1 at the seat to +1 at the
+## shoulder. Unlike scaling a capsule, moving one ring changes only that part of
+## the body: a pear can have a low belly and a narrow neck, a Cani can carry a
+## chest, and an Ursi can settle its mass through the hips.
+static func _profile_mesh(spec: Dictionary) -> Mesh:
+	var profile: Array = spec.get("profile", [])
+	if profile.size() < 2:
+		return CapsuleMesh.new()
+	var height := float(spec.get("height", 1.0))
+	var sides := int(spec.get("sides", 20))
+	var lobes := int(spec.get("lobes", 0))
+	var lobe_depth := float(spec.get("lobe_depth", 0.0))
+	var depth_scale := float(spec.get("depth_scale", 1.0))
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for ring in range(profile.size() - 1):
+		var lower: Vector2 = profile[ring]
+		var upper: Vector2 = profile[ring + 1]
+		for side in range(sides):
+			var a := TAU * float(side) / float(sides)
+			var b := TAU * float(side + 1) / float(sides)
+			var lower_a := lower.y * (1.0 + lobe_depth * cos(float(lobes) * a))
+			var lower_b := lower.y * (1.0 + lobe_depth * cos(float(lobes) * b))
+			var upper_a := upper.y * (1.0 + lobe_depth * cos(float(lobes) * a))
+			var upper_b := upper.y * (1.0 + lobe_depth * cos(float(lobes) * b))
+			var points := [
+				Vector3(cos(a) * lower_a, lower.x * height * 0.5, sin(a) * lower_a * depth_scale),
+				Vector3(cos(b) * lower_b, lower.x * height * 0.5, sin(b) * lower_b * depth_scale),
+				Vector3(cos(b) * upper_b, upper.x * height * 0.5, sin(b) * upper_b * depth_scale),
+				Vector3(cos(a) * upper_a, upper.x * height * 0.5, sin(a) * upper_a * depth_scale),
+			]
+			for corner in [0, 1, 2, 0, 2, 3]:
+				surface.add_vertex(points[corner])
+	surface.index()
+	surface.generate_normals()
+	return surface.commit()
+
+
 static func build_mesh(spec: Dictionary) -> Mesh:
 	match str(spec.get("shape", "capsule")):
+		"profile":
+			return _profile_mesh(spec)
 		"limb":
 			return _limb_mesh(
 				float(spec.get("top_radius", 0.09)),
@@ -2331,7 +2692,10 @@ static func build_mesh(spec: Dictionary) -> Mesh:
 ## *standing*. The ears drop instead of pricking up, for the same reason.
 static func _cani() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.295, "height": 1.00},
+		"torso": {"shape": "profile", "radius": 0.325, "height": 1.00,
+			"profile": [Vector2(-1.0, 0.14), Vector2(-0.70, 0.235),
+				Vector2(-0.12, 0.27), Vector2(0.48, 0.325),
+				Vector2(1.0, 0.16)], "depth_scale": 0.88},
 		"torso_y": 1.14,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.54, 0.22, 0.36)},
@@ -2359,14 +2723,20 @@ static func _cani() -> Dictionary:
 			## read the same -- a feature that cannot be seen is not a feature.
 			## Lifted 0.02 with it so the wider seat still meets the skull.
 			{
-				"name": "EarLeft", "parent": "BodyPivot", "shape": "cone",
-				"radius": 0.075, "height": 0.26,
+				"name": "EarLeft", "parent": "BodyPivot", "shape": "profile",
+				"radius": 0.11, "height": 0.30,
+				"profile": [Vector2(-1.0, 0.025), Vector2(-0.58, 0.085),
+					Vector2(0.30, 0.11), Vector2(1.0, 0.065)],
+				"depth_scale": 0.42,
 				"position": Vector3(-0.195, 1.88, 0.02),
 				"rotation": Vector3(0.0, 0.0, 152.0), "color": "skin",
 			},
 			{
-				"name": "EarRight", "parent": "BodyPivot", "shape": "cone",
-				"radius": 0.075, "height": 0.26,
+				"name": "EarRight", "parent": "BodyPivot", "shape": "profile",
+				"radius": 0.11, "height": 0.30,
+				"profile": [Vector2(-1.0, 0.025), Vector2(-0.58, 0.085),
+					Vector2(0.30, 0.11), Vector2(1.0, 0.065)],
+				"depth_scale": 0.42,
 				"position": Vector3(0.195, 1.88, 0.02),
 				"rotation": Vector3(0.0, 0.0, -152.0), "color": "skin",
 			},
@@ -2406,7 +2776,10 @@ static func _cani() -> Dictionary:
 ## nothing to it, Ursi makes one by being dense.
 static func _ursi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.355, "height": 1.02},
+		"torso": {"shape": "profile", "radius": 0.39, "height": 1.02,
+			"profile": [Vector2(-1.0, 0.18), Vector2(-0.72, 0.33),
+				Vector2(-0.10, 0.39), Vector2(0.50, 0.375),
+				Vector2(1.0, 0.20)], "depth_scale": 0.96},
 		"torso_y": 1.10,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.62, 0.22, 0.42)},
@@ -2464,7 +2837,10 @@ static func _ursi() -> Dictionary:
 ## in a human's place on a human's head was half the problem.
 static func _simi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.285, "height": 0.76},
+		"torso": {"shape": "profile", "radius": 0.325, "height": 0.76,
+			"profile": [Vector2(-1.0, 0.12), Vector2(-0.65, 0.205),
+				Vector2(-0.05, 0.25), Vector2(0.58, 0.325),
+				Vector2(1.0, 0.18)], "depth_scale": 0.75},
 		"torso_y": 0.98,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.46, 0.20, 0.32)},
@@ -2497,14 +2873,23 @@ static func _simi() -> Dictionary:
 			## mouth off the skull -- `_mouth_override` reads it by name -- and a
 			## face with its mouth on a snout is not a human face.
 			{
-				"name": "Brow", "parent": "BodyPivot", "shape": "box",
-				"size": Vector3(0.20, 0.05, 0.06),
-				"position": Vector3(0.0, 1.505, -0.115),
-				"rotation": Vector3(-12.0, 0.0, 0.0), "color": "crown",
+				"name": "BrowLeft", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.068, "height": 0.045,
+				"position": Vector3(-0.052, 1.505, -0.122),
+				"rotation": Vector3(-12.0, 0.0, -9.0),
+				"scale": Vector3(1.35, 1.0, 0.48), "color": "crown",
+			},
+			{
+				"name": "BrowRight", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.068, "height": 0.045,
+				"position": Vector3(0.052, 1.505, -0.122),
+				"rotation": Vector3(-12.0, 0.0, 9.0),
+				"scale": Vector3(1.35, 1.0, 0.48), "color": "crown",
 			},
 			{
 				## A monkey: small and prognathous -- little section, but it
-				## carries forward, which with the brow above it is the whole read.
+				## carries forward, which with the curved brow above it is the
+				## whole read.
 				"name": "Muzzle", "parent": "BodyPivot", "shape": "wedge", "ink": "body",
 				"radius": 0.070, "height": 0.078,
 				"depth": 0.145, "taper_width": 0.62, "taper_height": 0.70,

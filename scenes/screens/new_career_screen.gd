@@ -291,8 +291,11 @@ func _build_voli_choices() -> void:
 		_inline_label("Arms"),
 		_slider("arm_ratio", ManagerProfile.ARM_RATIO.x, ManagerProfile.ARM_RATIO.y, 0.005),
 	], false)
+	## Paired with legs for the same reason height is paired with arms: the fold.
 	_row("Legs", [
 		_slider("leg_ratio", ManagerProfile.LEG_RATIO.x, ManagerProfile.LEG_RATIO.y, 0.005),
+		_inline_label("Weight"),
+		_slider("mass_kg", ManagerProfile.MASS_KG.x, ManagerProfile.MASS_KG.y, 1.0),
 	], false)
 
 	_hand_row = HBoxContainer.new()
@@ -384,6 +387,11 @@ func _slider_caption(key: String, value: float) -> String:
 	match key:
 		"height_cm":
 			return "%d cm" % roundi(value)
+		## A weight, so it prints as one. It is also the only slider here that is
+		## not purely a look: mass reaches locomotion speed, floor recovery and
+		## the power term on a swing.
+		"mass_kg":
+			return "%d kg" % roundi(value)
 		"arm_ratio":
 			return "%d cm span" % roundi(float(appearance.height_cm) * value)
 		_:
@@ -458,6 +466,13 @@ func _build_preview_world() -> void:
 func _refresh_preview() -> void:
 	if _preview_actor == null:
 		return
+	## **Standing, not ready.** `ready_stance` defaults to the defender's crouch,
+	## which carries the torso 0.30 rad forward -- correct on a court and wrong
+	## here, where the reported symptom was every voli in the creator leaning.
+	## `watching` is authored for "a voli watching a ball that is not theirs", and
+	## in the creator there is no ball at all, so it is the existing answer rather
+	## than a fourth stance invented for a menu.
+	_preview_actor.ready_stance = "watching"
 	var profile := ManagerProfile.appearance_profile(appearance)
 	_preview_actor.configure(
 		0, true, "", ManagerProfile.actor_hand(appearance), profile
@@ -619,7 +634,9 @@ func _fill_region_grid() -> void:
 			_set_principles(
 				VolleyballRegions.preferred_principles(selected_region), true
 			)
-		_suggest_manager_name()
+		## NOTE guarded like `_select_region`; unguarded it overwrote a typed name
+		if manager_name_tracks_region:
+			_suggest_manager_name()
 	for region_name in names:
 		var button := Button.new()
 		button.toggle_mode = true
@@ -875,6 +892,20 @@ func _previous() -> void:
 func _next() -> void:
 	error_label.text = ""
 	if current_step < step_panels.size() - 1:
+		## **A name you have been shown and kept is a name you chose.**
+		##
+		## `manager_name_tracks_region` only cleared when the manager *typed*, so
+		## accepting the offer left it set and every later region or tier change
+		## silently replaced the name -- three times across the flow, at the
+		## identity step, the club step and the save setup. `suggested_name`'s own
+		## contract is "offered rather than imposed", and an offer that keeps
+		## being re-made after you have taken it is imposed.
+		##
+		## Leaving the step is the moment the offer closes: the name has been on
+		## screen, it was editable, and it is now the manager's whether they
+		## touched it or not.
+		if current_step == 0:
+			manager_name_tracks_region = false
 		current_step += 1
 		_show_step()
 		return
