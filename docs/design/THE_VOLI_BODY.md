@@ -216,6 +216,33 @@ Nothing here needs a second tailoring pass: a collar is a ring at the neck
 opening the six cuts already have, and trousers are the shorts cut continued past
 the knee. Avi's wing opening is the same opening in a shirt as in a singlet.
 
+## 2b. What got built, and the one thing that surprised us
+
+Both sections are built. Two notes, because in each case the measurement moved
+the work somewhere the design did not anticipate.
+
+**The stance was half a design question.** §1 assumed the fix was choosing
+between two postures, and that half is built exactly as decided --
+`ReadyStance.choose` takes `ball_is_live` off `ServeBiomechanics.TOSS_START`, so
+poised begins at the toss and no threshold was invented. But the *reason* the
+stance looked unbalanced was not the choice of posture at all. The gait blended
+both ankles to zero at rest, on the stated grounds that a standing voli's sole is
+already flat, and it is not: the shoe hangs off the knee and inherits the leg's
+fold, which put every body 53.7 degrees onto its toe. Cancelling hip and knee at
+the ankle -- the expression the walk already uses -- brings defending to 9.7 and
+the other two to 3.6. See `docs/review/READY_STANCE_FOOT.md`.
+
+So the two modes were real and needed, and they were also not the bug. Worth
+keeping in mind next time a posture reads wrong: the stance may be right and the
+thing under it wrong.
+
+**The garments needed the outline to be one number.** §2's six cuts are built,
+and building them surfaced that a shell sized as a *multiple* of the limb radius
+cannot clear an outline grown at a *fixed* 0.018 m -- they agree at one radius
+and nowhere else. The ink weight now lives in `body_type_models.gd` as
+`body_ink_metres`, because the file that authors garments is the one that has to
+clear them. See `docs/review/GARMENT_INK_CLEARANCE.md`.
+
 ## 3. What this does not decide
 
 Nothing here says how either is built. Both sections name what must not happen
