@@ -778,7 +778,15 @@ func apply_ui_palette(light_mode: bool) -> void:
 	var wears_kit := str(silhouette.get("torso_material", "kit")) == "kit"
 	## Hoisted above both limb loops: the shoulder and the hip are dressed in
 	## separate scopes and one of them cannot see the other's locals.
-	var dressed := wears_kit and BodyTypeModelsScript.draw_garments
+	##
+	## **Two facts, and this flag used to be both.** `wears_kit` says whether the
+	## *torso* is the strip's colour, which a produce's never is because the
+	## produce is the body. `dressed` says whether this voli is wearing garments
+	## at all -- and every body is, because `_add_garments` runs for all six and
+	## a produce now has a singlet cut to its own profile. Conflating them left a
+	## Vegi with sleeves, shorts and trousers hanging off skin-coloured shoulder,
+	## hip and knee joints: the joints a garment covers, left bare.
+	var dressed := BodyTypeModelsScript.draw_garments
 	_apply_material_color(torso, team_color if wears_kit else skin_color)
 	_build_kit_marks(wears_kit)
 	_apply_material_color(head, skin_color)
@@ -815,7 +823,19 @@ func apply_ui_palette(light_mode: bool) -> void:
 		_paint_joint(
 			leg, shorts_colour(team_color) if dressed else skin_color
 		)
-		_paint_joint(leg.get_node("Knee"), skin_color)
+		## **The knee is inside the trouser and outside the shorts.**
+		##
+		## The same rule the hip already follows, one joint down: a garment that
+		## crosses a joint has to include it, or the ball between its two halves
+		## is a patch of bare skin where the leg bends. Shorts end above the knee,
+		## so on a kit this stays skin and always did -- which is why the question
+		## only arrived with the trouser.
+		_paint_joint(
+			leg.get_node("Knee"),
+			shorts_colour(team_color) if dressed
+				and garment == BodyTypeModelsScript.GARMENT_FORMAL
+			else skin_color
+		)
 		_apply_material_color(leg.get_node("Knee/Shoe"), team_color.darkened(0.55))
 	## A face has to read on a pale turnip and on a near-black aubergine, so the
 	## colour is chosen against the skin's luminance rather than being one ink
@@ -853,9 +873,13 @@ func apply_ui_palette(light_mode: bool) -> void:
 			## whole point of formal dress is that it does not.
 			"formal":
 				_apply_material_color(cosmetic, FORMAL_COLOR, part_alpha)
+			## Through `shorts_colour`, not a second darkening of its own. The two
+			## were 0.38 and 0.34, which is invisible on a trouser leg and a band
+			## at the knee -- the joint takes this colour too, and a joint that is
+			## nearly the trouser is worse than one that is obviously not.
 			"formal_dark":
 				_apply_material_color(
-					cosmetic, FORMAL_COLOR.darkened(0.34), part_alpha
+					cosmetic, shorts_colour(FORMAL_COLOR), part_alpha
 				)
 			"trim":
 				_apply_material_color(cosmetic, trim_colour(), part_alpha)
