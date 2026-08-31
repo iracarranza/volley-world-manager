@@ -467,6 +467,7 @@ func _tray_profiles() -> Array[Dictionary]:
 			## to player 1 and the whole tray comes out as one voli.
 			"player_id": int(player.id),
 			"height_cm": player.height_cm,
+			"mass_kg": player.mass_kg,
 			"wingspan_cm": player.wingspan_cm,
 			"stride_length_m": player.stride_length_m,
 			"body_type": player.body_type,

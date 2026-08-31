@@ -65,6 +65,23 @@ const PLATES: Array[Dictionary] = [
 		"spacing": 1.80,
 	},
 	{
+		"name": "01c_type_details",
+		"caption": "body",
+		"subjects": ["Feli", "Cani", "Ursi", "Simi", "Pepper"],
+		"appearances": [
+			{"marking": "tabby", "palette_index": 0},
+			{"marking": "spots", "palette_index": 2},
+			{"marking": "blaze", "palette_index": 1},
+			{"marking": "patch", "palette_index": 5},
+			{"produce": "Pepper", "marking": "none", "palette_index": 0},
+		],
+		"pose": [-1, 0.0, 0.0],
+		"faces": ["neutral"],
+		"yaws": [-18.0, 18.0, -22.0, 22.0, -28.0],
+		"camera": [Vector3(0.0, 1.68, -9.8), Vector3(-2.0, 180.0, 0.0), 30.0],
+		"spacing": 1.80,
+	},
+	{
 		"name": "02_expressions_open",
 		"caption": "face",
 		"subjects": ["Pepper", "Pear", "Tomato"],
@@ -188,6 +205,21 @@ const PLATES: Array[Dictionary] = [
 		"camera": [Vector3(0.0, 1.62, -10.4), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.72,
 	},
+	{
+		"name": "08c_mass",
+		"caption": "build",
+		"subjects": ["Tomato", "Tomato", "Tomato"],
+		"pose": [-1, 0.0, 0.0],
+		"faces": ["neutral"],
+		"yaws": [-14.0, 0.0, 14.0],
+		"builds": [
+			{"label": "60 kg", "mass": 60.0},
+			{"label": "82 kg", "mass": 82.0},
+			{"label": "112 kg", "mass": 112.0},
+		],
+		"camera": [Vector3(0.0, 1.62, -7.2), Vector3(-2.0, 180.0, 0.0), 30.0],
+		"spacing": 1.86,
+	},
 	## What the contact *did* to them, which is a different axis from how strained
 	## it was. The four states are drawn as bodies rather than markers, so the
 	## plate is the test: a special move that needs an icon to be understood has
@@ -236,6 +268,24 @@ const PLATES: Array[Dictionary] = [
 		"yaws": [-38.0, 64.0, 48.0, 82.0],
 		"camera": [Vector3(0.0, 2.70, -7.0), Vector3(-14.0, 180.0, 0.0), 31.0],
 		"spacing": 2.20,
+	},
+	{
+		"name": "10_motion_language",
+		"caption": "motion",
+		"subjects": [
+			"Aubergine", "Aubergine", "Aubergine", "Aubergine",
+			"Feli", "Feli", "Feli", "Feli",
+		],
+		"phases": [-0.58, -0.18, 0.18, 0.62, -0.58, -0.18, 0.18, 0.62],
+		"labels": [
+			"load", "cock", "contact", "follow",
+			"load", "cock", "contact", "follow",
+		],
+		"pose": [4, 0.50, 0.0],
+		"faces": ["neutral"],
+		"yaws": [-28.0],
+		"camera": [Vector3(0.0, 2.22, -15.2), Vector3(-4.0, 180.0, 0.0), 31.0],
+		"spacing": 1.95,
 	},
 ]
 
@@ -328,21 +378,29 @@ func _shoot(plate: Dictionary) -> void:
 				label = str(Array(plate.get("signature_moves", []))[index]).replace(
 					"_", " "
 				)
+			"motion":
+				var motion_labels: Array = plate.get("labels", [])
+				label = str(motion_labels[index]) if index < motion_labels.size() else wanted
 			"body":
 				label = wanted if body_type == "Vegi" else body_type
 			_:
 				label = wanted if body_type == "Vegi" else body_type
 		var builds: Array = plate.get("builds", [])
 		var build: Dictionary = builds[index] if index < builds.size() else {}
+		var appearances: Array = plate.get("appearances", [])
+		var chosen_appearance: Dictionary = appearances[index] \
+			if index < appearances.size() else {}
 		if not build.is_empty():
 			label = str(build.get("label", label))
 		actor.configure(
 			actor_id, index % 2 == 0, label, "Right",
 			{
 				"height_cm": 188.0,
+				"mass_kg": float(build.get("mass", 82.0)),
 				"wingspan_cm": float(build.get("wingspan", 191.0)),
 				"stride_length_m": float(build.get("stride", 0.81)),
 				"body_type": body_type,
+				"appearance": chosen_appearance,
 			},
 		)
 		actor.set_tactical_position(
@@ -385,6 +443,12 @@ func _shoot(plate: Dictionary) -> void:
 
 	for _frame in range(8):
 		await get_tree().process_frame
+	## The final plate can otherwise read the previous swap-chain image on Metal:
+	## the scene tree has advanced, but the root viewport has not necessarily
+	## presented since the last stage was replaced. Force this authored stage to
+	## become the capture instead of silently duplicating an earlier plate.
+	RenderingServer.force_draw(false)
+	await get_tree().process_frame
 	var path := "user://portfolio_%s.png" % str(plate.name)
 	root.get_texture().get_image().save_png(path)
 	print("saved %s" % ProjectSettings.globalize_path(path))

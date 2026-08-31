@@ -113,6 +113,24 @@ func _scan(rally: Resource, census: Dictionary) -> void:
 		var row := _leg(census, str(RallyEventScript.EventType.keys()[kind]))
 		row.events += 1
 		var named := {}
+		var held := {}
+		## **Which side is silent, not just how many.** Each leg publishes roughly
+		## one team of the twelve, and the repair is to publish the other -- but
+		## which one differs per leg and reading it out of a 19,000-line resolver
+		## is guesswork. Counted here instead.
+		if not Dictionary(meta.get("home_phase_targets", {})).is_empty():
+			row["home_map"] = int(row.get("home_map", 0)) + 1
+		if not Dictionary(meta.get("opponent_phase_targets", {})).is_empty():
+			row["opponent_map"] = int(row.get("opponent_map", 0)) + 1
+		## **Held is a third state, not a fourth silence.** A voli the resolver
+		## walked somewhere and a voli it deliberately left standing are both
+		## answered -- presentation invents neither -- but they are different
+		## findings, so they get different columns. Counted before `named` fills
+		## so the two never double-count the same voli.
+		for key in ["home_phase_positions", "opponent_phase_positions"]:
+			for player_id in Dictionary(meta.get(key, {})):
+				if int(player_id) != int(event.actor_id):
+					held[int(player_id)] = true
 		for key in ["home_phase_targets", "opponent_phase_targets"]:
 			for player_id in Dictionary(meta.get(key, {})):
 				named[int(player_id)] = true
@@ -121,6 +139,9 @@ func _scan(rally: Resource, census: Dictionary) -> void:
 			for player_id in Dictionary(meta.get(key, {})):
 				intents[int(player_id)] = true
 		row.published += named.size()
+		for held_id in named:
+			held.erase(held_id)
+		row["held"] = int(row.get("held", 0)) + held.size()
 		row.contacting += 1
 		## A rally's first contact has no preceding interval; see the header.
 		if kind == RallyEventScript.EventType.SERVE:
@@ -132,7 +153,7 @@ func _scan(rally: Resource, census: Dictionary) -> void:
 		## both columns made `silent` undercount, so the accounted set is the
 		## union and not the sum.
 		named[int(event.actor_id)] = true
-		row.silent += maxi(ON_COURT - named.size(), 0)
+		row.silent += maxi(ON_COURT - named.size() - held.size(), 0)
 		row.with_intent += intents.size()
 		## No published map carries a per-voli traversal duration or arrival
 		## timestamp today. Counted rather than assumed, so the day one does the
@@ -155,28 +176,34 @@ func _print(census: Dictionary) -> void:
 	print("\naction-window census -- %d rallies, %d volis on court\n" % [
 		census.rallies, ON_COURT,
 	])
-	print("%-16s %8s %11s %11s %9s %8s %11s %10s" % [
-		"leg", "events", "published", "contacting", "silent", "no leg",
+	print("%-16s %7s %10s %6s %11s %7s %7s %9s %9s" % [
+		"leg", "events", "published", "held", "contacting", "silent", "no leg",
 		"w/ intent", "w/ timing",
 	])
 	var order := [
 		"SERVE", "RECEPTION", "SET", "ATTACK", "BLOCK", "DIG", "ATTACK_COVERAGE",
 	]
 	var totals := {
-		"published": 0, "contacting": 0, "silent": 0, "no_leg": 0,
+		"published": 0, "held": 0, "contacting": 0, "silent": 0, "no_leg": 0,
 		"with_timing": 0,
 	}
 	for name in order:
 		if not census.legs.has(name):
 			continue
 		var row: Dictionary = census.legs[name]
-		print("%-16s %8d %11d %11d %9d %8d %11d %10d" % [
-			name, row.events, row.published, row.contacting, row.silent,
+		print("%-16s %7d %10d %6d %11d %7d %7d %9d %9d" % [
+			name + (" [h%d/o%d]" % [
+				int(row.get("home_map", 0)), int(row.get("opponent_map", 0)),
+			]), row.events, row.published, int(row.get("held", 0)),
+			row.contacting, row.silent,
 			row.no_leg, row.with_intent, row.with_timing,
 		])
 		for key in totals:
 			totals[key] += int(row[key])
-	var accounted := int(totals.published) + int(totals.contacting)
+	## Held counts as placed: the resolver answered for these volis, it just
+	## answered "they stay". Presentation invents nothing for them.
+	var accounted := int(totals.published) + int(totals.held) \
+		+ int(totals.contacting)
 	var everyone := accounted + int(totals.silent)
 	print("")
 	print("  voli-legs with no interval to move in: %d  (excluded below)" % int(

@@ -103,6 +103,14 @@ const MOUTH_SAMPLES: int = 15
 ## What ever showed was the box plus a thin rim, and a thin rim is what this
 ## replaces. Measured against the ink-collapsed render rather than against the
 ## arithmetic.
+## How much of the eye the pupil is, across and down.
+##
+## A proportion rather than a size in head radii, so an expression that squashes
+## the eye squashes the pupil with it and the pupil cannot end up outside the eye
+## it belongs to. At the authored eye this is 0.16 by 0.15 head radii, roughly
+## four times `WHISKER_ROOT_RADIUS` -- the thinnest mark this file believes
+## survives the quantiser at roster distance.
+const PUPIL_SHARE: float = 0.45
 const EYE_WIDTH: float = 0.36
 const EYE_HEIGHT: float = 0.34
 const FEATURE_DEPTH: float = 0.10
@@ -249,6 +257,52 @@ static func parts(
 			## still look like perfectly good faces.
 			"rotation": Vector3(0.0, 0.0, -tilt * side),
 		})
+		## The pupil, in the ink the eye did not take.
+		##
+		## An eye is one flat mark, so it says which way a voli is *facing* and
+		## nothing about where they are looking. A pupil is the smallest thing
+		## that adds the second: it is what a viewer reads a gaze off.
+		##
+		## **No new colour.** `player_actor_3d.gd` already picks the face's ink
+		## from two, by the skin's luminance, so the contrast the pupil needs
+		## already exists -- it takes the one the eye did not. Inventing a third
+		## would be a colour that has to be checked against six skins and every
+		## regional kit.
+		##
+		## Sized as a fraction of the eye rather than in head radii, so it stays
+		## inside the eye whatever an expression's squash does to it. Well clear
+		## of `WHISKER_ROOT_RADIUS`, which is this file's own floor for a mark that
+		## survives the quantiser at roster distance.
+		##
+		## **Offset along the surface normal by both half-depths, not by a bigger
+		## lift.** The first attempt doubled `SURFACE_LIFT`, which moved the
+		## pupil's centre 3.9 mm forward while the eye's own half-depth is 9.7 --
+		## so the pupil sat entirely inside the eye and nothing showed. A lift is
+		## in head radii and a box's depth is not; what has to clear here is one
+		## box past another, so the distance comes from the two boxes.
+		##
+		## Straight down -z rather than along the surface normal, which was the
+		## second attempt. The normal leans outward and upward away from the
+		## face's centre, so it carried the pupil out of the middle of the eye --
+		## and a pupil that is not centred in its eye is a voli looking sideways,
+		## permanently. Both boxes are axis-aligned apart from a shared roll, so
+		## the direction one clears the other in is the face's own forward.
+		result.append({
+			"name": "PupilL" if side < 0.0 else "PupilR",
+			"shape": "box",
+			"size": Vector3(
+				EYE_WIDTH * radius * PUPIL_SHARE,
+				EYE_HEIGHT * radius * squash * PUPIL_SHARE,
+				FEATURE_DEPTH * radius * PUPIL_SHARE,
+			),
+			"position": _surface(EYE_U * side, EYE_V, radius, half_height)
+				- Vector3(
+					0.0, 0.0,
+					FEATURE_DEPTH * radius * (1.0 + PUPIL_SHARE) * 0.5,
+				),
+			"ink": "none",
+			"rotation": Vector3(0.0, 0.0, -tilt * side),
+		})
 
 	if bool(mouth_override.get("omit", false)):
 		return result
@@ -293,13 +347,28 @@ static func parts(
 	## on another. On Feli that is an 18.5 mm bar standing 18.5 mm proud of a snout
 	## whose entire height is 150 mm. The span already carried `mouth_scale`
 	## through `step`; these two never did.
+	## **A span scales with the snout; a line weight does not.**
+	##
+	## Both of these took `mouth_scale`, and half of that was the right fix: a
+	## depth authored for a skull and carried onto a muzzle stood the mouth proud
+	## of the snout, which is the defect the note above records. Thickness is a
+	## different quantity. It is a *line weight*, and a line weight is about
+	## surviving the quantiser at roster distance rather than about the size of
+	## what it is drawn on -- the same argument `WHISKER_ROOT_RADIUS` makes for
+	## the whiskers, which carry no scale at all.
+	##
+	## Measured with both scaled, against the eye, which is the mark that reads:
+	## Vegi 0.34 of the eye's height and every muzzled body 0.12 to 0.13, a third
+	## of it. That is the report that expressions cannot be made out on Feli and
+	## Simi while Vegi is fine -- Vegi is the one body with no muzzle, so it is
+	## the one whose mouth was never scaled down.
 	var stroke_scale := mouth_scale if anchor != null else 1.0
 	result.append({
 		"name": "Mouth",
 		"shape": "stroke",
 		"points": points,
 		"normals": normals,
-		"thickness": MOUTH_THICKNESS * radius * stroke_scale * 0.5,
+		"thickness": MOUTH_THICKNESS * radius * 0.5,
 		"depth": FEATURE_DEPTH * radius * stroke_scale,
 		"position": Vector3.ZERO,
 		"rotation": Vector3.ZERO,
