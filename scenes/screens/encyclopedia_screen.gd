@@ -135,6 +135,10 @@ func selected_register_region() -> String:
 	return _register_view.selected_region() if _register_view != null else ""
 
 
+func article_text() -> String:
+	return _article.text if _article != null else ""
+
+
 func set_world_register_mode(mode_name: StringName) -> void:
 	if _register_view == null:
 		_build()

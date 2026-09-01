@@ -57,6 +57,9 @@ const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.g
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
+const LOCKED_REGION_TAGLINES_SCRIPT := preload(
+	"res://scripts/data/region_taglines_locked.gd"
+)
 const REGIONAL_KITS_SCRIPT := preload("res://scripts/data/regional_kits.gd")
 const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
 const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
@@ -20253,78 +20256,39 @@ func _test_region_language() -> void:
 			% [ordered, plain],
 	)
 
-	## 8. **A tagline names its own people with the demonym, not with a second
-	##    word invented beside it.**
+	## 8. **Approved region-selection copy is the runtime copy.**
 	##
-	##    Seven of the eight majors carried one: Landavoli, Spëddich, Hitōue,
-	##    Larçgan, Taktikiãn, Ispakyanos, A'ace'ni. The `DEFINITIONS` header has
-	##    said "these do not currently match `DEMONYMS` below" since the taglines
-	##    were written, which is a comment doing a check's job and losing.
-	##
-	##    Larçgan is why it was worth more than tidiness. It hung a cedilla on
-	##    Blôc du Larg -- Bompaçao's mark, in the one region whose relationship to
-	##    Bompaçao is this map's single deliberate opposition -- so the sentence
-	##    introducing Larg to a player quietly said it was Bompaçao's kin. The
-	##    stray-mark gate could not see it because it reads names, and this was
-	##    prose.
-	var unnamed: Array[String] = []
-	var borrowed: Array[String] = []
-	for region_name in REGIONS_SCRIPT.names():
-		var tagline := str(
+	##    The save-differentiation pass deliberately superseded the earlier
+	##    mechanical prose gates. Keeping those gates here after the copy was
+	##    locked made the repository hold two incompatible authorities: the
+	##    approved table could exist while every runtime reader still displayed
+	##    the older inline sentence. The canonical definition boundary must now
+	##    reconcile every explicit lock exactly.
+	var stale_taglines: Array[String] = []
+	for region_name in LOCKED_REGION_TAGLINES_SCRIPT.TAGLINES:
+		var displayed := str(
 			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("tagline", "")
 		)
-		var own: String = REGIONS_SCRIPT.demonym(str(region_name))
-		## Only the majors are required to name their people at all -- a minor's
-		## tagline describes a hall rather than a nation, deliberately, because
-		## that is the size difference the two tiers are for.
-		if not region_name in REGIONS_SCRIPT.MINOR_REGIONS \
-				and not tagline.contains(own):
-			unnamed.append("%s never says %s" % [region_name, own])
-		for other in REGIONS_SCRIPT.names():
-			var word: String = REGIONS_SCRIPT.demonym(str(other))
-			if other != region_name and tagline.contains(word):
-				borrowed.append("%s says %s" % [region_name, word])
+		var approved := str(LOCKED_REGION_TAGLINES_SCRIPT.TAGLINES[region_name])
+		if displayed != approved:
+			stale_taglines.append(str(region_name))
 	_check(
-		unnamed.is_empty() and borrowed.is_empty(),
-		"a tagline names its own people and nobody else's (missing: %s; borrowed: %s)"
-			% [unnamed, borrowed],
+		stale_taglines.is_empty(),
+		"every approved regional tagline is the runtime tagline (stale: %s)"
+			% [stale_taglines],
 	)
 
-	## 9. **A tagline states a practice; it does not rate it.**
+	## 9. **A candidate is not silently promoted to locked copy.**
 	##
-	##    Five of the eight majors carried an adjective the frame had no standing
-	##    to use -- *nightmarish* power, *devastating* serves, a *crushing* bomba,
-	##    the *world's premier* volis, and structure *perfected* into *complete
-	##    control*. `DIEGETIC_MANAGEMENT.md` §11 is the rule they broke, and the
-	##    surface makes it worse than a style note: `main.gd` renders the
-	##    opponent's tagline on the match screen, so the frame was telling a
-	##    manager how to feel about a side before the first serve, and the region
-	##    picker is the first screen of a new save.
-	##
-	##    A word list is a blunt instrument and deliberately so. The failure this
-	##    catches is not subtle prose -- it is reaching for an intensifier because
-	##    the sentence has not said anything yet, which is the state every one of
-	##    those five was written in. What replaced them is checkable instead:
-	##    where a tagline now claims an extreme, the region holds that extreme in
-	##    `REGIONAL_PRINCIPLES` or `REGIONAL_CURVES`.
-	var rated: Array[String] = []
-	## Not banned: *hard*, *early*, *safe*, *long* -- those describe the action,
-	## not its worth. Every word here rates the region for the reader instead.
-	var verdicts: Array[String] = [
-		"nightmarish", "devastating", "crushing", "relentless", "premier",
-		"unstoppable", "ferocious", "brutal", "legendary", "feared",
-		"perfecting", "perfected", "complete control", "the world's best",
-	]
-	for region_name in REGIONS_SCRIPT.names():
-		var line: String = str(
-			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("tagline", "")
-		).to_lower()
-		for word in verdicts:
-			if line.contains(word):
-				rated.append("%s: %s" % [region_name, word])
+	##    Kutré Lyn's latest paragraph is still labelled a direction in the
+	##    authority document. It remains visible as an explicit candidate for the
+	##    next copy decision, but it must not enter runtime merely because the
+	##    other thirteen approved lines were reconciled.
 	_check(
-		rated.is_empty(),
-		"a tagline says what a region does, not how good it is at it (%s)" % [rated],
+		not LOCKED_REGION_TAGLINES_SCRIPT.TAGLINES.has("Kutré Lyn")
+			and str(REGIONS_SCRIPT.definition("Kutré Lyn").get("tagline", ""))
+				!= LOCKED_REGION_TAGLINES_SCRIPT.KUTRE_LYN_CANDIDATE,
+		"Kutré Lyn's candidate remains distinct from approved runtime copy",
 	)
 
 

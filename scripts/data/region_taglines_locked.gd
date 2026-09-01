@@ -3,10 +3,11 @@ extends RefCounted
 
 ## Approved region-selection copy from the save-file differentiation pass.
 ##
-## This is a source-of-truth staging file, not yet wired over
-## VolleyballRegions.DEFINITIONS. `regions.gd` still owns runtime display until
-## the monolithic table is reconciled safely. Kutré Lyn is intentionally omitted
-## because its latest wording is still a direction rather than an explicit lock.
+## VolleyballRegions.definition() reconciles this source-of-truth copy over the
+## older prose embedded in its monolithic simulation table. Runtime readers must
+## use that public boundary rather than introducing a second display table.
+## Kutré Lyn is intentionally omitted because its latest wording is still a
+## direction rather than an explicit lock.
 const TAGLINES := {
 	"Landavol": "Landavolan training is intentionally broad, allowing their volis to specialize into anything -- or everything, if they want.",
 	"Spëddigh": "The close-knit and compact Spëddish get under the ball and turn broken plays into attacks before the opponent can react; their system is to make a system unnecessary.",

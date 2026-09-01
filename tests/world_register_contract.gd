@@ -3,6 +3,8 @@ extends SceneTree
 const RegisterView := preload("res://scenes/components/world_register_view.gd")
 const Encyclopedia := preload("res://scenes/screens/encyclopedia_screen.gd")
 const Politics := preload("res://scripts/data/world_political_geography.gd")
+const Regions := preload("res://scripts/data/regions.gd")
+const LockedTaglines := preload("res://scripts/data/region_taglines_locked.gd")
 
 var checks := 0
 var failures := 0
@@ -32,6 +34,10 @@ func _run() -> void:
 	_check(view.selected_region() == "Pāwa Hitō", "region selection did not reach canonical map")
 	_check(not view.terrain_summary("Pāwa Hitō").is_empty(), "Pāwa terrain must come from geography")
 	_check(view.details_text().contains("Pāwa Hitō"), "selected-region card did not update")
+	_check(
+		view.details_text().contains(String(LockedTaglines.TAGLINES["Pāwa Hitō"])),
+		"selected-region card did not use the approved regional tagline"
+	)
 	_check(view.details_text().contains("Terrain"), "selected-region card must expose physical geography")
 	view.set_mode(&"terrain")
 	_check(view.mode() == &"terrain", "terrain mode did not reach map")
@@ -41,9 +47,19 @@ func _run() -> void:
 	var screen := Encyclopedia.new()
 	root.add_child(screen)
 	await process_frame
+	_check(
+		screen.article_text().contains(String(LockedTaglines.TAGLINES["A'ace"])),
+		"Encyclopedia article did not use the approved regional tagline"
+	)
 	screen.open_world_register("Kutré Lyn")
 	_check(screen.world_register_open(), "Encyclopedia must expose World Register as a real view")
 	_check(screen.selected_register_region() == "Kutré Lyn", "direct World Register selection was lost")
+	for region_name in LockedTaglines.TAGLINES:
+		_check(
+			String(Regions.definition(region_name).get("tagline", "")) \
+				== String(LockedTaglines.TAGLINES[region_name]),
+			"%s did not resolve to its approved tagline" % region_name
+		)
 
 	view.queue_free()
 	screen.queue_free()

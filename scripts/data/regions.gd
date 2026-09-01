@@ -2,6 +2,7 @@ class_name VolleyballRegions
 extends RefCounted
 
 const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
+const LockedTaglines := preload("res://scripts/data/region_taglines_locked.gd")
 
 const DEFINITIONS := {
 	## ## Names
@@ -765,7 +766,17 @@ static func demonym(region_name: String) -> String:
 
 static func definition(region_name: String) -> Dictionary:
 	var resolved_name := canonical_name(region_name)
-	return Dictionary(DEFINITIONS.get(resolved_name, DEFINITIONS["Landavol"])).duplicate(true)
+	var result := Dictionary(
+		DEFINITIONS.get(resolved_name, DEFINITIONS["Landavol"])
+	).duplicate(true)
+	## Approved selection copy lives separately from the monolithic simulation
+	## table so a prose change cannot accidentally rewrite regional mechanics.
+	## Reconcile it here, at the canonical public read boundary, so every caller
+	## (Encyclopedia, World Register, career creation, and match presentation)
+	## receives the same authoritative tagline.
+	if LockedTaglines.TAGLINES.has(resolved_name):
+		result["tagline"] = String(LockedTaglines.TAGLINES[resolved_name])
+	return result
 
 
 static func preferred_principles(region_name: String) -> TeamPrinciples:
