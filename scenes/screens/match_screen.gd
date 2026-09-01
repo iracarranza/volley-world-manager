@@ -7,6 +7,9 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
 ## NOTE only for `TOSS_START`, which is where the ball first becomes reactable
 const ServeBiomechanicsScript := preload("res://scripts/data/serve_biomechanics.gd")
+const ServeActionBiomechanicsScript := preload(
+	"res://scripts/data/serve_action_biomechanics.gd"
+)
 
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
 @onready var broadcast_overlay: BroadcastOverlay = %BroadcastOverlay
@@ -760,6 +763,14 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 			"action_power",
 			event.metadata.get("attack_effectiveness", event.quality),
 		)), 0.0, 1.0)
+	if int(event.event_type) == RallyEventModel.EventType.SERVE:
+		context["serve_style"] = str(event.metadata.get("serve_style", "Standing"))
+		## Stable per actor. This varies the possession beat without changing the
+		## resolved toss/contact clock or resampling when a replay is opened.
+		context["serve_routine_variant"] = \
+			ServeActionBiomechanicsScript.routine_variant(actor_id)
+	if int(event.event_type) == RallyEventModel.EventType.ATTACK:
+		context["attack_type"] = str(event.metadata.get("attack_type", "Power swing"))
 	## The wall's jump, carried whole rather than per actor: the court indexes it
 	## by player id because two blockers in one wall have two different jumps, and
 	## slicing it here would hand each body only its own and lose that.

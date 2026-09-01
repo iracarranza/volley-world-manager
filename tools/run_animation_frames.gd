@@ -26,6 +26,9 @@ extends Node
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockBiomechanics := preload("res://scripts/data/block_biomechanics.gd")
+const IdleBiomechanics := preload("res://scripts/data/idle_biomechanics.gd")
+
+const OUT := "res://artifacts/rally-action-animations"
 
 ## Frames per strip. Eight is enough to see an ease curve and few enough that
 ## each frame is still large enough to read at a glance.
@@ -128,6 +131,73 @@ const STRIPS: Array[Dictionary] = [
 		"approach_sweep": true,
 	},
 	{
+		"name": "serve_standing", "caption": "SERVE standing: compact toss, transfer, step-in",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Standing", "action_power": 0.72},
+	},
+	{
+		"name": "serve_jump_topspin", "caption": "SERVE jump topspin: approach, bow, high contact, wrap",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Jump Topspin", "action_power": 0.84},
+	},
+	{
+		"name": "serve_jump_float", "caption": "SERVE jump float: compact rise and arrested punch",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Jump Float", "action_power": 0.68},
+	},
+	{
+		"name": "serve_hybrid", "caption": "SERVE hybrid: float preparation, late rotational carry",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Hybrid", "action_power": 0.76},
+	},
+	{
+		"name": "serve_sky_ball", "caption": "SERVE sky ball: grounded underhand high finish",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Sky Ball", "action_power": 0.62},
+	},
+	{
+		"name": "receive_dive", "caption": "RECEPTION dive: push, flight, platform, floor",
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, 0.0], "action_sweep": true,
+		"posture": "reaching", "recovery": "fall",
+	},
+	{
+		"name": "set_front", "caption": "SET front: floor load and high outward finish",
+		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
+		"context": {"set_posture": "standing", "back_set": false},
+	},
+	{
+		"name": "set_back", "caption": "SET back: disguised gather, arch, carry over crown",
+		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
+		"context": {"set_posture": "standing", "back_set": true},
+	},
+	{
+		"name": "attack_power", "caption": "ATTACK power: bow, whip, cross-body finish",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.82},
+	},
+	{
+		"name": "attack_roll", "caption": "ATTACK roll: sold approach and late deceleration",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Roll shot", "action_power": 0.62},
+	},
+	{
+		"name": "attack_dink", "caption": "ATTACK dink: sold approach and compact touch",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Dink", "action_power": 0.38},
+	},
+	{
+		"name": "idle_breath_sway", "caption": "IDLE: breath, weight shift, arm lag",
+		"idle_sweep": true,
+	},
+	{
+		"name": "standing_to_ready", "caption": "STANCE: standing to ready and settle",
+		"ready_settle": true,
+	},
+	{
+		"name": "blink", "caption": "MICROEXPRESSION: close, hold, slower open",
+		"blink_sweep": true, "closeup": true, "frame_spacing": 0.56,
+	},
+	{
 		"name": "signature_crush",
 		"caption": "ATTACK signature: crush, full charge",
 		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
@@ -150,7 +220,14 @@ const STRIPS: Array[Dictionary] = [
 
 func _ready() -> void:
 	await get_tree().process_frame
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
+	var requested_strip := ""
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--strip="):
+			requested_strip = argument.trim_prefix("--strip=")
 	for strip in STRIPS:
+		if not requested_strip.is_empty() and str(strip.name) != requested_strip:
+			continue
 		for camera_name in CAMERAS:
 			await _shoot(strip, str(camera_name))
 	get_tree().quit()
@@ -182,9 +259,15 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 
 	var view: Array = CAMERAS[camera_name]
 	var camera := Camera3D.new()
-	camera.position = view[0]
-	camera.rotation_degrees = view[1]
-	camera.fov = float(view[2])
+	if bool(strip.get("closeup", false)):
+		var closeup_position := Vector3(0.0, 1.82, -5.2) if camera_name == "side" \
+			else Vector3(2.5, 2.05, -5.0)
+		camera.look_at_from_position(closeup_position, Vector3(0.0, 1.62, 0.0))
+		camera.fov = 34.0
+	else:
+		camera.position = view[0]
+		camera.rotation_degrees = view[1]
+		camera.fov = float(view[2])
 	stage.add_child(camera)
 
 	## **A floor.** A recovery is a body arriving at the ground, and judging one
@@ -199,19 +282,61 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 	floor_mesh.material_override = floor_material
 	stage.add_child(floor_mesh)
 
-	var start := FRAME_SPACING * float(FRAME_COUNT - 1) * 0.5
+	var spacing := float(strip.get("frame_spacing", FRAME_SPACING))
+	var start := spacing * float(FRAME_COUNT - 1) * 0.5
 	for index in range(FRAME_COUNT):
 		var progress := float(index) / float(FRAME_COUNT - 1)
 		var actor := ACTOR.instantiate()
 		stage.add_child(actor)
-		actor.configure(900 + index, true, "%d%%" % roundi(progress * 100.0),
-			"Right", {"height_cm": 191.0, "wingspan_cm": 197.0, "mass_kg": 84.0})
+		# Hold the athlete constant across the strip: only phase may change.
+		actor.configure(900, true, "%d%%" % roundi(progress * 100.0),
+			"Right", {
+				"height_cm": 191.0, "wingspan_cm": 197.0, "mass_kg": 84.0,
+				"body_type": "Cani", "expression": "neutral",
+				"appearance": {"palette_index": 0, "marking": "none"},
+			})
+		assert(actor.player_id == 900 and actor.body_type == "Cani")
 		actor.set_tactical_position(
-			Vector2.ZERO, Vector3(start - FRAME_SPACING * float(index), 0.0, 0.0)
+			Vector2.ZERO, Vector3(start - spacing * float(index), 0.0, 0.0)
 		)
 		actor.has_facing = true
 		actor.facing_yaw = 0.0
-		if strip.has("recovery"):
+		if bool(strip.get("action_sweep", false)):
+			actor.contact_posture = str(strip.get("posture", "planted"))
+			actor.contact_recovery = str(strip.get("recovery", "platform"))
+			var action_pose: Array = strip.pose
+			var action_phase := lerpf(-1.0, 1.0, progress)
+			var action_elevation := float(action_pose[1])
+			if int(action_pose[0]) == RallyEventModel.EventType.ATTACK:
+				action_elevation *= sin(progress * PI)
+			actor.set_pose(
+				int(action_pose[0]), action_elevation, action_phase,
+				Vector2.RIGHT, true, Dictionary(strip.get("context", {})),
+			)
+			actor.identity_label.text = "%+.2f" % action_phase
+		elif bool(strip.get("idle_sweep", false)):
+			actor.ready_stance = "watching"
+			actor._presentation_time_seconds = progress * IdleBiomechanics.SWAY_SECONDS
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.identity_label.text = "%.1fs" % actor._presentation_time_seconds
+		elif bool(strip.get("ready_settle", false)):
+			actor._stance_remaining = 0.0
+			actor.ready_stance = "watching"
+			actor._stance_remaining = 0.0
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.ready_stance = "defending"
+			actor._stance_remaining = actor._stance_duration * (1.0 - progress)
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+		elif bool(strip.get("blink_sweep", false)):
+			var interval := IdleBiomechanics.blink_interval_seconds(actor.player_id)
+			var offset := IdleBiomechanics.phase_offset(actor.player_id) * interval
+			var duration := IdleBiomechanics.BLINK_CLOSE_SECONDS \
+				+ IdleBiomechanics.BLINK_HOLD_SECONDS \
+				+ IdleBiomechanics.BLINK_OPEN_SECONDS
+			actor._presentation_time_seconds = progress * duration - offset
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.identity_label.visible = false
+		elif strip.has("recovery"):
 			actor.contact_recovery = str(strip.recovery)
 			actor.contact_posture = str(strip.get("posture", "planted"))
 			## Recovery is the DEFENSE pose's own phase -- `set_pose` passes it
@@ -339,10 +464,12 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 		else:
 			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
 		actor.set_highlighted(index == FRAME_COUNT - 1)
+		if bool(strip.get("blink_sweep", false)):
+			actor.identity_label.visible = false
 
 	for _frame in range(8):
 		await get_tree().process_frame
-	var path := "user://frames_%s_%s.png" % [str(strip.name), camera_name]
+	var path := "%s/frames_%s_%s.png" % [OUT, str(strip.name), camera_name]
 	root.get_texture().get_image().save_png(path)
 	print("saved %s  (%s)" % [
 		ProjectSettings.globalize_path(path), str(strip.caption)
