@@ -17,7 +17,7 @@ The animation must never become cute at the expense of volleyball credibility, a
 
 ## 1. Core principle: preserve the physics, exaggerate the idea
 
-Biomechanical correctness is the foundation, not the final aesthetic.
+Biomechanical correctness is the **skeleton, not the finished aesthetic**.
 
 A real player can communicate motion through subtle scapular movement, finger articulation, spinal detail, foot pressure, muscle tension, and facial micro-expression. The Voli rig cannot depend on all of those cues at match-view scale.
 
@@ -65,9 +65,12 @@ The body should read as a compact toy-like object with mass, softness, and inert
 - hands may trail or finish after the torso has already begun to settle;
 - landings produce a small whole-body compression after correct ankle-knee-hip absorption;
 - direction changes require visible commitment before reversal;
-- recovery poses should settle rather than snap into place.
+- recovery poses should settle rather than snap into place;
+- attached body-type anatomy should participate naturally in the same acceleration, inertia, and settle where the rig permits it.
 
-This does **not** mean rubbery motion, squash-and-stretch that changes anatomy, or loose joints. The toy quality comes from timing and inertia, not deformation.
+This does **not** mean rubbery motion, squash-and-stretch that changes anatomy, or loose joints. The toy quality comes from timing, inertia, softness, and recovery — not incompetence.
+
+A tail following a landing, a hanging ear lagging a head turn, feathers settling after a jump, or a Vegi crown carrying a little residual motion are part of this physical-performance layer. They are not a separate character-animation phase.
 
 ### 2.3 Volis are attentive
 
@@ -82,10 +85,9 @@ Examples:
 - a receiver acquires the ball with eyes/head before committing the sternum and feet;
 - a blocker reads the setter/hitter before closing and loading;
 - a setter checks the pass before establishing the second-contact solution;
-- a defender tracks the outgoing ball before beginning recovery;
-- players may glance toward teammates, targets, or landing locations during dead-time and transition windows.
+- a defender tracks the outgoing ball before beginning recovery.
 
-Attention is one of the main ways a procedural Voli stops reading as a simulation puppet and begins reading as a character.
+Attention is one of the main ways a procedural Voli stops reading as a simulation puppet and begins reading as a character. Eyes may therefore be disproportionately important to the finished aesthetic: a small gaze change can establish perception and intention before the larger body motion arrives.
 
 Full blinks remain suppressed around contact as defined by the biomechanics/choreography authority.
 
@@ -100,7 +102,7 @@ When animation goals conflict, resolve them in this order:
 3. **action clarity** — readable silhouette and unmistakable action identity;
 4. **continuity** — believable handoff from the previous and into the next action;
 5. **timing polish** — anticipation, acceleration, deceleration, holds, and settle;
-6. **Voli character** — inertia, attention, idle behavior, restrained personality;
+6. **Voli character** — inertia, attention, body-specific behavior, restrained personality;
 7. **decorative flourish** — only when it does not weaken any layer above.
 
 A polished animation that violates the first two layers is wrong. A biomechanically correct animation that fails layers three through six is unfinished.
@@ -183,6 +185,8 @@ Prefer:
 - restrained overshoot or settle after large motions;
 - action-specific deceleration patterns.
 
+The desired form of “cool” is therefore mostly **rhythm and commitment**: quiet preparation, decisive commitment, sharp contact, and clean continuation.
+
 ---
 
 ## 6. Toy-like body language without incompetence
@@ -201,17 +205,18 @@ Toy-like character should appear primarily through:
 - soft breathing and weight transfer;
 - readable gaze and attention;
 - restrained recovery gestures;
-- subtle individual readiness habits.
+- natural secondary response from attached anatomy where applicable.
 
 Do not make elite players look clumsy, floppy, surprised by routine actions, or unable to control their own momentum.
 
 ### Landing example
 
-A correct landing still uses ankle-knee-hip absorption. The Voli character layer may add:
+A correct landing still uses ankle-knee-hip absorption. The Voli performance layer may add:
 
 - a small visible compression of the whole body after foot contact;
 - a fractionally delayed head settle;
 - hands finishing their arc after the torso begins to stabilize;
+- attached ears, tails, feathers, crowns, or stalks carrying and settling residual motion where appropriate;
 - a clean return toward the next stance.
 
 The result should feel soft and object-like without becoming rubbery.
@@ -229,7 +234,6 @@ Eyes and head are high-value animation channels because they remain legible even
 - the head may lead the torso when reaction time allows;
 - contact actions should not show visible blinking through the ball;
 - post-contact gaze should usually follow the ball or next tactical responsibility;
-- dead-ball gaze may move toward teammates, officials, court zones, or reset positions;
 - gaze motion should remain bounded and deterministic during replay.
 
 ### Reception clarity
@@ -246,39 +250,47 @@ The simulation may already know the destination. Presentation must make the Voli
 
 ---
 
-## 8. Cozy behavior belongs mainly between contacts
+## 8. Baseline life is not the cozy-character pass
 
-The contrast between quiet body language and sudden elite athletic motion is a core part of the desired identity.
+Several quiet presentation behaviors belong to the general living-body and volleyball-performance foundation rather than to body-specific character animation.
 
-### During contact actions
+The current presentation system already has foundations for:
 
-Favor:
+- breathing and slow weight sway;
+- small arm lag tied to idle motion;
+- blinking and pupil motion;
+- head/gaze behavior during rally playback;
+- stance settling and transitions;
+- small deterministic pre-serve routine variation.
 
-- precision;
-- commitment;
-- clean silhouettes;
-- readable force;
-- restrained facial/idle overlay.
+These systems should continue to be refined where necessary, but they should not be counted as the new body-specific “cozy behavior” feature. Mid-rally head tracking in particular is volleyball perception and readability, not decorative character acting.
 
-### Between contact actions
+The character layer begins when a Voli uses or attends to anatomy that is distinctive to its body type.
 
-Allow more character through:
+### Body-specific character behavior
 
-- breathing;
-- slow weight shifts;
-- small foot resets;
-- head turns;
-- checking teammates;
-- hands relaxing after effort;
-- post-landing rebalance;
-- restrained relief, disappointment, or readiness;
-- individual stance habits where they do not obscure tactical information.
+These behaviors belong primarily in genuinely safe dead-ball or waiting windows. They should be **rare, interruptible, and subordinate to volleyball information**.
+
+Current direction:
+
+- **Vegi:** tend or straighten a crown, stalk, leaf, calyx, or similar produce anatomy;
+- **Feli:** groom the face or head with a hand/paw;
+- **Cani:** shake off with the head or whole body, allowing hanging ears and tail to follow;
+- **Avi:** preen/smooth the opposite arm feathers or make a small crest adjustment;
+- **Ursi:** a large, slow yawn using the broad muzzle and heavy body settle;
+- **Simi:** a long-arm stretch, forearm rub, or shoulder rub that makes use of its unusual proportions.
+
+Prefer **causal or contextual opportunities** over arbitrary idle timers where practical. A dive may leave a Vegi crown needing attention; floor contact may motivate Feli grooming; a long rally may motivate a Cani shake-off; a large Avi movement may leave feathers to be smoothed. Random selection can remain a fallback, but behavior that appears to follow from what just happened will read as more intentional.
+
+Do not fire these gestures merely because an animation slot is available. Constant “cute” motion would flatten the contrast and reduce both coziness and athletic impact.
 
 The intended contrast is:
 
-> **quiet toy-like people -> sudden serious volleyball -> quiet toy-like people**
+> **quiet, physically alive Volis -> sudden serious volleyball -> quiet, body-specific character**
 
-Constant “cute” motion would flatten this contrast and reduce both the coziness and the athletic impact.
+### Social and emotional behavior is separate
+
+Point celebrations, disappointment, teammate acknowledgement, high-fives, substitution behavior, and other social acting are a later animation layer. They may eventually make the spaces between rallies much richer, but they are **not required** to complete the body-specific cozy pass and should not expand its scope.
 
 ---
 
@@ -319,7 +331,7 @@ The player should perceive **one rally**, not a queue of animation windows.
 
 Serves should feel self-paced and intentional before becoming explosive.
 
-The quiet possession beat is important character space: target check, shoulder settle, ball transfer, small deterministic routine differences.
+The quiet possession beat is useful preparation space: target check, shoulder settle, ball transfer, small deterministic routine differences. This is part of the action-performance foundation, not the body-specific cozy layer.
 
 Variant identity must then become unmistakable:
 
@@ -379,7 +391,10 @@ During important contacts, reduce or suppress:
 - unnecessary head bob;
 - decorative hand motion;
 - expressive blinks;
+- deliberate body-specific maintenance gestures;
 - personality gestures that compete with the contact silhouette.
+
+Passive physical response of attached anatomy may remain when it follows naturally from the action, but it must not obscure the action.
 
 ### Avoid over-animation
 
@@ -398,7 +413,8 @@ Stable per-player variation may affect small pre-action and idle qualities such 
 - weight-shift phase;
 - head/gaze responsiveness;
 - breathing phase;
-- minor hand/arm lag.
+- minor hand/arm lag;
+- frequency or variant of eligible body-specific maintenance behavior.
 
 These variations must not alter phase zero, action identity, tactical outcome, or biomechanical class.
 
@@ -429,11 +445,12 @@ For every important action, review:
 
 1. **silhouette:** can the action be identified in flat shape?
 2. **timing:** is the force/rhythm legible without the ball?
-3. **attention:** does the actor appear to perceive before responding where time allows?
-4. **mass:** do torso, head, hands, and legs move with believable sequencing and settle?
-5. **transition:** does the action enter from and leave toward plausible neighboring states?
-6. **restraint:** are idle/personality overlays subordinate during important volleyball information?
-7. **character:** does the actor still feel like a Voli rather than a generic human mannequin?
+3. **commitment:** does preparation visibly become decisive action rather than merely arriving at a contact pose?
+4. **attention:** does the actor appear to perceive before responding where time allows?
+5. **mass:** do torso, head, hands, legs, and eligible attached anatomy move with believable sequencing and settle?
+6. **transition:** does the action enter from and leave toward plausible neighboring states?
+7. **restraint:** are idle/personality overlays subordinate during important volleyball information?
+8. **character:** does the actor still feel like a Voli rather than a generic human mannequin?
 
 An action is production-ready only when it passes both tracks.
 
@@ -465,23 +482,48 @@ Priority clips should include:
 - dive commit -> flight/contact -> floor -> kneel/ready;
 - idle/watch -> attention -> ready -> locomotion.
 
+Body-specific character review should use separate dead-ball clips so maintenance gestures are not judged by inserting them into rally action strips.
+
 ---
 
-## 14. Implementation priority
+## 14. Animation roadmap
 
-Do not continue adding joint-detail realism indefinitely once the corrective biomechanical floor is stable.
+Do not continue adding joint-detail realism indefinitely once the corrective biomechanical floor is stable. Biomechanical accuracy supplies the skeleton; the next work is to turn that skeleton into the game's finished animation aesthetic.
 
-The preferred next-order investment is:
+### Step 1 — Core Voli performance polish
 
-1. **silhouette and key-pose clarity**;
-2. **attention/gaze preceding action**;
-3. **timing accents and force rhythm**;
-4. **Voli inertia, lag, and settle**;
-5. **continuous transitions between actions**;
-6. **stable per-player character variation**;
-7. **small decorative polish only after the above is working.**
+This is the immediate priority. It is not another biomechanics-completion pass.
 
-This ordering is deliberate. It yields the largest gain in readability and personality without weakening the volleyball simulation.
+Refine the existing volleyball actions in this order of concern:
+
+1. **silhouette and key-pose clarity** — actions must read at match-view scale;
+2. **anticipation and commitment** — the body visibly develops toward the action instead of displaying the correct pose only when contact arrives;
+3. **rhythm and force timing** — “cool” comes primarily from the cadence of preparation, release, contact, continuation, and absorption;
+4. **attention and perception** — eyes/head establish what the Voli is reading before the larger body response where time permits;
+5. **toy-like inertia, softness, and recovery** — mass propagates through the body with lag and settle without making the athlete incompetent;
+6. **natural secondary response of attached anatomy** — crowns, stalks, hanging ears, tails, feathers, crests, and similar parts participate in the same acceleration and settle where appropriate;
+7. **continuous transitions** — the body produced by one action becomes the starting body for the next rather than resetting between animation windows.
+
+Existing breathing, sway, blinking/pupil motion, rally head tracking, stance transitions, and pre-serve routine foundations belong inside or beneath this performance layer. They should be refined rather than reinvented.
+
+### Step 2 — Body-specific character behavior
+
+After the core volleyball performance reads correctly, add the rare, interruptible maintenance behaviors defined in section 8:
+
+- Vegi crown/stalk tending;
+- Feli grooming;
+- Cani shake-off;
+- Avi preening;
+- Ursi yawn;
+- Simi long-arm stretch/rub.
+
+Prefer contextual opportunities over arbitrary firing. These behaviors should enrich quiet time without becoming the reason the viewer notices that quiet time.
+
+### Step 3 — Social/emotional match behavior
+
+Treat celebrations, disappointment, teammate interactions, substitutions, high-fives, and related social acting as a separate later system.
+
+This layer is valuable, but it is not a dependency for either polished volleyball motion or the body-specific cozy identity.
 
 ---
 
@@ -495,7 +537,12 @@ The target is reached when a rally can be watched with minimal UI and still comm
 - that contact and recovery belong to one continuous movement;
 - that different tactical variants have different physical identities;
 - that the actors possess weight, attention, and individual presence;
-- that the match feels clean and athletic at full speed;
-- that the Volis remain warm, compact, and toy-like in the quiet spaces between explosive actions.
+- that attached anatomy feels physically connected to the moving body rather than rigidly decorative;
+- that the match feels clean, committed, and athletic at full speed;
+- that safe quiet spaces can reveal restrained, body-specific Voli character without competing with the sport.
+
+The intended overall contrast is:
+
+> **quiet, physically alive Volis -> sudden serious volleyball -> quiet, body-specific character**
 
 The final aesthetic should not look like realistic humans reduced into simplified models. It should look like **Volis who genuinely know how to play volleyball.**
