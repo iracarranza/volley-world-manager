@@ -10,6 +10,10 @@ const ServeBiomechanicsScript := preload("res://scripts/data/serve_biomechanics.
 const ServeActionBiomechanicsScript := preload(
 	"res://scripts/data/serve_action_biomechanics.gd"
 )
+## Temporarily disabled while the match presentation performance budget is
+## tightened. Keeping the gate here preserves the resolved cognition stream;
+## only its player-facing badges and per-frame sampling are suppressed.
+const COGNITICONS_ENABLED: bool = false
 
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
 @onready var broadcast_overlay: BroadcastOverlay = %BroadcastOverlay
@@ -156,8 +160,8 @@ func load_and_play_rally(
 	)
 	_cache_contact_body_targets(rally_result.events)
 	## The measurement pass poses the real actors so it can read their actual
-	## forearms. Rebuild them from the same inputs so playback starts from the
-	## untouched receive formation and ready facing.
+	## forearms. setup_players now reuses matching rigs and resets presentation
+	## state, avoiding a second twelve-actor mesh/material rebuild here.
 	match_court_3d.setup_players(
 		home_positions, opponent_positions, player_names, player_handedness,
 		player_physical_profiles,
@@ -191,7 +195,10 @@ func _run_rally(generation: int) -> void:
 	var events := active_result.events
 	## The rally's own cues, taken off the result rather than recompiled, so a
 	## replay shows the thoughts the rally was resolved with.
-	match_court_3d.set_cognition_stream(active_result.cognition_cues)
+	if COGNITICONS_ENABLED:
+		match_court_3d.set_cognition_stream(active_result.cognition_cues)
+	else:
+		match_court_3d.set_cognition_stream([])
 	## How far into the rally's own clock the drawing has already reached. A
 	## flight is drawn for its physics duration rather than for the gap to the
 	## next event, so the two run on different clocks and the difference is time
@@ -2613,6 +2620,8 @@ func _sample_cognition(
 	progress: float,
 	leg_seconds: float,
 ) -> void:
+	if not COGNITICONS_ENABLED:
+		return
 	var from_time := float(event.metadata.get("physical_time", 0.0))
 	var to_time := from_time
 	if next_contact != null:

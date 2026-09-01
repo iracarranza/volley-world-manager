@@ -14,6 +14,8 @@ const FPS := 30
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const IdleBiomechanics := preload("res://scripts/data/idle_biomechanics.gd")
+const SpikeBiomechanics := preload("res://scripts/data/spike_biomechanics.gd")
+const BlockBiomechanics := preload("res://scripts/data/block_biomechanics.gd")
 
 const ACTION_SECONDS := 2.4
 const HOLD_SECONDS := 0.35
@@ -66,7 +68,12 @@ const ACTIONS := {
 		"event": RallyEventModel.EventType.ATTACK,
 		"context": {"attack_type": "Dink", "action_power": 0.38},
 	},
+	"block": {
+		"event": RallyEventModel.EventType.BLOCK,
+		"context": {},
+	},
 	"idle_breath_sway": {"idle": true},
+	"attention_track": {"attention": true},
 	"standing_to_ready": {"ready": true},
 	"blink": {"blink": true, "closeup": true},
 }
@@ -92,6 +99,8 @@ func _run() -> void:
 
 	if bool(spec.get("idle", false)):
 		await _record_idle(actor)
+	elif bool(spec.get("attention", false)):
+		await _record_attention(actor)
 	elif bool(spec.get("ready", false)):
 		await _record_ready(actor)
 	elif bool(spec.get("blink", false)):
@@ -166,6 +175,10 @@ func _record_action(actor: PlayerActor3D, spec: Dictionary) -> void:
 	var frames := int(ceil((ACTION_SECONDS + HOLD_SECONDS * 2.0) * FPS))
 	for frame in range(frames):
 		var seconds := float(frame) / float(FPS)
+		if seconds > HOLD_SECONDS + ACTION_SECONDS:
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			await process_frame
+			continue
 		var action_progress := clampf(
 			(seconds - HOLD_SECONDS) / ACTION_SECONDS, 0.0, 1.0
 		)
@@ -173,7 +186,12 @@ func _record_action(actor: PlayerActor3D, spec: Dictionary) -> void:
 		var event_type := int(spec.event)
 		var elevation := 0.0
 		if event_type == RallyEventModel.EventType.ATTACK:
-			elevation = sin(action_progress * PI)
+			# The review camera is a consumer of canonical mechanics too.  The old
+			# sine launched the actor while the authored approach was still running,
+			# showing a movement that never exists in match playback.
+			elevation = SpikeBiomechanics.elevation_at(phase)
+		elif event_type == RallyEventModel.EventType.BLOCK:
+			elevation = BlockBiomechanics.elevation_at(phase)
 		actor.set_pose(
 			event_type,
 			elevation,
@@ -190,6 +208,19 @@ func _record_idle(actor: PlayerActor3D) -> void:
 	var frames := int(ceil(IDLE_SECONDS * FPS))
 	for frame in range(frames):
 		actor._presentation_time_seconds = float(frame) / float(FPS)
+		actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+		await process_frame
+
+
+func _record_attention(actor: PlayerActor3D) -> void:
+	actor.ready_stance = "watching"
+	var frames := int(ceil(IDLE_SECONDS * FPS))
+	for frame in range(frames):
+		var seconds := float(frame) / float(FPS)
+		actor._presentation_time_seconds = seconds
+		var target_yaw := sin(seconds * 1.35) * 0.62
+		var target_pitch := cos(seconds * 0.92) * 13.0
+		actor.look_toward(target_yaw, target_pitch)
 		actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
 		await process_frame
 

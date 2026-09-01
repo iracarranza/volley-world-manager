@@ -27,6 +27,9 @@ const DefenseActionBiomechanicsScript := preload(
 	"res://scripts/data/defense_action_biomechanics.gd"
 )
 const IdleBiomechanicsScript := preload("res://scripts/data/idle_biomechanics.gd")
+const CoreVoliPerformanceScript := preload(
+	"res://scripts/data/core_voli_performance.gd"
+)
 
 @onready var body_pivot: Node3D = $BodyPivot
 @onready var torso: MeshInstance3D = $BodyPivot/Torso
@@ -149,6 +152,10 @@ var ready_stance: String = "defending":
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
 ## than being derived from state that does not exist.
 var expression: String = FaceExpressionsScript.NEUTRAL
+## Generated nodes are static between configure/expression changes. These
+## caches keep the per-frame pose path out of SceneTree.find_children().
+var _cosmetic_cache: Array[MeshInstance3D] = []
+var _face_feature_cache: Array[MeshInstance3D] = []
 ## Produce, colourway and coat, when somebody chose them rather than the id
 ## deciding. Empty means the hash, which is every generated voli.
 var appearance: Dictionary = {}
@@ -166,6 +173,13 @@ var has_facing: bool = false
 ## actor being a mannequin that swivels as one piece.
 var look_yaw: float = 0.0
 var look_pitch: float = 0.0
+## Ball attention arrives at the eyes before the mass of the head catches it.
+## These are presentation targets only; simulation and body facing never read
+## them. Action-specific safety poses (a dive chin tuck, for example) continue
+## to write `look_yaw`/`look_pitch` directly and remain authoritative.
+var _look_target_yaw: float = 0.0
+var _look_target_pitch: float = 0.0
+var _has_attention_target: bool = false
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
 ## `VolleyballPlayer.stride_length_m` is metres per *step*: the locomotion
@@ -200,6 +214,17 @@ var _floor_posture: String = "planted"
 var _floor_direction: Vector2 = Vector2.ZERO
 var _floor_remaining: float = 0.0
 var _floor_duration: float = 0.0
+## A short grounded handoff from the last authored contact pose into the gait.
+## Landing, floor recovery and stance transitions already own their continuity;
+## this state fills only the ordinary gap between those systems.
+var _last_contact_joints: Dictionary = {}
+var _last_contact_event: int = -1
+var _last_contact_phase: float = -1.0
+var _last_contact_performance: Dictionary = {}
+var _last_pose_was_contact: bool = false
+var _handoff_joints: Dictionary = {}
+var _handoff_remaining: float = 0.0
+var _handoff_duration: float = 0.0
 ## Which way this voli is travelling relative to the way they are facing, in
 ## radians: 0 straight ahead, PI a backpedal, plus or minus a right angle a
 ## lateral shuffle.
@@ -465,6 +490,13 @@ func configure(
 	physical_profile: Dictionary = {},
 ) -> void:
 	_ensure_node_bindings()
+	look_yaw = 0.0
+	look_pitch = 0.0
+	_look_target_yaw = 0.0
+	_look_target_pitch = 0.0
+	_has_attention_target = false
+	_handoff_remaining = 0.0
+	_last_pose_was_contact = false
 	player_id = p_player_id
 	voli_name = display_name
 	is_home_team = home_team
@@ -523,6 +555,45 @@ func configure(
 	identity_label.visible = false
 	apply_ui_palette(false)
 	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+	_refresh_surface_marks()
+
+
+## Reset presentation-only state without rebuilding meshes, materials, faces or
+## surface marks. Used when the same roster begins another rally.
+func reset_for_rally(position: Vector2, world_position: Vector3) -> void:
+	has_world_position = false
+	ground_speed_mps = 0.0
+	gait_blend = 0.0
+	stride_cycle = 0.0
+	_heading_travel_accumulator = Vector3.ZERO
+	_landing_remaining = 0.0
+	_floor_remaining = 0.0
+	_handoff_remaining = 0.0
+	_last_pose_was_contact = false
+	contact_posture = "planted"
+	contact_recovery = "platform"
+	contact_platform_aim.clear()
+	hide_cognition_cue()
+	clear_look()
+	set_tactical_position(position, world_position)
+	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+
+
+## The match already draws a stable blob shadow under every voli. Avoid making
+## the full articulated mesh a second animated shadow caster as well.
+func set_realtime_shadows_enabled(enabled: bool) -> void:
+	var setting := GeometryInstance3D.SHADOW_CASTING_SETTING_ON if enabled \
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for node in find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if mesh != null:
+			mesh.cast_shadow = setting
+
+
+func _refresh_surface_marks() -> void:
+	var renderer := get_node_or_null("SurfaceMarkRenderer3D")
+	if renderer != null and renderer.has_method("refresh"):
+		renderer.call("refresh")
 
 
 ## The centre of the forearm surface that a reception or dig is visibly played
@@ -720,6 +791,7 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 			ink_material.grow = true
 			ink_material.grow_amount = _ink_weight_for(mesh)
 			ink.material_override = ink_material
+	_refresh_surface_marks()
 
 
 ## How heavy a line this mesh takes.
@@ -906,6 +978,7 @@ func apply_ui_palette(light_mode: bool) -> void:
 			_:
 				_apply_material_color(cosmetic, skin_color, part_alpha)
 	_apply_material_color(focus_ring, accent_color)
+	_refresh_surface_marks()
 
 
 func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
@@ -2285,22 +2358,34 @@ func _lowest_body_point() -> float:
 ## as a neck goes and no further; the body has to do the rest.
 func look_toward(world_yaw: float, pitch_degrees: float = 0.0) -> void:
 	var relative := angle_difference(facing_yaw, world_yaw)
-	look_yaw = clampf(
+	_look_target_yaw = clampf(
 		relative,
 		-deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
 		deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
 	)
-	look_pitch = deg_to_rad(clampf(
+	_look_target_pitch = deg_to_rad(clampf(
 		pitch_degrees, -HEAD_PITCH_LIMIT_DEGREES, HEAD_PITCH_LIMIT_DEGREES
 	))
-	_apply_head_look()
+	_has_attention_target = true
 
 
 ## Forget the target and face straight ahead again.
 func clear_look() -> void:
-	look_yaw = 0.0
-	look_pitch = 0.0
-	_apply_head_look()
+	_look_target_yaw = 0.0
+	_look_target_pitch = 0.0
+	_has_attention_target = true
+
+
+func _advance_head_attention() -> void:
+	if not _has_attention_target:
+		return
+	var advanced := CoreVoliPerformanceScript.attention_step(
+		Vector2(look_yaw, look_pitch),
+		Vector2(_look_target_yaw, _look_target_pitch),
+		get_process_delta_time(),
+	)
+	look_yaw = advanced.x
+	look_pitch = advanced.y
 
 
 func _apply_head_look() -> void:
@@ -2764,44 +2849,75 @@ func _body_motion_response() -> float:
 func _apply_secondary_body_motion(
 	event_type: int, phase: float, contact_direction: Vector2,
 	action_context: Dictionary,
-) -> void:
-	var response := _body_motion_response()
-	var handed := -1.0 if dominant_hand == "Left" else 1.0
-	var roll_degrees := 0.0
-	var lateral_shift := 0.0
-	match event_type:
-		RallyEventModel.EventType.ATTACK:
-			var load := smoothstep(-0.78, -0.42, phase) * (1.0 - smoothstep(-0.22, 0.02, phase))
-			var follow := smoothstep(-0.12, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
-			var attack_family := AttackActionBiomechanicsScript.family(str(
-				action_context.get("attack_type", "Power swing")
-			))
-			var attack_scale := 0.55 if attack_family == AttackActionBiomechanicsScript.ROLL \
-				else 0.25 if attack_family == AttackActionBiomechanicsScript.DINK else 1.0
-			roll_degrees = handed * (-4.5 * load + 7.5 * follow) * attack_scale
-			lateral_shift = handed * (-0.018 * load + 0.030 * follow) * attack_scale
-		RallyEventModel.EventType.SERVE:
-			var coil := smoothstep(-0.72, -0.34, phase) * (1.0 - smoothstep(-0.12, 0.08, phase))
-			var release := smoothstep(-0.14, 0.16, phase) * (1.0 - smoothstep(0.62, 0.94, phase))
-			var overhead_scale := 0.18 if str(action_context.get(
-				"serve_style", "Standing"
-			)) == ServeActionBiomechanicsScript.SKY_BALL else 1.0
-			roll_degrees = handed * (-3.5 * coil + 6.0 * release) * overhead_scale
-			lateral_shift = handed * 0.020 * (release - coil) * overhead_scale
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
-			var commit := smoothstep(-0.30, 0.18, phase) * (1.0 - smoothstep(0.70, 1.0, phase))
-			roll_degrees = clampf(contact_direction.x, -1.0, 1.0) * 6.5 * commit
-			lateral_shift = clampf(contact_direction.x, -1.0, 1.0) * 0.026 * commit
-		RallyEventModel.EventType.SET:
-			var release := smoothstep(-0.18, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
-			var back := -1.0 if bool(action_context.get("back_set", false)) else 1.0
-			roll_degrees = back * handed * 2.8 * release
-		RallyEventModel.EventType.BLOCK:
-			var press := smoothstep(-0.25, 0.10, phase) * (1.0 - smoothstep(0.58, 0.92, phase))
-			if block_arms != &"two":
-				roll_degrees = (1.0 if contact_direction.x > 0.0 else -1.0) * 4.0 * press
-	body_pivot.rotation.z += deg_to_rad(roll_degrees * response)
-	body_pivot.position.x += lateral_shift * response * body_height_scale
+) -> Dictionary:
+	var performance := CoreVoliPerformanceScript.resolve(
+		event_type, phase, body_type, dominant_hand, contact_direction,
+		action_context, block_arms, _body_motion_response(),
+	)
+	body_pivot.rotation.z += deg_to_rad(float(performance.body_roll_degrees))
+	body_pivot.position.x += float(performance.lateral_metres) * body_height_scale
+	# The head counterweight is deliberately small and added after the head's
+	# actual gaze. It changes the read of force without choosing what is watched.
+	head.rotation.x += deg_to_rad(float(performance.head_pitch_degrees))
+	head.rotation.z += deg_to_rad(float(performance.head_roll_degrees))
+	return performance
+
+
+func _restore_passive_anatomy() -> void:
+	for cosmetic in _cosmetics():
+		if not cosmetic.has_meta("performance_rest_rotation"):
+			continue
+		cosmetic.rotation = Vector3(cosmetic.get_meta("performance_rest_rotation"))
+		cosmetic.position = Vector3(cosmetic.get_meta("performance_rest_position"))
+
+
+func _apply_passive_anatomy(performance: Dictionary, weight: float = 1.0) -> void:
+	var w := clampf(weight, 0.0, 1.0)
+	for cosmetic in _cosmetics():
+		if not cosmetic.has_meta("performance_rest_rotation"):
+			continue
+		var angles := CoreVoliPerformanceScript.passive_response(
+			body_type, str(cosmetic.name), performance, dominant_hand
+		) * w
+		if angles.is_zero_approx():
+			continue
+		var rest_rotation := Vector3(cosmetic.get_meta("performance_rest_rotation"))
+		var rest_position := Vector3(cosmetic.get_meta("performance_rest_position"))
+		var root := Vector3(cosmetic.get_meta("performance_root_local", Vector3.ZERO))
+		var rest_basis := Basis.from_euler(rest_rotation)
+		var scaled_root := root * cosmetic.scale
+		var moved_rotation := rest_rotation + Vector3(
+			deg_to_rad(angles.x), deg_to_rad(angles.y), deg_to_rad(angles.z)
+		)
+		var moved_basis := Basis.from_euler(moved_rotation)
+		cosmetic.rotation = moved_rotation
+		# Preserve the attachment point while the free end follows through.
+		cosmetic.position = rest_position \
+			+ rest_basis * scaled_root - moved_basis * scaled_root
+
+
+func _apply_action_handoff() -> void:
+	if _landing_remaining > 0.0 or _floor_remaining > 0.0:
+		_handoff_remaining = 0.0
+		_last_pose_was_contact = false
+		return
+	if _last_pose_was_contact:
+		_last_pose_was_contact = false
+		if _last_contact_phase >= 0.35 and not _last_contact_joints.is_empty():
+			_handoff_joints = _last_contact_joints.duplicate(true)
+			_handoff_duration = CoreVoliPerformanceScript.handoff_seconds(
+				_last_contact_event
+			)
+			_handoff_remaining = _handoff_duration
+	if _handoff_remaining <= 0.0 or _handoff_joints.is_empty():
+		return
+	var progress := 1.0 - _handoff_remaining / maxf(_handoff_duration, 0.0001)
+	var weight := CoreVoliPerformanceScript.handoff_weight(progress)
+	_blend_joints_toward(_handoff_joints, weight)
+	_apply_passive_anatomy(_last_contact_performance, weight)
+	_handoff_remaining = maxf(
+		_handoff_remaining - get_process_delta_time(), 0.0
+	)
 
 
 ## Quiet life under the action layer. The biomechanics resolver bounds every
@@ -2859,6 +2975,12 @@ func _apply_face_micro_motion(is_contact_actor: bool, phase: float) -> void:
 	var pupil := IdleBiomechanicsScript.pupil_offset(
 		_presentation_time_seconds, player_id
 	)
+	var attention := Vector2.ZERO
+	if _has_attention_target:
+		attention = CoreVoliPerformanceScript.pupil_attention_offset(
+			Vector2(look_yaw, look_pitch),
+			Vector2(_look_target_yaw, _look_target_pitch),
+		)
 	var head_radius := float(Dictionary(silhouette.get("head", {})).get(
 		"radius", 0.13
 	))
@@ -2875,8 +2997,8 @@ func _apply_face_micro_motion(is_contact_actor: bool, phase: float) -> void:
 				or str(feature.name).begins_with("Pupil"):
 			feature.scale.y = base_scale.y * lerpf(1.0, 0.08, blink)
 		if str(feature.name).begins_with("Pupil") and blink < 0.92:
-			feature.position.x += pupil.x * head_radius
-			feature.position.y += pupil.y * head_radius
+			feature.position.x += (pupil.x + attention.x) * head_radius
+			feature.position.y += (pupil.y + attention.y) * head_radius
 
 
 func set_pose(
@@ -2888,8 +3010,10 @@ func set_pose(
 	action_context: Dictionary = {},
 ) -> void:
 	_ensure_node_bindings()
+	_restore_passive_anatomy()
 	if is_inside_tree():
 		_presentation_time_seconds += get_process_delta_time()
+	_advance_head_attention()
 	_track_landing(event_type, elevation)
 	var lift := clampf(elevation, 0.0, 1.0) * 0.82
 	## Every joint of the walk-to-run comes from `GaitBiomechanics`, which knows
@@ -3094,8 +3218,10 @@ func set_pose(
 			_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
 		_ground_the_feet(elevation, gait_knee)
+		_apply_action_handoff()
 		_apply_face_micro_motion(false, phase)
 		return
+	_handoff_remaining = 0.0
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
 	var guide_arm := right_arm if dominant_hand == "Left" else left_arm
 	var diving_floor_guard := event_type in [
@@ -3358,7 +3484,9 @@ func set_pose(
 	## Last, after the primary joint solution, so anticipation and follow-through
 	## shift the completed toy-body silhouette instead of fighting the action's
 	## biomechanics for ownership of individual limbs.
-	_apply_secondary_body_motion(event_type, phase, contact_direction, action_context)
+	var performance := _apply_secondary_body_motion(
+		event_type, phase, contact_direction, action_context
+	)
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)
@@ -3367,6 +3495,12 @@ func set_pose(
 	## After the grounding, because the pose this hands over is the finished one.
 	_track_floor_recovery(event_type, phase, is_contact_actor)
 	_apply_face_micro_motion(true, phase)
+	_apply_passive_anatomy(performance)
+	_last_contact_joints = _capture_joints()
+	_last_contact_event = event_type
+	_last_contact_phase = phase
+	_last_contact_performance = performance.duplicate(true)
+	_last_pose_was_contact = true
 
 
 ## Whether this rig is being lit or being *printed*.
@@ -4219,6 +4353,7 @@ func _build_cosmetics() -> void:
 		## marking. Nothing keeps a reference to these generated meshes, so remove
 		## them in the same operation that replaces them.
 		existing.free()
+	_cosmetic_cache.clear()
 	for raw_part in silhouette.get("extras", []):
 		var part: Dictionary = raw_part
 		var parent := get_node_or_null(str(part.get("parent", "BodyPivot")))
@@ -4250,15 +4385,21 @@ func _build_cosmetics() -> void:
 		if part.has("ink"):
 			instance.set_meta("ink", str(part.ink))
 		parent.add_child(instance)
+		_cosmetic_cache.append(instance)
+		instance.set_meta("performance_rest_rotation", instance.rotation)
+		instance.set_meta("performance_rest_position", instance.position)
+		var passive_name := str(instance.name).to_lower()
+		var root := Vector3.ZERO
+		if "tail" in passive_name or "ear" in passive_name \
+				or "stem" in passive_name or "shoot" in passive_name \
+				or "crest" in passive_name or "calyx" in passive_name \
+				or "cap" in passive_name:
+			root = Vector3(0.0, instance.mesh.get_aabb().size.y * 0.5, 0.0)
+		instance.set_meta("performance_root_local", root)
 
 
 func _cosmetics() -> Array[MeshInstance3D]:
-	var found: Array[MeshInstance3D] = []
-	for node in find_children("*", "MeshInstance3D", true, false):
-		var mesh_node := node as MeshInstance3D
-		if mesh_node != null and mesh_node.has_meta("cosmetic"):
-			found.append(mesh_node)
-	return found
+	return _cosmetic_cache
 
 
 ## Two eyes and a seven-segment mouth, parented to the head so they travel with
@@ -4272,6 +4413,7 @@ func _build_face() -> void:
 	var face := head.get_node_or_null("Face")
 	if face != null:
 		face.free()
+	_face_feature_cache.clear()
 	face = Node3D.new()
 	face.name = "Face"
 	head.add_child(face)
@@ -4298,6 +4440,7 @@ func _build_face() -> void:
 		if part.has("ink"):
 			instance.set_meta("ink", str(part.ink))
 		face.add_child(instance)
+		_face_feature_cache.append(instance)
 
 
 ## Some body types already have something where the mouth goes.
@@ -4362,15 +4505,7 @@ func _mouth_override() -> Dictionary:
 
 
 func _face_features() -> Array[MeshInstance3D]:
-	var found: Array[MeshInstance3D] = []
-	var face := head.get_node_or_null("Face") if head != null else null
-	if face == null:
-		return found
-	for node in face.get_children():
-		var mesh_node := node as MeshInstance3D
-		if mesh_node != null:
-			found.append(mesh_node)
-	return found
+	return _face_feature_cache
 
 
 ## Swap the face. Rebuilds rather than reposing, because nine small boxes is

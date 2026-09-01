@@ -2,7 +2,8 @@ extends Node
 
 ## Every animation as a strip of frames, so a motion can be judged as a motion.
 ##
-##     xvfb-run -a godot --path . res://tools/animation_frames.tscn
+##     xvfb-run -a godot --path . res://tools/animation_frames.tscn \
+##       -- --strip=attack_power --camera=three_quarter
 ##
 ## `run_voli_portfolio.gd` photographs *poses* -- one instant per subject -- and
 ## that is the right instrument for asking whether a body reads. It is the wrong
@@ -217,19 +218,30 @@ const STRIPS: Array[Dictionary] = [
 	},
 ]
 
-
 func _ready() -> void:
 	await get_tree().process_frame
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
 	var requested_strip := ""
+	var requested_camera := ""
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--strip="):
 			requested_strip = argument.trim_prefix("--strip=")
+		elif argument.begins_with("--camera="):
+			requested_camera = argument.trim_prefix("--camera=")
+	if requested_strip.is_empty() or not CAMERAS.has(requested_camera):
+		push_error(
+			"Animation frame rendering requires --strip=<name> and "
+			+ "--camera=side|three_quarter; CI isolates each artifact in its own "
+			+ "renderer process."
+		)
+		get_tree().quit(2)
+		return
 	for strip in STRIPS:
 		if not requested_strip.is_empty() and str(strip.name) != requested_strip:
 			continue
 		for camera_name in CAMERAS:
-			await _shoot(strip, str(camera_name))
+			if str(camera_name) == requested_camera:
+				await _shoot(strip, str(camera_name))
 	get_tree().quit()
 
 
@@ -269,6 +281,12 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 		camera.rotation_degrees = view[1]
 		camera.fov = float(view[2])
 	stage.add_child(camera)
+	# Each strip builds and frees its own stage. After the first camera has been
+	# removed a later one is not guaranteed to become current automatically,
+	# which used to make most artifacts repeat the first strip. The review image
+	# must belong to the camera named in its filename.
+	camera.current = true
+	camera.make_current()
 
 	## **A floor.** A recovery is a body arriving at the ground, and judging one
 	## against empty space is judging half of it -- the first read of the fall was
@@ -286,6 +304,11 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 	# image rather than the gap between -0.143 and +0.143.
 	var frame_count := 9 if bool(strip.get("action_sweep", false)) else FRAME_COUNT
 	var spacing := float(strip.get("frame_spacing", FRAME_SPACING))
+	if bool(strip.get("action_sweep", false)):
+		# The exact contact frame makes action rows one subject wider than the
+		# older eight-frame strips. Keep the full recovery inside both review
+		# cameras instead of clipping the ninth figure at the right edge.
+		spacing = minf(spacing, 1.34)
 	var start := spacing * float(frame_count - 1) * 0.5
 	for index in range(frame_count):
 		var progress := float(index) / float(frame_count - 1)
@@ -300,7 +323,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			})
 		assert(actor.player_id == 900 and actor.body_type == "Cani")
 		actor.set_tactical_position(
-			Vector2.ZERO, Vector3(start - spacing * float(index), 0.0, 0.0)
+			Vector2.ZERO, Vector3(-start + spacing * float(index), 0.0, 0.0)
 		)
 		actor.has_facing = true
 		actor.facing_yaw = 0.0
@@ -454,7 +477,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			if int(pose[0]) == RallyEventModel.EventType.BLOCK:
 				elevation *= BlockBiomechanics.elevation_at(progress)
 			elif int(pose[0]) == RallyEventModel.EventType.ATTACK:
-				elevation *= sin(clampf(progress, 0.0, 1.0) * PI)
+				elevation *= SpikeBiomechanics.elevation_at(progress)
 			actor.set_pose(
 				int(pose[0]), elevation, progress, Vector2.RIGHT, true, context
 			)

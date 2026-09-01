@@ -9,6 +9,7 @@ const PlayerActor := preload("res://scenes/components/player_actor_3d.gd")
 const PlayerActorScene := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const Spike := preload("res://scripts/data/spike_biomechanics.gd")
+const CorePerformance := preload("res://scripts/data/core_voli_performance.gd")
 
 var checks := 0
 var failures := 0
@@ -143,6 +144,8 @@ func _run() -> void:
 	_check(Idle.blink_weight(0.37, 9, false) == Idle.blink_weight(0.37, 9, false),
 		"blink schedule must repeat exactly for inspection")
 
+	_test_core_performance_contract()
+
 	if failures == 0:
 		print("Rally action animation contract: %d checks, 0 failures" % checks)
 		quit(0)
@@ -151,12 +154,65 @@ func _run() -> void:
 	quit(1)
 
 
+func _test_core_performance_contract() -> void:
+	var load := CorePerformance.resolve(
+		RallyEventModel.EventType.ATTACK, -0.55, "Cani", "Right",
+		Vector2.UP, {"attack_type": "Power swing"},
+	)
+	var contact := CorePerformance.resolve(
+		RallyEventModel.EventType.ATTACK, 0.0, "Cani", "Right",
+		Vector2.UP, {"attack_type": "Power swing"},
+	)
+	var finish := CorePerformance.resolve(
+		RallyEventModel.EventType.ATTACK, 0.38, "Cani", "Right",
+		Vector2.UP, {"attack_type": "Power swing"},
+	)
+	_check(float(load.anticipation) > 0.55,
+		"core performance must publish a readable pre-contact load")
+	_check(float(contact.force) > float(load.force) \
+		and float(contact.force) > float(finish.force),
+		"force accent must peak at the authoritative contact phase")
+	_check(float(finish.continuation) > float(load.continuation),
+		"follow-through must continue beyond contact rather than freeze there")
+
+	var target := Vector2(0.72, -0.24)
+	var first_head := CorePerformance.attention_step(
+		Vector2.ZERO, target, 1.0 / 60.0
+	)
+	var pupil_lead := CorePerformance.pupil_attention_offset(first_head, target)
+	_check(first_head.length() > 0.0 and first_head.length() < target.length(),
+		"head attention must pursue the target without snapping to it")
+	_check(pupil_lead.length() > 0.0,
+		"eyes must visibly lead a head that is still catching the target")
+
+	var tail := CorePerformance.passive_response(
+		"Cani", "Tail", finish, "Right"
+	)
+	var compact_ear := CorePerformance.passive_response(
+		"Ursi", "EarLeft", finish, "Right"
+	)
+	_check(tail.length() > 0.1 and tail.length() < 12.0,
+		"a hanging tail needs restrained passive follow-through")
+	_check(compact_ear.is_zero_approx(),
+		"compact attached anatomy must not gain arbitrary floppy motion")
+	_check(is_equal_approx(CorePerformance.handoff_weight(0.0), 1.0) \
+		and is_equal_approx(CorePerformance.handoff_weight(1.0), 0.0),
+		"ordinary action handoff must meet both endpoint poses exactly")
+
+
 func _test_rig_geometry() -> void:
 	var actor: Node3D = PlayerActorScene.instantiate()
 	get_root().add_child(actor)
 	await process_frame
-	actor.configure(901, true, "Contract", "Right", {"height_cm": 191.0})
+	actor.configure(901, true, "Contract", "Right", {
+		"height_cm": 191.0,
+		"body_type": "Cani",
+	})
 	await process_frame
+	actor.look_toward(0.72, -12.0)
+	actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+	_check(actor.look_yaw > 0.0 and actor.look_yaw < 0.72,
+		"real rig head must follow rally attention without snapping")
 	actor.contact_posture = "reaching"
 	actor.contact_recovery = "fall"
 	actor.set_pose(
@@ -191,6 +247,38 @@ func _test_rig_geometry() -> void:
 	_check(hand.z > 0.10 and hand.y > 0.50,
 		"dink hand must be above and ahead of its shoulder (up %.2f, ahead %.2f)"
 			% [hand.y, hand.z])
+
+	var tail := actor.find_child("Tail", true, false) as MeshInstance3D
+	_check(tail != null, "Cani contract rig must expose its authored tail")
+	if tail != null:
+		var root := Vector3(tail.get_meta("performance_root_local", Vector3.ZERO))
+		var rest_rotation := Vector3(tail.get_meta("performance_rest_rotation"))
+		var rest_position := Vector3(tail.get_meta("performance_rest_position"))
+		var scaled_root := root * tail.scale
+		var rest_attachment := rest_position \
+			+ Basis.from_euler(rest_rotation) * scaled_root
+		actor.set_pose(
+			RallyEventModel.EventType.ATTACK, Spike.elevation_at(0.38), 0.38,
+			Vector2.UP, true,
+			{"attack_type": "Power swing", "action_power": 0.82},
+		)
+		var moved_attachment := tail.position \
+			+ Basis.from_euler(tail.rotation) * scaled_root
+		_check(not tail.rotation.is_equal_approx(rest_rotation),
+			"attached tail must respond passively during follow-through")
+		_check(moved_attachment.distance_to(rest_attachment) < 0.0001,
+			"passive anatomy must flex without detaching from the body")
+		# A jump attack correctly hands to the landing system. Use a grounded set
+		# to exercise the ordinary action-to-ready continuity seam.
+		actor._was_airborne = false
+		actor._landing_remaining = 0.0
+		actor.set_pose(
+			RallyEventModel.EventType.SET, 0.0, 0.80, Vector2.UP, true,
+			{"set_posture": "standing", "back_set": false},
+		)
+		actor.set_pose(-1, 0.0, 0.0, Vector2.UP, false)
+		_check(actor._handoff_remaining > 0.0,
+			"grounded completed action must continue into a timed ready handoff")
 	actor.queue_free()
 	await process_frame
 

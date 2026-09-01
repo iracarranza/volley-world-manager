@@ -52,6 +52,12 @@ jobs:
           set -euo pipefail
           godot --headless --path . --script tests/rally_action_animation_contract.gd
 
+      - name: Validate match view performance boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . --script tests/match_view_performance_contract.gd
+
       - name: Install virtual display
         shell: bash
         run: |
@@ -63,8 +69,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xvfb-run -a godot --path . --rendering-method gl_compatibility \
-            res://tools/animation_frames.tscn
+          strips=(
+            recovery_fall_roll recovery_fall_slide recovery_blown_away recovery_knee
+            gait_ready_to_run gait_backpedal gait_shuffle platform_aim approach_three_step
+            serve_standing serve_jump_topspin serve_jump_float serve_hybrid serve_sky_ball
+            receive_dive set_front set_back attack_power attack_roll attack_dink
+            idle_breath_sway standing_to_ready blink
+            signature_crush signature_high_hands signature_monster_block
+          )
+          for strip in "${strips[@]}"; do
+            for camera in side three_quarter; do
+              xvfb-run -a godot --path . --rendering-method gl_compatibility \
+                res://tools/animation_frames.tscn -- \
+                "--strip=${strip}" "--camera=${camera}"
+            done
+          done
           test "$(find artifacts/rally-action-animations -type f -name '*.png' | wc -l)" -eq 52
 
       - name: Upload rally action animation strips
@@ -92,7 +111,9 @@ jobs:
             attack_power
             attack_roll
             attack_dink
+            block
             idle_breath_sway
+            attention_track
             standing_to_ready
             blink
           )
@@ -101,7 +122,7 @@ jobs:
               --write-movie "artifacts/rally-action-videos/${action}.avi" \
               --fixed-fps 30 --script tools/render_rally_action_movie.gd -- "$action"
           done
-          test "$(find artifacts/rally-action-videos -type f -name '*.avi' | wc -l)" -eq 14
+          test "$(find artifacts/rally-action-videos -type f -name '*.avi' | wc -l)" -eq 16
           for action in "${actions[@]}"; do
             test -s "artifacts/rally-action-videos/${action}.avi"
           done
