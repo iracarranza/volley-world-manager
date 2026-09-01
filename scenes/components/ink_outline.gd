@@ -211,6 +211,11 @@ const FRAY_WIDTH: float = 1.1
 ## counts them.
 const FRAY_ALPHA: float = 0.34
 
+## Navigation rows use the animated pen gesture without enclosing the words in
+## a button-shaped perimeter. Kept on this component rather than special-cased
+## in a screen so `NavAction` remains the reusable visual class.
+var draw_perimeter: bool = true
+
 ## How far inside the cloth the stitching runs.
 ##
 ## A seam is sewn *in from* the edge -- there has to be material outside it or
@@ -633,6 +638,8 @@ func _notification(what: int) -> void:
 
 
 func _draw() -> void:
+	if not draw_perimeter:
+		return
 	if size.x < 4.0 or size.y < 4.0:
 		return
 	var light_mode := UIPalette.control_is_light(self)

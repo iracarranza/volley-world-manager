@@ -1,6 +1,7 @@
 extends Control
 
 const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
+const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 
 var _screen: VolleyballTitleScreen
 var _frame := 0
@@ -11,6 +12,10 @@ func _ready() -> void:
 	_screen = load("res://scenes/screens/title_screen.tscn").instantiate()
 	add_child(_screen)
 	_screen.set_theme_name("dark")
+	## The application owns the classification pass. A direct preview without it
+	## leaves the title scene's legacy local styleboxes in place and photographs
+	## menu rows as buttons even though player-facing NavAction does not.
+	UIStyleSystem.apply(_screen, false)
 
 
 func _process(_delta: float) -> void:

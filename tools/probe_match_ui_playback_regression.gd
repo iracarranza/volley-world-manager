@@ -37,6 +37,36 @@ func _run() -> void:
 	var highlight := button.get_node_or_null("InkHighlight") as Control
 	_expect(highlight != null and highlight.show_behind_parent,
 		"animated highlighter owns a separate behind-button layer")
+	var nav := Button.new()
+	nav.name = "MenuItem"
+	nav.text = "01  NEW CAREER"
+	nav.theme_type_variation = &"NavAction"
+	nav.size = Vector2(240.0, 52.0)
+	host.add_child(nav)
+	UIStyleSystem.apply(nav, false, UIStyleSystem.MEDIUM_DRAWN)
+	await process_frame
+	var nav_outline := nav.get_node_or_null("InkOutline")
+	_expect(
+		nav.theme_type_variation == &"NavAction"
+			and nav_outline != null
+			and not bool(nav_outline.draw_perimeter)
+			and nav.get_node_or_null("InkHighlight") != null,
+		"navigation item keeps its mark without becoming a boxed button",
+	)
+	var title := load("res://scenes/screens/title_screen.tscn").instantiate() as Control
+	UIStyleSystem.apply(title, false, UIStyleSystem.MEDIUM_DRAWN)
+	for title_item_name in [
+		"NewCareerButton", "LoadMenuButton", "OptionsButton", "ExitButton",
+	]:
+		var title_item := title.get_node("%%%s" % title_item_name) as Button
+		var title_mark := title_item.get_node_or_null("InkOutline")
+		_expect(
+			title_item.theme_type_variation == &"NavAction"
+				and title_mark != null
+				and not bool(title_mark.draw_perimeter),
+			"title %s remains a navigation item" % title_item_name,
+		)
+	title.free()
 
 	var screen := MatchScreenScene.instantiate() as MatchScreen
 	root.add_child(screen)
