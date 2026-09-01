@@ -488,7 +488,7 @@ func _process(delta: float) -> void:
 	highlight_fade = move_toward(
 		highlight_fade, _fade_target, delta / HIGHLIGHT_BLINK_SECONDS
 	)
-	queue_redraw()
+	_queue_mark_redraw()
 	if is_equal_approx(highlight_fade, 0.0):
 		## Wound back once the mark is gone rather than while it is going, so the
 		## next hover starts from a clean sheet without the retreat being visible.
@@ -521,8 +521,44 @@ func _process(delta: float) -> void:
 ## Width is only known once the control has been laid out, so this is re-run on
 ## resize rather than settled in `_ready`.
 func _sync_draw_order() -> void:
-	show_behind_parent = hover_highlight
+	## The perimeter is a persistent control boundary and must remain in front of
+	## the button. Only the translucent hover stroke belongs behind its label.
+	## Moving this whole node behind the parent hid every button outline in the
+	## title, journal and match overlay because the parent draws after its child.
+	show_behind_parent = false
+	_sync_highlight_layer()
 	_sync_underline_layer()
+
+
+func _queue_mark_redraw() -> void:
+	queue_redraw()
+	var parent := get_parent()
+	if parent == null:
+		return
+	for layer_name in ["InkHighlight", "InkUnderline"]:
+		var layer := parent.get_node_or_null(layer_name) as Control
+		if layer != null:
+			layer.queue_redraw()
+
+
+func _sync_highlight_layer() -> void:
+	var parent := get_parent() as Control
+	if parent == null:
+		return
+	var wanted := hover_highlight and not _is_underlined()
+	var existing := parent.get_node_or_null("InkHighlight") as HighlightLayer
+	if not wanted:
+		if existing != null:
+			existing.queue_free()
+		return
+	if existing != null:
+		existing.outline = self
+		existing.queue_redraw()
+		return
+	var layer := HighlightLayer.new()
+	layer.name = "InkHighlight"
+	layer.outline = self
+	parent.add_child(layer)
 
 
 ## The rule that draws in front, while the rest of this node draws behind.
@@ -572,6 +608,23 @@ class UnderlineLayer extends Control:
 	func _draw() -> void:
 		if outline != null and is_instance_valid(outline):
 			outline.paint_underline(self)
+
+
+## The highlighter is the one part of a button mark that belongs behind the
+## parent's own drawing. It is split from the persistent perimeter so changing
+## draw order for one can never erase the other.
+class HighlightLayer extends Control:
+	var outline: UIInkOutline = null
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_meta("ui_style_exempt", true)
+		show_behind_parent = true
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		if outline != null and is_instance_valid(outline):
+			outline.paint_highlight(self)
 
 
 func _notification(what: int) -> void:
@@ -625,8 +678,6 @@ func _draw() -> void:
 			* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage)
 		alphas[index] = ink.a * coverage
 	## The mark goes down first, under everything else this node draws.
-	if hover_highlight and highlight_sweep > 0.001 and highlight_fade > 0.001:
-		_draw_highlight(highlight_sweep)
 	if stroke_style == Stroke.STITCH:
 		## Silhouette first, so the seam sits on top of the cloth it is holding.
 		_draw_perforation()
@@ -670,7 +721,26 @@ func _draw_ribbon(
 		])
 		var near := Color(ink, alphas[index] * alpha_scale)
 		var far := Color(ink, alphas[next_index] * alpha_scale)
-		draw_polygon(quad, PackedColorArray([near, far, far, near]))
+		## A rapidly turning broad nib can make this four-point strip concave
+		## (or even a bow tie) at a rounded corner. Godot's polygon triangulator
+		## rejects that whole quad, which was why button boundaries vanished and
+		## the renderer emitted hundreds of errors. The strip already has a known
+		## shared diagonal, so submit its two triangles directly and discard only
+		## a genuinely zero-area sliver.
+		_draw_ribbon_triangle(quad[0], quad[1], quad[2], near, far, far)
+		_draw_ribbon_triangle(quad[0], quad[2], quad[3], near, far, near)
+
+
+func _draw_ribbon_triangle(
+	a: Vector2, b: Vector2, c: Vector2,
+	a_color: Color, b_color: Color, c_color: Color,
+) -> void:
+	if absf((b - a).cross(c - a)) <= 0.0001:
+		return
+	draw_polygon(
+		PackedVector2Array([a, b, c]),
+		PackedColorArray([a_color, b_color, c_color]),
+	)
 
 
 ## One swipe of a chisel-tip highlighter across the control.
@@ -679,10 +749,13 @@ func _draw_ribbon(
 ## here, so the theme stays the single place that decides what a primary action
 ## is coloured. The stylebox itself is transparent for these tiers -- this band
 ## *is* the fill, not a decoration over one.
-func _draw_highlight(sweep: float) -> void:
+func paint_highlight(surface: CanvasItem) -> void:
 	## Underlined controls paint nothing here -- their mark is on the layer in
 	## front of the parent, which repaints itself off the same sweep.
 	if _is_underlined():
+		return
+	var sweep := highlight_sweep
+	if sweep <= 0.001 or highlight_fade <= 0.001:
 		return
 	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA * highlight_fade)
 	## Where the band sat relative to the word this time, and whether the hand
@@ -714,11 +787,11 @@ func _draw_highlight(sweep: float) -> void:
 	## narrower pass along the top is what stops it reading as a flat rectangle.
 	## Both are the same run of the tip, so they share one builder -- the lead
 	## simply stops a third of the way down instead of at the bottom.
-	draw_colored_polygon(
+	surface.draw_colored_polygon(
 		_highlight_band(anchor, tip, shear, top, bottom, tilt, steps, 601, 1409),
 		band
 	)
-	draw_colored_polygon(
+	surface.draw_colored_polygon(
 		_highlight_band(
 			anchor, tip, shear, top, lerpf(top, bottom, 0.34), tilt, steps,
 			601, 2803, 0.4

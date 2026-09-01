@@ -59,6 +59,11 @@ var movement_proof: bool = false
 var playback_paused: bool = false
 var skip_requested: bool = false
 var playback_active: bool = false
+## Bounds of the resolved physical record currently being drawn. The scrubber
+## is a clock, not an event counter: a long serve flight must occupy more of it
+## than a simultaneous block, and contact/recovery spans must advance it too.
+var playback_clock_start: float = 0.0
+var playback_clock_end: float = 1.0
 var player_names: Dictionary = {}
 var player_handedness: Dictionary = {}
 var player_physical_profiles: Dictionary = {}
@@ -159,6 +164,7 @@ func load_and_play_rally(
 		player_physical_profiles,
 	)
 	_cache_contact_body_targets(rally_result.events)
+	_configure_playback_clock(rally_result.events)
 	## The measurement pass poses the real actors so it can read their actual
 	## forearms. setup_players now reuses matching rigs and resets presentation
 	## state, avoiding a second twelve-actor mesh/material rebuild here.
@@ -419,8 +425,8 @@ func _play_flight(
 	movement_contact: RallyEvent,
 	after_next: RallyEvent,
 	trajectory: Dictionary,
-	event_index: int,
-	event_count: int,
+	_event_index: int,
+	_event_count: int,
 	generation: int,
 ) -> float:
 	## Read from the *display* trajectory, not the source one. A flight cut short
@@ -457,8 +463,11 @@ func _play_flight(
 			and next_contact.event_type == RallyEventModel.EventType.BLOCK else null,
 	)
 	var elapsed := 0.0
-	match_court_3d.ball_actor.reset_flight()
 	match_court_3d.begin_ball_flight(display_trajectory, float(event.quality))
+	## Do not hide the ball for the frame between two physical legs. Sampling the
+	## new leg at zero also makes any real seam disagreement visible instead of
+	## disguising it as a disappear/reappear teleport.
+	match_court_3d.set_ball_trajectory_sample(display_trajectory, 0.0)
 	while elapsed < duration:
 		if generation != playback_generation or skip_requested:
 			break
@@ -475,9 +484,7 @@ func _play_flight(
 		)
 		_apply_contact_poses(event, next_contact, after_next, progress, duration)
 		_sample_cognition(event, next_contact, progress, duration)
-		progress_bar.value = (
-			(float(event_index) + progress) / maxf(float(event_count), 1.0)
-		) * 100.0
+		_update_playback_clock(event, progress, duration)
 		await get_tree().process_frame
 	match_court_3d.finish_movement_plan(movement_plan, duration)
 	match_court_3d.reset_player_poses()
@@ -516,8 +523,8 @@ func _play_contact_pulse(
 	var movement_plan := _build_movement_plan(event, next_contact, duration)
 	var carry := _carry_trajectory(event, next_contact, duration)
 	if not carry.is_empty():
-		match_court_3d.ball_actor.reset_flight()
 		match_court_3d.begin_ball_flight(carry, float(event.quality))
+		match_court_3d.set_ball_trajectory_sample(carry, 0.0)
 	var elapsed := 0.0
 	while elapsed < duration:
 		if generation != playback_generation or skip_requested:
@@ -527,6 +534,7 @@ func _play_contact_pulse(
 			continue
 		elapsed += get_process_delta_time() * playback_speed
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
+		_update_playback_clock(event, progress, duration)
 		match_court_3d.reset_player_poses()
 		if not carry.is_empty():
 			match_court_3d.set_ball_trajectory_sample(carry, progress)
@@ -1851,11 +1859,11 @@ func _from_metres(metres: Vector2) -> Vector2:
 ## too long for its window simply is not finished when the window ends. The next
 ## plan starts from where the body got to, so the walk continues.
 ##
-## The contact actor is not an exception. Forcing that body to the ball inside a
-## short set window is exactly how a T1 approach was time-warped. The resolver
-## already publishes a reachable body contact and movement duration; playback
-## honours those clocks and records any remaining disagreement instead of
-## changing the player's speed to conceal it.
+## Off-ball actors keep that pace across windows. The contact actor is the one
+## exception because production has already published that their body and ball
+## coincide at the resolved contact moment. Playback records any required
+## overspeed as a resolver/presentation disagreement, then honours the physical
+## record instead of drawing a credited receiver or setter behind the ball.
 const PLAUSIBLE_TOP_SPEED_MPS: float = 7.0
 
 
@@ -1904,11 +1912,60 @@ func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) 
 					## a blocker following a ball off their own hands.
 					"event_type": _pacing_event_type,
 				})
+			## This is presentation of a contact that production has already
+			## resolved. Drawing the ball at that record while leaving the credited
+			## actor halfway there creates the receiver/setter desync visible in
+			## replay. Keep the overspeed diagnostic above, but make the body and
+			## physical contact coincide; off-ball actors retain their paced,
+			## continuous movement and are never snapped.
+			movement["seconds"] = active_window
+			continue
 		var authored_seconds := maxf(float(movement.get("seconds", 0.0)), 0.0)
 		movement["seconds"] = maxf(
 			metres / speed,
 			authored_seconds if authored_seconds > 0.0 else active_window,
 		)
+
+
+func _configure_playback_clock(events: Array) -> void:
+	var first := INF
+	var last := -INF
+	for event_index in range(events.size()):
+		var event := events[event_index] as RallyEvent
+		if event == null or not event.metadata.has("physical_time"):
+			continue
+		var moment := _event_physical_time(event)
+		first = minf(first, moment)
+		last = maxf(last, moment)
+		var source: Dictionary = event.metadata.get("outgoing_trajectory", {})
+		if source.is_empty():
+			continue
+		var next_contact := _next_contact_event(events, event_index + 1)
+		var display := _display_trajectory(event, next_contact, source)
+		last = maxf(last, moment + float(display.get("duration", 0.0)))
+	if is_inf(first):
+		first = 0.0
+	if is_inf(last):
+		last = first + 1.0
+	playback_clock_start = first
+	playback_clock_end = maxf(last, first + 0.001)
+
+
+func _update_playback_clock(event: RallyEvent, progress: float, duration: float) -> void:
+	var moment := _event_physical_time(event) + clampf(progress, 0.0, 1.0) * duration
+	## A missed block may be published inside the attack flight already drawn.
+	## Its stamp is earlier than the visible ball's current time, so the bar must
+	## not run backwards when playback visits that record to pose the blocker.
+	progress_bar.value = maxf(
+		progress_bar.value,
+		playback_clock_percent(moment, playback_clock_start, playback_clock_end),
+	)
+
+
+static func playback_clock_percent(moment: float, start: float, finish: float) -> float:
+	if finish <= start:
+		return 100.0
+	return clampf((moment - start) / (finish - start), 0.0, 1.0) * 100.0
 
 
 ## The length of the drawn journey in metres, corner included.
