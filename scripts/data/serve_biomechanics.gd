@@ -72,12 +72,16 @@ const TOSS_END: float = -0.58
 const COCK_END: float = -0.22
 const FOLLOW_END: float = 0.42
 const RECOVER_END: float = 0.86
+const STRIKE_START: float = -0.34
+const ELBOW_RELEASE_START: float = -0.22
+const SHOULDER_CONTACT_VELOCITY: float = -230.0
+const ELBOW_CONTACT_VELOCITY: float = -250.0
 
 ## The shoulder, along the sweep described above.
 const SHOULDER_REST_DEGREES: float = 8.0
-const SHOULDER_COCK_DEGREES: float = -162.0
-const SHOULDER_CONTACT_DEGREES: float = -190.0
-const SHOULDER_FOLLOW_DEGREES: float = -300.0
+const SHOULDER_COCK_DEGREES: float = -132.0
+const SHOULDER_CONTACT_DEGREES: float = -202.0
+const SHOULDER_FOLLOW_DEGREES: float = -292.0
 ## Not `SHOULDER_REST_DEGREES`. Same arm, reached forwards instead of by
 ## unwinding the swing -- see the note on the sweep above.
 const SHOULDER_RECOVER_DEGREES: float = -352.0
@@ -95,8 +99,8 @@ const ABDUCT_FOLLOW_DEGREES: float = -26.0
 ## The elbow. Folded to cock, thrown open through the ball, and folding again as
 ## the arm comes down -- an arm that stays locked through the follow-through
 ## reads as a bowling action.
-const ELBOW_COCK_DEGREES: float = 102.0
-const ELBOW_CONTACT_DEGREES: float = 6.0
+const ELBOW_COCK_DEGREES: float = 88.0
+const ELBOW_CONTACT_DEGREES: float = 8.0
 const ELBOW_FOLLOW_DEGREES: float = 44.0
 const ELBOW_REST_DEGREES: float = 17.0
 
@@ -148,6 +152,29 @@ static func window(phase: float, from_phase: float, to_phase: float) -> float:
 	return smoothstep(from_phase, to_phase, phase)
 
 
+static func travel(
+	phase: float,
+	from_phase: float,
+	to_phase: float,
+	from_value: float,
+	to_value: float,
+	from_velocity: float,
+	to_velocity: float,
+) -> float:
+	if phase <= from_phase:
+		return from_value
+	if phase >= to_phase:
+		return to_value
+	var span := maxf(to_phase - from_phase, 0.0001)
+	var t := clampf((phase - from_phase) / span, 0.0, 1.0)
+	var t2 := t * t
+	var t3 := t2 * t
+	return (2.0 * t3 - 3.0 * t2 + 1.0) * from_value \
+		+ (t3 - 2.0 * t2 + t) * from_velocity * span \
+		+ (-2.0 * t3 + 3.0 * t2) * to_value \
+		+ (t3 - t2) * to_velocity * span
+
+
 ## Every joint of a serve at one instant.
 ##
 ## `hand` is +1 for a right-hander and -1 for a left-hander, and multiplies only
@@ -163,16 +190,26 @@ static func resolve(
 	var power_boost := smoothstep(0.62, 0.96, clampf(action_power, 0.0, 1.0))
 	var toss := window(p, TOSS_START, TOSS_END)
 	var cock := window(p, TOSS_END - 0.06, COCK_END)
-	## Saturating a little before the ball, so the arm is at full extension
-	## *through* the contact rather than still arriving at it. The spike needed
-	## the same correction and for the same reason.
-	var swing := window(p, COCK_END, -0.02)
+	## The shoulder begins before the elbow and both remain in motion through
+	## contact. Shared Hermite endpoint velocities prevent contact from becoming
+	## a stop followed by a separately eased follow-through.
+	var swing := window(p, STRIKE_START, 0.0)
 	var follow := window(p, 0.0, FOLLOW_END)
 	var recover := window(p, FOLLOW_END, RECOVER_END)
 
 	var shoulder := lerpf(SHOULDER_REST_DEGREES, SHOULDER_COCK_DEGREES, cock)
-	shoulder = lerpf(shoulder, SHOULDER_CONTACT_DEGREES, swing)
-	shoulder = lerpf(shoulder, SHOULDER_FOLLOW_DEGREES, follow)
+	if p >= STRIKE_START and p <= 0.0:
+		shoulder = travel(
+			p, STRIKE_START, 0.0,
+			SHOULDER_COCK_DEGREES, SHOULDER_CONTACT_DEGREES,
+			0.0, SHOULDER_CONTACT_VELOCITY,
+		)
+	elif p > 0.0:
+		shoulder = travel(
+			p, 0.0, FOLLOW_END,
+			SHOULDER_CONTACT_DEGREES, SHOULDER_FOLLOW_DEGREES,
+			SHOULDER_CONTACT_VELOCITY, 0.0,
+		)
 	shoulder = lerpf(shoulder, SHOULDER_RECOVER_DEGREES, recover)
 
 	var abduct := lerpf(6.0, ABDUCT_COCK_DEGREES, cock)
@@ -181,9 +218,32 @@ static func resolve(
 	abduct = lerpf(abduct, 0.0, recover)
 
 	var elbow := lerpf(ELBOW_REST_DEGREES, ELBOW_COCK_DEGREES, cock)
-	elbow = lerpf(elbow, ELBOW_CONTACT_DEGREES, swing)
-	elbow = lerpf(elbow, ELBOW_FOLLOW_DEGREES, follow)
+	if p >= ELBOW_RELEASE_START and p <= 0.0:
+		elbow = travel(
+			p, ELBOW_RELEASE_START, 0.0,
+			ELBOW_COCK_DEGREES, ELBOW_CONTACT_DEGREES,
+			0.0, ELBOW_CONTACT_VELOCITY,
+		)
+	elif p > 0.0:
+		elbow = travel(
+			p, 0.0, FOLLOW_END,
+			ELBOW_CONTACT_DEGREES, ELBOW_FOLLOW_DEGREES,
+			ELBOW_CONTACT_VELOCITY, 0.0,
+		)
 	elbow = lerpf(elbow, ELBOW_REST_DEGREES, recover)
+
+	var internal_rotation := lerpf(0.0, -20.0 * hand, cock)
+	if p >= STRIKE_START and p <= 0.0:
+		internal_rotation = travel(
+			p, STRIKE_START, 0.0,
+			-20.0 * hand, 12.0 * hand, 0.0, 90.0 * hand,
+		)
+	elif p > 0.0:
+		internal_rotation = travel(
+			p, 0.0, FOLLOW_END,
+			12.0 * hand, 30.0 * hand, 90.0 * hand, 0.0,
+		)
+	internal_rotation = lerpf(internal_rotation, 0.0, recover)
 
 	## The toss arm holds up until the ball is nearly struck, then comes down.
 	## Dropping it on the cock -- which is what a single ramp would do -- draws a
@@ -239,6 +299,7 @@ static func resolve(
 	return {
 		"striking_shoulder_degrees": shoulder,
 		"striking_abduction_degrees": abduct * hand,
+		"striking_internal_rotation_degrees": internal_rotation,
 		"striking_elbow_degrees": elbow,
 		"guide_shoulder_degrees": guide,
 		"guide_elbow_degrees": guide_elbow,

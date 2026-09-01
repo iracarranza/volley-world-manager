@@ -154,6 +154,7 @@ static func _sky_ball(phase: float, hand: float, routine: int) -> Dictionary:
 	return {
 		"striking_shoulder_degrees": shoulder,
 		"striking_abduction_degrees": 9.0 * hand,
+		"striking_internal_rotation_degrees": 0.0,
 		"striking_elbow_degrees": lerpf(18.0, 4.0, maxf(strike, follow)),
 		"guide_shoulder_degrees": lerpf(18.0, -28.0, strike),
 		"guide_elbow_degrees": 12.0,

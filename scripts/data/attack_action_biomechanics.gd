@@ -41,13 +41,17 @@ static func resolve(
 	var hand := 1.0 if handedness_sign >= 0.0 else -1.0
 	if variant == ROLL:
 		joints["striking_shoulder_degrees"] = lerpf(
-			float(joints.striking_shoulder_degrees), -178.0, 0.82 * change
+			float(joints.striking_shoulder_degrees), -196.0, 0.82 * change
 		)
 		joints["striking_elbow_degrees"] = lerpf(
 			float(joints.striking_elbow_degrees), 22.0, 0.90 * change
 		)
 		joints["striking_abduction_degrees"] = lerpf(
 			float(joints.striking_abduction_degrees), 28.0 * hand, 0.82 * change
+		)
+		joints["striking_internal_rotation_degrees"] = lerpf(
+			float(joints.get("striking_internal_rotation_degrees", 0.0)),
+			8.0 * hand, 0.72 * change
 		)
 		joints["torso_pitch_radians"] = lerpf(
 			float(joints.torso_pitch_radians), -0.08, 0.58 * change
@@ -66,13 +70,19 @@ static func resolve(
 		)
 	else:
 		joints["striking_shoulder_degrees"] = lerpf(
-			float(joints.striking_shoulder_degrees), -148.0, 0.94 * change
+			# Past vertical: the elbow remains compact, but the *upper arm* has
+			# already carried the hand in front of the striking shoulder.
+			float(joints.striking_shoulder_degrees), -225.0, 0.96 * change
 		)
 		joints["striking_elbow_degrees"] = lerpf(
 			float(joints.striking_elbow_degrees), 62.0, 0.98 * change
 		)
 		joints["striking_abduction_degrees"] = lerpf(
 			float(joints.striking_abduction_degrees), 14.0 * hand, 0.82 * change
+		)
+		joints["striking_internal_rotation_degrees"] = lerpf(
+			float(joints.get("striking_internal_rotation_degrees", 0.0)),
+			10.0 * hand, 0.90 * change
 		)
 		joints["torso_pitch_radians"] = lerpf(
 			float(joints.torso_pitch_radians), -0.01, 0.82 * change

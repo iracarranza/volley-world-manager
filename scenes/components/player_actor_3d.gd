@@ -2209,6 +2209,29 @@ func _settle_to_floor(floor_height: float, hips: Vector3) -> void:
 	body_pivot.position.y += floor_height - _lowest_body_point()
 
 
+## A pre-contact dive reaches the floor before recovery has a non-zero clock,
+## leaving that solver no settlement to apply at phase zero. Clamp only actual
+## penetration: forward commitment and airborne height remain untouched, while
+## no hand, knee, or shoe is allowed through the court.
+func _keep_above_floor(floor_height: float) -> void:
+	# Nested arm/leg transforms are lazily propagated. A short convergence loop
+	# lets the next measurement observe the previous lift, just as the crouch
+	# solver iterates after composing its nested joints.
+	for _pass in 4:
+		_force_transform_tree(body_pivot)
+		var lowest := _lowest_body_point()
+		if lowest >= floor_height - 0.0005:
+			break
+		body_pivot.position.y += floor_height - lowest
+
+
+func _force_transform_tree(node: Node) -> void:
+	if node is Node3D:
+		(node as Node3D).force_update_transform()
+	for child in node.get_children():
+		_force_transform_tree(child)
+
+
 ## Where the hips sit relative to the actor.
 ##
 ## **Read from the leg roots, which are the hip joint.** This used to read the
@@ -3075,6 +3098,19 @@ func set_pose(
 		return
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
 	var guide_arm := right_arm if dominant_hand == "Left" else left_arm
+	var diving_floor_guard := event_type in [
+		RallyEventModel.EventType.RECEPTION,
+		RallyEventModel.EventType.DIG,
+		RallyEventModel.EventType.ATTACK_COVERAGE,
+	] and DefenseActionBiomechanicsScript.is_diving(
+		contact_posture, contact_recovery
+	)
+	var contact_court_floor := 0.0
+	if diving_floor_guard:
+		# Ground reference after the ordinary gait/stance has been posed, before
+		# any action-specific reach or fall can lower a limb through it.
+		_force_transform_tree(body_pivot)
+		contact_court_floor = _lowest_body_point()
 	match event_type:
 		RallyEventModel.EventType.SERVE:
 			## Every joint comes from `ServeBiomechanics`, for the same reason the
@@ -3110,7 +3146,8 @@ func set_pose(
 			## carries the elbow out away from the ribs on the way back and brings
 			## the hand across the body on the way down.
 			striking_arm.rotation_degrees = Vector3(
-				float(toss.striking_shoulder_degrees), 0.0,
+				float(toss.striking_shoulder_degrees),
+				float(toss.get("striking_internal_rotation_degrees", 0.0)),
 				float(toss.striking_abduction_degrees)
 			)
 			_set_elbow(striking_arm, float(toss.striking_elbow_degrees))
@@ -3144,6 +3181,10 @@ func set_pose(
 			## there when the ball is. Before the blend starts the gait owns the
 			## arms, which is what running looks like.
 			if phase >= PLATFORM_PHASE:
+				# Commitment is applied before posture/recovery grounding. Applied
+				# afterwards, its vertical offset pushed an already-settled body
+				# through the court and defeated `_settle_to_floor`.
+				_apply_dive_receive_overlay(phase, contact_direction)
 				_apply_dig_posture(
 					smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase),
 					smoothstep(PLATFORM_DRIVE_START, PLATFORM_DRIVE_END, phase),
@@ -3166,7 +3207,6 @@ func set_pose(
 					## one that did not.
 					_recovery_clock(phase), contact_direction,
 				)
-				_apply_dive_receive_overlay(phase, contact_direction)
 
 		RallyEventModel.EventType.SET:
 			## Every joint comes from `SetBiomechanics`. What was here got the
@@ -3322,6 +3362,8 @@ func set_pose(
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)
+	if diving_floor_guard:
+		_keep_above_floor(contact_court_floor)
 	## After the grounding, because the pose this hands over is the finished one.
 	_track_floor_recovery(event_type, phase, is_contact_actor)
 	_apply_face_micro_motion(true, phase)
@@ -4450,7 +4492,8 @@ func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
 	## as well as back and stands the forearm up *out* of it -- without it the
 	## whole swing happens in one plane and reads as a hinge.
 	striking_arm.rotation_degrees = Vector3(
-		float(swing.striking_shoulder_degrees), 0.0,
+		float(swing.striking_shoulder_degrees),
+		float(swing.get("striking_internal_rotation_degrees", 0.0)),
 		float(swing.striking_abduction_degrees)
 	)
 	_set_elbow(striking_arm, float(swing.striking_elbow_degrees))

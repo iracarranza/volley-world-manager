@@ -289,3 +289,74 @@ deterministic side and three-quarter strips produced by
 `tools/animation_frames.tscn` in `artifacts/rally-action-animations/`. Each row
 uses one fixed physical profile, palette, player ID, camera, and light rig; only
 the authored phase or documented input changes between frames.
+
+## Corrective pass: continuous launch and overhead contact
+
+This section records the observed defects in the first implementation and is
+authoritative over conflicting timing language above.
+
+### Approach into launch
+
+`ApproachBiomechanics` remains the sole owner from phase `-1` through
+`SpikeBiomechanics.PLANT_END`. Its directional step, long penultimate, closing
+step, bilateral plant, arm gather, and forward trunk load must be reused without
+variant-specific substitutes. During that interval the actor's vertical
+elevation is exactly zero.
+
+At `PLANT_END`, both feet are planted and the knees are at maximum load. The
+launch then belongs to `SpikeBiomechanics`: knees and hips extend first, the
+body rises continuously from zero, the arms lift out of the existing backswing,
+and peak elevation occurs at phase zero. No gallery or playback path may drive
+an independent sine jump over the approach.
+
+### Overhead striking path
+
+The striking hand must travel in an arc, not translate horizontally into the
+ball. From high-elbow cock to contact:
+
+- shoulder drive begins early enough to occupy at least four 60 fps frames on
+  the published 0.18--0.25 second takeoff-to-contact clock;
+- elbow extension starts after the shoulder but overlaps it through contact;
+- shoulder pitch, elbow extension, and the elbow plane's internal rotation
+  carry the hand upward, forward, and inward around the shoulder;
+- angular velocity is continuous through phase zero; contact is not a clamped
+  endpoint followed by a separately eased follow-through;
+- the hand continues down and across after contact, then decelerates before the
+  landing recovery begins.
+
+The contact hand must be above, ahead of, and outside the striking shoulder,
+with positive forward travel and a visible vertical component in the final
+pre-contact samples. Late recovery must not exceed contact hand speed.
+
+### Dink contact
+
+A dink shares the canonical approach, plant, launch, guide-arm sell, and early
+high-elbow cock. Its late change keeps the elbow flexed but carries the upper arm
+past vertical so the hand reaches in front of the striking shoulder. The hand
+stops near the ball and withdraws; a compact elbow attached to an arm still
+behind the head is not a dink.
+
+### Diving floor handoff
+
+The dive overlay may supply pre-contact forward travel, centre-of-mass
+commitment, and torso pitch. It must run before the shared floor settlement or
+fade its vertical offset before settlement. `PlayerActor3D`'s existing recovery
+grounding remains the sole final authority: after every rendered phase the
+lowest body surface is on or above the court, and phase `+1` returns a coherent
+kneel/ready handoff without buried limbs.
+
+### Corrective acceptance measurements
+
+- attack elevation is zero for every phase below `PLANT_END` and increases only
+  after the canonical close has planted;
+- approach joint values at the handoff equal the legacy/currently wired
+  `ApproachBiomechanics.resolve(1.0, handedness)` values;
+- shoulder and elbow angular velocity immediately before and after contact do
+  not contain the former order-of-magnitude brake;
+- dense world-space hand samples show an overhead arc rather than a final
+  horizontal shove;
+- dink contact places the striking hand ahead of its shoulder while retaining a
+  more flexed elbow than power or roll;
+- the dive's lowest body point never falls below the rendered floor;
+- visual strips include an exact phase-zero frame and separately identify the
+  approach, plant, launch, contact, and landing samples.

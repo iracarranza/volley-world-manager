@@ -6,6 +6,9 @@ const SetMotion := preload("res://scripts/data/set_biomechanics.gd")
 const Attack := preload("res://scripts/data/attack_action_biomechanics.gd")
 const Idle := preload("res://scripts/data/idle_biomechanics.gd")
 const PlayerActor := preload("res://scenes/components/player_actor_3d.gd")
+const PlayerActorScene := preload("res://scenes/components/player_actor_3d.tscn")
+const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const Spike := preload("res://scripts/data/spike_biomechanics.gd")
 
 var checks := 0
 var failures := 0
@@ -111,6 +114,21 @@ func _run() -> void:
 		"roll shot must soften the elbow at contact")
 	_check(float(dink_contact.striking_elbow_degrees) > float(roll_contact.striking_elbow_degrees),
 		"dink must retain the most compact striking elbow")
+	_check(Spike.elevation_at(Spike.PLANT_END - 0.001) == 0.0 \
+		and Spike.elevation_at(Spike.PLANT_END) == 0.0 \
+		and Spike.elevation_at(Spike.PLANT_END + 0.08) > 0.0,
+		"attack launch must begin after, not during, the canonical approach")
+	var epsilon := 0.001
+	var before := Spike.resolve(-epsilon, 1.0, 0.82)
+	var at_contact := Spike.resolve(0.0, 1.0, 0.82)
+	var after := Spike.resolve(epsilon, 1.0, 0.82)
+	for key in ["striking_shoulder_degrees", "striking_elbow_degrees"]:
+		var incoming_velocity := (float(at_contact[key]) - float(before[key])) / epsilon
+		var outgoing_velocity := (float(after[key]) - float(at_contact[key])) / epsilon
+		_check(absf(incoming_velocity - outgoing_velocity) < 12.0,
+			"%s velocity must continue through overhead contact" % key)
+
+	await _test_rig_geometry()
 
 	var idle := Idle.resolve(1.75, 12, "watching")
 	_check(absf(float(idle.rise_metres)) <= 0.0061, "idle breathing exceeds its vertical bound")
@@ -131,3 +149,58 @@ func _run() -> void:
 		return
 	push_error("Rally action animation contract: %d checks, %d failures" % [checks, failures])
 	quit(1)
+
+
+func _test_rig_geometry() -> void:
+	var actor: Node3D = PlayerActorScene.instantiate()
+	get_root().add_child(actor)
+	await process_frame
+	actor.configure(901, true, "Contract", "Right", {"height_cm": 191.0})
+	await process_frame
+	actor.contact_posture = "reaching"
+	actor.contact_recovery = "fall"
+	actor.set_pose(
+		RallyEventModel.EventType.RECEPTION, 0.0, -1.0,
+		Vector2.RIGHT, true,
+	)
+	await process_frame
+	var court_floor: float = actor._lowest_body_point()
+	var lowest := INF
+	var lowest_phase := 0.0
+	for sample in range(41):
+		var phase := lerpf(-1.0, 1.0, float(sample) / 40.0)
+		actor.set_pose(
+			RallyEventModel.EventType.RECEPTION, 0.0, phase,
+			Vector2.RIGHT, true,
+		)
+		await process_frame
+		var sample_lowest: float = actor._lowest_body_point()
+		if sample_lowest < lowest:
+			lowest = sample_lowest
+			lowest_phase = phase
+	_check(lowest >= court_floor - 0.002,
+		"diving receive must remain above the court (lowest %.4f m at phase %.2f)"
+			% [lowest, lowest_phase])
+
+	actor.set_pose(
+		RallyEventModel.EventType.ATTACK, 1.0, 0.0, Vector2.UP, true,
+		{"attack_type": "Dink", "action_power": 0.38},
+	)
+	await process_frame
+	var hand := _rig_hand(actor, "RightArm")
+	_check(hand.z > 0.10 and hand.y > 0.50,
+		"dink hand must be above and ahead of its shoulder (up %.2f, ahead %.2f)"
+			% [hand.y, hand.z])
+	actor.queue_free()
+	await process_frame
+
+
+func _rig_hand(actor: Node3D, arm_name: String) -> Vector3:
+	var arm := actor.get_node("BodyPivot/%s" % arm_name) as Node3D
+	var elbow := arm.get_node("Elbow") as Node3D
+	var mesh := elbow.get_node("Mesh") as MeshInstance3D
+	var length := mesh.mesh.get_aabb().size.y * elbow.scale.y
+	var tip: Vector3 = elbow.global_transform * Vector3(0.0, -length, 0.0)
+	var local: Vector3 = actor.global_transform.basis.inverse() \
+		* (tip - arm.global_position)
+	return Vector3(local.x, local.y, -local.z)

@@ -231,6 +231,11 @@ func _run_rally(generation: int) -> void:
 				played_index = _next_contact_index(events, played_index + 1)
 			if played_index >= 0:
 				movement_contact = events[played_index] as RallyEvent
+		if event_index == 0 \
+				and event.event_type == RallyEventModel.EventType.SERVE:
+			await _play_serve_preparation(event, next_contact, generation)
+			if generation != playback_generation or skip_requested:
+				break
 		if not trajectory.is_empty():
 			drawn_until = maxf(
 				drawn_until,
@@ -301,6 +306,38 @@ func _run_rally(generation: int) -> void:
 			await _play_contact_pulse(event, next_contact, window, generation)
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.clear_cognition()
+
+
+## A serve has no incoming ball flight to carry its negative pose phase. Without
+## this pre-roll, playback's first server went directly from idle to phase zero
+## and every authored toss, load and overhead swing existed only in diagnostics.
+const SERVE_PREPARATION_SECONDS: float = 1.12
+
+
+func _play_serve_preparation(
+	event: RallyEvent, next_contact: RallyEvent, generation: int
+) -> void:
+	var elapsed := 0.0
+	var actor_id := int(event.actor_id)
+	var direction := event.end_position - event.start_position
+	while elapsed < SERVE_PREPARATION_SECONDS:
+		if generation != playback_generation or skip_requested:
+			return
+		if playback_paused:
+			await get_tree().process_frame
+			continue
+		elapsed += get_process_delta_time() * playback_speed
+		var progress := clampf(elapsed / SERVE_PREPARATION_SECONDS, 0.0, 1.0)
+		var phase := lerpf(-1.0, 0.0, progress)
+		match_court_3d.reset_player_poses()
+		_apply_ready_stances(event, next_contact, phase)
+		match_court_3d.set_player_pose(
+			actor_id, RallyEventModel.EventType.SERVE, 0.0, phase,
+			direction, true, _contact_posture(event),
+			_contact_recovery(event), _platform_aim(event),
+			_action_context(event, actor_id),
+		)
+		await get_tree().process_frame
 
 
 ## Where the ball rests, and what it falls under. Named here rather than reached
@@ -890,9 +927,12 @@ func _apply_contact_poses(
 			event,
 		)
 	elif draw_outgoing:
+		var event_lift := SpikeBiomechanics.elevation_at(progress) \
+			if event.event_type == RallyEventModel.EventType.ATTACK \
+			else outgoing_weight
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
-			event_peak * outgoing_weight,
+			event_peak * event_lift,
 			## **A contact that never happened has no follow-through.**
 			##
 			## `set_pose` takes a signed phase with contact at zero: the reach
@@ -973,7 +1013,7 @@ func _apply_contact_poses(
 		##
 		## This window is the hold, so it ends where the hold ends.
 		var next_phase := _incoming_pose_phase(next_contact, progress)
-		var next_lift := _incoming_attack_lift(next_contact, progress) \
+		var next_lift := SpikeBiomechanics.elevation_at(next_phase) \
 			if next_contact.event_type == RallyEventModel.EventType.ATTACK \
 			else incoming_weight
 		match_court_3d.set_player_pose(
@@ -1102,9 +1142,7 @@ func _apply_pre_release_attack(
 	), 0.0, 1.0)
 	var release_phase := _attack_release_phase(attack)
 	var phase := lerpf(-1.0, release_phase, completion)
-	var phase_lift := smoothstep(
-		0.0, 1.0, inverse_lerp(SpikeBiomechanics.PLANT_END, 0.0, phase)
-	) if phase > SpikeBiomechanics.PLANT_END else 0.0
+	var phase_lift := SpikeBiomechanics.elevation_at(phase)
 	var actor_id := int(attack.actor_id)
 	match_court_3d.set_player_pose(
 		actor_id, RallyEventModel.EventType.ATTACK,
@@ -1116,26 +1154,9 @@ func _apply_pre_release_attack(
 
 
 static func _incoming_attack_lift(event: RallyEvent, progress: float) -> float:
-	if event == null or Dictionary(event.metadata.get(
-		"tempo_coordination", {}
-	)).is_empty():
-		return smoothstep(0.48, 1.0, clampf(progress, 0.0, 1.0))
-	var timing: Dictionary = event.metadata.get("tempo_coordination", {})
-	var takeoff_offset := float(timing.get("takeoff_offset_seconds", 0.0))
-	if takeoff_offset < 0.0:
-		var flight := maxf(float(timing.get(
-			"delivered_flight_seconds", 0.0
-		)), 0.0001)
-		var takeoff_to_contact := maxf(float(timing.get(
-			"takeoff_to_contact_seconds", flight
-		)), 0.0001)
-		return smoothstep(0.0, 1.0, clampf(
-			(-takeoff_offset + clampf(progress, 0.0, 1.0) * flight)
-				/ takeoff_to_contact,
-			0.0, 1.0,
-		))
-	var takeoff := _attack_takeoff_fraction(event)
-	return smoothstep(takeoff, 1.0, clampf(progress, 0.0, 1.0))
+	return SpikeBiomechanics.elevation_at(
+		_incoming_pose_phase(event, progress)
+	)
 
 
 ## A block now has one physical clock across the set, attack and deflection

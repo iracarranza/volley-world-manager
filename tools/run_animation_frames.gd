@@ -282,10 +282,13 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 	floor_mesh.material_override = floor_material
 	stage.add_child(floor_mesh)
 
+	# Odd action rows contain an exact middle frame, so phase zero/contact is an
+	# image rather than the gap between -0.143 and +0.143.
+	var frame_count := 9 if bool(strip.get("action_sweep", false)) else FRAME_COUNT
 	var spacing := float(strip.get("frame_spacing", FRAME_SPACING))
-	var start := spacing * float(FRAME_COUNT - 1) * 0.5
-	for index in range(FRAME_COUNT):
-		var progress := float(index) / float(FRAME_COUNT - 1)
+	var start := spacing * float(frame_count - 1) * 0.5
+	for index in range(frame_count):
+		var progress := float(index) / float(frame_count - 1)
 		var actor := ACTOR.instantiate()
 		stage.add_child(actor)
 		# Hold the athlete constant across the strip: only phase may change.
@@ -308,7 +311,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			var action_phase := lerpf(-1.0, 1.0, progress)
 			var action_elevation := float(action_pose[1])
 			if int(action_pose[0]) == RallyEventModel.EventType.ATTACK:
-				action_elevation *= sin(progress * PI)
+				action_elevation *= SpikeBiomechanics.elevation_at(action_phase)
 			actor.set_pose(
 				int(action_pose[0]), action_elevation, action_phase,
 				Vector2.RIGHT, true, Dictionary(strip.get("context", {})),
@@ -463,7 +466,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			pass
 		else:
 			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
-		actor.set_highlighted(index == FRAME_COUNT - 1)
+		actor.set_highlighted(index == frame_count - 1)
 		if bool(strip.get("blink_sweep", false)):
 			actor.identity_label.visible = false
 
