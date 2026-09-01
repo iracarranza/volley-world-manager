@@ -75,6 +75,45 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Render rally action animation videos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/rally-action-videos
+          actions=(
+            serve_standing
+            serve_jump_topspin
+            serve_jump_float
+            serve_hybrid
+            serve_sky_ball
+            receive_dive
+            set_front
+            set_back
+            attack_power
+            attack_roll
+            attack_dink
+            idle_breath_sway
+            standing_to_ready
+            blink
+          )
+          for action in "${actions[@]}"; do
+            xvfb-run -a godot --path . --rendering-method gl_compatibility \
+              --write-movie "artifacts/rally-action-videos/${action}.avi" \
+              --fixed-fps 30 --script tools/render_rally_action_movie.gd -- "$action"
+          done
+          test "$(find artifacts/rally-action-videos -type f -name '*.avi' | wc -l)" -eq 14
+          for action in "${actions[@]}"; do
+            test -s "artifacts/rally-action-videos/${action}.avi"
+          done
+
+      - name: Upload rally action animation videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: rally-action-animation-videos
+          path: artifacts/rally-action-videos/*.avi
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Render creation-flow drafts
         shell: bash
         run: |
