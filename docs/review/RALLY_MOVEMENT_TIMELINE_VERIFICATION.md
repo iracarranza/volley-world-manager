@@ -313,14 +313,36 @@ journey; adding a third record adds a third opinion.
 Four changes, none of them a new data structure, in this order. Each is
 independently measurable.
 
-**1. Fix what `movement_duration` means.** Publish the time to the endpoint that
-is actually published. `_reached_point` already knows both the asked-for target
-and the reached one; the duration should be timed on `movement_start ->
-movement_target`, not `movement_start -> home_target`. Predicted effect:
-`v_to_target` rises to meet `v_to_ball` (~2 m/s) across every truncating family;
-the `move > window` count falls from 195/236 digs toward zero. This one change is
-most of the visible defect, and it costs one argument at each of the ten
-`_reached_point` call sites that publish a target.
+**1. Publish the budget the arrival was truncated against, and clamp to it.**
+
+*This replaces a first draft of this section that said to re-time
+`movement_duration` to `movement_target`. That was wrong twice, and both ways are
+worth recording because they are the same mistake this file is about.*
+
+`movement_duration` is **not** a presentation number. `_platform_body_velocity`
+(`rally_simulator.gd:11520-11534`) takes it as `required_seconds` and divides the
+contact displacement by `min(required, available)` to get the body velocity
+carried into `_reception_pass_result` -- so re-timing it moves a **resolved
+contact**. And `movement_timing_ratio_calibration.gd` divides a modelled
+traversal by it against measured per-family bands; that file's own docstring
+records the mirror-image failure (RECEPTION 0.9952 -> 0.7802, DIG 0.9977 ->
+0.6491, when the *numerator's* destination moved and the denominator did not) and
+concludes that naming the families was the repair rather than redrawing the
+bands. Moving the denominator's destination earns the same entry.
+
+The smaller change is to publish what is already known and add nothing to any
+existing key's meaning. Truncation *is defined as* "as far as you got in the time
+available", so a truncated leg's drawn duration is that budget. Every
+`_reached_point` call site already holds it -- `attack_time` for the dig,
+`reception_window` for the reception -- and publishing it (say
+`movement_available_seconds`) lets `_pace_plan:1868-1872` take
+`min(authored, budget)` where it currently takes a `max`. A truncated leg then
+fills exactly the span it was truncated against and is at `movement_target` when
+the contact lands; an untruncated leg finishes early and stands, which is correct.
+
+It also makes a currently silent disagreement measurable: the resolver's budget
+(`attack_time`) and playback's window (`physical_time` gap) are not the same
+number and nothing today compares them.
 
 **2. Publish a start time, not only a duration.** Generalise
 `movement_delay_seconds` from the approach to every family that publishes a
@@ -344,6 +366,33 @@ nothing; `receiver_arrived` is published and read by nothing. Gate 1 above again
 `resolver_event_time` vs `physical_time`, and the fix becomes falsifiable without
 a new probe.
 
+**5. Give off-ball targets a duration.** `_set_plan_target:1904-1917` writes
+`{start, target, protected}` and no timing, so `_pace_plan` hands every
+`home_phase_targets` / `opponent_phase_targets` player `active_window`: their
+journey is stretched or compressed to the ball's flight whatever its length. That
+is **10 of the 12 volis on court**, and 1-4 above do not touch one of them. Same
+one-key change at the same call sites, and it is the likelier source of a
+receiver standing set in their platform while the serve is still out than the
+contact actor's leg is.
+
+## Does this fully address the reported behaviour? No
+
+1-5 close the **contact actor's leg in 3D**, which is what was measured here: 83%
+of digs and 19% of receptions drawn short of their own ball. Five things remain
+outside them, and three were never measured at all:
+
+- **2D is unchanged.** `_integrate_phase_path:725` still normalises its own time
+  axis; better inputs, same discard.
+- **Cause E is untouched.** A residual snap after 1-5 is *expected*, not evidence
+  that 1-5 failed. That is the whole reason for separating position from pose.
+- **The ace's phantom pass.** A failed reception publishes `outgoing_trajectory`
+  before `_finish(..., "ace")` at `rally_simulator.gd:1495-1517`. One key, not
+  architecture.
+- **Journeys spanning two windows.** A floor defender's travel legitimately runs
+  `ATTACK -> BLOCK -> DIG`. `_plan_fraction` continues an unfinished leg only if
+  the next window re-issues the same target; that was not verified.
+- **`RECEPTION -> RECEPTION`**, 3 in 600. Not investigated.
+
 **What I would not do yet.** Do not promote the shadow traversal, do not add
 `PlayerMovementTrace`, and do not retire `playback_progress` in 2D. Those are all
 downstream of whether 1-3 close the gap, and 1-3 are cheap enough to measure
@@ -358,5 +407,11 @@ thing left, which is the whole point of doing them in this order.
 - **The ace's outgoing trajectory.** The key is published on a failed reception;
   whether playback draws it was not confirmed.
 - **The `RECEPTION -> RECEPTION` pair** (3 in 600). Noted, not investigated.
-- **Whether fix 1 is outcome-neutral.** It changes only a published number, not a
-  resolved one, but that must be measured rather than assumed.
+- **Whether fix 1 is outcome-neutral.** As revised it adds a key and changes no
+  existing one, so it should be -- but `movement_duration` turned out to feed a
+  resolved contact through `_platform_body_velocity` and a calibrated ratio
+  through `movement_timing_ratio_calibration`, which is exactly the kind of reach
+  a "just a published number" claim does not see. Measure it.
+- **Off-ball timing after fix 5.** The 10 unmeasured volis have no published
+  duration today, so there is no before-figure for them at all. One is needed
+  before the change, not after.
