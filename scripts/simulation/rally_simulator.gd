@@ -1411,7 +1411,11 @@ func resolve(
 			## first contact of a rally, so that leg does not exist. Measured
 			## after the fact: 400 serves of 400 had no preceding flight.
 			"home_phase_targets": _lineup_live_shape(lineup, live_positions),
-			"home_phase_intents": receive_formation_intents,
+			"home_phase_intents": _shape_intents(
+				_lineup_live_shape(lineup, live_positions),
+				_lineup_players(players, lineup), _positions_at_last_contact,
+				serve_time, receive_formation_intents,
+			),
 			"opponent_phase_targets": opponent_serve_transition,
 			"opponent_phase_intents": opponent_serve_intents,
 			"planner_zone_center": Vector2(receiver_zone.center) \
@@ -1468,6 +1472,26 @@ func resolve(
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
+			## **The budget `movement_target` was truncated against.**
+			##
+			## `movement_duration` is the time this journey would take to reach
+			## the *ball*; `movement_target` is as far as the body got in the time
+			## available. Two journeys, and playback was pairing the short one's
+			## distance with the long one's clock -- measured at 0.59 m/s for a
+			## beaten digger against a 2.05 m/s shuffle, a third of walking pace.
+			## See `docs/review/RALLY_MOVEMENT_TIMELINE_VERIFICATION.md`.
+			##
+			## Publishing the budget rather than re-timing the duration is
+			## deliberate: `movement_duration` feeds `_platform_body_velocity` and
+			## `MovementTimingRatioCalibration`, so its meaning is load-bearing on
+			## the simulation side and cannot be quietly moved.
+			"movement_available_seconds": reception_window,
+			## When this receiver could first have known where the serve was
+			## going. See `_read_ready_delay`: derived, not drawn, and already
+			## computed every rally by a shadow evaluation nothing reads.
+			"movement_ready_seconds": _read_ready_delay(
+				shadow_reception_trace, receiver.id
+			),
 			## **The leg this contact actually received.** Publishing the
 			## untruncated serve here while the serve event publishes the sliced
 			## one is two records of one handover, which is precisely what the
@@ -2374,9 +2398,29 @@ func resolve(
 		var phase_intents: Dictionary = set_event_for_staging.metadata.get(
 			"home_phase_intents", {}
 		)
-		phase_intents[hitter.id] = {
-			"intent": &"preparing_attack", "progress": hitter_release_progress,
-		}
+		## The last off-ball population publishing a destination and no clock.
+		##
+		## The leg is `hitter_standing_at -> hitter_start`, captured above
+		## "before preparation relocates it" for exactly this reason, and it
+		## happens while the pass is in the air -- which is the window this map is
+		## consumed in. `progress` becomes the journey fraction every other
+		## `_travel_intent` entry carries; the tempo's release progress keeps its
+		## own name rather than sharing a key with a different quantity, and
+		## `tempo_coordination` on this same event carries it too.
+		var hitter_stage_intent := _travel_intent(
+			hitter, &"preparing_attack", hitter_standing_at, hitter_start,
+			hitter_start, "transition", float(second_contact_window),
+		)
+		## `progress` keeps the release progress it has always carried: it is the
+		## cogniticon fill `run_intent_progress_probe.gd` measures, and the
+		## journey fraction would be a constant 1.0 here because the resolver
+		## stages the hitter onto the mark rather than short of it. The travel
+		## fraction is published beside it rather than over it.
+		hitter_stage_intent["travel_progress"] = float(
+			hitter_stage_intent.get("progress", 1.0)
+		)
+		hitter_stage_intent["progress"] = hitter_release_progress
+		phase_intents[hitter.id] = hitter_stage_intent
 		set_event_for_staging.metadata["home_phase_intents"] = phase_intents
 		set_event_for_staging.metadata["tempo_coordination"] = \
 			home_tempo_timing.duplicate(true)
@@ -3002,6 +3046,21 @@ func resolve(
 		if opponent_block_stage.has(floor_id):
 			continue
 		opponent_block_stage[floor_id] = Vector2(opponent_floor_stage[raw_floor_id])
+	## Before the write below overwrites them. A wall close is timed from where
+	## the blocker was standing, and three lines later that is the wall.
+	var opponent_wall_starts := {}
+	if opponent_blocker != null:
+		opponent_wall_starts[opponent_blocker.id] = Vector2(
+			opponent_live_positions.get(
+				opponent_blocker.id, opponent_wall.primary_position
+			)
+		)
+	if assisting_blocker != null:
+		opponent_wall_starts[assisting_blocker.id] = Vector2(
+			opponent_live_positions.get(
+				assisting_blocker.id, opponent_wall.assist_position
+			)
+		)
 	for raw_player_id in opponent_block_stage:
 		opponent_live_positions[int(raw_player_id)] = Vector2(
 			opponent_block_stage[raw_player_id]
@@ -3021,13 +3080,23 @@ func resolve(
 			opponent_stage_intents[int(raw_floor_id)] = \
 				opponent_floor_intents[raw_floor_id]
 		if opponent_blocker != null:
-			opponent_stage_intents[opponent_blocker.id] = {
-				"intent": &"blocking", "progress": 0.0,
-			}
+			opponent_stage_intents[opponent_blocker.id] = _wall_close_intent(
+				opponent_blocker,
+				opponent_wall_starts.get(
+					opponent_blocker.id, Vector2(opponent_wall.primary_position)
+				),
+				Vector2(opponent_wall.primary_position),
+				float(set_flight_time),
+			)
 		if assisting_blocker != null:
-			opponent_stage_intents[assisting_blocker.id] = {
-				"intent": &"blocking", "progress": 0.0,
-			}
+			opponent_stage_intents[assisting_blocker.id] = _wall_close_intent(
+				assisting_blocker,
+				opponent_wall_starts.get(
+					assisting_blocker.id, Vector2(opponent_wall.assist_position)
+				),
+				Vector2(opponent_wall.assist_position),
+				float(set_flight_time),
+			)
 		attack_event.metadata["opponent_phase_intents"] = opponent_stage_intents
 	## NOTE FD-003, the attacking side's own six -- RALLY_SIMULATOR_NOTES.md
 	var home_cover_stage_intents := {}
@@ -3323,9 +3392,14 @@ func resolve(
 		var coverer_move_time := _movement_time(
 			coverer, coverer_start, recycle_target, "lateral"
 		) if coverer != null else 4.0
+		## Named rather than inlined so the span the arrival is truncated
+		## against and the span published as its budget are one expression.
+		var recycle_coverage_time := float(
+			opponent_block_trajectory.get("duration", 0.24)
+		)
 		var coverer_reach := _reached_point(
 			coverer, coverer_start, recycle_target,
-			float(opponent_block_trajectory.get("duration", 0.24)), "lateral",
+			recycle_coverage_time, "lateral",
 			0.0,
 			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
 			_incoming_ball_direction(
@@ -3380,6 +3454,12 @@ func resolve(
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
 			"movement_duration": coverer_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": recycle_coverage_time,
 			"arrival": coverage_contact_state.arrival,
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
@@ -3624,6 +3704,12 @@ func resolve(
 				opponent_live_positions, &"defending"
 			),
 			"movement_target": opponent_defender_reach,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": opponent_defense_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states. Deriving it from
 			## `rally_clock` instead misses the set flight that separates them.
@@ -4005,7 +4091,15 @@ func _resolve_home_serve(
 				opponent_team.current_lineup() if opponent_team != null else null,
 				opponent_live_positions,
 			),
-			"opponent_phase_intents": receive_formation_intents,
+			"opponent_phase_intents": _shape_intents(
+				_lineup_live_shape(
+					opponent_team.current_lineup() if opponent_team != null else null,
+					opponent_live_positions,
+				),
+				opponent_team.on_court_players() if opponent_team != null else [],
+				_positions_at_last_contact, serve_time,
+				receive_formation_intents,
+			),
 			"home_phase_targets": home_serve_transition,
 			"home_phase_intents": home_serve_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
@@ -4040,6 +4134,12 @@ func _resolve_home_serve(
 			"movement_start": receiver_start,
 			"movement_target": opponent_receiver_reach,
 			"movement_duration": receiver_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": reception_window,
 			## The three keys that made this side's timeline synthetic. Without an
 			## outgoing trajectory `_ensure_event_trajectories` invented one from
 			## `flight_time` -- which on a reception is the *incoming* serve's
@@ -4693,9 +4793,30 @@ func _resolve_opponent_transition(
 	var pre_release_home_targets: Dictionary = pre_release_home_block.get(
 		"targets", {}
 	)
+	## The one phase map in the file that published a destination and no intent,
+	## and therefore the whole of the "target with no intent entry at all"
+	## population -- 231 before the wall closes were timed, 84 after. Timed
+	## against the pass that is in the air while it happens, which is what the
+	## comment above this block already says the map is consumed during.
+	var pre_release_home_intents := {}
+	for raw_player_id in pre_release_home_targets:
+		var pre_release_id := int(raw_player_id)
+		var stager := _player_by_id(players, pre_release_id)
+		if stager == null:
+			continue
+		pre_release_home_intents[pre_release_id] = _wall_close_intent(
+			stager,
+			Vector2(live_positions.get(
+				pre_release_id, pre_release_home_targets[raw_player_id]
+			)),
+			Vector2(pre_release_home_targets[raw_player_id]),
+			float(second_contact_window),
+		)
 	if opponent_set_event != null:
 		opponent_set_event.metadata["home_phase_targets"] = \
 			pre_release_home_targets.duplicate(true)
+		opponent_set_event.metadata["home_phase_intents"] = \
+			pre_release_home_intents.duplicate(true)
 		opponent_set_event.metadata["home_block_pre_release"] = Dictionary(
 			pre_release_home_block.get("prediction", {})
 		).duplicate(true)
@@ -4970,14 +5091,54 @@ func _resolve_opponent_transition(
 		staged_home_assist.id if staged_home_assist != null else -1,
 		live_positions,
 	)
+	## **The wall the home side actually forms, published as a phase target.**
+	##
+	## These two writes moved the resolver's live map and told playback nothing,
+	## so the only home-block destination that ever reached the screen was the
+	## *pre-release* stage published on the opponent set. The final wall was
+	## drawn nowhere and the blocker was left standing at a prediction. Merged
+	## over the pre-release map on the same event rather than published on a new
+	## one, because both legs happen inside the same opponent set flight and two
+	## keys for one window is the correct-then-clobbered shape this file has been
+	## bitten by before.
+	var home_wall_intents := {}
 	if staged_home_primary != null:
+		home_wall_intents[staged_home_primary.id] = _wall_close_intent(
+			staged_home_primary,
+			Vector2(live_positions.get(
+				staged_home_primary.id, home_wall_positions.primary_position
+			)),
+			Vector2(home_wall_positions.primary_position),
+			float(set_flight_time),
+		)
 		live_positions[staged_home_primary.id] = Vector2(
 			home_wall_positions.primary_position
 		)
 	if staged_home_assist != null:
+		home_wall_intents[staged_home_assist.id] = _wall_close_intent(
+			staged_home_assist,
+			Vector2(live_positions.get(
+				staged_home_assist.id, home_wall_positions.assist_position
+			)),
+			Vector2(home_wall_positions.assist_position),
+			float(set_flight_time),
+		)
 		live_positions[staged_home_assist.id] = Vector2(
 			home_wall_positions.assist_position
 		)
+	if opponent_set_event != null and not home_wall_intents.is_empty():
+		var home_stage_targets: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_targets", {}
+		)
+		var home_stage_intents: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_intents", {}
+		)
+		for raw_wall_id in home_wall_intents:
+			var wall_id := int(raw_wall_id)
+			home_stage_targets[wall_id] = Vector2(live_positions[wall_id])
+			home_stage_intents[wall_id] = home_wall_intents[raw_wall_id]
+		opponent_set_event.metadata["home_phase_targets"] = home_stage_targets
+		opponent_set_event.metadata["home_phase_intents"] = home_stage_intents
 	## Rebuilding the arc must not rebuild the clock with it. This passed
 	## `rally_clock`, so whenever the reachable-contact clamp moved the target --
 	## often -- the retarget silently restamped the set back to the moment of the
@@ -5156,10 +5317,17 @@ func _resolve_opponent_transition(
 		var opponent_phase_intents: Dictionary = opponent_set_event.metadata.get(
 			"opponent_phase_intents", {}
 		)
-		opponent_phase_intents[opponent_hitter.id] = {
-			"intent": &"preparing_attack",
-			"progress": opponent_release_progress,
-		}
+		## Same staging leg as the home first ball, timed the same way.
+		var opponent_stage_intent := _travel_intent(
+			opponent_hitter, &"preparing_attack", opponent_standing_at,
+			opponent_approach_start, opponent_approach_start, "transition",
+			float(second_contact_window),
+		)
+		opponent_stage_intent["travel_progress"] = float(
+			opponent_stage_intent.get("progress", 1.0)
+		)
+		opponent_stage_intent["progress"] = opponent_release_progress
+		opponent_phase_intents[opponent_hitter.id] = opponent_stage_intent
 		opponent_set_event.metadata["opponent_phase_intents"] = \
 			opponent_phase_intents
 		opponent_set_event.metadata["tempo_coordination"] = \
@@ -5851,6 +6019,12 @@ func _resolve_opponent_transition(
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
 			"movement_duration": coverer_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": coverage_time,
 			"arrival": coverage_contact_state.arrival,
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
@@ -6143,6 +6317,12 @@ func _resolve_opponent_transition(
 			"movement_start": defender_start,
 			"movement_target": defender_reach,
 			"movement_duration": defender_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": attack_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states.
 			"contact_recovery": home_dig_recovery,
@@ -6731,10 +6911,16 @@ func _resolve_home_continuation(
 			continuation_phase_targets
 		var continuation_phase_intents: Dictionary = \
 			set_event_for_staging.metadata.get("home_phase_intents", {})
-		continuation_phase_intents[hitter.id] = {
-			"intent": &"preparing_attack",
-			"progress": continuation_release_progress,
-		}
+		## Same staging leg as the home first ball, timed the same way.
+		var continuation_stage_intent := _travel_intent(
+			hitter, &"preparing_attack", hitter_standing_at, hitter_start,
+			hitter_start, "transition", float(second_contact_window),
+		)
+		continuation_stage_intent["travel_progress"] = float(
+			continuation_stage_intent.get("progress", 1.0)
+		)
+		continuation_stage_intent["progress"] = continuation_release_progress
+		continuation_phase_intents[hitter.id] = continuation_stage_intent
 		set_event_for_staging.metadata["home_phase_intents"] = \
 			continuation_phase_intents
 		set_event_for_staging.metadata["tempo_coordination"] = \
@@ -7113,6 +7299,26 @@ func _resolve_home_continuation(
 		var floor_id := int(raw_floor_id)
 		if not cont_block_stage.has(floor_id):
 			cont_block_stage[floor_id] = Vector2(cont_floor_stage[raw_floor_id])
+	## Same capture-before-write as the first-ball path above.
+	var cont_wall_intents := {}
+	if opponent_blocker != null:
+		cont_wall_intents[opponent_blocker.id] = _wall_close_intent(
+			opponent_blocker,
+			Vector2(opponent_live_positions.get(
+				opponent_blocker.id, cont_wall.primary_position
+			)),
+			Vector2(cont_wall.primary_position),
+			float(continuation_flight_time),
+		)
+	if assisting_blocker != null:
+		cont_wall_intents[assisting_blocker.id] = _wall_close_intent(
+			assisting_blocker,
+			Vector2(opponent_live_positions.get(
+				assisting_blocker.id, cont_wall.assist_position
+			)),
+			Vector2(cont_wall.assist_position),
+			float(continuation_flight_time),
+		)
 	for raw_player_id in cont_block_stage:
 		opponent_live_positions[int(raw_player_id)] = Vector2(
 			cont_block_stage[raw_player_id]
@@ -7122,8 +7328,15 @@ func _resolve_home_continuation(
 			cont_block_stage
 		## This site published where the continuation defence stood and never why
 		## or for how long, which the other two both did. Same map, same shape.
+		## The two at the net are blocking, not defending, and their close is
+		## timed rather than stamped -- the same split the first-ball path makes.
+		var cont_stage_intents := _defensive_intents(
+			cont_block_stage, cont_floor_intents
+		)
+		for raw_wall_id in cont_wall_intents:
+			cont_stage_intents[int(raw_wall_id)] = cont_wall_intents[raw_wall_id]
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
-			_defensive_intents(cont_block_stage, cont_floor_intents)
+			cont_stage_intents
 	## FD-003, on the continuation exchange: the attacking side walking into
 	## cover during its own set flight. See the home attack leg.
 	var cont_cover_stage_intents := {}
@@ -7441,6 +7654,12 @@ func _resolve_home_continuation(
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
 			"movement_duration": coverer_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": coverage_time,
 			"arrival": coverage_contact_state.arrival,
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
@@ -7653,6 +7872,18 @@ func _resolve_home_continuation(
 			"incoming_trajectory": continuation_arriving_trajectory,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
+			## The only dig family that published a start and an end and no time
+			## between them, so playback had to fall back to the whole window for
+			## twelve digs in every hundred rallies. The figure is not new: it is
+			## the same `cont_defense.travel_time` the body velocity two blocks up
+			## has always been built from.
+			"movement_duration": float(cont_defense.travel_time),
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": cont_defense_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states.
 			"contact_recovery": cont_dig_recovery,
@@ -12553,6 +12784,25 @@ func _stamp_physical_times(result: Resource) -> int:
 			metadata["physical_time_floored"] = previous - moment
 			moment = previous
 		metadata["physical_time"] = moment
+		## **One journey, one name, whichever window is looking at it.**
+		##
+		## A floor defender sets off at the hitter's contact and is drawn in the
+		## window that starts at the block, because that is where
+		## `_net_crossing_time` above puts an untouched block -- measured at a
+		## mean 0.2058 s of the swing spent before the net, on 159 of 175 pairs.
+		## The leg spans two windows and nothing said so.
+		##
+		## Derived here rather than at the eight publishing sites because this is
+		## the one place `physical_time` is known, so the start and the id cannot
+		## disagree with the clock playback reads. Both are functions of facts
+		## already on the record: no new decision is taken.
+		var leg_budget := float(metadata.get("movement_available_seconds", -1.0))
+		if leg_budget >= 0.0 and int(event.actor_id) >= 0:
+			var leg_start := moment - leg_budget
+			metadata["movement_start_time"] = leg_start
+			metadata["movement_leg_id"] = "%d@%.3f" % [
+				int(event.actor_id), leg_start
+			]
 		event.metadata = metadata
 		previous = moment
 		if trajectory.has("end_time"):
@@ -14700,6 +14950,35 @@ func _read_error_meters(
 
 
 ## NOTE The arrival a defender actually has, once they have gone to the wrong place -- RALLY_SIMULATOR_NOTES.md
+## When this voli could first have known where the ball was going, in seconds
+## after the flight began.
+##
+## `BallReadSystem` derives `recognition_time` with no random draw at all -- it is
+## `lerp(0.34, 0.07, reading) + novelty * 0.18 - observation_progress * 0.05`,
+## clamped -- and `ShadowReceptionSystem.evaluate` already runs on every rally
+## regardless of the promotion gate, so this number is computed today and thrown
+## away today. Reading it costs nothing and moves nothing.
+##
+## Published rather than applied. The resolver granted this journey the *whole*
+## flight; a departure later than the flight's start is a fact about the body
+## that the arrival it produced does not account for. Playback applies the delay
+## only where the leg still fits inside its budget, and the cases where it does
+## not are the question for the movement-contract gate rather than something to
+## silently absorb here.
+func _read_ready_delay(trace: Resource, player_id: int) -> float:
+	if trace == null or player_id < 0:
+		return 0.0
+	var summary: Dictionary = trace.summary
+	var flight_start := float(summary.get("flight_start_time", 0.0))
+	for raw_entry in trace.entries:
+		var entry: Dictionary = raw_entry
+		if int(entry.get("player_id", -1)) != player_id:
+			continue
+		return maxf(float(entry.get("recognition_time", flight_start))
+			- flight_start, 0.0)
+	return 0.0
+
+
 func _read_adjusted_arrival(
 	arrival: Dictionary, read_error_meters: float
 ) -> Dictionary:
@@ -15775,6 +16054,48 @@ static func _uniform_intents(targets: Dictionary, intent: StringName) -> Diction
 	return intents
 
 
+## The receive shape, described as the journey it was rather than the posture it
+## ends in.
+##
+## `_initial_home_positions` stamps `{intent, progress: 0.0}` once, at the start
+## of the rally, when it is exactly right -- nobody has travelled yet. Those same
+## intents are then republished on the reception event, by which point the bodies
+## have moved a mean 2.24 m and the stamp still says they have not. This rebuilds
+## them against `_positions_at_last_contact`, which is the resolver's own record
+## of where each body began the leg it has just finished.
+func _shape_intents(
+	shape: Dictionary,
+	roster: Array,
+	from_positions: Dictionary,
+	window_seconds: float,
+	fallback: Dictionary,
+) -> Dictionary:
+	var by_id := {}
+	for entry in roster:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var intents := {}
+	for raw_player_id in shape:
+		var player_id := int(raw_player_id)
+		var target := Vector2(shape[raw_player_id])
+		var mover := by_id.get(player_id, null) as VolleyballPlayer
+		var here := Vector2(from_positions.get(player_id, target))
+		if mover == null or window_seconds <= 0.0:
+			intents[player_id] = fallback.get(player_id, {
+				"intent": &"receiving", "progress": 0.0,
+			})
+			continue
+		var named: Dictionary = fallback.get(player_id, {})
+		var intent_name: StringName = StringName(str(
+			named.get("intent", &"receiving")
+		))
+		intents[player_id] = _travel_intent(
+			mover, intent_name, here, target, target, "lateral", window_seconds
+		)
+	return intents
+
+
 ## NOTE Where the side that just served goes while their own serve is in the air -- RALLY_SIMULATOR_NOTES.md
 const DEFLECTION_LEAN: float = 0.28
 
@@ -15892,6 +16213,30 @@ func _travel_fraction(from: Vector2, intended: Vector2, reached: Vector2) -> flo
 		return 1.0
 	return clampf(
 		RallyKinematics.court_distance_meters(from, reached) / asked, 0.0, 1.0
+	)
+
+
+## One wall close, timed like every other off-ball journey.
+##
+## The two blockers were the only off-ball population publishing a destination
+## and no clock -- 116 of 116 BLOCK contacts and 137 of 137 `blocking` legs --
+## because each staging site stamped `{intent, progress: 0.0}` and left the
+## timing to "the block path", which never described it. Playback then paced the
+## close at whatever the ball's flight was, uniformly 0.67 of the model's own.
+## See `docs/review/OFFBALL_TIMING_BASELINE.md`.
+##
+## `transition` rather than `lateral` because closing a wall is the one journey
+## on this ball that is a sprint -- `_establish_shape` says so where it charges
+## the four *behind* the wall laterally and notes the two in front are already
+## there.
+func _wall_close_intent(
+	blocker: VolleyballPlayer,
+	from: Vector2,
+	to: Vector2,
+	window_seconds: float,
+) -> Dictionary:
+	return _travel_intent(
+		blocker, &"blocking", from, to, to, "transition", window_seconds
 	)
 
 

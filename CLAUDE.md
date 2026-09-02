@@ -12,9 +12,36 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-30 at `0bf250c`, after the merge of
-the voli-body work at `5a55494`: **2 of 2,174 checks fail**. A *third* failure
-is a regression; these two are not.
+Current branch baseline, verified 2026-09-02 on the merge of
+`claude/system-fit-serve-receive-von64k` into this branch: **2 of 2,242 checks
+fail**. A *third* failure is a regression; these two are not.
+
+**Six checks written, six gained, and both sides of the merge were measured** --
+so the delta is attributable and says no sampling population moved. This branch
+stood at **3 of 2,236 at `a7f1a97`**, and the third failure was *"the world
+population and its transfer-market slice both survive a save/load cycle"*, which
+the merge fixes: it arrives with the `origin/main` work the incoming branch had
+already merged and this one had not.
+
+**The merge moved no rally outcome, and that is measured rather than assumed.**
+`run_rally_balance_probe.gd` over 700 rallies is byte-identical between
+`a7f1a97` and the merge -- all nineteen figures, both serving sides. The
+incoming branch's twenty-four commits are a movement *contract* pass; every one
+of them was held to the same byte-identity on its own tree, and this run says
+the property survives transplanting.
+
+Before it on the incoming side, 2,223 at `528ca7f` and 2,221 at `4b60055`.
+
+**The delta from that merge is not computable, and the reason is worth one
+line.** Two attempts to measure the merged tree's own predecessor were spoiled --
+the first had the working tree change underneath it mid-run, the second buffered
+its output through a pipe and outlived its timeout -- so 2,221 has no measured
+number before it on this tree. Four checks were authored
+(`_test_movement_contract_completeness`), and the balance probe over 700 rallies
+is byte-identical across all five changes, so no sampling population moved. What
+that *cannot* say is how much of the distance from 2,174 is the 84 commits the
+merge brought in. Quoting a difference against 2,174 would be comparing two
+different trees, which is the mistake the rest of this section is about.
 
 **The two are older than this branch and fail on `origin/main` unchanged.** Named
 so nobody re-derives them:

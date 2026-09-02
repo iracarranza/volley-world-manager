@@ -1,5 +1,8 @@
 extends "res://scenes/screens/new_career_screen_v2.gd"
 
+## The nested volleyball flow, and a layout fix for the 1280x720 base
+## resolution. Subtitle copy is deliberately *not* here -- see `_show_step`.
+
 const VOLLEYBALL_PREVIEW := preload("res://scenes/components/volleyball_philosophy_preview.gd")
 
 ## Presentation belongs here rather than in the tactical-value table inherited
@@ -326,8 +329,12 @@ func _previous() -> void:
 	super._previous()
 
 
-## Keep implementation status out of player-facing copy. The builder can be an
-## incomplete implementation without announcing its seams inside the fiction.
+## Dispatch only. This used to reassign two of the six subtitles *after*
+## `super._show_step()` had already assigned them, so each of those two existed
+## as two strings and the one a reader finds first was the one the player never
+## saw. The copy now lives at the single site in `new_career_screen_v2.gd` that
+## authors all six; what stays here is the one thing v2 cannot do, which is know
+## that step 1 has a nested page to render.
 func _show_step() -> void:
 	super._show_step()
 	if not _v2_ready:
@@ -335,5 +342,3 @@ func _show_step() -> void:
 	match current_step:
 		1:
 			_render_volleyball_page()
-		3:
-			question_hint.text = "Take an existing institution or found a new one."

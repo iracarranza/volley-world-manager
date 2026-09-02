@@ -1,0 +1,263 @@
+extends Node
+
+## The plan the real `MatchScreen` builds, read out of the real `MatchScreen`.
+##
+##     xvfb-run -a godot --path . --rendering-method gl_compatibility \
+##         res://tools/movement_plan.tscn
+##
+## Every other movement probe in this pass reproduces `_build_movement_plan` and
+## `_pace_plan` from published metadata, which is honest about the record and
+## silent about the code. This one instantiates the screen, hands it a resolved
+## rally, and calls those two functions directly, so what it prints is the leg
+## playback will actually draw -- including the clamps, the re-anchoring to
+## `live_positions`, and the separation pass.
+##
+## **Every leg is walked out before the next window is built.** The first version
+## of this probe built every window's plan against the court's *opening*
+## positions, because it never played anything -- so `_apply_cheat_steps`,
+## `_apply_base_positions` and the start re-anchoring all measured from a body
+## that had not moved since the serve. Metadata-derived figures were unaffected;
+## everything read off `live_positions` was measured against a stale court. The
+## plan's own targets are now applied at the end of each window, which is what a
+## completed leg does.
+##
+## Not headless: `MatchCourt3D` needs a rendering context.
+
+const MANAGER := preload("res://scripts/managers/game_manager.gd")
+const MATCH_SCREEN := preload("res://scenes/screens/match_screen.tscn")
+const RallyEventScript := preload("res://scripts/models/rally_event.gd")
+
+const FIRST_SEED: int = 61000
+const SEED_COUNT: int = 40
+const COURT_W: float = 9.0
+const COURT_L: float = 18.0
+
+
+func _ready() -> void:
+	get_window().size = Vector2i(960, 640)
+	var screen: Node = MATCH_SCREEN.instantiate()
+	add_child(screen)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var manager: Object = MANAGER.new()
+	manager.seed_vertical_slice_data()
+	var rows: Array[String] = []
+	var metres_by_source := {}
+	var count_by_source := {}
+	var totals := {
+		"legs": 0, "with_seconds": 0, "seconds_from_window": 0,
+		"delayed": 0, "late_departures": 0, "overspeed": 0, "mismatches": 0,
+		"window_paced_contact_actor": 0, "window_paced_phase_entry": 0,
+		"window_paced_base_return": 0, "window_paced_staged": 0,
+		"window_paced_cheat_step": 0,
+		"early_legs": 0, "early_legs_duplicated": 0, "continued_legs": 0,
+		"following_has_start": 0, "following_starts_earlier": 0,
+		"following_starts_later": 0, "following_starts_inside": 0,
+	}
+	for seed_value in range(FIRST_SEED, FIRST_SEED + SEED_COUNT):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		## The setup `load_and_play_rally` performs before it starts drawing,
+		## and only that. Calling the entry point itself would start the
+		## playback coroutine, and a plan read while a tween is running is a
+		## measurement of the tween.
+		screen.active_result = result
+		screen._build_player_names(result.events)
+		screen.player_handedness = result.player_handedness.duplicate(true)
+		screen.player_physical_profiles = \
+			result.player_physical_profiles.duplicate(true)
+		screen.contact_body_targets.clear()
+		var home_positions: Dictionary = result.initial_home_positions
+		var opponent_positions: Dictionary = result.initial_opponent_positions
+		screen.match_court_3d.setup_players(
+			home_positions, opponent_positions, screen.player_names,
+			screen.player_handedness, screen.player_physical_profiles,
+		)
+		screen._cache_contact_body_targets(result.events)
+		await get_tree().process_frame
+		var events: Array = result.events
+		for index in range(events.size() - 1):
+			var event: Resource = events[index]
+			var next_contact: Resource = events[index + 1]
+			if event == null or next_contact == null:
+				continue
+			var window := float(next_contact.metadata.get("physical_time", 0.0)) \
+				- float(event.metadata.get("physical_time", 0.0))
+			if window <= 0.0:
+				continue
+			## Why an early leg was or was not issued, counted from the probe so
+			## the answer does not depend on reading the screen's control flow.
+			var following: Resource = screen._contact_after(next_contact)
+			if following != null and following.metadata.has("movement_start_time"):
+				totals["following_has_start"] = int(
+					totals.following_has_start
+				) + 1
+				var ls := float(following.metadata["movement_start_time"])
+				var ws := float(event.metadata.get("physical_time", 0.0))
+				if ls < ws - 0.001:
+					totals["following_starts_earlier"] = int(
+						totals.following_starts_earlier
+					) + 1
+				elif ls >= ws + window:
+					totals["following_starts_later"] = int(
+						totals.following_starts_later
+					) + 1
+				else:
+					totals["following_starts_inside"] = int(
+						totals.following_starts_inside
+					) + 1
+			var plan: Dictionary = screen._build_movement_plan(
+				event, next_contact, window
+			)
+			for raw_player_id in plan:
+				var movement: Dictionary = plan[raw_player_id]
+				var start := Vector2(movement.get("start", Vector2.ZERO))
+				var target := Vector2(movement.get("target", start))
+				var delta := target - start
+				var metres := Vector2(
+					delta.x * COURT_W, delta.y * COURT_L
+				).length()
+				if metres <= 0.05:
+					continue
+				totals["legs"] = int(totals.legs) + 1
+				## Legs are counted and metres are counted, because a cheat step
+				## is capped at CHEAT_STEP_METERS and a chase is not: 55% of legs
+				## and 55% of the drawn travel are different claims.
+				var leg_source := _window_paced_source(
+					result, event, next_contact, int(raw_player_id), target
+				)
+				metres_by_source[leg_source] = float(
+					metres_by_source.get(leg_source, 0.0)
+				) + metres
+				count_by_source[leg_source] = int(
+					count_by_source.get(leg_source, 0)
+				) + 1
+				var seconds := float(movement.get("seconds", 0.0))
+				if seconds > 0.0:
+					totals["with_seconds"] = int(totals.with_seconds) + 1
+					## A leg whose duration is exactly the window is one nothing
+					## timed: `_pace_plan`'s fallback. Counting it separately is
+					## the whole question this probe exists to answer.
+					if is_equal_approx(seconds, window):
+						totals["seconds_from_window"] = int(
+							totals.seconds_from_window
+						) + 1
+						## Which of the three movement sources left this leg
+						## unpaced. Without the split the total says a number is
+						## too high and cannot say what to fix.
+						var source := _window_paced_source(
+							result, event, next_contact,
+							int(raw_player_id), target,
+						)
+						totals[source] = int(totals[source]) + 1
+				if movement.has("delay_seconds"):
+					totals["delayed"] = int(totals.delayed) + 1
+				if movement.has("continued_leg"):
+					totals["continued_legs"] = int(totals.continued_legs) + 1
+				if rows.size() < 20:
+					rows.append("%d|%d|%s->%s|%.2f|%.3f|%.3f|%.2f" % [
+						seed_value, int(raw_player_id),
+						RallyEventScript.EventType.keys()[int(event.event_type)],
+						RallyEventScript.EventType.keys()[
+							int(next_contact.event_type)
+						],
+						metres, window, seconds,
+						metres / maxf(seconds, 0.0001),
+					])
+			## The window plays: bodies end where the plan sent them, which is what
+			## the next window has to build its legs from.
+			for raw_player_id in plan:
+				screen.match_court_3d.set_player_position(
+					int(raw_player_id),
+					Vector2(plan[raw_player_id].get("target", Vector2.ZERO)),
+				)
+	totals["late_departures"] = screen.playback_late_departures.size()
+	totals["early_legs"] = screen.playback_early_legs.size()
+	## One journey drawn once. An id appearing twice would be a leg issued early
+	## in two different windows, which is the double-consumption the handoff
+	## forbids.
+	var seen_legs := {}
+	var duplicated := 0
+	for entry in screen.playback_early_legs:
+		var leg_id := str(entry.get("leg_id", ""))
+		if seen_legs.has(leg_id):
+			duplicated += 1
+		seen_legs[leg_id] = true
+	totals["early_legs_duplicated"] = duplicated
+	totals["overspeed"] = screen.playback_leg_overspeed.size()
+	totals["mismatches"] = screen.playback_start_mismatches.size()
+	print("seed|player|window_pair|metres|window_s|planned_s|drawn_mps")
+	for row in rows:
+		print(row)
+	print("--- every drawn leg by where its destination came from")
+	print("source|legs|metres|mean_m")
+	var source_keys: Array = metres_by_source.keys()
+	source_keys.sort()
+	for key in source_keys:
+		var n := maxf(float(count_by_source[key]), 1.0)
+		print("%s|%d|%.1f|%.2f" % [
+			key, int(count_by_source[key]), float(metres_by_source[key]),
+			float(metres_by_source[key]) / n,
+		])
+	print("--- totals over %d rallies" % SEED_COUNT)
+	var keys: Array = totals.keys()
+	keys.sort()
+	for key in keys:
+		print("%s|%d" % [key, int(totals[key])])
+	get_tree().quit()
+
+
+## Why a leg fell back to the window: it is the contact actor and its own event
+## published no duration; it is in a phase map whose intent carries no
+## `traversal_seconds`; or it is in no phase map at all, which means it came from
+## a base return or a staged next position.
+func _window_paced_source(
+	result: Resource,
+	event: Resource,
+	next_contact: Resource,
+	player_id: int,
+	target: Vector2,
+) -> String:
+	if int(next_contact.actor_id) == player_id:
+		return "window_paced_contact_actor"
+	for side in ["home", "opponent"]:
+		var targets: Dictionary = next_contact.metadata.get(
+			"%s_phase_targets" % side, {}
+		)
+		if not targets.has(player_id):
+			continue
+		var intents: Dictionary = next_contact.metadata.get(
+			"%s_phase_intents" % side, {}
+		)
+		var raw_intent: Variant = intents.get(player_id, null)
+		if raw_intent is Dictionary \
+				and Dictionary(raw_intent).has("traversal_seconds"):
+			continue
+		return "window_paced_phase_entry"
+	## **A reset is not a late journey and should not be counted as one.**
+	##
+	## `_apply_base_positions` sends a voli home when the resolver has stopped
+	## asking for them. There is no contact at the end of it and therefore no
+	## deadline to be late for, so drawing it across the window is a defensible
+	## pace rather than a missing fact. Separated from the staged legs, which do
+	## have a contact waiting.
+	for map_name in ["home_base_positions", "opponent_base_positions"]:
+		var bases: Dictionary = result.get(map_name)
+		if bases.has(player_id) \
+				and Vector2(bases[player_id]).distance_to(target) <= 0.002:
+			return "window_paced_base_return"
+	## A staging mark the resolver named for the contact after this one.
+	for source in [event, next_contact]:
+		if int(source.metadata.get("staged_next_actor_id", -1)) != player_id:
+			continue
+		if Vector2(source.metadata.get(
+			"staged_next_position", Vector2(-9, -9)
+		)).distance_to(target) <= 0.002:
+			return "window_paced_staged"
+	## **Nothing on the record put this body here.** `_apply_cheat_steps` hands a
+	## target to every voli not otherwise in the plan: a bounded step toward a
+	## lerp between their responsibility position and the ball. The destination
+	## is playback's, not the resolver's.
+	return "window_paced_cheat_step"
