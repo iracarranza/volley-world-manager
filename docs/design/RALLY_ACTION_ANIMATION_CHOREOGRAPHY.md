@@ -271,6 +271,16 @@ resolvers and one rig integration point:
   guide arm for balance; dink/feint/tip keeps the elbow markedly flexed and
   stops the hand in front of the shoulder. The first half of all three proof
   strips is therefore the same sell, while contact and follow-through diverge.
+- `AttackPerformanceBiomechanics` adds the body channels that the compact rig
+  cannot express through shoulder and elbow angles alone. The connected upper
+  silhouette carries the full chest turn; the leg roots counter-rotate around
+  the hip centre so the pelvis carries only part of the wind-up. Shoulder roots
+  retract, shrug, and travel toward the ball; planted ankles release into the
+  existing jump; a visible wrist/palm supplies forearm pronation and hand shape;
+  and restrained, approximately volume-preserving torso deformation marks load,
+  acceleration, landing, and recovery. These are presentation transforms only:
+  they do not move the actor root, change the elevation curve, or replace the
+  contact-height fitter.
 - `IdleBiomechanics` produces bounded breathing, pelvis-led weight shift,
   counter-sway, arm lag, pupil drift, and a stable per-player phase. The stance
   transition continues to use the existing stance-distance duration and its
@@ -360,6 +370,11 @@ kneel/ready handoff without buried limbs.
 - the dive's lowest body point never falls below the rendered floor;
 - visual strips include an exact phase-zero frame and separately identify the
   approach, plant, launch, contact, and landing samples.
+- dense contact-detail strips retain the full-action strips, place a reference
+  ball at the posed rig's real contact anchor at phase zero, and sample the late
+  load/whip interval closely enough to distinguish power pronation, roll release,
+  and dink touch. Resolved-rally review remains a separate artifact: its ball is
+  sampled from the production trajectory rather than posed by the animation.
 
 ## Vocabulary expansion: contacts made while arriving or under pressure
 

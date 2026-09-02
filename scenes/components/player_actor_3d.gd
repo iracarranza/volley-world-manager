@@ -39,6 +39,8 @@ const CoreVoliPerformanceScript := preload(
 @onready var head: MeshInstance3D = $BodyPivot/Head
 @onready var left_arm: Node3D = $BodyPivot/LeftArm
 @onready var right_arm: Node3D = $BodyPivot/RightArm
+@onready var left_wrist: Node3D = $BodyPivot/LeftArm/Elbow/Wrist
+@onready var right_wrist: Node3D = $BodyPivot/RightArm/Elbow/Wrist
 @onready var left_leg: Node3D = $BodyPivot/LeftLeg
 @onready var right_leg: Node3D = $BodyPivot/RightLeg
 @onready var shadow: MeshInstance3D = $Shadow
@@ -83,6 +85,11 @@ var arm_length_scale: float = 1.0
 ## The authored torso scale after height/stride fitting. Pose deformation always
 ## starts here, so squash and extension do not accumulate from frame to frame.
 var torso_rest_scale: Vector3 = Vector3.ONE
+## Structural anchors after silhouette and physical-profile fitting. Attack
+## performance rewrites them from these values every frame, never from the
+## previous pose, so chest separation and squash/stretch cannot accumulate.
+var torso_rest_position: Vector3 = Vector3.ZERO
+var head_rest_position: Vector3 = Vector3.ZERO
 ## How long this voli's legs are for their height, from `stride_length_m`.
 var leg_length_scale: float = 1.0
 var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
@@ -549,6 +556,8 @@ func configure(
 	_build_silhouette()
 	_apply_physical_profile(physical_profile)
 	torso_rest_scale = torso.scale
+	torso_rest_position = torso.position
+	head_rest_position = head.position
 	## Name and position. It used to read `name · 200 cm · R`, which spent both
 	## its fields on things the body already shows -- height in how tall the rig
 	## is drawn, handedness in which arm swings -- and never said who this voli
@@ -645,6 +654,11 @@ func _hand_world_position(arm: Node3D) -> Vector3:
 	var elbow := arm.get_node_or_null("Elbow") as Node3D
 	if elbow == null:
 		return arm.global_position
+	## The wrist is seated at the exact endpoint the legacy inferred chain used.
+	## Its local rotation may turn the palm, but its origin preserves reach.
+	var wrist := elbow.get_node_or_null("Wrist") as Node3D
+	if wrist != null:
+		return wrist.global_position
 	var forearm_length := arm_bone_lengths.y * arm_length_scale
 	return elbow.global_transform * Vector3(0.0, -forearm_length, 0.0)
 
@@ -764,7 +778,9 @@ func arm_meshes() -> Array[MeshInstance3D]:
 	_ensure_node_bindings()
 	var out: Array[MeshInstance3D] = []
 	for arm in [left_arm, right_arm]:
-		for path in ["Mesh", "Joint", "Elbow/Mesh", "Elbow/Joint"]:
+		for path in [
+			"Mesh", "Joint", "Elbow/Mesh", "Elbow/Joint", "Elbow/Wrist/Palm"
+		]:
 			var mesh := arm.get_node_or_null(path) as MeshInstance3D
 			if mesh != null:
 				out.append(mesh)
@@ -885,6 +901,9 @@ func apply_ui_palette(light_mode: bool) -> void:
 		## Two bones, as the legs have been since the knee.
 		_apply_material_color(arm.get_node("Mesh"), skin_color)
 		_apply_material_color(arm.get_node("Elbow/Mesh"), skin_color)
+		var palm := arm.get_node_or_null("Elbow/Wrist/Palm") as MeshInstance3D
+		if palm != null:
+			_apply_material_color(palm, skin_color)
 		## The joints are skin too. Left out of this list they kept the default
 		## grey and turned every shoulder and elbow into a bead -- a worse read
 		## than the gap they were added to close.
@@ -2873,8 +2892,9 @@ func _apply_torso_deformation(
 			compression = 1.0 - smoothstep(-0.45, 0.05, phase)
 			extension = smoothstep(-0.08, 0.55, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
 		RallyEventModel.EventType.ATTACK:
-			compression = smoothstep(-0.78, -0.48, phase) * (1.0 - smoothstep(-0.30, -0.04, phase))
-			extension = smoothstep(-0.30, 0.02, phase) * (1.0 - smoothstep(0.48, 0.92, phase))
+			## Applied after the joint solve, where the connected head and shoulder
+			## roots can travel with the torso instead of being reset underneath it.
+			pass
 		RallyEventModel.EventType.BLOCK:
 			compression = 1.0 - smoothstep(-0.58, -0.18, phase)
 			extension = smoothstep(-0.28, 0.08, phase) * (1.0 - smoothstep(0.55, 0.95, phase))
@@ -3077,6 +3097,16 @@ func set_pose(
 ) -> void:
 	_ensure_node_bindings()
 	_restore_passive_anatomy()
+	## Presentation channels that translate structural anchors are rewritten from
+	## the configured body on every frame. Without this reset a chest rotation or
+	## mass extension would be integrated repeatedly and the rig would drift.
+	if torso_rest_position != Vector3.ZERO:
+		torso.position = torso_rest_position
+	if head_rest_position != Vector3.ZERO:
+		head.position = head_rest_position
+	for wrist in [left_wrist, right_wrist]:
+		if wrist != null:
+			wrist.rotation = Vector3.ZERO
 	if is_inside_tree():
 		_presentation_time_seconds += get_process_delta_time()
 	_advance_head_attention()
@@ -4129,6 +4159,8 @@ func _ensure_node_bindings() -> void:
 	head = get_node("BodyPivot/Head")
 	left_arm = get_node("BodyPivot/LeftArm")
 	right_arm = get_node("BodyPivot/RightArm")
+	left_wrist = get_node_or_null("BodyPivot/LeftArm/Elbow/Wrist")
+	right_wrist = get_node_or_null("BodyPivot/RightArm/Elbow/Wrist")
 	left_leg = get_node("BodyPivot/LeftLeg")
 	right_leg = get_node("BodyPivot/RightLeg")
 	shadow = get_node("Shadow")
@@ -4198,6 +4230,17 @@ func _build_silhouette() -> void:
 		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
 		fore_mesh.mesh = BodyTypeModelsScript.build_mesh(fore_spec)
 		fore_mesh.position = Vector3(0.0, -fore_length * 0.5, 0.0)
+		## A small asymmetric palm at the existing forearm endpoint. Its origin is
+		## the old inferred hand position, so articulation adds orientation without
+		## silently adding reach.
+		var wrist := elbow.get_node_or_null("Wrist") as Node3D
+		if wrist != null:
+			wrist.position = Vector3(0.0, -fore_length, 0.0)
+			wrist.rotation = Vector3.ZERO
+			var palm := wrist.get_node_or_null("Palm") as MeshInstance3D
+			if palm != null:
+				var hand_width := float(arm_spec.get("bottom_radius", 0.08)) / 0.08
+				palm.scale = Vector3(0.78, 1.08, 0.46) * hand_width
 		## The shoulder and the elbow, as joints rather than as the gap between
 		## two pills. Rounding the limb ends stopped them reading as rods and left
 		## the other half of the problem standing: a bent elbow opens a wedge on
@@ -4677,6 +4720,88 @@ func cognition_head_anchor() -> Vector3:
 	return global_transform.affine_inverse() * crown
 
 
+## Carry attack deformation through the connected upper-body silhouette. The
+## torso changes volume, while the head and shoulder roots travel with that
+## volume; limb lengths and the actor's authoritative elevation stay untouched.
+func _apply_attack_connected_mass(swing: Dictionary) -> void:
+	var response := _body_motion_response()
+	var height_scale := lerpf(
+		1.0, float(swing.get("mass_height_scale", 1.0)), response
+	)
+	var width_scale := lerpf(
+		1.0, float(swing.get("mass_width_scale", 1.0)), response
+	)
+	var depth_scale := lerpf(
+		1.0, float(swing.get("mass_depth_scale", 1.0)), response
+	)
+	var anchor_scale := lerpf(
+		1.0, float(swing.get("anchor_height_scale", 1.0)), response
+	)
+	torso.scale = Vector3(
+		torso_rest_scale.x * width_scale,
+		torso_rest_scale.y * height_scale,
+		torso_rest_scale.z * depth_scale,
+	)
+	torso.position.y = hip_offset.y \
+		+ (torso_rest_position.y - hip_offset.y) * anchor_scale
+	head.position.y = hip_offset.y \
+		+ (head_rest_position.y - hip_offset.y) * anchor_scale
+	for arm in [left_arm, right_arm]:
+		arm.position.y = hip_offset.y \
+			+ (arm.position.y - hip_offset.y) * anchor_scale
+		arm.position.x *= width_scale
+
+
+## Let the upper silhouette keep using the legacy BodyPivot so face, ears,
+## garments and every body-type attachment remain one connected mass. The legs
+## counter-rotate around the hip centre to show the pelvis carrying less of the
+## chest wind-up. This is the missing pelvis/ribcage separation without a new
+## skeleton, reparenting existing anatomy, or moving the actor root.
+func _apply_attack_pelvis_delta(delta_rotation: Vector3) -> void:
+	var delta := Basis.from_euler(delta_rotation)
+	var anchor := Vector3(hip_offset.x, hip_offset.y, 0.0)
+	for part in [left_leg, right_leg]:
+		var posed: Transform3D = part.transform
+		posed.origin = anchor + delta * (posed.origin - anchor)
+		posed.basis = delta * posed.basis
+		part.transform = posed
+
+
+func _apply_attack_performance(
+	swing: Dictionary,
+	striking_arm: Node3D,
+	guide_arm: Node3D,
+	lead_leg: Node3D,
+	trail_leg: Node3D,
+	chest_delta: Vector3,
+) -> void:
+	_apply_attack_connected_mass(swing)
+	var striking_side := -1.0 if striking_arm == left_arm else 1.0
+	var guide_side := -striking_side
+	var strike_offset := Vector3(swing.get(
+		"striking_shoulder_offset", Vector3.ZERO
+	))
+	var guide_offset := Vector3(swing.get(
+		"guide_shoulder_offset", Vector3.ZERO
+	))
+	striking_arm.position += Vector3(
+		striking_side * strike_offset.x, strike_offset.y, strike_offset.z
+	)
+	guide_arm.position += Vector3(
+		guide_side * guide_offset.x, guide_offset.y, guide_offset.z
+	)
+	_set_ankle(lead_leg, float(swing.get("lead_ankle_degrees", 0.0)))
+	_set_ankle(trail_leg, float(swing.get("trail_ankle_degrees", 0.0)))
+	var wrist := left_wrist if striking_arm == left_arm else right_wrist
+	if wrist != null:
+		wrist.rotation_degrees = Vector3(
+			float(swing.get("wrist_flex_degrees", 0.0)),
+			float(swing.get("forearm_pronation_degrees", 0.0)),
+			float(swing.get("wrist_deviation_degrees", 0.0)),
+		)
+	_apply_attack_pelvis_delta(chest_delta)
+
+
 ## The swing itself, from the plant onward.
 ##
 ## Split out of the ATTACK branch when the approach arrived in front of it:
@@ -4705,14 +4830,24 @@ func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
 		str(action_context.get("attack_type", "Power swing")),
 		StringName(str(action_context.get("attack_adjustment", "clean"))),
 	)
-	body_pivot.rotation.x = float(swing.torso_pitch_radians)
-	body_pivot.rotation.z += deg_to_rad(float(
-		swing.get("adjustment_roll_degrees", 0.0)
+	var total_pitch := float(swing.torso_pitch_radians)
+	var total_twist_degrees := float(swing.torso_twist_degrees)
+	var pelvis_pitch := total_pitch * float(swing.get(
+		"pelvis_pitch_share", 1.0
 	))
-	## Hip-shoulder separation. Applied here rather than by turning the
-	## actor, because `_turn_toward` is where the voli is *looking* and
-	## this is the trunk winding against it.
-	body_pivot.rotation.y += deg_to_rad(float(swing.torso_twist_degrees))
+	var pelvis_twist_degrees := total_twist_degrees * float(swing.get(
+		"pelvis_twist_share", 1.0
+	))
+	var adjustment_roll := float(swing.get("adjustment_roll_degrees", 0.0))
+	var chest_pitch := total_pitch \
+		+ float(swing.get("chest_pitch_extra_radians", 0.0))
+	var chest_twist_degrees := total_twist_degrees \
+		+ float(swing.get("chest_twist_extra_degrees", 0.0))
+	var chest_roll_degrees := adjustment_roll \
+		+ float(swing.get("chest_roll_degrees", 0.0))
+	body_pivot.rotation.x = chest_pitch
+	body_pivot.rotation.y += deg_to_rad(chest_twist_degrees)
+	body_pivot.rotation.z += deg_to_rad(chest_roll_degrees)
 	var lead_leg := left_leg if dominant_hand == "Left" else right_leg
 	var trail_leg := right_leg if dominant_hand == "Left" else left_leg
 	lead_leg.rotation_degrees.x = float(swing.lead_hip_degrees)
@@ -4735,3 +4870,11 @@ func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
 	_set_elbow(striking_arm, float(swing.striking_elbow_degrees))
 	guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
 	_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
+	_apply_attack_performance(
+		swing, striking_arm, guide_arm, lead_leg, trail_leg,
+		Vector3(
+			pelvis_pitch - chest_pitch,
+			deg_to_rad(pelvis_twist_degrees - chest_twist_degrees),
+			deg_to_rad(adjustment_roll * 0.42 - chest_roll_degrees),
+		),
+	)

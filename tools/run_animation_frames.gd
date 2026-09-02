@@ -25,6 +25,7 @@ extends Node
 ## three-quarter answers "does it look like a person".
 
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
+const BALL := preload("res://scenes/components/ball_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockBiomechanics := preload("res://scripts/data/block_biomechanics.gd")
 const IdleBiomechanics := preload("res://scripts/data/idle_biomechanics.gd")
@@ -35,6 +36,13 @@ const OUT := "res://artifacts/rally-action-animations"
 ## each frame is still large enough to read at a glance.
 const FRAME_COUNT: int = 8
 const FRAME_SPACING: float = 1.55
+## Dense around the only instant whose geometry must agree with the ball. The
+## ordinary nine-frame strips remain the full action overview; detail strips
+## make load, acceleration, contact and early continuation individually legible.
+const ATTACK_CONTACT_PHASES: Array[float] = [
+	-0.40, -0.32, -0.24, -0.18, -0.12, -0.08, -0.04,
+	0.0, 0.04, 0.08, 0.14, 0.22, 0.34,
+]
 ## Where a recovery strip starts, in pose phase. Before the platform forms, so
 ## the row reads approach -> contact -> recovery rather than beginning mid-fall.
 const RECOVERY_STRIP_FROM_PHASE: float = -0.34
@@ -257,6 +265,48 @@ const STRIPS: Array[Dictionary] = [
 		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "missed"},
 	},
 	{
+		"name": "attack_power_contact_detail",
+		"caption": "ATTACK power detail: load, whip, ball contact, continuation",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.82},
+	},
+	{
+		"name": "attack_roll_contact_detail",
+		"caption": "ATTACK roll detail: shared sell, late hand choice, ball contact",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Roll shot", "action_power": 0.62},
+	},
+	{
+		"name": "attack_dink_contact_detail",
+		"caption": "ATTACK dink detail: shared sell, compact touch, ball contact",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Short tip", "action_power": 0.38},
+	},
+	{
+		"name": "attack_reaching_contact_detail",
+		"caption": "ATTACK reaching detail: extended meeting point and counterbalance",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "reaching"},
+	},
+	{
+		"name": "attack_mistimed_contact_detail",
+		"caption": "ATTACK mistimed detail: cramped release and asymmetric recovery",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "mistimed"},
+	},
+	{
+		"name": "attack_missed_contact_detail",
+		"caption": "ATTACK missed detail: no contact ball, arrested unspent rotation",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "missed"},
+	},
+	{
 		"name": "block_impact", "caption": "BLOCK impact: wall yields and absorbs the return",
 		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
 		"context": {"block_response": "impact"},
@@ -387,9 +437,13 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 
 	# Odd action rows contain an exact middle frame, so phase zero/contact is an
 	# image rather than the gap between -0.143 and +0.143.
-	var frame_count := 9 if bool(strip.get("action_sweep", false)) else FRAME_COUNT
+	var detail_phases: Array = strip.get("detail_phases", [])
+	var frame_count := detail_phases.size() if not detail_phases.is_empty() \
+		else 9 if bool(strip.get("action_sweep", false)) else FRAME_COUNT
 	var spacing := float(strip.get("frame_spacing", FRAME_SPACING))
-	if bool(strip.get("action_sweep", false)):
+	if not detail_phases.is_empty():
+		spacing = minf(spacing, 0.78)
+	elif bool(strip.get("action_sweep", false)):
 		# The exact contact frame makes action rows one subject wider than the
 		# older eight-frame strips. Keep the full recovery inside both review
 		# cameras instead of clipping the ninth figure at the right edge.
@@ -412,13 +466,14 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 		)
 		actor.has_facing = true
 		actor.facing_yaw = 0.0
-		if bool(strip.get("action_sweep", false)):
+		if bool(strip.get("action_sweep", false)) or not detail_phases.is_empty():
 			actor.ground_speed_mps = float(strip.get("ground_speed_mps", 0.0))
 			actor.stride_cycle = float(strip.get("stride_cycle", 0.0))
 			actor.contact_posture = str(strip.get("posture", "planted"))
 			actor.contact_recovery = str(strip.get("recovery", "platform"))
 			var action_pose: Array = strip.pose
-			var action_phase := lerpf(-1.0, 1.0, progress)
+			var action_phase := float(detail_phases[index]) \
+				if not detail_phases.is_empty() else lerpf(-1.0, 1.0, progress)
 			var action_elevation := float(action_pose[1])
 			if int(action_pose[0]) == RallyEventModel.EventType.ATTACK:
 				action_elevation *= SpikeBiomechanics.elevation_at(action_phase)
@@ -429,6 +484,14 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 				Vector2.RIGHT, true, Dictionary(strip.get("context", {})),
 			)
 			actor.identity_label.text = "%+.2f" % action_phase
+			if bool(strip.get("contact_ball", false)) \
+					and is_zero_approx(action_phase):
+				var ball := BALL.instantiate()
+				stage.add_child(ball)
+				ball.set_flight_style(Color("f4c542"), 0.0)
+				ball.set_flight_sample(actor.contact_anchor_world_position(
+					int(action_pose[0]), Dictionary(strip.get("context", {})),
+				), Vector3.ZERO)
 		elif bool(strip.get("idle_sweep", false)):
 			actor.ready_stance = "watching"
 			actor._presentation_time_seconds = progress * IdleBiomechanics.SWAY_SECONDS
@@ -574,7 +637,9 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			actor.identity_label.text = "%+.2f" % lerpf(
 				RECOVERY_STRIP_FROM_PHASE, 1.0, progress
 			)
-		elif strip.has("gait_sweep") or bool(strip.get("approach_sweep", false)):
+		elif strip.has("gait_sweep") or bool(strip.get("approach_sweep", false)) \
+				or bool(strip.get("action_sweep", false)) \
+				or not detail_phases.is_empty():
 			pass
 		else:
 			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)

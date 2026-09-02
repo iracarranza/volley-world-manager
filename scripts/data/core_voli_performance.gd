@@ -52,12 +52,33 @@ static func resolve(
 			var family := AttackActionBiomechanics.family(str(
 				action_context.get("attack_type", "Power swing")
 			))
+			var adjustment := StringName(str(action_context.get(
+				"attack_adjustment", AttackActionBiomechanics.ADJUSTMENT_CLEAN
+			)))
 			var scale := 0.55 if family == AttackActionBiomechanics.ROLL \
 				else 0.25 if family == AttackActionBiomechanics.DINK else 1.0
 			roll_degrees = handed * (-4.5 * anticipation + 7.5 * continuation) * scale
 			lateral_metres = handed * (-0.018 * anticipation + 0.030 * continuation) * scale
 			head_roll_degrees = -handed * (2.6 * anticipation + 1.8 * force) * scale
 			head_pitch_degrees = -1.8 * commitment + 2.4 * continuation * scale
+			## Explicit review labels alter only the carried performance after the
+			## canonical joint pose. They are not inferred from quality or outcome.
+			if adjustment == AttackActionBiomechanics.ADJUSTMENT_REACHING:
+				roll_degrees += handed * 5.2 * commitment
+				lateral_metres += handed * 0.030 * commitment
+				head_roll_degrees -= handed * 2.8 * commitment
+			elif adjustment == AttackActionBiomechanics.ADJUSTMENT_MISTIMED:
+				roll_degrees -= handed * 4.4 * continuation
+				lateral_metres -= handed * 0.018 * continuation
+				head_pitch_degrees += 3.0 * continuation
+				force *= 0.58
+			elif adjustment == AttackActionBiomechanics.ADJUSTMENT_MISSED:
+				var arrest := smoothstep(0.02, 0.52, p) \
+					* (1.0 - smoothstep(0.72, 1.0, p))
+				roll_degrees -= handed * 6.2 * arrest
+				lateral_metres -= handed * 0.026 * arrest
+				head_roll_degrees += handed * 3.0 * arrest
+				force = 0.0
 		RallyEvent.EventType.SERVE:
 			var overhead_scale := 0.18 if str(action_context.get(
 				"serve_style", ServeActionBiomechanics.STANDING

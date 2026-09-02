@@ -4,6 +4,9 @@ const Serve := preload("res://scripts/data/serve_action_biomechanics.gd")
 const Defense := preload("res://scripts/data/defense_action_biomechanics.gd")
 const SetMotion := preload("res://scripts/data/set_biomechanics.gd")
 const Attack := preload("res://scripts/data/attack_action_biomechanics.gd")
+const AttackPerformance := preload(
+	"res://scripts/data/attack_performance_biomechanics.gd"
+)
 const Idle := preload("res://scripts/data/idle_biomechanics.gd")
 const PlayerActor := preload("res://scenes/components/player_actor_3d.gd")
 const PlayerActorScene := preload("res://scenes/components/player_actor_3d.tscn")
@@ -151,6 +154,7 @@ func _run() -> void:
 	_check(float(cramped_attack.striking_elbow_degrees) \
 		> float(reaching_attack.striking_elbow_degrees),
 		"mistimed attack must retain a more compromised elbow")
+	_test_attack_performance_contract()
 
 	for response in [Block.RESPONSE_IMPACT, Block.RESPONSE_TOOL, Block.RESPONSE_BEATEN]:
 		var plain_before := Block.resolve(-0.08)
@@ -225,6 +229,23 @@ func _test_core_performance_contract() -> void:
 		"force accent must peak at the authoritative contact phase")
 	_check(float(finish.continuation) > float(load.continuation),
 		"follow-through must continue beyond contact rather than freeze there")
+	var reaching_finish := CorePerformance.resolve(
+		RallyEventModel.EventType.ATTACK, 0.26, "Cani", "Right",
+		Vector2.UP, {
+			"attack_type": "Power swing", "attack_adjustment": "reaching",
+		},
+	)
+	var missed_finish := CorePerformance.resolve(
+		RallyEventModel.EventType.ATTACK, 0.26, "Cani", "Right",
+		Vector2.UP, {
+			"attack_type": "Power swing", "attack_adjustment": "missed",
+		},
+	)
+	_check(absf(float(reaching_finish.body_roll_degrees) \
+		- float(finish.body_roll_degrees)) > 1.0,
+		"reaching attack needs its own carried counterbalance")
+	_check(is_zero_approx(float(missed_finish.force)),
+		"missed attack must not publish an invented contact impact")
 
 	var target := Vector2(0.72, -0.24)
 	var first_head := CorePerformance.attention_step(
@@ -249,6 +270,63 @@ func _test_core_performance_contract() -> void:
 	_check(is_equal_approx(CorePerformance.handoff_weight(0.0), 1.0) \
 		and is_equal_approx(CorePerformance.handoff_weight(1.0), 0.0),
 		"ordinary action handoff must meet both endpoint poses exactly")
+
+
+func _test_attack_performance_contract() -> void:
+	var expected := {
+		"Power swing": Attack.POWER,
+		"Tempo swing": Attack.POWER,
+		"Quick attack": Attack.POWER,
+		"Pipe attack": Attack.POWER,
+		"Line attack": Attack.POWER,
+		"Seam attack": Attack.POWER,
+		"Tool attempt": Attack.POWER,
+		"Controlled roll": Attack.ROLL,
+		"Roll shot": Attack.ROLL,
+		"Emergency tip": Attack.DINK,
+		"Short tip": Attack.DINK,
+		"Tip": Attack.DINK,
+	}
+	_check(Attack.PRODUCTION_ATTACK_TYPES.size() == expected.size(),
+		"production attack vocabulary and animation coverage drifted")
+	for attack_type in Attack.PRODUCTION_ATTACK_TYPES:
+		_check(Attack.production_family(attack_type) == expected[attack_type],
+			"production attack %s has the wrong visual family" % attack_type)
+
+	var load := AttackPerformance.resolve(
+		-0.52, Attack.POWER, Attack.ADJUSTMENT_CLEAN, 1.0, 0.82
+	)
+	var power_contact := AttackPerformance.resolve(
+		0.0, Attack.POWER, Attack.ADJUSTMENT_CLEAN, 1.0, 0.82
+	)
+	var roll_contact := AttackPerformance.resolve(
+		0.0, Attack.ROLL, Attack.ADJUSTMENT_CLEAN, 1.0, 0.82
+	)
+	var dink_contact := AttackPerformance.resolve(
+		0.0, Attack.DINK, Attack.ADJUSTMENT_CLEAN, 1.0, 0.82
+	)
+	_check(float(load.pelvis_pitch_share) > 0.0 \
+		and float(load.pelvis_pitch_share) < 0.75,
+		"attack wind-up must separate pelvis carry from chest rotation")
+	_check(absf(float(power_contact.forearm_pronation_degrees)) \
+		> absf(float(roll_contact.forearm_pronation_degrees)) \
+		and absf(float(roll_contact.forearm_pronation_degrees)) \
+		> absf(float(dink_contact.forearm_pronation_degrees)),
+		"power, roll and dink need distinct distal hand releases")
+	_check(float(Vector3(power_contact.striking_shoulder_offset).z) \
+		< float(Vector3(load.striking_shoulder_offset).z),
+		"striking shoulder must travel from loaded retraction toward the ball")
+	_check(float(load.lead_ankle_degrees) < -5.0,
+		"attack launch needs visible ankle/toe release")
+	for sample in [load, power_contact, roll_contact, dink_contact]:
+		_check(float(sample.mass_height_scale) >= 0.86 \
+			and float(sample.mass_height_scale) <= 1.14,
+			"attack squash/stretch exceeded the restrained toy-body range")
+	var missed := AttackPerformance.resolve(
+		0.08, Attack.POWER, Attack.ADJUSTMENT_MISSED, 1.0, 0.82
+	)
+	_check(is_zero_approx(float(missed.impact_strength)),
+		"missed attack must preserve motion without inventing impact")
 
 
 func _test_rig_geometry() -> void:
@@ -294,10 +372,32 @@ func _test_rig_geometry() -> void:
 		{"attack_type": "Dink", "action_power": 0.38},
 	)
 	await process_frame
+	_check(actor.has_node("BodyPivot/RightArm/Elbow/Wrist/Palm"),
+		"attack rig must expose a visible palm at the legacy hand endpoint")
+	var wrist := actor.get_node("BodyPivot/RightArm/Elbow/Wrist") as Node3D
+	_check(wrist.global_position.distance_to(
+		actor.contact_anchor_world_position(
+			RallyEventModel.EventType.ATTACK,
+			{"attack_type": "Dink"},
+		)
+	) < 0.0001, "visible wrist must preserve the authoritative hand anchor")
 	var hand := _rig_hand(actor, "RightArm")
 	_check(hand.z > 0.10 and hand.y > 0.50,
 		"dink hand must be above and ahead of its shoulder (up %.2f, ahead %.2f)"
 			% [hand.y, hand.z])
+	var authored_contact_height: float = actor.contact_anchor_world_position(
+		RallyEventModel.EventType.ATTACK,
+		{"attack_type": "Power swing"},
+	).y - 0.06
+	actor.fit_contact_anchor_height(
+		RallyEventModel.EventType.ATTACK, authored_contact_height,
+		{"attack_type": "Power swing"},
+	)
+	_check(absf(actor.contact_anchor_world_position(
+		RallyEventModel.EventType.ATTACK,
+		{"attack_type": "Power swing"},
+	).y - authored_contact_height) < 0.002,
+		"new palm/wrist channels must remain compatible with contact fitting")
 
 	var tail := actor.find_child("Tail", true, false) as MeshInstance3D
 	_check(tail != null, "Cani contract rig must expose its authored tail")

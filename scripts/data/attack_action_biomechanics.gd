@@ -5,6 +5,9 @@ extends RefCounted
 ## canonical SpikeBiomechanics sequence; only the late hand action diverges.
 
 const Spike := preload("res://scripts/data/spike_biomechanics.gd")
+const AttackPerformance := preload(
+	"res://scripts/data/attack_performance_biomechanics.gd"
+)
 
 const POWER := &"power"
 const ROLL := &"roll"
@@ -41,6 +44,22 @@ static func family(attack_type: String) -> StringName:
 	return POWER
 
 
+## The strings the current production simulation can publish. Kept beside the
+## visual family resolver so the contract can prove every production name has a
+## meaning here instead of relying on a permissive unknown->power fallback.
+const PRODUCTION_ATTACK_TYPES: Array[String] = [
+	"Power swing", "Tempo swing", "Quick attack", "Pipe attack",
+	"Line attack", "Seam attack", "Tool attempt",
+	"Controlled roll", "Roll shot",
+	"Emergency tip", "Short tip", "Tip",
+]
+
+
+static func production_family(attack_type: String) -> StringName:
+	assert(attack_type in PRODUCTION_ATTACK_TYPES)
+	return family(attack_type)
+
+
 static func resolve(
 	phase: float,
 	handedness_sign: float,
@@ -55,6 +74,9 @@ static func resolve(
 	else:
 		_apply_soft_shot(joints, phase, handedness_sign, variant)
 	_apply_adjustment(joints, phase, handedness_sign, adjustment)
+	joints.merge(AttackPerformance.resolve(
+		phase, variant, adjustment, handedness_sign, action_power
+	), true)
 	return joints
 
 
