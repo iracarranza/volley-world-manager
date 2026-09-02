@@ -107,7 +107,7 @@ Whether a voli not involved in the play should lean toward the ball is a questio
 `docs/design/OFF_BALL_MOVEMENT.md` governs, not one the movement contract can
 answer. It is not a broken fact; it is presentation deciding something the
 simulation has no opinion about. Removing it would change what the court looks
-like for 55% of drawn legs, which is a design call and belongs to whoever owns
+like for 79% of drawn legs, which is a design call and belongs to whoever owns
 that document.
 
 **It is not inert, and that is the part worth carrying forward.** A cheat step
