@@ -139,6 +139,19 @@ should land first.
 
 ### Give the resolver an off-ball opinion
 
+**The implementation spec for this half is
+`docs/implementation/OFFBALL_RESOLVER_AUTHORITY.md`.** It carries the phase
+split, the six named holes in priority order, and the gates. What follows here
+is the design reasoning it is built on.
+
+**One number this section could not have, and now can.** The table above counts
+volis *moved* per leg and reports a mean of 5.29 of twelve. The companion
+question -- how many the resolver has an *opinion* about -- is 6.89 of twelve
+over 1,760 flights at `6ae238e`, and twelve minus that is precisely the
+population `_apply_cheat_steps` invents a destination for: 1,194 legs of 1,507
+and two thirds of all drawn travel. The two figures measure different things and
+neither supersedes the other; the second is the one that says how much is left.
+
 The larger half. The rule "playback draws what the resolver decided" is right
 and must not be relaxed — so the resolver has to decide more.
 
@@ -166,6 +179,16 @@ target, the intention that produced it (`cover`, `approach`, `chase`, `base`,
 `release`) and whether they expected to arrive. Playback then draws all twelve
 with no new authority, and the caption layer gains something it currently cannot
 say — *who else went for it*.
+
+**That shape now exists and is not a separate dictionary.** `_travel_intent`
+publishes `intent`, `progress`, `traversal_seconds` and `window_seconds` into the
+`*_phase_intents` map that already sits beside the targets, and every one of
+3,223 off-ball legs carries it. The vocabulary the code settled on is
+`covering / defending / blocking / preparing_attack / receiving / setting`, and
+the spec adds `chasing` and `recovering` to it; `base` and `release` are not
+added, because a base return is already resolver-published ground and *release
+for transition* is a branch `_cover_phase_map` already takes. What is missing is
+not the shape. It is that only 6.89 of twelve get an entry at all.
 
 ### The consequence the design cares about
 

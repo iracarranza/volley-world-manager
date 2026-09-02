@@ -27,6 +27,7 @@ const SEED_COUNT: int = 200
 
 func _initialize() -> void:
 	var by_leg := {}
+	var unnamed_by_role := {}
 	var omitted_by_intent_gap := {}
 	var flights := 0
 	var named_total := 0
@@ -38,6 +39,7 @@ func _initialize() -> void:
 			var result: Resource = manager.resolve_active_rally(seed_value)
 			if result == null:
 				continue
+			var roles: Dictionary = result.player_physical_profiles
 			var on_court := {}
 			for map_name in ["initial_home_positions", "initial_opponent_positions"]:
 				for raw_id in Dictionary(result.get(map_name)):
@@ -96,6 +98,18 @@ func _initialize() -> void:
 						home_missing += 1
 					else:
 						opp_missing += 1
+				## Which *role* is being left out, because "2.98 of six" is not
+				## actionable and "the libero and both middles" is.
+				for raw_id in on_court:
+					if named.has(int(raw_id)):
+						continue
+					var code := str(Dictionary(
+						roles.get(int(raw_id), {})
+					).get("position_code", "?"))
+					var role_key := "%s|%s" % [key, code]
+					unnamed_by_role[role_key] = int(
+						unnamed_by_role.get(role_key, 0)
+					) + 1
 				var gap: Dictionary = omitted_by_intent_gap.get(key, {
 					"home": 0, "opponent": 0,
 				})
@@ -115,6 +129,19 @@ func _initialize() -> void:
 			float(b.home_named) / n, float(b.opp_named) / n,
 			float(gap.home) / n, float(gap.opponent) / n,
 		])
+	print("--- unnamed volis by flight and position, per flight")
+	print("flight|position|unnamed_per_flight")
+	var role_keys: Array = unnamed_by_role.keys()
+	role_keys.sort()
+	for role_key in role_keys:
+		var parts: PackedStringArray = str(role_key).split("|")
+		var flight_count := maxf(float(
+			Dictionary(by_leg.get(parts[0], {})).get("flights", 1)
+		), 1.0)
+		var per := float(unnamed_by_role[role_key]) / flight_count
+		if per < 0.25:
+			continue
+		print("%s|%s|%.2f" % [parts[0], parts[1], per])
 	print("--- all drawn flights")
 	print("flights|%d" % flights)
 	print("mean_named_of_12|%.2f" % (float(named_total) / maxf(float(flights), 1.0)))
