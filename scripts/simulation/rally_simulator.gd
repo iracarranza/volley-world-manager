@@ -11741,9 +11741,15 @@ func _resolve_overpass_attack(
 	var landing := Vector2(swing.get("landing", contact_pos))
 	var outcome := str(swing.get("outcome", "in"))
 	var errored := outcome in ["net", "out"]
+	## The overpass chooser already resolved the exact later contact on the
+	## incoming free flight. Replace the earlier net-crossing checkpoint with
+	## that realised prefix before publishing the attack, so the pass crosses the
+	## tape continuously and ends where the hitter actually met it.
+	_stamp_free_flight_resolution(result, choice)
+	var attack_endpoint := Vector2(outgoing.get("end_position", landing))
 	_add_event(
 		result, RallyEventModel.EventType.ATTACK, attacker.id, attacker.display_name,
-		contact_pos, landing, not errored, float(choice.get("score", 0.5)),
+		contact_pos, attack_endpoint, not errored, float(choice.get("score", 0.5)),
 		"%s attacks the overpass" % attacker.display_name,
 		"First-contact attack on a ball that crossed the net.",
 		{
@@ -11764,6 +11770,69 @@ func _resolve_overpass_attack(
 			{"hitter": attacker.display_name},
 		)
 	if outcome in ["stuff", "monster_block"]:
+		## A stuff is a resolved second contact, not merely a terminal label. The
+		## geometric swing already owns the hand, height, instant and deflection;
+		## publish those facts so playback truncates the spike at the wall and draws
+		## the same downward ball that decided the point.
+		var contact_actor_id := int(swing.get("block_contact_actor_id", -1))
+		var contact_blocker := _player_by_id(players, contact_actor_id)
+		if contact_blocker == null and opponent_team != null:
+			for raw_player in opponent_team.on_court_players():
+				var candidate := raw_player as VolleyballPlayer
+				if candidate != null and candidate.id == contact_actor_id:
+					contact_blocker = candidate
+					break
+		var blocking_side := &"home" if defending_home else &"opponent"
+		var block_point := _block_contact_point(
+			swing, contact_pos.x, CourtConstants.NET_Y
+		)
+		var block_time := _swing_reaches_net(
+			outgoing, float(choice.get("contact_time", rally_clock))
+		)
+		var delivered: Dictionary = swing.get("delivered", {})
+		var block_trajectory := _block_deflection_trajectory(
+			block_point, landing, true, 0.35, block_time,
+			float(delivered.get("speed_mps", 0.0)), contact_blocker, "neutral",
+			{}, 0.0, swing.get("block_deflection_landing", null),
+			float(swing.get("block_deflection_speed_mps", 0.0)),
+			float(swing.get("block_deflection_vertical_angle_degrees", 0.0)),
+			float(swing.get("block_deflection_duration_seconds", 0.0)),
+			bool(swing.get("block_deflection_playable", false)),
+			float(swing.get("block_contact_height_meters", NAN)),
+		)
+		var attack_to_wall := FreeFlightInterceptionModel.realised_prefix(
+			outgoing, block_time
+		)
+		var attack_event := result.events[-1] as RallyEvent
+		if attack_event != null and not attack_to_wall.is_empty():
+			## The unimpeded launch remains in `incoming_trajectory` on the block as
+			## resolver evidence. The published ball leg ends at the contact that
+			## actually interrupted it; otherwise the timeline counts both the
+			## imaginary flight through the hands and the real deflection.
+			attack_event.metadata["outgoing_trajectory"] = attack_to_wall
+			attack_event.end_position = block_point
+		var block_end := _trajectory_endpoint(block_trajectory, landing)
+		_add_event(
+			result, RallyEventModel.EventType.BLOCK, contact_actor_id,
+			contact_blocker.display_name if contact_blocker != null else "Block",
+			block_point, block_end, true, float(choice.get("score", 0.5)),
+			"Block meets the overpass attack",
+			"The resolved wall contacts the first-ball swing.",
+			{
+				"side": str(blocking_side), "overpass": true,
+				"outcome": outcome, "outgoing_trajectory": block_trajectory,
+				"incoming_trajectory": outgoing,
+				"net_crossing_x": float(swing.get("net_crossing_x", block_point.x)),
+				"block_contact_kind": str(swing.get("block_contact_kind", "")),
+				"block_contact_actor_id": contact_actor_id,
+				"block_contact_height_meters": swing.get(
+					"block_contact_height_meters", null
+				),
+				"ball_height_at_net_meters": swing.get(
+					"ball_height_at_net_meters", null
+				),
+			},
+		)
 		if attacking_side == &"home":
 			return _finish(
 				result, "blocked", false, attacker.id,

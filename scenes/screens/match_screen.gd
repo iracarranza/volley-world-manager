@@ -219,13 +219,19 @@ func _run_rally(generation: int) -> void:
 		var event := events[event_index] as RallyEvent
 		if event == null:
 			continue
-		_show_event_text(event, event_index, events.size())
+		var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
+		## A terminal contact's verdict belongs at the end of the ball it launched,
+		## not at the instant it left the hand. The record still owns the words and
+		## the outcome; playback only waits until its own authoritative trajectory
+		## has visibly reached the floor before revealing them.
+		var defer_commentary := not trajectory.is_empty() \
+			and not _has_later_ball_touch(events, event_index + 1)
+		_show_event_text(event, event_index, events.size(), not defer_commentary)
 		if event.event_type == RallyEventModel.EventType.SET_DECISION:
 			## Tactical choice, not a second physical touch. The preceding flight
 			## already delivered the setter to this instant; pausing here created a
 			## visible hitch immediately before every set.
 			continue
-		var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
 		var next_index := _next_contact_index(events, event_index + 1)
 		var next_contact: RallyEvent = null
 		var after_next: RallyEvent = null
@@ -240,11 +246,25 @@ func _run_rally(generation: int) -> void:
 			## differs exactly when the next contact never touched it.
 			movement_contact = next_contact
 			var played_index := next_index
+			var final_floor_attempt: RallyEvent = null
 			while played_index >= 0 \
 					and not _touched_the_ball(events[played_index] as RallyEvent):
+				var missed := events[played_index] as RallyEvent
+				if missed != null and missed.event_type in [
+					RallyEventModel.EventType.RECEPTION,
+					RallyEventModel.EventType.DIG,
+					RallyEventModel.EventType.ATTACK_COVERAGE,
+				]:
+					final_floor_attempt = missed
 				played_index = _next_contact_index(events, played_index + 1)
 			if played_index >= 0:
 				movement_contact = events[played_index] as RallyEvent
+			elif final_floor_attempt != null:
+				## No later touch exists, but the resolver did publish who tried and
+				## failed to reach the terminal ball. Move toward that attempt during
+				## the flight; leaving the missed blocker as the target froze every
+				## floor defender while the commentary claimed nobody could arrive.
+				movement_contact = final_floor_attempt
 		## A flight can arrive before the next contact's physical stamp. The set
 		## decision in particular marks the ball reaching the setter; release can
 		## follow several tenths later. Skipping that interval jumped the progress
@@ -279,6 +299,8 @@ func _run_rally(generation: int) -> void:
 					event_index, events.size(), generation
 				),
 			)
+			if defer_commentary:
+				_show_event_text(event, event_index, events.size(), true)
 		else:
 			## An event the ball spends no time on costs no time.
 			##
@@ -478,9 +500,13 @@ func _play_flight(
 	## that already covered it, the approach has to move here or the defender
 	## teleports into the dig, which is the regression this whole seam produced
 	## the first time.
-	var movement_plan := _build_movement_plan(
+	var movement_window := movement_deadline_seconds(
 		event, movement_contact if movement_contact != null else next_contact,
 		duration,
+	)
+	var movement_plan := _build_movement_plan(
+		event, movement_contact if movement_contact != null else next_contact,
+		movement_window,
 		next_contact if next_contact != null \
 			and next_contact.event_type == RallyEventModel.EventType.BLOCK else null,
 	)
@@ -515,6 +541,27 @@ func _play_flight(
 	## this the next event has no way to tell whether its window is aftermath or
 	## a repeat of what was just drawn.
 	return duration
+
+
+## The ball may expose only a prefix of the interval before the next contact.
+## Pace bodies against the contact's physical clock, then sample only the part
+## of that movement covered by this visible leg. This prevents a receiver or
+## setter completing a later resolved journey inside a shortened flight prefix.
+static func movement_deadline_seconds(
+	event: RallyEvent, contact: RallyEvent, display_duration: float
+) -> float:
+	if event == null or contact == null:
+		return display_duration
+	var event_time := float(event.metadata.get(
+		"physical_time", event.metadata.get("event_time", 0.0)
+	))
+	var contact_time := float(contact.metadata.get(
+		"physical_time", contact.metadata.get("event_time", event_time)
+	))
+	return maxf(
+		display_duration,
+		contact_time - event_time,
+	)
 
 
 ## Draw time between a resolved incoming flight and the later contact stamp.
@@ -759,6 +806,20 @@ static func _touched_the_ball(event: RallyEvent) -> bool:
 	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
 	return not outgoing.is_empty() \
 		and float(outgoing.get("duration", 0.0)) > 0.0
+
+
+static func _has_later_ball_touch(events: Array, start_index: int) -> bool:
+	for index in range(start_index, events.size()):
+		var later := events[index] as RallyEvent
+		if later == null:
+			continue
+		if later.event_type == RallyEventModel.EventType.POINT:
+			return false
+		if later.event_type == RallyEventModel.EventType.SET_DECISION:
+			continue
+		if _touched_the_ball(later):
+			return true
+	return false
 
 
 func _contact_posture(event: RallyEvent) -> String:
@@ -1978,14 +2039,11 @@ func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) 
 					## a blocker following a ball off their own hands.
 					"event_type": _pacing_event_type,
 				})
-			## This is presentation of a contact that production has already
-			## resolved. Drawing the ball at that record while leaving the credited
-			## actor halfway there creates the receiver/setter desync visible in
-			## replay. Keep the overspeed diagnostic above, but make the body and
-			## physical contact coincide; off-ball actors retain their paced,
-			## continuous movement and are never snapped.
-			movement["seconds"] = active_window
-			continue
+			## Do not conceal a resolver/body disagreement by accelerating the
+			## credited actor. The ball record remains authoritative and the
+			## diagnostic above names the mismatch; presentation keeps the same
+			## human movement bound as every other voli instead of drawing the
+			## receiver sprinting at arbitrary speed to make the contact look exact.
 		var authored_seconds := maxf(float(movement.get("seconds", 0.0)), 0.0)
 		movement["seconds"] = maxf(
 			metres / speed,
@@ -2520,7 +2578,12 @@ func _next_contact_event(events: Array[Resource], start_index: int) -> RallyEven
 	return null
 
 
-func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> void:
+func _show_event_text(
+	event: RallyEvent,
+	event_index: int,
+	event_count: int,
+	show_commentary: bool = true,
+) -> void:
 	event_label.text = event.type_name().to_upper()
 	broadcast_overlay.lower_kicker.text = "%02d / %02d · t=%.2fs" % [
 		event_index + 1, event_count, float(event.metadata.get("event_time", 0.0)),
@@ -2528,11 +2591,11 @@ func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> 
 	## The router may deliberately choose silence. The event label above remains
 	## available as playback diagnostics; raw simulator headline/detail never
 	## substitute for commentary.
-	var selected_commentary := "" if event.commentary_silent \
+	var selected_commentary := "" if event.commentary_silent or not show_commentary \
 		else event.commentary_headline
-	if not event.commentary_detail.is_empty():
+	if show_commentary and not event.commentary_detail.is_empty():
 		selected_commentary += "\n%s" % event.commentary_detail
-	caption_label.text = "" if event.commentary_silent \
+	caption_label.text = "" if event.commentary_silent or not show_commentary \
 		else event.commentary_headline
 	broadcast_overlay.set_commentary(
 		selected_commentary, event_index % 2,

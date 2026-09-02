@@ -111,13 +111,32 @@ func _run() -> void:
 		},
 	}
 	screen._pace_plan(plan, 0.5, 7)
-	_expect(is_equal_approx(float(plan[7].seconds), 0.5),
-		"resolved contact actor arrives at the physical contact moment")
+	_expect(float(plan[7].seconds) > 0.5,
+		"resolved contact actor keeps human pace when the record's deadline is impossible")
 	_expect(float(plan[8].seconds) > 0.5,
 		"off-ball actor keeps continuous production-paced movement")
 	_expect(is_equal_approx(
 		MatchScreenScript.playback_clock_percent(3.0, 1.0, 5.0), 50.0
 	), "playback bar represents physical time rather than event count")
+	var launch := RallyEvent.new()
+	launch.metadata = {"physical_time": 1.0}
+	var later_contact := RallyEvent.new()
+	later_contact.metadata = {"physical_time": 2.2}
+	_expect(is_equal_approx(
+		MatchScreenScript.movement_deadline_seconds(launch, later_contact, 0.6),
+		1.2,
+	), "a shortened ball prefix cannot compress a later actor journey")
+	var terminal_attack := RallyEvent.new()
+	terminal_attack.event_type = RallyEvent.EventType.ATTACK
+	terminal_attack.metadata = {"outgoing_trajectory": {"duration": 0.4}}
+	var missed_dig := RallyEvent.new()
+	missed_dig.event_type = RallyEvent.EventType.DIG
+	missed_dig.metadata = {}
+	var point := RallyEvent.new()
+	point.event_type = RallyEvent.EventType.POINT
+	_expect(not MatchScreenScript._has_later_ball_touch(
+		[terminal_attack, missed_dig, point], 1
+	), "a missed floor attempt does not announce the point before the ball lands")
 
 	host.queue_free()
 	screen.queue_free()
