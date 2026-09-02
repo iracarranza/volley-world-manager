@@ -73,7 +73,10 @@ jobs:
             recovery_fall_roll recovery_fall_slide recovery_blown_away recovery_knee
             gait_ready_to_run gait_backpedal gait_shuffle platform_aim approach_three_step
             serve_standing serve_jump_topspin serve_jump_float serve_hybrid serve_sky_ball
-            receive_dive set_front set_back attack_power attack_roll attack_dink
+            receive_dive receive_moving receive_strained
+            set_front set_back set_moving
+            attack_power attack_roll attack_dink attack_reaching attack_mistimed attack_missed
+            block_impact block_tool block_beaten
             idle_breath_sway standing_to_ready blink
             signature_crush signature_high_hands signature_monster_block
           )
@@ -84,7 +87,17 @@ jobs:
                 "--strip=${strip}" "--camera=${camera}"
             done
           done
-          test "$(find artifacts/rally-action-animations -type f -name '*.png' | wc -l)" -eq 52
+          front_strips=(
+            receive_moving receive_strained set_moving
+            attack_reaching attack_mistimed attack_missed
+            block_impact block_tool block_beaten
+          )
+          for strip in "${front_strips[@]}"; do
+            xvfb-run -a godot --path . --rendering-method gl_compatibility \
+              res://tools/animation_frames.tscn -- \
+              "--strip=${strip}" "--camera=front"
+          done
+          test "$(find artifacts/rally-action-animations -type f -name '*.png' | wc -l)" -eq 79
 
       - name: Upload rally action animation strips
         uses: actions/upload-artifact@v4

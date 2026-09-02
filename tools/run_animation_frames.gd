@@ -39,9 +39,11 @@ const FRAME_SPACING: float = 1.55
 ## the row reads approach -> contact -> recovery rather than beginning mid-fall.
 const RECOVERY_STRIP_FROM_PHASE: float = -0.34
 
-## The two angles every motion is shot from.
+## Side exposes lateral travel; front exposes left/right support and limb depth;
+## three-quarter remains the general silhouette review.
 const CAMERAS := {
 	"side": [Vector3(0.0, 1.15, 9.4), Vector3(-4.0, 0.0, 0.0), 46.0],
+	"front": [Vector3(0.0, 1.15, -9.4), Vector3(-4.0, 180.0, 0.0), 46.0],
 	"three_quarter": [
 		Vector3(5.6, 3.05, 8.2), Vector3(-15.0, 34.0, 0.0), 44.0,
 	],
@@ -162,6 +164,16 @@ const STRIPS: Array[Dictionary] = [
 		"posture": "reaching", "recovery": "fall",
 	},
 	{
+		"name": "receive_moving", "caption": "RECEPTION moving: final stride, platform, carried recovery",
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, 0.0], "action_sweep": true,
+		"posture": "moving", "ground_speed_mps": 3.1, "stride_cycle": 0.24,
+	},
+	{
+		"name": "receive_strained", "caption": "RECEPTION strained: off-axis platform and unequal support",
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, 0.0], "action_sweep": true,
+		"posture": "off-axis", "ground_speed_mps": 2.4, "stride_cycle": 0.74,
+	},
+	{
 		"name": "set_front", "caption": "SET front: floor load and high outward finish",
 		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
 		"context": {"set_posture": "standing", "back_set": false},
@@ -170,6 +182,12 @@ const STRIPS: Array[Dictionary] = [
 		"name": "set_back", "caption": "SET back: disguised gather, arch, carry over crown",
 		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
 		"context": {"set_posture": "standing", "back_set": true},
+	},
+	{
+		"name": "set_moving", "caption": "SET moving: hands gather over the active adjustment step",
+		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
+		"context": {"set_posture": "standing", "back_set": false},
+		"ground_speed_mps": 3.0, "stride_cycle": 0.24,
 	},
 	{
 		"name": "attack_power", "caption": "ATTACK power: bow, whip, cross-body finish",
@@ -185,6 +203,36 @@ const STRIPS: Array[Dictionary] = [
 		"name": "attack_dink", "caption": "ATTACK dink: sold approach and compact touch",
 		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
 		"context": {"attack_type": "Dink", "action_power": 0.38},
+	},
+	{
+		"name": "attack_reaching", "caption": "ATTACK reaching: extended hand with airborne counterbalance",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "reaching"},
+	},
+	{
+		"name": "attack_mistimed", "caption": "ATTACK mistimed: cramped contact and asymmetric recovery",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "mistimed"},
+	},
+	{
+		"name": "attack_missed", "caption": "ATTACK missed: attempted arc and arrested unspent rotation",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "missed"},
+	},
+	{
+		"name": "block_impact", "caption": "BLOCK impact: wall yields and absorbs the return",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
+		"context": {"block_response": "impact"},
+	},
+	{
+		"name": "block_tool", "caption": "BLOCK tool: contacted hand yields after phase zero",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
+		"context": {"block_response": "tool"},
+	},
+	{
+		"name": "block_beaten", "caption": "BLOCK beaten: incomplete wall withdraws into landing",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
+		"context": {"block_response": "beaten"},
 	},
 	{
 		"name": "idle_breath_sway", "caption": "IDLE: breath, weight shift, arm lag",
@@ -231,7 +279,7 @@ func _ready() -> void:
 	if requested_strip.is_empty() or not CAMERAS.has(requested_camera):
 		push_error(
 			"Animation frame rendering requires --strip=<name> and "
-			+ "--camera=side|three_quarter; CI isolates each artifact in its own "
+			+ "--camera=side|front|three_quarter; CI isolates each artifact in its own "
 			+ "renderer process."
 		)
 		get_tree().quit(2)
@@ -328,6 +376,8 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 		actor.has_facing = true
 		actor.facing_yaw = 0.0
 		if bool(strip.get("action_sweep", false)):
+			actor.ground_speed_mps = float(strip.get("ground_speed_mps", 0.0))
+			actor.stride_cycle = float(strip.get("stride_cycle", 0.0))
 			actor.contact_posture = str(strip.get("posture", "planted"))
 			actor.contact_recovery = str(strip.get("recovery", "platform"))
 			var action_pose: Array = strip.pose
@@ -335,6 +385,8 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			var action_elevation := float(action_pose[1])
 			if int(action_pose[0]) == RallyEventModel.EventType.ATTACK:
 				action_elevation *= SpikeBiomechanics.elevation_at(action_phase)
+			elif int(action_pose[0]) == RallyEventModel.EventType.BLOCK:
+				action_elevation *= BlockBiomechanics.elevation_at(action_phase)
 			actor.set_pose(
 				int(action_pose[0]), action_elevation, action_phase,
 				Vector2.RIGHT, true, Dictionary(strip.get("context", {})),

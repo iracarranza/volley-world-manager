@@ -10,6 +10,8 @@ const PlayerActorScene := preload("res://scenes/components/player_actor_3d.tscn"
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const Spike := preload("res://scripts/data/spike_biomechanics.gd")
 const CorePerformance := preload("res://scripts/data/core_voli_performance.gd")
+const Arrival := preload("res://scripts/data/contact_arrival_biomechanics.gd")
+const Block := preload("res://scripts/data/block_biomechanics.gd")
 
 var checks := 0
 var failures := 0
@@ -96,6 +98,17 @@ func _run() -> void:
 		_check(float(back.shoulder_degrees) > float(front.shoulder_degrees),
 			"back set must carry the hands behind the crown")
 
+	var settled_arrival := Arrival.resolve(-0.18, 0.0, 0.25)
+	var moving_arrival := Arrival.resolve(-0.18, 3.2, 0.25, "moving")
+	_check(float(Arrival.resolve(-0.06, 3.2, 0.25, "moving").upper_body_weight) > 0.99,
+		"late arrival must still complete the contact apparatus before contact")
+	_check(float(moving_arrival.lower_body_weight) < float(settled_arrival.lower_body_weight),
+		"moving arrival must retain its active step longer than a settled arrival")
+	_check(bool(moving_arrival.active_left),
+		"arrival handoff must preserve the active foot from stride phase")
+	_check(Arrival.resolve(-0.18, 3.2, 0.75, "moving").active_left == false,
+		"opposite stride phase must preserve the opposite active foot")
+
 	var power_sell := Attack.resolve(-0.36, 1.0, 0.8, "Power swing")
 	var roll_sell := Attack.resolve(-0.36, 1.0, 0.8, "Roll shot")
 	var dink_sell := Attack.resolve(-0.36, 1.0, 0.8, "Dink")
@@ -115,6 +128,44 @@ func _run() -> void:
 		"roll shot must soften the elbow at contact")
 	_check(float(dink_contact.striking_elbow_degrees) > float(roll_contact.striking_elbow_degrees),
 		"dink must retain the most compact striking elbow")
+	for adjustment in [
+		Attack.ADJUSTMENT_REACHING, Attack.ADJUSTMENT_MISTIMED,
+		Attack.ADJUSTMENT_MISSED,
+	]:
+		var clean_sell := Attack.resolve(-0.36, 1.0, 0.8, "Power swing")
+		var adjusted_sell := Attack.resolve(
+			-0.36, 1.0, 0.8, "Power swing", adjustment
+		)
+		_check(is_equal_approx(
+			float(clean_sell.striking_shoulder_degrees),
+			float(adjusted_sell.striking_shoulder_degrees),
+		), "%s adjustment changed the canonical sold approach" % adjustment)
+	var reaching_attack := Attack.resolve(
+		0.12, 1.0, 0.8, "Power swing", Attack.ADJUSTMENT_REACHING
+	)
+	var cramped_attack := Attack.resolve(
+		0.12, 1.0, 0.8, "Power swing", Attack.ADJUSTMENT_MISTIMED
+	)
+	_check(absf(float(reaching_attack.adjustment_roll_degrees)) > 1.0,
+		"reaching attack must counterbalance the extended striking side")
+	_check(float(cramped_attack.striking_elbow_degrees) \
+		> float(reaching_attack.striking_elbow_degrees),
+		"mistimed attack must retain a more compromised elbow")
+
+	for response in [Block.RESPONSE_IMPACT, Block.RESPONSE_TOOL, Block.RESPONSE_BEATEN]:
+		var plain_before := Block.resolve(-0.08)
+		var response_before := Block.resolve(-0.08, response, 1.0)
+		_check(is_equal_approx(
+			float(plain_before.shoulder_degrees),
+			float(response_before.shoulder_degrees),
+		), "%s block response anticipated the outcome before contact" % response)
+	var impact_wall := Block.resolve(0.12, Block.RESPONSE_IMPACT, 1.0)
+	var tool_wall := Block.resolve(0.12, Block.RESPONSE_TOOL, 1.0)
+	_check(float(impact_wall.elbow_degrees) > float(Block.resolve(0.12).elbow_degrees),
+		"hard block impact must yield through the elbows")
+	_check(float(tool_wall.right_elbow_delta_degrees) \
+		> float(tool_wall.left_elbow_delta_degrees),
+		"tool response must yield on the contacted hand only")
 	_check(Spike.elevation_at(Spike.PLANT_END - 0.001) == 0.0 \
 		and Spike.elevation_at(Spike.PLANT_END) == 0.0 \
 		and Spike.elevation_at(Spike.PLANT_END + 0.08) > 0.0,

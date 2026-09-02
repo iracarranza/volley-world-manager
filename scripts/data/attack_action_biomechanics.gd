@@ -9,6 +9,10 @@ const Spike := preload("res://scripts/data/spike_biomechanics.gd")
 const POWER := &"power"
 const ROLL := &"roll"
 const DINK := &"dink"
+const ADJUSTMENT_CLEAN := &"clean"
+const ADJUSTMENT_REACHING := &"reaching"
+const ADJUSTMENT_MISTIMED := &"mistimed"
+const ADJUSTMENT_MISSED := &"missed"
 
 
 static func family(attack_type: String) -> StringName:
@@ -26,13 +30,21 @@ static func resolve(
 	handedness_sign: float,
 	action_power: float,
 	attack_type: String,
+	adjustment: StringName = ADJUSTMENT_CLEAN,
 ) -> Dictionary:
 	var joints := Spike.resolve(phase, handedness_sign, action_power)
 	var variant := family(attack_type)
 	if variant == POWER:
 		joints["attack_family"] = POWER
-		return joints
+	else:
+		_apply_soft_shot(joints, phase, handedness_sign, variant)
+	_apply_adjustment(joints, phase, handedness_sign, adjustment)
+	return joints
 
+
+static func _apply_soft_shot(
+	joints: Dictionary, phase: float, handedness_sign: float, variant: StringName
+) -> void:
 	var p := clampf(phase, -1.0, 1.0)
 	## The sell remains intact through most of the cock. This late envelope is the
 	## biomechanical fact both soft-shot families depend on.
@@ -97,4 +109,58 @@ static func resolve(
 		)
 	joints["attack_family"] = variant
 	joints["variant_weight"] = change
-	return joints
+
+
+## Airborne organization around a resolved poor swing. The approach and launch
+## are untouched; this envelope begins only after the canonical plant.
+static func _apply_adjustment(
+	joints: Dictionary, phase: float, handedness_sign: float,
+	adjustment: StringName,
+) -> void:
+	joints["attack_adjustment"] = adjustment
+	joints["adjustment_roll_degrees"] = 0.0
+	joints["landing_stagger_degrees"] = 0.0
+	if adjustment == ADJUSTMENT_CLEAN:
+		return
+	var p := clampf(phase, -1.0, 1.0)
+	var hand := 1.0 if handedness_sign >= 0.0 else -1.0
+	var adjust := smoothstep(-0.24, 0.02, p) \
+		* (1.0 - smoothstep(0.56, 0.94, p))
+	if adjustment == ADJUSTMENT_REACHING:
+		joints["striking_shoulder_degrees"] = lerpf(
+			float(joints.striking_shoulder_degrees), -242.0, 0.38 * adjust
+		)
+		joints["guide_shoulder_degrees"] = lerpf(
+			float(joints.guide_shoulder_degrees), 82.0, 0.72 * adjust
+		)
+		joints["adjustment_roll_degrees"] = -hand * 8.5 * adjust
+		joints["landing_stagger_degrees"] = 14.0 * adjust
+	elif adjustment == ADJUSTMENT_MISTIMED:
+		joints["striking_elbow_degrees"] = lerpf(
+			float(joints.striking_elbow_degrees), 48.0, 0.72 * adjust
+		)
+		joints["torso_twist_degrees"] = lerpf(
+			float(joints.torso_twist_degrees), 0.0, 0.62 * adjust
+		)
+		joints["guide_shoulder_degrees"] = lerpf(
+			float(joints.guide_shoulder_degrees), 68.0, 0.64 * adjust
+		)
+		joints["adjustment_roll_degrees"] = hand * 6.0 * adjust
+		joints["landing_stagger_degrees"] = -12.0 * adjust
+	elif adjustment == ADJUSTMENT_MISSED:
+		# Preserve the attempted arc through phase zero, then use the guide arm
+		# and trunk to arrest the unspent rotation rather than drawing a ball-driven
+		# carry that never happened.
+		var arrest := smoothstep(0.02, 0.40, p) \
+			* (1.0 - smoothstep(0.70, 1.0, p))
+		joints["striking_shoulder_degrees"] = lerpf(
+			float(joints.striking_shoulder_degrees), -205.0, 0.52 * arrest
+		)
+		joints["striking_elbow_degrees"] = lerpf(
+			float(joints.striking_elbow_degrees), 34.0, 0.48 * arrest
+		)
+		joints["guide_shoulder_degrees"] = lerpf(
+			float(joints.guide_shoulder_degrees), 74.0, 0.78 * arrest
+		)
+		joints["adjustment_roll_degrees"] = -hand * 7.0 * arrest
+		joints["landing_stagger_degrees"] = 10.0 * arrest

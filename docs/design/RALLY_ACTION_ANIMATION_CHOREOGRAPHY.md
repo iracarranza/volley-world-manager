@@ -360,3 +360,106 @@ kneel/ready handoff without buried limbs.
 - the dive's lowest body point never falls below the rendered floor;
 - visual strips include an exact phase-zero frame and separately identify the
   approach, plant, launch, contact, and landing samples.
+
+## Vocabulary expansion: contacts made while arriving or under pressure
+
+This pass expands presentation vocabulary only. The event, contact phase,
+contact height, trajectory, reach verdict, posture, recovery, attack label, and
+block participation remain inputs. None of the motions below can create a touch
+or reinterpret an outcome.
+
+### Shared arrival-to-contact handoff
+
+An action begins from the locomotion state already on the rig. The active foot,
+stride phase, body heading, and carried momentum are not reset when preparation
+starts.
+
+- Eyes and head acquire the ball first. Upper-body preparation may begin while
+  the lower body is still finishing a shuffle, crossover, or running step.
+- An early arrival decelerates through small adjustment steps, establishes its
+  base, and then performs the ordinary contact chain.
+- A late arrival retains the active stride longer. Its final support foot plants
+  during preparation and the other leg finishes travelling through contact or
+  the first part of follow-through.
+- Platform or setting-hand assembly progresses independently of the lower-body
+  settle. The apparatus may be ready before the feet are quiet, but the feet may
+  not teleport into a canonical stance.
+- Recovery inherits the last support and momentum. It may gather into ready,
+  continue into coverage, or absorb a landing; it may not return through a
+  neutral pose that the action never occupied.
+
+The shared arrival resolver supplies only blend weights and active-step carry.
+Existing gait owns stride geometry; the contact-family resolver owns the final
+biomechanical shape.
+
+### Reception and bump pressure variants
+
+**Settled bump:** the final adjustment step finishes before the platform is
+still. Knees drive under quiet forearms and the body rises toward the target.
+
+**Moving / late bump:** the active support leg remains visible through platform
+assembly. The trailing leg is still finishing the stride at contact, the torso
+counterbalances the carried momentum, and recovery resolves the unequal stance
+rather than snapping both feet square.
+
+**Reaching bump:** the last support leg lengthens into a lunge while the far
+shoulder and arm chase the near arm to preserve one platform. Contact remains at
+phase zero; the continued reach and fall are consequences of arriving extended.
+
+**Strained / off-balance pass:** platform geometry remains the published one,
+but the body pays for residual alignment with trunk counter-rotation, unequal
+support, and a slower balance recovery. Strain must not be represented by an arm
+swing, bent platform elbows, or a new ball path.
+
+### Sets while moving
+
+The hands gather on their existing timeline while the live stride continues
+beneath them. At low arrival speed the split stance is established early. At
+higher speed the active step fades progressively into the target split, and the
+setter can contact while the trailing foot is still completing its placement.
+The leg drive then absorbs that carried step into the normal extension. Front,
+back, standing, jump, and underhand set identities remain unchanged.
+
+### Compromised attack variants
+
+All variants retain the canonical approach, plant, launch, and phase-zero
+contact. They alter only how the airborne body organizes around an already
+resolved poor contact.
+
+- **Reaching adjustment:** the hitting shoulder and hand lengthen toward the
+  ball, the guide arm opens for counterbalance, and the torso/legs oppose the
+  reach so the body does not rotate as one rigid piece.
+- **Mistimed / cramped attack:** the elbow remains more flexed, trunk snap and
+  shoulder carry are reduced, and the legs organize for an earlier asymmetric
+  landing. The motion still continues through phase zero.
+- **Missed swing adjustment:** the arm follows the attempted overhead arc, then
+  the torso and guide arm recover the unspent rotation. It does not add contact
+  follow-through or imply the ball was touched.
+
+### Block response variants
+
+Every response begins from the existing read, close, load, drive, and press.
+
+- **Hard impact absorbed:** hands give minimally after phase zero, elbows and
+  shoulders yield together without collapsing the wall, the torso recoils, and
+  the knees prepare a deeper two-foot absorption.
+- **Tooled / deflected:** the contacted hand yields and turns on the deflection
+  side while the opposite hand remains structurally high. The torso
+  counter-rotates after the ball has left; the response never redirects it.
+- **Late / beaten block:** the reach stays incomplete or one-sided according to
+  the already supplied arm participation. The blocker continues upward, then
+  withdraws and lands from that asymmetry instead of displaying a successful
+  sealed-wall hold.
+
+### Expanded acceptance
+
+- the active stride foot is the same immediately before and during preparation;
+- increasing arrival speed delays lower-body settlement without delaying the
+  authoritative upper-body contact;
+- platform and set hands reach contact geometry continuously from locomotion;
+- no arrival variant changes root court position or contact phase;
+- compromised attacks preserve the canonical approach values;
+- block impact, tool, and beaten responses share the same pre-contact wall and
+  diverge only at/after contact;
+- side and three-quarter strips expose support, lateral travel, front/back limb
+  separation, contact, and recovery for each added family.
