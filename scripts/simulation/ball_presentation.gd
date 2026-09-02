@@ -40,9 +40,33 @@ static func display_trajectory(
 	profiles: Dictionary,
 ) -> Dictionary:
 	var display := trajectory.duplicate(true)
-	terminate_at_next_contact(display, next_contact)
+	var serve_prefix := _serve_reception_prefix(
+		event, next_contact, display, profiles
+	)
+	if not serve_prefix.is_empty():
+		display = serve_prefix
+	else:
+		terminate_at_next_contact(display, next_contact)
+	## The pass leaves from the same physical point the arriving serve prefix
+	## reached, not from the natural floor landing stored on the gameplay event.
+	## This is the other half of the seam: correcting only the incoming endpoint
+	## would still make the outgoing ball begin somewhere else.
+	if event != null and event.event_type == RallyEventModel.EventType.RECEPTION:
+		var visible_contact: Variant = visual_contact_position(event, profiles)
+		if visible_contact is Vector2:
+			var old_start := Vector2(display.get(
+				"start_position", event.start_position
+			))
+			var delta := Vector2(visible_contact) - old_start
+			display["start_position"] = Vector2(visible_contact)
+			display["control_position"] = Vector2(display.get(
+				"control_position", old_start.lerp(
+					Vector2(display.get("end_position", old_start)), 0.5
+				)
+			)) + delta * 0.5
 	var start_height := contact_height(event, profiles)
 	var duration := maxf(float(display.get("duration", 0.5)), 0.08)
+	var gravity := trajectory_gravity(display)
 	var end_height := FLOOR_CONTACT_HEIGHT_METERS if next_contact == null \
 		else contact_height(next_contact, profiles)
 	## **A ball keeps the trajectory it was struck with.**
@@ -103,7 +127,6 @@ static func display_trajectory(
 			## outro does not grow to match: `MatchScreen.settle_seconds` already
 			## lengthened the last window by exactly this fall, and now returns
 			## zero for it because the ball has already arrived.
-			var gravity := BallFlightModel.DEFAULT_GRAVITY_MPS2
 			var vertical := float(display.launch_vertical_mps)
 			var drop := maxf(start_height - FLOOR_CONTACT_HEIGHT_METERS, 0.0)
 			var falling := (vertical + sqrt(maxf(
@@ -120,6 +143,7 @@ static func display_trajectory(
 			)
 	display["start_height_meters"] = start_height
 	display["end_height_meters"] = end_height
+	display["display_gravity_mps2"] = gravity
 	## Reported, not chosen.
 	##
 	## This key used to be the input that shaped the curve, and it was computed
@@ -128,13 +152,93 @@ static func display_trajectory(
 	## now what the flight actually does, so a reader who wants to know whether a
 	## ball cleared the net can ask, and a probe can find the flights that do not.
 	display["apex_height_meters"] = BallFlightModel.apex_between(
-		start_height, end_height, duration
+		start_height, end_height, duration, gravity
 	)
 	display["rise_speed_mps"] = BallFlightModel.rise_speed_between(
-		start_height, end_height, duration
+		start_height, end_height, duration, gravity
 	)
 	display["height_contract"] = "gravity_true"
 	return display
+
+
+## The gravity this launch actually published, with the physical default only
+## for legacy trajectories that predate launch state. Kept here because every
+## display sampler must ask the same question and a missing key must have one
+## explicit compatibility answer rather than several local fallbacks.
+static func trajectory_gravity(trajectory: Dictionary) -> float:
+	return maxf(float(trajectory.get(
+		"launch_gravity_mps2", BallFlightModel.DEFAULT_GRAVITY_MPS2
+	)), 0.1)
+
+
+## A successful serve's visible, physically played prefix. Gameplay still owns
+## and retains the natural floor landing and its calibrated responsibility
+## window; the display endpoint is derived from the same launch at the
+## descending crossing of the receiver's platform height. The counterfactual
+## gameplay promotion is measured by `run_ball_contact_outcome_census.gd`.
+static func _serve_reception_prefix(
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	natural: Dictionary,
+	profiles: Dictionary,
+) -> Dictionary:
+	if event == null or next_contact == null or not next_contact.success \
+			or event.event_type != RallyEventModel.EventType.SERVE \
+			or next_contact.event_type != RallyEventModel.EventType.RECEPTION \
+			or not natural.has("launch_vertical_mps"):
+		return {}
+	var start := Vector2(natural.get("start_position", event.start_position))
+	var floor_end := Vector2(natural.get("end_position", event.end_position))
+	var natural_duration := maxf(float(natural.get("duration", 0.01)), 0.01)
+	var start_height := float(natural.get(
+		"start_height_meters", contact_height(event, profiles)
+	))
+	var end_height := contact_height(next_contact, profiles)
+	var vertical := float(natural.get("launch_vertical_mps", 0.0))
+	var gravity := trajectory_gravity(natural)
+	var discriminant := maxf(
+		vertical * vertical + 2.0 * gravity * (start_height - end_height), 0.0
+	)
+	var duration := clampf(
+		(vertical + sqrt(discriminant)) / gravity, 0.01, natural_duration
+	)
+	var contact := start.lerp(floor_end, duration / natural_duration)
+	var prefix := natural.duplicate(true)
+	prefix["natural_end_position"] = floor_end
+	prefix["natural_end_time"] = float(natural.get("start_time", 0.0)) \
+		+ natural_duration
+	prefix["natural_end_reason"] = "floor"
+	prefix["end_position"] = contact
+	prefix["control_position"] = start.lerp(contact, 0.5)
+	prefix["duration"] = duration
+	prefix["end_time"] = float(natural.get("start_time", 0.0)) + duration
+	prefix["end_height_meters"] = end_height
+	prefix["reception_contact_semantics"] = "displayed_descending_platform_crossing"
+	return prefix
+
+
+## Where a reception visibly contacts the serve, when its incoming trajectory
+## carries a published launch. Returns null for ordinary digs and legacy data.
+static func visual_contact_position(
+	event: RallyEvent, profiles: Dictionary
+) -> Variant:
+	if event == null or event.event_type != RallyEventModel.EventType.RECEPTION:
+		return null
+	var incoming: Dictionary = event.metadata.get("incoming_trajectory", {})
+	if incoming.is_empty() or not incoming.has("launch_vertical_mps"):
+		return null
+	var sender := RallyEventModel.new()
+	sender.event_type = RallyEventModel.EventType.SERVE
+	sender.actor_id = int(incoming.get("launch_actor_id", -1))
+	sender.start_position = Vector2(incoming.get("start_position", Vector2.ZERO))
+	sender.end_position = Vector2(incoming.get("end_position", sender.start_position))
+	## The server id is not needed for the prefix's start height because the
+	## trajectory already publishes it. Supply a synthetic sender and then replace
+	## the contact height source explicitly below.
+	var prefix := _serve_reception_prefix(sender, event, incoming, profiles)
+	if prefix.is_empty():
+		return null
+	return Vector2(prefix.end_position)
 
 
 ## How high above the floor this player's hands were when they touched the ball.
@@ -466,6 +570,7 @@ static func sample(display: Dictionary, progress: float) -> Dictionary:
 			float(display.get("end_height_meters", 1.0)),
 			float(display.get("duration", 0.5)),
 			t,
+			trajectory_gravity(display),
 		),
 	}
 
@@ -495,6 +600,7 @@ static func net_crossing_height(display: Dictionary) -> float:
 				float(display.get("end_height_meters", 1.0)),
 				float(display.get("duration", 0.5)),
 				t,
+				trajectory_gravity(display),
 			)
 		previous = here
 	return -1.0

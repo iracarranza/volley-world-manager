@@ -48,9 +48,13 @@ var is_home_team: bool = true
 ## Only a match knows this, because only a match has two clubs in it.
 var club_region: String = ""
 var champion_region: String = ""
+## Preview override for the three recorded kit passes. Gameplay leaves this at
+## -1 and RegionalKits resolves the selected design.
+var kit_design_attempt: int = -1
 var tactical_position: Vector2 = Vector2.ZERO
 var dominant_hand: String = "Right"
 var height_cm: float = 188.0
+var mass_kg: float = 82.0
 var wingspan_cm: float = 191.0
 var stride_length_m: float = 0.83
 var body_type: String = "Vegi"
@@ -60,6 +64,9 @@ var shoulder_offset: Vector2 = Vector2(0.40, 1.52)
 var hip_offset: Vector2 = Vector2(0.16, 0.48)
 var body_height_scale: float = 1.0
 var arm_length_scale: float = 1.0
+## The authored torso scale after height/stride fitting. Pose deformation always
+## starts here, so squash and extension do not accumulate from frame to frame.
+var torso_rest_scale: Vector3 = Vector3.ONE
 ## How long this voli's legs are for their height, from `stride_length_m`.
 var leg_length_scale: float = 1.0
 var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
@@ -135,6 +142,9 @@ var expression: String = FaceExpressionsScript.NEUTRAL
 ## Produce, colourway and coat, when somebody chose them rather than the id
 ## deciding. Empty means the hash, which is every generated voli.
 var appearance: Dictionary = {}
+## Kit or formal -- see `BodyTypeModels.GARMENT_KIT`.
+var garment: String = BodyTypeModelsScript.GARMENT_KIT
+var is_libero: bool = false
 ## Where the actor is currently facing, kept between frames so a change of
 ## heading can be turned into rather than snapped to.
 var facing_yaw: float = 0.0
@@ -206,6 +216,11 @@ var has_world_position: bool = false
 ## simulator's own speed would be right about the player and wrong about the
 ## figure on screen.
 var ground_speed_mps: float = 0.0
+## The live horizontal direction of the body, in the same court-plane axes as
+## tactical contact directions. SignatureSurge3D uses it only to place causal
+## residue behind an action; it never feeds back into movement or simulation.
+var action_movement_direction: Vector2 = Vector2.ZERO
+var _signature_movement_frame: int = -1
 ## Whether this voli was off the floor on a previous frame, and what they were
 ## doing when they left it. A landing is *observed* rather than announced: the
 ## actor already sees elevation and event type every frame, so no caller has to
@@ -219,9 +234,8 @@ var _landing_remaining: float = 0.0
 ## which case `_ground_the_feet` must not do it a second time. Consumed on read.
 var _feet_already_grounded: bool = false
 
-## Thigh share of total leg length. Slightly over half, which is roughly true
-## and is the ratio that keeps a folded knee reading as a knee.
-const THIGH_SHARE: float = 0.54
+## NOTE the ratio lives in body_type_models.gd because the trousers are cut to it
+const THIGH_SHARE: float = BodyTypeModelsScript.THIGH_SHARE
 
 ## How far in front of the ankle the shoe sits, in rig units.
 ##
@@ -278,6 +292,15 @@ const _PLANT_RIGHT: int = 1
 ## `_apply_physical_profile` for why these are under 1.0 and why they differ.
 const JOINT_ARM: float = 0.94
 const JOINT_LEG: float = 0.86
+
+## What a manager wears, and the one colour on the court chosen to be nobody's.
+##
+## A slate the regional kits do not use: `RegionalKits` spends its range on
+## saturated club hues, so a low-chroma cool grey reads as "not a strip" against
+## every one of them without having to be checked against each. Trousers take the
+## same colour darkened, the way the shorts take the shirt's -- one derivation,
+## because two would be two things that can disagree.
+const FORMAL_COLOR := Color("3c4250")
 
 ## How much darker the shorts are than the shirt.
 ##
@@ -447,11 +470,25 @@ func configure(
 	## exactly that. The alternative was a sixth positional argument on a call
 	## made from twenty places, nineteen of which have no region to pass.
 	club_region = str(physical_profile.get("club_region", ""))
+	## **Which garment class this voli wears.** A kit was the only clothing that
+	## existed, so a manager -- who is attached to a club without being one of its
+	## players -- got dressed as one. Defaulted to kit so every roster caller is
+	## unchanged; only somebody who is not playing has to say so.
+	garment = BodyTypeModelsScript.GARMENT_FORMAL \
+		if str(physical_profile.get("garment", "")) \
+			== BodyTypeModelsScript.GARMENT_FORMAL \
+		else BodyTypeModelsScript.GARMENT_KIT
+	## The libero wears a contrasting shirt, which the rules demand and the away
+	## strip already is -- one rule, no second garment. Read from the role rather
+	## than from the shirt number, because the number is a rotation fact and the
+	## role is the one the kit follows.
+	is_libero = str(physical_profile.get("position_role", "")) == "Libero"
 	## Who last won the Sixnet, for the one region whose strip is a pointer
 	## rather than a pattern. Rides the same dictionary as `club_region` and
 	## for the same reason: it is something the view needs in order to draw
 	## this voli that the id cannot tell it.
 	champion_region = str(physical_profile.get("champion_region", ""))
+	kit_design_attempt = clampi(int(physical_profile.get("kit_design_attempt", -1)), -1, 2)
 	## Before the build, not after it. `_build_silhouette` draws the face, so
 	## setting the expression afterwards would build nine boxes twice on every
 	## voli on the court to change the second set.
@@ -460,6 +497,7 @@ func configure(
 		expression = chosen_face
 	_build_silhouette()
 	_apply_physical_profile(physical_profile)
+	torso_rest_scale = torso.scale
 	## Name and position. It used to read `name · 200 cm · R`, which spent both
 	## its fields on things the body already shows -- height in how tall the rig
 	## is drawn, handedness in which arm swings -- and never said who this voli
@@ -471,6 +509,136 @@ func configure(
 	identity_label.visible = false
 	apply_ui_palette(false)
 	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+
+
+## The centre of the forearm surface that a reception or dig is visibly played
+## from, read from the posed rig itself. Body types do not share arm proportions
+## (the modelled spread is about twenty centimetres), so callers must not replace
+## this with a universal reach constant.
+func platform_contact_world_position() -> Vector3:
+	_ensure_node_bindings()
+	return (_hand_world_position(left_arm) + _hand_world_position(right_arm)) * 0.5
+
+
+## The ball-centre anchor for a contact, read after the real action pose has
+## written every shoulder and elbow. There is deliberately no reach table here:
+## silhouette, height, wingspan, handedness, posture, facing and phase have
+## already changed these node transforms by the time this is called.
+func contact_anchor_world_position(
+	event_type: int, action_context: Dictionary = {}
+) -> Vector3:
+	_ensure_node_bindings()
+	var left_hand := _hand_world_position(left_arm)
+	var right_hand := _hand_world_position(right_arm)
+	match event_type:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
+			return (left_hand + right_hand) * 0.5
+		RallyEventModel.EventType.SET:
+			if str(action_context.get("set_posture_reason", "")) \
+					== "under the hands":
+				return (left_hand + right_hand) * 0.5
+			return (left_hand + right_hand) * 0.5
+		RallyEventModel.EventType.SERVE, RallyEventModel.EventType.ATTACK:
+			return left_hand if dominant_hand == "Left" else right_hand
+		RallyEventModel.EventType.BLOCK:
+			if block_arms == &"left":
+				return left_hand
+			if block_arms == &"right":
+				return right_hand
+			return (left_hand + right_hand) * 0.5
+	return global_position
+
+
+func _hand_world_position(arm: Node3D) -> Vector3:
+	if arm == null:
+		return global_position
+	var elbow := arm.get_node_or_null("Elbow") as Node3D
+	if elbow == null:
+		return arm.global_position
+	var forearm_length := arm_bone_lengths.y * arm_length_scale
+	return elbow.global_transform * Vector3(0.0, -forearm_length, 0.0)
+
+
+## Raise or lower the joined forearms until their real rendered surface reaches
+## the ball's authoritative contact height. This is solved against node
+## transforms, not a silhouette table: the six models have different shoulders,
+## arms and scale, and the numerical slope automatically includes all of them.
+func fit_platform_contact_height(target_height_meters: float) -> void:
+	fit_contact_anchor_height(
+		RallyEventModel.EventType.RECEPTION, target_height_meters, {}
+	)
+
+
+## Fit the relevant posed limb endpoints to the simulator's contact height.
+## This solves the rig already on screen; it does not alter the ball, event
+## time, jump height or body destination. Horizontal placement is measured only
+## after this fit, because changing an arm angle changes both height and reach.
+func fit_contact_anchor_height(
+	event_type: int,
+	target_height_meters: float,
+	action_context: Dictionary = {},
+) -> void:
+	_ensure_node_bindings()
+	var arms: Array[Node3D] = []
+	match event_type:
+		RallyEventModel.EventType.SERVE, RallyEventModel.EventType.ATTACK:
+			arms.append(left_arm if dominant_hand == "Left" else right_arm)
+		RallyEventModel.EventType.BLOCK:
+			if block_arms != &"right":
+				arms.append(left_arm)
+			if block_arms != &"left":
+				arms.append(right_arm)
+		_:
+			arms.assign([left_arm, right_arm])
+	if arms.is_empty():
+		return
+	var platform_contact := event_type in [
+		RallyEventModel.EventType.RECEPTION,
+		RallyEventModel.EventType.DIG,
+		RallyEventModel.EventType.ATTACK_COVERAGE,
+	] or event_type == RallyEventModel.EventType.SET \
+		and str(action_context.get("set_posture_reason", "")) == "under the hands"
+	var joints: Array[Node3D] = []
+	for arm in arms:
+		joints.append(arm)
+		if not platform_contact:
+			var elbow := arm.get_node_or_null("Elbow") as Node3D
+			if elbow != null:
+				joints.append(elbow)
+	for _iteration in 8:
+		var current := contact_anchor_world_position(event_type, action_context)
+		var error := target_height_meters - current.y
+		if absf(error) < 0.001:
+			return
+		const PROBE_DEGREES: float = 0.5
+		var slopes: Array[float] = []
+		var slope_squared := 0.0
+		for joint in joints:
+			var before := joint.rotation_degrees
+			joint.rotation_degrees.x += PROBE_DEGREES
+			var slope := (
+				contact_anchor_world_position(event_type, action_context).y - current.y
+			) / PROBE_DEGREES
+			joint.rotation_degrees = before
+			slopes.append(slope)
+			slope_squared += slope * slope
+		if slope_squared < 0.00000001:
+			return
+		for index in range(joints.size()):
+			var correction := clampf(
+				error * slopes[index] / slope_squared, -18.0, 18.0
+			)
+			joints[index].rotation_degrees.x += correction
+	## A few authored silhouettes have a shorter drawable arm chain than the
+	## simulation reach carried by the same physical profile. Once the relevant
+	## joints have reached their closest pose, translate the posed body by the
+	## exact residual. This is still derived body placement around a fixed ball,
+	## not a second contact height; it is most often the airborne part of a jump
+	## and remains measurable on grounded sets in the anchor probe.
+	var residual := target_height_meters - contact_anchor_world_position(
+		event_type, action_context
+	).y
+	body_pivot.position.y += residual
 
 
 ## Every mesh in the rig, and the subset the arms are made of.
@@ -536,9 +704,31 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 			ink_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			ink_material.cull_mode = BaseMaterial3D.CULL_FRONT
 			ink_material.grow = true
-			ink_material.grow_amount = ink_metres \
-				if str(mesh.name) in INK_BODY_PARTS else crown_ink_metres
+			ink_material.grow_amount = _ink_weight_for(mesh)
 			ink.material_override = ink_material
+
+
+## How heavy a line this mesh takes.
+##
+## **The body models already say, and nothing was reading it.** Nine parts are
+## authored `"ink": "body"` in `body_type_models.gd` -- every muzzle, the nose,
+## the crown -- and it reaches the node as metadata. The weight was chosen from
+## `INK_BODY_PARTS` instead, a list of *names*, and not one authored part name is
+## in it. So every part that declared itself body took the 0.030 m cosmetic line.
+##
+## Measured before changing: `tools/body_ink_weight.tscn` reports the nose at
+## 0.042 to 0.064 m across against a 0.030 m hull each side -- ratio 0.71 on
+## Simi, 0.92 on Cani, 0.96 on Feli. Majority outline, which is the same
+## arithmetic that made a Feli eye 0.053 m wide render at 0.113 m and produce the
+## speckle the face pass removed.
+##
+## The name list stays as the fallback, because it is right about the parts it
+## names and its own comment explains why it is a closed set. This only stops it
+## overriding a part that stated its own weight.
+static func _ink_weight_for(mesh: MeshInstance3D) -> float:
+	if str(mesh.get_meta("ink", "")) == "body":
+		return ink_metres
+	return ink_metres if str(mesh.name) in INK_BODY_PARTS else crown_ink_metres
 
 
 func apply_ui_palette(light_mode: bool) -> void:
@@ -564,6 +754,19 @@ func apply_ui_palette(light_mode: bool) -> void:
 	if not club_region.is_empty():
 		team_color = RegionalKitsScript.kit_for(club_region) if is_home_team \
 			else RegionalKitsScript.away_kit()
+	## The libero, in the one hue on the court that is already guaranteed to
+	## contrast with the home strip. The rules want a shirt a referee can pick
+	## out; the away kit is that shirt and it exists, so this costs one line
+	## rather than a seventh cut.
+	if is_libero and is_home_team:
+		team_color = RegionalKitsScript.away_kit()
+	## **A manager is not wearing a strip.** Formal dress is a neutral that is
+	## deliberately not the club's hue: a manager is attached to a club without
+	## being one of its players, and dressing them in its colour is the category
+	## error a viewer reads instantly. The club appears on them as a mark, which
+	## `_build_kit_marks` still places, rather than as the garment.
+	if garment == BodyTypeModelsScript.GARMENT_FORMAL:
+		team_color = FORMAL_COLOR
 	var accent_color := UIPalette.color(
 		&"accent" if is_home_team else &"ink", light_mode
 	)
@@ -575,7 +778,15 @@ func apply_ui_palette(light_mode: bool) -> void:
 	var wears_kit := str(silhouette.get("torso_material", "kit")) == "kit"
 	## Hoisted above both limb loops: the shoulder and the hip are dressed in
 	## separate scopes and one of them cannot see the other's locals.
-	var dressed := wears_kit and BodyTypeModelsScript.draw_garments
+	##
+	## **Two facts, and this flag used to be both.** `wears_kit` says whether the
+	## *torso* is the strip's colour, which a produce's never is because the
+	## produce is the body. `dressed` says whether this voli is wearing garments
+	## at all -- and every body is, because `_add_garments` runs for all six and
+	## a produce now has a singlet cut to its own profile. Conflating them left a
+	## Vegi with sleeves, shorts and trousers hanging off skin-coloured shoulder,
+	## hip and knee joints: the joints a garment covers, left bare.
+	var dressed := BodyTypeModelsScript.draw_garments
 	_apply_material_color(torso, team_color if wears_kit else skin_color)
 	_build_kit_marks(wears_kit)
 	_apply_material_color(head, skin_color)
@@ -612,15 +823,36 @@ func apply_ui_palette(light_mode: bool) -> void:
 		_paint_joint(
 			leg, shorts_colour(team_color) if dressed else skin_color
 		)
-		_paint_joint(leg.get_node("Knee"), skin_color)
+		## **The knee is inside the trouser and outside the shorts.**
+		##
+		## The same rule the hip already follows, one joint down: a garment that
+		## crosses a joint has to include it, or the ball between its two halves
+		## is a patch of bare skin where the leg bends. Shorts end above the knee,
+		## so on a kit this stays skin and always did -- which is why the question
+		## only arrived with the trouser.
+		_paint_joint(
+			leg.get_node("Knee"),
+			shorts_colour(team_color) if dressed
+				and garment == BodyTypeModelsScript.GARMENT_FORMAL
+			else skin_color
+		)
 		_apply_material_color(leg.get_node("Knee/Shoe"), team_color.darkened(0.55))
 	## A face has to read on a pale turnip and on a near-black aubergine, so the
 	## colour is chosen against the skin's luminance rather than being one ink
 	## that happens to suit the first body type tried.
 	var face_color := Color("18131f") if skin_color.get_luminance() > 0.30 \
 		else Color("f6eddc")
+	## The pupil takes the other one. Both inks already exist and one of them is
+	## always the wrong choice for this skin -- which is exactly what makes it the
+	## right choice for a mark that has to read *against* the eye. No third colour
+	## to check against six skins and fourteen strips.
+	var pupil_color := Color("f6eddc") if face_color == Color("18131f") \
+		else Color("18131f")
 	for feature in _face_features():
-		_apply_material_color(feature, face_color)
+		_apply_material_color(
+			feature,
+			pupil_color if str(feature.name).begins_with("Pupil") else face_color,
+		)
 	for cosmetic in _cosmetics():
 		var part_alpha := float(cosmetic.get_meta("alpha", 1.0))
 		match str(cosmetic.get_meta("color_key", "skin")):
@@ -635,6 +867,19 @@ func apply_ui_palette(light_mode: bool) -> void:
 			"shorts":
 				_apply_material_color(
 					cosmetic, shorts_colour(team_color), part_alpha
+				)
+			## A formal shirt and its trousers. Two keys rather than reusing
+			## `kit`/`shorts` because those derive from the club's strip, and the
+			## whole point of formal dress is that it does not.
+			"formal":
+				_apply_material_color(cosmetic, FORMAL_COLOR, part_alpha)
+			## Through `shorts_colour`, not a second darkening of its own. The two
+			## were 0.38 and 0.34, which is invisible on a trouser leg and a band
+			## at the knee -- the joint takes this colour too, and a joint that is
+			## nearly the trouser is worse than one that is obviously not.
+			"formal_dark":
+				_apply_material_color(
+					cosmetic, shorts_colour(FORMAL_COLOR), part_alpha
 				)
 			"trim":
 				_apply_material_color(cosmetic, trim_colour(), part_alpha)
@@ -658,6 +903,12 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		).length()
 		if travelled > 0.0001:
 			_heading_travel_accumulator += world_delta
+			action_movement_direction = Vector2(
+				world_delta.x, world_delta.z
+			).normalized()
+			_signature_movement_frame = Engine.get_process_frames()
+			if signature_surge != null:
+				signature_surge.action_direction = action_movement_direction
 		else:
 			_heading_travel_accumulator = Vector3.ZERO
 		## Speed, smoothed, before anything reads it.
@@ -702,6 +953,8 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			_plant_active[_PLANT_RIGHT] = false
 			ground_speed_mps = 0.0
 			_heading_travel_accumulator = Vector3.ZERO
+			action_movement_direction = Vector2.ZERO
+			_signature_movement_frame = -1
 			has_world_position = true
 			tactical_position = position
 			## Still moved. Skipping this is a body that never arrives where it
@@ -2409,6 +2662,97 @@ func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> Vector2:
 ## already crossing the net. Elevation was continuous across that boundary and
 ## only the arms teleported, which is why it read as a broken limb rather than a
 ## timing error.
+func _apply_torso_deformation(
+	event_type: int, phase: float, is_contact_actor: bool,
+	contact_direction: Vector2,
+) -> void:
+	torso.scale = torso_rest_scale
+	torso.rotation = Vector3.ZERO
+	if not is_contact_actor:
+		return
+	var compression := 0.0
+	var extension := 0.0
+	match event_type:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
+			compression = smoothstep(-0.35, 0.18, phase) * (1.0 - smoothstep(0.55, 1.0, phase))
+		RallyEventModel.EventType.SET:
+			compression = 1.0 - smoothstep(-0.45, 0.05, phase)
+			extension = smoothstep(-0.08, 0.55, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
+		RallyEventModel.EventType.ATTACK:
+			compression = smoothstep(-0.78, -0.48, phase) * (1.0 - smoothstep(-0.30, -0.04, phase))
+			extension = smoothstep(-0.30, 0.02, phase) * (1.0 - smoothstep(0.48, 0.92, phase))
+		RallyEventModel.EventType.BLOCK:
+			compression = 1.0 - smoothstep(-0.58, -0.18, phase)
+			extension = smoothstep(-0.28, 0.08, phase) * (1.0 - smoothstep(0.55, 0.95, phase))
+		RallyEventModel.EventType.SERVE:
+			compression = smoothstep(-0.75, -0.38, phase) * (1.0 - smoothstep(-0.18, 0.04, phase))
+			extension = smoothstep(-0.24, 0.04, phase) * (1.0 - smoothstep(0.50, 0.90, phase))
+	var response := _body_motion_response()
+	var vertical := 1.0 - 0.10 * compression * response + 0.085 * extension * response
+	var width := 1.0 + 0.07 * compression * response - 0.045 * extension * response
+	torso.scale = Vector3(
+		torso_rest_scale.x * width,
+		torso_rest_scale.y * vertical,
+		torso_rest_scale.z * width,
+	)
+	var handed := -1.0 if dominant_hand == "Left" else 1.0
+	var action_roll := 0.0
+	if event_type in [RallyEventModel.EventType.ATTACK, RallyEventModel.EventType.SERVE]:
+		action_roll = handed * (extension - compression * 0.35) * 4.5 * response
+	elif event_type in [RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE]:
+		action_roll = clampf(contact_direction.x, -1.0, 1.0) * compression * 5.0 * response
+	torso.rotation.z = deg_to_rad(action_roll)
+
+
+func _body_motion_response() -> float:
+	match body_type:
+		"Feli", "Simi": return 1.18
+		"Avi": return 1.10
+		"Cani": return 0.96
+		"Ursi": return 0.78
+		"Vegi": return 1.12 if produce in ["Stalk", "Aubergine"] else 0.92
+	return 1.0
+
+
+## Secondary weight shift belongs to the whole toy, not only the torso mesh.
+## The primary biomechanics still own every joint; this adds the small opposing
+## lean that makes anticipation load one side and follow-through finish on the
+## other. It is deliberately a single-body curve, not an anatomical spine.
+func _apply_secondary_body_motion(
+	event_type: int, phase: float, contact_direction: Vector2,
+	action_context: Dictionary,
+) -> void:
+	var response := _body_motion_response()
+	var handed := -1.0 if dominant_hand == "Left" else 1.0
+	var roll_degrees := 0.0
+	var lateral_shift := 0.0
+	match event_type:
+		RallyEventModel.EventType.ATTACK:
+			var load := smoothstep(-0.78, -0.42, phase) * (1.0 - smoothstep(-0.22, 0.02, phase))
+			var follow := smoothstep(-0.12, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
+			roll_degrees = handed * (-4.5 * load + 7.5 * follow)
+			lateral_shift = handed * (-0.018 * load + 0.030 * follow)
+		RallyEventModel.EventType.SERVE:
+			var coil := smoothstep(-0.72, -0.34, phase) * (1.0 - smoothstep(-0.12, 0.08, phase))
+			var release := smoothstep(-0.14, 0.16, phase) * (1.0 - smoothstep(0.62, 0.94, phase))
+			roll_degrees = handed * (-3.5 * coil + 6.0 * release)
+			lateral_shift = handed * 0.020 * (release - coil)
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
+			var commit := smoothstep(-0.30, 0.18, phase) * (1.0 - smoothstep(0.70, 1.0, phase))
+			roll_degrees = clampf(contact_direction.x, -1.0, 1.0) * 6.5 * commit
+			lateral_shift = clampf(contact_direction.x, -1.0, 1.0) * 0.026 * commit
+		RallyEventModel.EventType.SET:
+			var release := smoothstep(-0.18, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
+			var back := -1.0 if bool(action_context.get("back_set", false)) else 1.0
+			roll_degrees = back * handed * 2.8 * release
+		RallyEventModel.EventType.BLOCK:
+			var press := smoothstep(-0.25, 0.10, phase) * (1.0 - smoothstep(0.58, 0.92, phase))
+			if block_arms != &"two":
+				roll_degrees = (1.0 if contact_direction.x > 0.0 else -1.0) * 4.0 * press
+	body_pivot.rotation.z += deg_to_rad(roll_degrees * response)
+	body_pivot.position.x += lateral_shift * response * body_height_scale
+
+
 func set_pose(
 	event_type: int,
 	elevation: float,
@@ -2437,6 +2781,7 @@ func set_pose(
 	body_pivot.position = Vector3(0.0, lift + locomotion_bob, 0.0)
 	body_pivot.rotation = Vector3(float(gait.torso_pitch_radians), 0.0, 0.0)
 	body_pivot.scale = Vector3.ONE * body_height_scale
+	_apply_torso_deformation(event_type, phase, is_contact_actor, contact_direction)
 	left_arm.rotation_degrees = Vector3(float(gait.left_arm_degrees), 0.0, -12.0)
 	right_arm.rotation_degrees = Vector3(float(gait.right_arm_degrees), 0.0, 12.0)
 	left_arm.position = Vector3(-shoulder_offset.x, shoulder_offset.y, 0.0)
@@ -2557,6 +2902,16 @@ func set_pose(
 		## front of the hips. `body_pivot.position.y` already carries the jump, so
 		## the anchor rises with it rather than being a constant.
 		signature_surge.contact_anchor_meters = _signature_anchor_height(event_type)
+		## The gallery can assign this directly; live playback cannot. Prefer the
+		## body's displacement from the movement plan in this frame, falling back
+		## to the resolved action/contact direction when the body is planted. This
+		## keeps leftward and along-court trails on the side the action actually
+		## came from instead of every cue inheriting SignatureSurge3D's +X default.
+		var signature_direction := action_movement_direction \
+			if _signature_movement_frame == Engine.get_process_frames() \
+			else contact_direction
+		if signature_direction.length_squared() > 0.0001:
+			signature_surge.action_direction = signature_direction.normalized()
 		signature_surge.set_cue(
 			signature_move, signature_charge,
 			bool(action_context.get("signature_succeeded", false)), phase,
@@ -2839,6 +3194,10 @@ func set_pose(
 			## ready posture a blocker waits in.
 			_set_elbow(left_arm, float(wall.elbow_degrees))
 			_set_elbow(right_arm, float(wall.elbow_degrees))
+	## Last, after the primary joint solution, so anticipation and follow-through
+	## shift the completed toy-body silhouette instead of fighting the action's
+	## biomechanics for ownership of individual limbs.
+	_apply_secondary_body_motion(event_type, phase, contact_direction, action_context)
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)
@@ -2877,7 +3236,7 @@ func set_pose(
 func _build_kit_marks(wears_kit: bool) -> void:
 	for existing in _kit_marks():
 		existing.queue_free()
-	if club_region.is_empty() or not wears_kit or torso == null:
+	if club_region.is_empty() or torso == null:
 		return
 	var trim := trim_colour()
 	## Where a mark actually sits on the shirt.
@@ -2919,27 +3278,74 @@ func _build_kit_marks(wears_kit: bool) -> void:
 	## pose and needs no knowledge of where the garment was built.
 	var arm_spec: Dictionary = silhouette.get("arm", {})
 	var leg_spec: Dictionary = silhouette.get("leg", {})
+	var arm_radius := float(arm_spec.get("top_radius", 0.07))
+	var leg_radius := float(leg_spec.get("top_radius", 0.11))
+	## Marks sit on the garment, not the limb under it. `_add_garments` builds a
+	## flared shell from the clearing radius; using the naked limb radius here
+	## buried every sleeve/shorts motif inside that shell, most visibly on Vegi
+	## where those are the only regional surfaces. Use the middle of each flare,
+	## which is the surface the authored mark spans.
+	var sleeve_surface := BodyTypeModelsScript._clearing_radius(arm_radius, 1.30) * 1.32
+	var shorts_surface := BodyTypeModelsScript._clearing_radius(leg_radius, 1.28) * 1.34
 	var places := {
 		"torso": [[torso, torso_radius]],
 		"sleeves": [
-			[left_arm, float(arm_spec.get("top_radius", 0.07))],
-			[right_arm, float(arm_spec.get("top_radius", 0.07))],
+			[left_arm, sleeve_surface],
+			[right_arm, sleeve_surface],
 		],
 		"legs": [
-			[left_leg, float(leg_spec.get("top_radius", 0.11))],
-			[right_leg, float(leg_spec.get("top_radius", 0.11))],
+			[left_leg, shorts_surface],
+			[right_leg, shorts_surface],
 		],
+	}
+	## RegionalKits authors against the reference cut, while the current body
+	## system changes the cut itself. Scale the drawing in the garment's frame so
+	## a full-height column stays full-height on Avi and Ursi, and an outer panel
+	## stays at the same longitude on narrow and broad torsos. The host node's
+	## later pose/physical scaling is inherited normally; these factors account
+	## only for differences in the authored body geometry.
+	var place_scale := {
+		"torso": Vector2(torso_radius / 0.28, float(torso_spec.get("height", 0.9)) / 0.9),
+		"band": Vector2(torso_radius / 0.28, float(torso_spec.get("height", 0.9)) / 0.9),
+		"sleeves": Vector2(
+			float(arm_spec.get("top_radius", 0.07)) / 0.07,
+			float(arm_spec.get("height", 0.84)) / 0.84
+		),
+		"legs": Vector2(
+			float(leg_spec.get("top_radius", 0.11)) / 0.11,
+			float(leg_spec.get("height", 0.66)) / 0.66
+		),
 	}
 	## A darker relative of the trim, for a rule that has to read *against* the
 	## trim rather than against the shirt -- the edging on a heritage band.
 	var shade := trim.darkened(0.42)
 	var lane := 0
-	for mark in RegionalKitsScript.marks_for(club_region, champion_region):
+	for mark in RegionalKitsScript.marks_for(
+		club_region, champion_region, kit_design_attempt
+	):
 		lane += 1
-		var at: Vector3 = mark[1]
 		var roll := float(mark[2]) if mark.size() > 2 else 0.0
 		var place := str(mark[3]) if mark.size() > 3 else "torso"
 		var profile: Dictionary = mark[4] if mark.size() > 4 else {}
+		## Vegi keep produce as their torso, but their sleeves and shorts are still
+		## garments. Suppress only marks that would paint the produce itself; the
+		## previous early return also erased the real garment marks and made every
+		## regional Vegi identical.
+		if not wears_kit and place in ["torso", "band"]:
+			continue
+		var garment_scale: Vector2 = place_scale.get(place, place_scale["torso"])
+		var source_size: Vector3 = mark[0]
+		var source_at: Vector3 = mark[1]
+		var size := Vector3(
+			source_size.x * garment_scale.x,
+			source_size.y * garment_scale.y,
+			source_size.z,
+		)
+		var at := Vector3(
+			source_at.x * garment_scale.x,
+			source_at.y * garment_scale.y,
+			source_at.z,
+		)
 		var ink := shade if str(profile.get("ink", "trim")) == "shade" else trim
 		## A band rings the whole body, so it is built once rather than per face.
 		if place == "band":
@@ -2950,22 +3356,50 @@ func _build_kit_marks(wears_kit: bool) -> void:
 			## enough to matter reaches into the caps, and a straight-sided ring
 			## there stands off the shirt at its lower edge.
 			var band_semi := float(torso_spec.get("height", 0.9)) * 0.5
-			var half := float(mark[0].y) * 0.5
+			var half := size.y * 0.5
 			ring.mesh = BodyTypeModelsScript.build_mesh({
 				"shape": "cylinder",
-				"top_radius": float(mark[0].z) + BodyTypeModelsScript._torso_radius_at(
+				"top_radius": size.z + BodyTypeModelsScript._torso_radius_at(
 					torso_spec, (at.y + half) / maxf(band_semi, 0.001)
 				),
-				"bottom_radius": float(mark[0].z) + BodyTypeModelsScript._torso_radius_at(
+				"bottom_radius": size.z + BodyTypeModelsScript._torso_radius_at(
 					torso_spec, (at.y - half) / maxf(band_semi, 0.001)
 				),
-				"height": float(mark[0].y),
+				"height": size.y,
 			})
 			ring.position = Vector3(0.0, at.y, 0.0)
 			ring.set_meta("kit_mark", true)
 			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			torso.add_child(ring)
 			_apply_material_color(ring, ink)
+			continue
+		## Limb garments are short, narrow cylinders that rotate aggressively with
+		## the pose. A front/back patch on one has almost no projected area once the
+		## arm turns, and on Vegi that erased the only regional construction they
+		## wear. Wrap limb motifs around the garment instead. Their authored height,
+		## count and spacing still distinguish a cuff rule, a broad sponsor tab, a
+		## stack of Spëddigh pulses and a long Pāwa continuation, while the ring
+		## remains readable from every volleyball pose.
+		if place in ["sleeves", "legs"]:
+			if at.z < 0.0:
+				continue
+			for host in Array(places[place]):
+				var parent := host[0] as Node3D
+				if parent == null:
+					continue
+				var limb_ring := MeshInstance3D.new()
+				limb_ring.mesh = BodyTypeModelsScript.build_mesh({
+					"shape": "cylinder",
+					"top_radius": float(host[1]) + size.z,
+					"bottom_radius": float(host[1]) + size.z,
+					"height": size.y,
+				})
+				limb_ring.position = Vector3(0.0, at.y, 0.0)
+				limb_ring.set_meta("kit_mark", true)
+				limb_ring.set_meta("kit_mark_lane", lane)
+				limb_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				parent.add_child(limb_ring)
+				_apply_material_color(limb_ring, ink)
 			continue
 		## **A mark is a shape down its own length, not one rectangle.**
 		##
@@ -3003,7 +3437,7 @@ func _build_kit_marks(wears_kit: bool) -> void:
 			## curve. None of them was it, and `build_surface_patch` records what
 			## was: a stack of flat boxes stepping down a curved body shows the
 			## top face of every step. The depth is just a depth again.
-			var proud := float(mark[0].z)
+			var proud := size.z
 			var on_torso := place == "torso"
 			var torso_semi := float(torso_spec.get("height", 0.9)) * 0.5
 			## **The angle is fixed once, at the mark's own middle.**
@@ -3044,7 +3478,7 @@ func _build_kit_marks(wears_kit: bool) -> void:
 			## Enough rows that no quad is longer than `PATCH_STEP`, and never fewer
 			## than the profile asked for.
 			var rows := clampi(
-				maxi(segments, int(ceil(float(mark[0].y) / 0.028))), 2, 28
+				maxi(segments, int(ceil(size.y / 0.028))), 2, 28
 			)
 			var patch: Array = []
 			for row in range(rows + 1):
@@ -3063,10 +3497,10 @@ func _build_kit_marks(wears_kit: bool) -> void:
 				var along := float(row) / float(rows)
 				## Symmetric about the middle, for the taper.
 				var from_end := 1.0 - absf(along - 0.5) * 2.0
-				var width := float(mark[0].x) \
+				var width := size.x \
 					* lerpf(1.0, waist, along) \
 					* lerpf(taper, 1.0, from_end)
-				var row_y := at.y + float(mark[0].y) * (0.5 - along)
+				var row_y := at.y + size.y * (0.5 - along)
 				## The radius is read at the row's own height, because the body has
 				## narrowed by the time a long mark reaches its ends and a mark held
 				## at the middle radius would hang off it.
@@ -3076,7 +3510,8 @@ func _build_kit_marks(wears_kit: bool) -> void:
 					) if on_torso else float(host[1])
 				)
 				var theta := asin(clampf(
-					(at.x + bow * along) / maxf(reference_radius, 0.001), -1.0, 1.0
+					(at.x + bow * garment_scale.x * along) \
+						/ maxf(reference_radius, 0.001), -1.0, 1.0
 				))
 				## A roll is a **shear along the surface**, not a slab tipped in
 				## front of it. Rotating the mesh tilted its whole plane off the
@@ -3146,6 +3581,13 @@ func _apply_material_color(
 
 func _apply_physical_profile(profile: Dictionary) -> void:
 	height_cm = clampf(float(profile.get("height_cm", REFERENCE_HEIGHT_CM)), 150.0, 220.0)
+	## Mass is interpreted relative to height, so 82 kg means something different
+	## on a 160 cm and a 210 cm player. Missing mass deliberately lands at the
+	## reference build for that height, preserving every older portrait caller.
+	var expected_mass := 82.0 * pow(height_cm / REFERENCE_HEIGHT_CM, 2.0)
+	mass_kg = clampf(float(profile.get("mass_kg", expected_mass)), 45.0, 145.0)
+	var mass_girth := clampf(pow(mass_kg / maxf(expected_mass, 1.0), 0.35), 0.88, 1.14)
+	var limb_girth := lerpf(1.0, mass_girth, 0.58)
 	wingspan_cm = clampf(float(profile.get("wingspan_cm", REFERENCE_WINGSPAN_CM)), 150.0, 235.0)
 	stride_length_m = clampf(float(profile.get("stride_length_m", 0.83)), 0.55, 1.15)
 	## Scale the silhouette so its own stated height becomes this player's real
@@ -3193,15 +3635,17 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	var leg_gain := leg_span * (leg_length_scale - 1.0)
 	var hip_y := hip_offset.y + leg_gain
 	for leg in [left_leg, right_leg]:
-		leg.scale.y = leg_length_scale
+		leg.scale = Vector3(limb_girth, leg_length_scale, limb_girth)
 		leg.position.y = hip_y
 	var crown := float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M))
 	var upper_span := maxf(crown - hip_offset.y, 0.1)
 	var squeeze := clampf((upper_span - leg_gain) / upper_span, 0.55, 1.45)
 	for part in [torso, head]:
 		part.position.y = hip_y + (part.position.y - hip_offset.y) * squeeze
-	torso.scale.y = squeeze
+	torso.scale = Vector3(mass_girth, squeeze, mass_girth)
+	_seat_collar()
 	for arm in [left_arm, right_arm]:
+		arm.scale = Vector3(limb_girth, 1.0, limb_girth)
 		arm.position.y = hip_y + (arm.position.y - hip_offset.y) * squeeze
 	shoulder_offset.y = hip_y + (shoulder_offset.y - hip_offset.y) * squeeze
 	hip_offset.y = hip_y
@@ -3268,6 +3712,18 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
 		fore_mesh.scale.y = arm_length_scale
 		fore_mesh.position.y = -fore_length * 0.5 * arm_length_scale
+		## **Cosmetics on a bone are part of that bone.** This scaled `Mesh`,
+		## `Elbow` and the forearm and stopped, so an Avi with a non-unit arm ratio
+		## grew a limb out from under its own wing -- the fans stayed the length
+		## they were authored while the arm they grow from did not. Only sibling
+		## cosmetics of the two arm bones are touched; everything else on the body
+		## is scaled by its own rule or by none.
+		for bone in [arm, elbow]:
+			for child in bone.get_children():
+				var fan := child as MeshInstance3D
+				if fan == null or not fan.has_meta("cosmetic"):
+					continue
+				fan.scale.y = arm_length_scale
 	identity_label.position.y = (
 		float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M)) + 0.26
 	) * body_height_scale
@@ -3297,7 +3753,9 @@ func _ensure_node_bindings() -> void:
 ## an aubergine without a branch anywhere in the animation code.
 func _build_silhouette() -> void:
 	_ensure_node_bindings()
-	silhouette = BodyTypeModelsScript.silhouette(body_type, player_id, appearance)
+	var choices := appearance.duplicate()
+	choices["garment"] = garment
+	silhouette = BodyTypeModelsScript.silhouette(body_type, player_id, choices)
 	produce = str(silhouette.get("produce", ""))
 	shoulder_offset = silhouette.get("shoulder", Vector2(0.40, 1.52))
 	hip_offset = silhouette.get("hip", Vector2(0.16, 0.48))
@@ -3452,7 +3910,11 @@ func _paint_joint(bone: Node, color: Color) -> void:
 ## `static var` so the two candidates -- drop the die cut, or thicken the line so
 ## it survives the quantiser -- can be rendered against each other rather than
 ## argued about.
-static var ink_metres: float = 0.018
+## NOTE the body weight lives in body_type_models.gd because the garments have to
+## NOTE clear it -- GARMENT_INK_CLEARANCE.md. This is the same number, read.
+static var ink_metres: float:
+	get: return BodyTypeModelsScript.body_ink_metres
+	set(value): BodyTypeModelsScript.body_ink_metres = value
 static var crown_ink_metres: float = 0.030
 const INK_COLOR := Color(0.06, 0.07, 0.10)
 ## Everything else is a cosmetic and takes the heavier line. Named as the body
@@ -3489,6 +3951,13 @@ func _ink_node(node: Node) -> void:
 	## The shadow and the focus ring are marks on the floor, not parts of a body.
 	if mesh_instance == shadow or mesh_instance == focus_ring:
 		return
+	## **A part that is already a line does not get a line round it.** A whisker is
+	## four millimetres thick and the hull is thirty, so inking one produces a
+	## black rod eight times its own width -- the same failure the nose hit at a
+	## quarter of a muzzle, and the mouth hit seven times over. Where a cosmetic is
+	## drawn *as* the stroke, the stroke is the geometry.
+	if str(mesh_instance.get_meta("ink", "")) == "none":
+		return
 	var existing := mesh_instance.get_node_or_null("Ink") as MeshInstance3D
 	var twin := existing if existing != null else MeshInstance3D.new()
 	if existing == null:
@@ -3500,9 +3969,54 @@ func _ink_node(node: Node) -> void:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.cull_mode = BaseMaterial3D.CULL_FRONT
 	material.grow = true
-	material.grow_amount = ink_metres \
-		if str(mesh_instance.name) in INK_BODY_PARTS else crown_ink_metres
+	## **Name first, then an explicit exception.** The name rule is right by
+	## default and the comment above says why: the body is a closed set and the
+	## cosmetics are not, so an unlisted part should take the heavier crown line
+	## unasked. It is wrong for exactly one thing so far -- the Avi wing fans,
+	## which are the largest cosmetic in the game rather than the smallest, and
+	## which read as separate objects precisely because a 30 mm contour announced
+	## them as such. An opt-in meta keeps the default and admits the exception.
+	var heavy := str(mesh_instance.name) not in INK_BODY_PARTS
+	if mesh_instance.has_meta("ink"):
+		heavy = str(mesh_instance.get_meta("ink")) != "body"
+	material.grow_amount = crown_ink_metres if heavy else ink_metres
 	twin.material_override = material
+
+
+## Put the collar on top of the shirt the rig actually drew.
+##
+## `_add_garments` places it from `torso_y + torso.height * 0.5`, which describes
+## a nominal capsule. Two things then move underneath it: a Vegi's torso is a
+## lathed produce whose mesh overshoots that height, and `_apply_physical_profile`
+## has just scaled the torso by mass girth and squeeze, which the collar does not
+## inherit because it hangs off `BodyPivot` rather than off the torso.
+##
+## Measured before this existed: the collar's top sat 20 mm inside the drawn
+## torso on Feli and 64 mm inside on Vegi, well below where that torso's 0.018 m
+## outline reaches -- the neckline dashing in
+## `docs/review/GARMENT_INK_CLEARANCE.md`.
+##
+## Owned here for the reason the shorts are: the function that knows the final
+## torso is the one that may place things against it, and two functions both
+## placing the collar is the correct-then-clobbered shape this file has been
+## bitten by repeatedly.
+func _seat_collar() -> void:
+	if torso == null or torso.mesh == null:
+		return
+	var collar := body_pivot.get_node_or_null("Collar") as MeshInstance3D
+	if collar == null or collar.mesh == null:
+		return
+	var torso_bounds := torso.mesh.get_aabb()
+	var torso_top := torso.position.y \
+		+ (torso_bounds.position.y + torso_bounds.size.y) * torso.scale.y
+	var collar_bounds := collar.mesh.get_aabb()
+	var above_origin := collar_bounds.position.y + collar_bounds.size.y
+	## One line width clear of the torso's outline, the same standoff and the
+	## same hull `BodyTypeModels._clearing_radius` sizes the sleeves against.
+	collar.position.y = maxf(
+		collar.position.y,
+		torso_top + BodyTypeModelsScript.body_ink_metres * 2.0 - above_origin,
+	)
 
 
 ## A ball at a joint, so two segments read as one limb bending.
@@ -3533,7 +4047,14 @@ func _joint_ball(bone: Node3D, radius: float, drop: float) -> void:
 ## and does not.
 func _build_cosmetics() -> void:
 	for existing in _cosmetics():
-		existing.queue_free()
+		## `configure` is a synchronous rebuild. Deferring this removal leaves the
+		## old coat in the tree while the replacement is added below, so a slider
+		## that reconfigures one preview actor can draw two copies of every Tabby
+		## bar for the rest of that frame. With one-centimetre slider steps the
+		## rebuild count looks like height parity even though height never chooses a
+		## marking. Nothing keeps a reference to these generated meshes, so remove
+		## them in the same operation that replaces them.
+		existing.free()
 	for raw_part in silhouette.get("extras", []):
 		var part: Dictionary = raw_part
 		var parent := get_node_or_null(str(part.get("parent", "BodyPivot")))
@@ -3559,6 +4080,11 @@ func _build_cosmetics() -> void:
 			instance.set_meta("color_key", str(part.get("color", "skin")))
 		if part.has("alpha"):
 			instance.set_meta("alpha", float(part.alpha))
+		## Which pen this cosmetic is drawn with, when the default is wrong for it.
+		## Absent means the name rule in `_ink_node` decides, which is what keeps
+		## a new ear or tail on the crown weight without anybody remembering.
+		if part.has("ink"):
+			instance.set_meta("ink", str(part.ink))
 		parent.add_child(instance)
 
 
@@ -3601,6 +4127,8 @@ func _build_face() -> void:
 		instance.position = part.get("position", Vector3.ZERO)
 		instance.rotation_degrees = part.get("rotation", Vector3.ZERO)
 		instance.set_meta("face", true)
+		if part.has("ink"):
+			instance.set_meta("ink", str(part.ink))
 		face.add_child(instance)
 
 
@@ -3638,6 +4166,27 @@ func _mouth_override() -> Dictionary:
 					"radius": part_radius,
 					"half_height": float(part.get("height", part_radius * 2.0)) * 0.5,
 					"scale": clampf(part_radius / maxf(head_radius, 0.001), 0.2, 1.0),
+					## **A wedge's front is a plane, so the mouth stops wrapping.**
+					## `FaceExpressions` projects onto an ellipsoid, which is right
+					## for a sphere muzzle and wrong for a snout with a flat pad:
+					## the stroke would bow away from a face that does not curve.
+					## The pad's own half-extents and its depth are published here
+					## so the seating is read off the muzzle rather than assumed.
+					"flat": str(part.get("shape", "sphere")) == "wedge",
+					"taper_width": clampf(
+						float(part.get("taper_width", 1.0)), 0.05, 1.0
+					),
+					"taper_height": clampf(
+						float(part.get("taper_height", 1.0)), 0.05, 1.0
+					),
+					"reach": float(part.get(
+						"depth", part_radius * 2.0
+					)) * 0.5,
+					## Read off the body spec rather than inferred from having a
+					## muzzle: a bear and a monkey have snouts and do not read as
+					## whiskered, so this is a per-type statement and not a
+					## consequence of geometry.
+					"whiskers": bool(silhouette.get("whiskers", false)),
 				}
 			"Beak":
 				return {"omit": true}

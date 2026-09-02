@@ -18,14 +18,14 @@ extends Resource
 ## it is drawn or what consumes it, so the clipboard can change its mind about
 ## presentation without a save migration and a consumer can arrive later.
 
-## Where the manager has dropped each voli, by roster slot, in court coordinates.
-##
-## Keyed by slot rather than by player id on purpose: a plan is a shape the club
-## plays, and it outlives the particular voli standing in position four. Signing
-## a new outside hitter should not silently empty half the sheet.
+## Where the manager has dropped each voli, by roster-tray slot, in court
+## coordinates.  Each row also carries `who: v<player id>`; the tray index is an
+## editor address while `who` is the gameplay identity.  A rotation slot is a
+## third, unrelated namespace and must never be used as the tray key.
 @export var placements: Dictionary = {}
 
-## What each voli has been told to do, keyed `"slot:phase"`.
+## What each tray row has been told to do, keyed `"tray-slot:phase"`.  Rally
+## consumers resolve that row through the placement's `who` identity.
 ##
 ## Both parts of the key are load-bearing. The same voli closes the line when
 ## blocking and digs cross when the ball comes down, so one instruction per voli
@@ -82,6 +82,81 @@ func apply_to(worksheet: Control) -> void:
 ## session or a rally can ask without instantiating a `Control`.
 func behaviour_of(slot: int, for_phase: String) -> String:
 	return str(behaviours.get("%d:%s" % [slot, for_phase], ""))
+
+
+## Resolve a tray-authored instruction by the player identity stored alongside
+## the placement.  Clipboard slots are roster-tray indices, not rotation slots;
+## treating them as interchangeable sends a call to a different player as soon
+## as the lineup rotates.  The legacy slot fallback keeps early saves readable.
+func behaviour_for_player(
+	player_id: int, for_phase: String, legacy_rotation_slot: int = -1
+) -> String:
+	var player_key := "v%d" % player_id
+	for raw_slot in placements:
+		var placement: Dictionary = placements[raw_slot] as Dictionary
+		if str(placement.get("who", "")) == player_key:
+			return behaviour_of(int(raw_slot), for_phase)
+	if legacy_rotation_slot >= 0:
+		return behaviour_of(legacy_rotation_slot, for_phase)
+	return ""
+
+
+## The authored court point for a player, still in worksheet metres.  Returning
+## a tagged dictionary distinguishes an absent mark from the valid centre point.
+func placement_for_player(player_id: int) -> Dictionary:
+	var player_key := "v%d" % player_id
+	for raw_slot in placements:
+		var placement: Dictionary = placements[raw_slot] as Dictionary
+		if str(placement.get("who", "")) == player_key:
+			return {
+				"authored": true,
+				"tray_slot": int(raw_slot),
+				"meters": Vector2(placement.get("at", Vector2.ZERO)),
+			}
+	return {"authored": false}
+
+
+func to_dict() -> Dictionary:
+	var placement_data := {}
+	for raw_slot in placements:
+		var placement: Dictionary = placements[raw_slot] as Dictionary
+		var at := Vector2(placement.get("at", Vector2.ZERO))
+		placement_data[str(int(raw_slot))] = {
+			"at": [at.x, at.y],
+			"who": str(placement.get("who", "")),
+		}
+	return {
+		"placements": placement_data,
+		"behaviours": behaviours.duplicate(true),
+		"zone_priorities": Array(zone_priorities).duplicate(),
+		"drill_zone": drill_zone,
+		"phase": phase,
+		"view": view,
+	}
+
+
+static func from_dict(data: Dictionary) -> TacticSheet:
+	var sheet := TacticSheet.new()
+	sheet.placements.clear()
+	for raw_slot in Dictionary(data.get("placements", {})):
+		var saved: Dictionary = Dictionary(data.placements[raw_slot])
+		var coordinates: Array = Array(saved.get("at", [0.0, 0.0]))
+		if coordinates.size() >= 2:
+			sheet.placements[int(raw_slot)] = {
+				"at": Vector2(float(coordinates[0]), float(coordinates[1])),
+				"who": str(saved.get("who", "")),
+			}
+	sheet.behaviours = Dictionary(data.get("behaviours", {})).duplicate(true)
+	sheet.zone_priorities.clear()
+	for value in Array(data.get("zone_priorities", [3, 2, 1, 2])):
+		sheet.zone_priorities.append(clampi(int(value), 0, 3))
+	while sheet.zone_priorities.size() < 4:
+		sheet.zone_priorities.append(0)
+	sheet.zone_priorities.resize(4)
+	sheet.drill_zone = clampi(int(data.get("drill_zone", 2)), 0, 3)
+	sheet.phase = str(data.get("phase", "Block"))
+	sheet.view = str(data.get("view", "Three quarter"))
+	return sheet
 
 
 ## Every instruction for one phase, as slot -> behaviour.

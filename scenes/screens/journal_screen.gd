@@ -1469,6 +1469,7 @@ func _refresh_inbox() -> void:
 			speaker.id, true, speaker_name, speaker.dominant_hand,
 			{
 				"height_cm": speaker.height_cm,
+				"mass_kg": speaker.mass_kg,
 				"wingspan_cm": speaker.wingspan_cm,
 				"stride_length_m": speaker.stride_length_m,
 				"body_type": speaker.body_type,
@@ -1746,6 +1747,7 @@ func _refresh_roster_actor(player) -> void:
 		player.id, true, player.display_name, player.dominant_hand,
 		{
 			"height_cm": player.height_cm,
+			"mass_kg": player.mass_kg,
 			"wingspan_cm": player.wingspan_cm,
 			"stride_length_m": player.stride_length_m,
 			"body_type": player.body_type,

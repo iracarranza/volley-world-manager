@@ -20,6 +20,13 @@ const CAPTURES := [
 	[5, "06_signature.png"],
 	[6, "save_setup.png"],
 ]
+const VIGNETTE_FILES := [
+	["02_q1_quick.png", "02_q1_read.png", "02_q1_hitter.png"],
+	["02_q2_controlled.png", "02_q2_target.png", "02_q2_aggressive.png"],
+	["02_q3_floor.png", "02_q3_read.png", "02_q3_block.png"],
+	["02_q4_reset.png", "02_q4_opportunity.png", "02_q4_pressure.png"],
+	["02_q5_structure.png", "02_q5_available.png", "02_q5_pressure.png"],
+]
 
 
 func _initialize() -> void:
@@ -38,12 +45,51 @@ func _run() -> void:
 
 	for capture in CAPTURES:
 		await _capture(screen, int(capture[0]), str(capture[1]))
+
+	## A default screenshot cannot prove that toggle text remains intact once the
+	## pressed/focus style is active. Exercise one of the narrowest body controls
+	## and one route card explicitly, then keep those frames in the same artifact.
+	screen.debug_select_body_for_render("Simi")
+	await _capture(screen, 0, "01_you_selected.png")
+	screen.debug_select_club_route_for_render("Founded")
+	await _capture(screen, 3, "04_club_selected.png")
+
+	## A screenshot taken immediately after changing an animated vignette mostly
+	## proves that all fifteen share a starting state. Freeze each Q1-Q5 option at
+	## the same late decision/consequence fraction instead, so the artifact proves
+	## whether the tactical distinctions are actually visible on the court.
+	for question_index in range(VIGNETTE_FILES.size()):
+		for choice_index in range(3):
+			screen.debug_show_volleyball_question_for_render(question_index, choice_index)
+			await process_frame
+			await process_frame
+			var preview := screen.get("_volleyball_preview") as Node
+			if preview != null:
+				preview.process_mode = Node.PROCESS_MODE_DISABLED
+				preview.call("_apply_frame", 0.72)
+			await _capture_current(str(VIGNETTE_FILES[question_index][choice_index]))
+			if preview != null:
+				preview.process_mode = Node.PROCESS_MODE_INHERIT
+
+	## Keep the end of the nested sequence and the section-level review in the
+	## same artifact as navigation evidence.
+	screen.debug_show_volleyball_question_for_render(5, 2)
+	await _capture_current("02_volleyball_q6_selected.png")
+	screen.debug_show_volleyball_review_for_render()
+	await _capture_current("02_volleyball_review.png")
+
 	print("Rendered live creation flow with project theme to %s" % OUTPUT_DIR)
 	quit()
 
 
 func _capture(screen: Control, step: int, file_name: String) -> void:
 	screen.debug_jump_to_step(step)
+	await process_frame
+	await process_frame
+	await _capture_current(file_name)
+
+
+func _capture_current(file_name: String) -> void:
 	await process_frame
 	await process_frame
 	await RenderingServer.frame_post_draw

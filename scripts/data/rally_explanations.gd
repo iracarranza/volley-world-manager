@@ -1,7 +1,9 @@
 class_name RallyExplanations
 extends RefCounted
 
-## Player-facing rally dialogue is centralized here for manual editing.
+## Neutral result summaries and diagnostic factor labels are centralized here.
+## Spoken contact/analyst commentary is selected separately by
+## `RallyCommentaryRouter` from `RallyCommentaryLines`.
 ##
 ## **All three tables substitute now.** `headline()` and `factor()` used to
 ## return their string untouched, so a placeholder written into either one
@@ -26,17 +28,17 @@ extends RefCounted
 ## the opponent's stuff.
 
 const HEADLINES := {
-	"ace": "SERVICE ACE! {server} takes one for themself.",
-	"serve_error": "And it's a service error from {server}.",
-	"kill": "... and back to {hitter}, who finishes it neatly.",
-	"blocked": "... but {opponent_blocker}'s block is there!!",
-	"attack_error": "... but {hitter}'s attack isn't where they wanted it.",
-	"opponent_attack_error": "... and {hitter}'s attack goes just wide!",
-	"transition_loss": "... and {opponent}'s transition shines through!",
-	"counter_block": "... but {team} is waiting with a block!",
-	"opponent_kill": "... and {opponent} turns it back on them!",
-	"long_rally_win": "... but {team} is just too stable, and they finish it off.",
-	"long_rally_loss": "... but {opponent} holds on just long enough to win the point.",
+	"ace": "Service ace by {server}.",
+	"serve_error": "Service error by {server}.",
+	"kill": "Kill by {hitter}.",
+	"blocked": "Block point by {opponent_blocker}.",
+	"attack_error": "Attack error by {hitter}.",
+	"opponent_attack_error": "Attack error by {hitter}.",
+	"transition_loss": "Transition point for {opponent}.",
+	"counter_block": "Block point for {team}.",
+	"opponent_kill": "Kill for {opponent}.",
+	"long_rally_win": "Long-rally point for {team}.",
+	"long_rally_loss": "Long-rally point for {opponent}.",
 }
 
 ## Keyed by explanation key, which is not always the terminal outcome -- see
@@ -47,45 +49,45 @@ const HEADLINES := {
 ## just won the point. `ace`/`ace_conceded` and
 ## `serve_error`/`opponent_serve_error` let the line say it.
 const EXPLANATIONS := {
-	"ace": "{server}'s serving pressure overwhelmed the reception before the offense could develop.",
-	"ace_conceded": "... but {opponent} has made too much of a mess, and the point is lost.",
-	"serve_error": "It's a wild serve from {server} -- point to {opponent}.",
-	"opponent_serve_error": "{server} pursued too much pressure and could not place the serve in court.",
-	"kill_called": "Classic from {setter} -- that's the offense we know from them. Nothing {opponent} could do.",
-	"kill_improvised": "A bit messy from {team}, but {setter} found a chance and took it!",
-	"kill_default": "{hitter} withstood the pressure from {opponent} -- clean and cool execution.",
-	"blocked": "{hitter} had nowhere to go with that one -- classy block from {opponent}.",
-	"attack_error": "Looks like {setter} demanded a bit too much of {hitter} there. Point to {opponent}.",
-	"opponent_attack_error": "... but {hitter} got lost in the transition play and couldn't stay inbounds.",
+	"ace": "The serve ended the rally before a controlled first contact.",
+	"ace_conceded": "The reception did not control the serve.",
+	"serve_error": "The serve did not enter the playable court.",
+	"opponent_serve_error": "The serve did not enter the playable court.",
+	"kill_called": "The selected offensive play was followed and produced the kill.",
+	"kill_improvised": "The setter left the selected play and the attack still scored.",
+	"kill_default": "The default offense produced the kill.",
+	"blocked": "The opposing block ended the attack.",
+	"attack_error": "The attack ended outside the playable court or at the net.",
+	"opponent_attack_error": "The attack ended outside the playable court or at the net.",
 	## Unreachable: no `_finish` call emits `transition_loss`. Kept so the table
 	## still describes the outcome vocabulary, but nothing renders this.
-	"transition_loss": "An excellent read from {opponent}!! And the finish to match.",
-	"counter_block": "{opponent} handled that well, but {blocker} read it excellently and shut down the attack.",
-	"opponent_kill": "{opponent} handled that well -- {hitter}'s swing did nothing to shut their attack down.",
-	"long_rally_win": "The defense recovered after {hitter}'s first swing and created a second scoring opportunity.",
-	"long_rally_loss": "It was solid defense from {team}, but just too much quality from {opponent}.",
+	"transition_loss": "The opponent converted in transition.",
+	"counter_block": "The home block ended the counterattack.",
+	"opponent_kill": "The opponent converted the attack.",
+	"long_rally_win": "The home team won after an extended exchange.",
+	"long_rally_loss": "The opponent won after an extended exchange.",
 }
 
 ## Rendered by `main.gd` as a `• ` bullet list in append order, not as running
 ## commentary -- the leading and trailing ellipses below read as a sequence and
 ## do not currently get one.
 const FACTOR_LINES := {
-	"good_pass": "Good from {receiver} ... {setter} with options ...",
-	"poor_pass": "And it's a rough one from {receiver} ... {setter} will have to work for this one ...",
-	"play_followed": "... {setter} follows the plan ...",
-	"play_abandoned": "... {setter} finds {hitter} ...",
-	"fast_tempo": "Too much tempo on the attack -- {team} couldn't execute.",
-	"strong_block": "{opponent}'s block didn't leave {hitter} with much to work with.",
-	"strong_defense": "{opponent}'s defense was just too quick.",
-	"attack_control": "{hitter} kept their eyes up and found the floor.",
-	"default_offense": "No play was active; the setter used the default T3 outside ball.",
-	"opponent_adapted": "The opponent recognized a repeated lane or tempo and formed earlier.",
-	"defense_assignment_fit": "The saved defensive responsibility matched the attack target.",
-	"defense_assignment_stretch": "A defender had to leave the saved responsibility to reach the ball.",
-	"block_touch": "A partial block touch slowed the attack and gave floor defense more time.",
-	"block_funnel": "The block shaped the attack toward the saved floor-defense structure.",
-	"seam_conflict": "Equal-priority passers hesitated over ownership at the reception seam.",
-	"attack_recycled": "Attack coverage controlled a block deflection and kept the rally alive.",
+	"good_pass": "Reception gave the setter full options.",
+	"poor_pass": "Reception pulled the setter off target.",
+	"play_followed": "Selected offensive play was followed.",
+	"play_abandoned": "Selected offensive play was abandoned.",
+	"fast_tempo": "Requested and achieved attack timing differed.",
+	"strong_block": "Opponent block pressure reduced the attack window.",
+	"strong_defense": "Opponent floor defense controlled the attack.",
+	"attack_control": "Attack control produced a playable target.",
+	"default_offense": "No offensive play was active.",
+	"opponent_adapted": "Opponent formation incorporated a repeated lane or tempo.",
+	"defense_assignment_fit": "Saved defensive responsibility matched the attack target.",
+	"defense_assignment_stretch": "Defender moved outside the saved responsibility.",
+	"block_touch": "Block touch slowed the attack before floor defense.",
+	"block_funnel": "Block outcome shaped the attack toward the floor-defense structure.",
+	"seam_conflict": "Equal-priority passers contested reception ownership.",
+	"attack_recycled": "Attack coverage controlled the block deflection.",
 }
 
 

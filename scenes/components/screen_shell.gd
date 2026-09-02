@@ -78,19 +78,26 @@ static func build(
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen.add_child(backdrop)
 
+	## **The page margin is the same on every page, whatever it is backed with.**
+	##
+	## The cork allowance used to be added here, so a clipboard and a board sat 22
+	## pixels further in than the journal on all four sides -- the ribbon, the
+	## title and the outer edge all moved when you changed page. This file's own
+	## note two constants up says why that is wrong: two pages an inch apart in
+	## their margins read as a bug in the one the player sees second.
+	##
+	## The allowance still has to exist, because the cork draws *outward* from the
+	## card's rect and at a 30px board margin it painted over the title. It is now
+	## spent inside the frame, on `BackingInset` below, so the card gives up the
+	## room rather than the page.
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var extra := CORK_MARGIN if backing == BACKING_CORK or backing == BACKING_BOARD \
 		else 0
-	margin.add_theme_constant_override("margin_left", PAGE_MARGIN_X + extra)
-	margin.add_theme_constant_override("margin_right", PAGE_MARGIN_X + extra)
-	## The top gets the allowance too. It did not, on the reasoning that the ribbon
-	## already sits above the card -- but the cork draws *outward* from the card's
-	## rect, so at a 30px board margin it painted straight over the title and the
-	## ribbon buttons. The board needs room on every side it shows on, and it shows
-	## on four.
-	margin.add_theme_constant_override("margin_top", PAGE_MARGIN_Y + extra)
-	margin.add_theme_constant_override("margin_bottom", PAGE_MARGIN_Y + extra)
+	margin.add_theme_constant_override("margin_left", PAGE_MARGIN_X)
+	margin.add_theme_constant_override("margin_right", PAGE_MARGIN_X)
+	margin.add_theme_constant_override("margin_top", PAGE_MARGIN_Y)
+	margin.add_theme_constant_override("margin_bottom", PAGE_MARGIN_Y)
 	screen.add_child(margin)
 
 	var root := VBoxContainer.new()
@@ -120,7 +127,22 @@ static func build(
 	card.name = "BoardRegion" if backing == BACKING_BOARD else "PageCard"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(card)
+	## Where the cork's outward draw is paid for. Wrapped round the card alone, so
+	## the ribbon above it and the page edge around it are where they are on every
+	## other page, and only the card is smaller for having a board behind it.
+	var card_host: Container = root
+	if extra > 0:
+		var inset := MarginContainer.new()
+		inset.name = "BackingInset"
+		inset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		inset.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		for side in [
+			"margin_left", "margin_right", "margin_top", "margin_bottom",
+		]:
+			inset.add_theme_constant_override(side, extra)
+		root.add_child(inset)
+		card_host = inset
+	card_host.add_child(card)
 	if backing == BACKING_CORK or backing == BACKING_BOARD:
 		## Added as a child of the card and drawn behind it, so the board tracks
 		## the card's rect through every layout pass without anything having to

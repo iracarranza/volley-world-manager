@@ -12,8 +12,40 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-24 on the FD-009/FD-007 closure at
-`8f96dc6`: **2,178 checks pass, 0 fail**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-30 at `0bf250c`, after the merge of
+the voli-body work at `5a55494`: **2 of 2,174 checks fail**. A *third* failure
+is a regression; these two are not.
+
+**The two are older than this branch and fail on `origin/main` unchanged.** Named
+so nobody re-derives them:
+
+- `_test_tempo_buys_flight_time` -- "only an extremely strict tactic imposes
+  authored set shape over hitter rhythm"
+- `_test_playback_geometry_is_drawable` -- "the two blockers stand beside each
+  other, not inside each other (24 walls, 1 stacked, narrowest 0.000 m)"
+
+**The line above used to read "2,178 checks pass, 0 fail" at `8f96dc6`, and it
+was still saying so a week after that stopped being true.** The 2,174-with-two
+measured at `5a55494` was never written here, so the file told every reader the
+branch was green and to treat any failure as a regression -- which would have
+made both known failures look like something the reader had just broken. That is
+the exact failure this section spends a page warning about, and it happened to
+the headline rather than to an entry.
+
+**Zero delta from `5a55494`, and that is the right answer.** 2,174 before, 2,174
+after, same two failures. The seven commits in between are documentation plus
+`PRODUCE_BODIES` geometry -- the Stalk rebuilt from a smooth shaft into a leek --
+and the suite samples neither, so an unmoved count is what a presentation-only
+pass has to look like. The claim is checked independently: the garment clearance
+and sole contact probes both re-run clean (every row positive, collars 0.0180
+exactly, `defending` 9.71 degrees), and
+`validate_voli_body_construction.gd` passes.
+
+One caveat on that zero. `probe_garment_clearance.gd:36` iterates the six body
+*types* and builds one Vegi, whose produce is whatever `produce_for(1)` returns
+-- **Pepper**. The Stalk collar is the one thing this pass changed that
+`_seat_collar` reads, and no probe has ever measured it. See
+`docs/review/GARMENT_INK_CLEARANCE.md`.
 
 **Four checks written, four gained, and the predecessor was recorded** -- so the
 delta is attributable and says no sampling population moved. That is the right
@@ -257,6 +289,7 @@ Then, by subject:
 | Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`, `REGIONAL_DIFFERENTIATION_SPEC.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
 | Player generation, bodies | `docs/design/ATTRIBUTE_FIRST_GENERATION.md`, `BODY_TYPES.md` |
+| How a voli stands and dresses -- ready stance, kits | `docs/design/THE_VOLI_BODY.md` |
 | Setting, regions, naming | `docs/world/` |
 | What is designed but unbuilt | `docs/BACKLOG.md` |
 
@@ -332,9 +365,26 @@ away.
 
   The title screen is exempt from all of it because it is not an object on the
   desk but the **room the desk is in**. See `docs/design/TITLE_SCREEN.md`.
-- **Comments say why, not what.** The house style explains the decision and,
-  where a previous version was wrong, what it got wrong and how that was
-  measured.
+- **Comments are NOTEs, not prose.** One line, three at the absolute most, never
+  a paragraph. State the fact and point at the record:
+
+  ```gdscript
+  ## NOTE reads the ball's height, not the passer's body -- CONTACT_HEIGHT_CHAIN.md
+  ## NOTE 12% of physical receptions floor -- FD-005
+  ```
+
+  The reasoning, the measurement, and the account of what an earlier version got
+  wrong belong in `docs/review/`, organised by subject, which is where a reader
+  goes looking for them. Keep a number inline only when it is the fact — then
+  keep the number and drop the sentence around it.
+
+  **This replaces the previous rule**, which asked comments to explain the
+  decision and how it was measured. That was not wrong about the information
+  being worth keeping; it was wrong about where it goes. The result was 46,526
+  comment lines across the `.gd` files — 28% of every non-blank line, 37% of
+  `rally_simulator.gd`, 96% of `rally_feature_flags.gd` — and prose that
+  duplicates the review docs almost paragraph for paragraph. A file that is one
+  third essay is harder to read, not better documented.
 - **Themes are `Mikasa` (dark) and `Molten` (light)** everywhere they are named.
 - Godot gotchas that have cost time before: `_`-prefixed parameters mean
   explicitly unused; `%-22s` padding only aligns in a monospace font and this

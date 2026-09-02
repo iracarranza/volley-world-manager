@@ -41,15 +41,6 @@ const AXIS_QUESTIONS := [
 ## What each body type is, in the two or three words a picker has room for. The
 ## bodies are drawn beside these, so the line names the thing the silhouette
 ## cannot say rather than describing the silhouette.
-const BODY_BLURBS := {
-	"Vegi": "grown",
-	"Feli": "ears up",
-	"Avi": "beak",
-	"Cani": "ears down",
-	"Ursi": "round",
-	"Simi": "long arms",
-}
-
 ## How far the preview swings either side of square, and how long a swing takes.
 ##
 ## A swing rather than a turntable, because a full rotation spends half its time
@@ -122,6 +113,21 @@ func _ready() -> void:
 	step_panels = [
 		%VoliStep, %IdentityStep, %RegionStep, %TypeStep, %NamesStep,
 	]
+	## **A question long enough to ask something is wider than the screen.**
+	##
+	## Neither heading wrapped, so each one's minimum width was however long its
+	## sentence happened to be, and a `Label` hands that straight up the chain: on
+	## 02 the title alone asked for 1,060 pixels, the layout resolved to 1,486
+	## against a 1,280 base, and the page lost its title mid-word, its step rail
+	## and its confirm button off either edge.
+	##
+	## Measured rather than guessed at -- the obvious suspect was the new court
+	## preview, whose stretched viewport really was imposing a 760-pixel floor,
+	## and removing that floor changed nothing because the title was the binding
+	## constraint all along. Walking `get_combined_minimum_size()` down the tree
+	## is what separated them.
+	question_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	question_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_build_step_rail()
 	_build_voli_choices()
 	_build_tier_choices()
@@ -218,8 +224,16 @@ func _build_voli_choices() -> void:
 		button.toggle_mode = true
 		button.button_group = body_group
 		button.custom_minimum_size = Vector2(84, 36)
-		button.text = "%s\n%s" % [body_type, str(BODY_BLURBS.get(body_type, ""))]
-		button.add_theme_font_size_override("font_size", 11)
+		## **The name, and nothing else.**
+		##
+		## Each button used to carry a second line -- "ears up", "beak", "round",
+		## "long arms" -- describing the body the viewer is looking at while they
+		## look at it. The preview is a live rotatable actor two controls away and
+		## it updates the moment a type is chosen, so the prose was the interface
+		## narrating its own picture, and narrating it badly: "round" is not what
+		## an Ursi is and "grown" is not what a Vegi is.
+		button.text = body_type
+		button.add_theme_font_size_override("font_size", 12)
 		button.set_meta("value", body_type)
 		button.pressed.connect(_select_body_type.bind(body_type))
 		_body_row.add_child(button)
@@ -277,8 +291,11 @@ func _build_voli_choices() -> void:
 		_inline_label("Arms"),
 		_slider("arm_ratio", ManagerProfile.ARM_RATIO.x, ManagerProfile.ARM_RATIO.y, 0.005),
 	], false)
+	## Paired with legs for the same reason height is paired with arms: the fold.
 	_row("Legs", [
 		_slider("leg_ratio", ManagerProfile.LEG_RATIO.x, ManagerProfile.LEG_RATIO.y, 0.005),
+		_inline_label("Weight"),
+		_slider("mass_kg", ManagerProfile.MASS_KG.x, ManagerProfile.MASS_KG.y, 1.0),
 	], false)
 
 	_hand_row = HBoxContainer.new()
@@ -370,6 +387,11 @@ func _slider_caption(key: String, value: float) -> String:
 	match key:
 		"height_cm":
 			return "%d cm" % roundi(value)
+		## A weight, so it prints as one. It is also the only slider here that is
+		## not purely a look: mass reaches locomotion speed, floor recovery and
+		## the power term on a swing.
+		"mass_kg":
+			return "%d kg" % roundi(value)
 		"arm_ratio":
 			return "%d cm span" % roundi(float(appearance.height_cm) * value)
 		_:
@@ -444,6 +466,13 @@ func _build_preview_world() -> void:
 func _refresh_preview() -> void:
 	if _preview_actor == null:
 		return
+	## **Standing, not ready.** `ready_stance` defaults to the defender's crouch,
+	## which carries the torso 0.30 rad forward -- correct on a court and wrong
+	## here, where the reported symptom was every voli in the creator leaning.
+	## `watching` is authored for "a voli watching a ball that is not theirs", and
+	## in the creator there is no ball at all, so it is the existing answer rather
+	## than a fourth stance invented for a menu.
+	_preview_actor.ready_stance = "watching"
 	var profile := ManagerProfile.appearance_profile(appearance)
 	_preview_actor.configure(
 		0, true, "", ManagerProfile.actor_hand(appearance), profile
@@ -605,7 +634,9 @@ func _fill_region_grid() -> void:
 			_set_principles(
 				VolleyballRegions.preferred_principles(selected_region), true
 			)
-		_suggest_manager_name()
+		## NOTE guarded like `_select_region`; unguarded it overwrote a typed name
+		if manager_name_tracks_region:
+			_suggest_manager_name()
 	for region_name in names:
 		var button := Button.new()
 		button.toggle_mode = true
@@ -861,6 +892,20 @@ func _previous() -> void:
 func _next() -> void:
 	error_label.text = ""
 	if current_step < step_panels.size() - 1:
+		## **A name you have been shown and kept is a name you chose.**
+		##
+		## `manager_name_tracks_region` only cleared when the manager *typed*, so
+		## accepting the offer left it set and every later region or tier change
+		## silently replaced the name -- three times across the flow, at the
+		## identity step, the club step and the save setup. `suggested_name`'s own
+		## contract is "offered rather than imposed", and an offer that keeps
+		## being re-made after you have taken it is imposed.
+		##
+		## Leaving the step is the moment the offer closes: the name has been on
+		## screen, it was editable, and it is now the manager's whether they
+		## touched it or not.
+		if current_step == 0:
+			manager_name_tracks_region = false
 		current_step += 1
 		_show_step()
 		return

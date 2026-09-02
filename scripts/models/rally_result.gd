@@ -71,3 +71,9 @@ extends Resource
 ## the raw tokens.
 @export var headline: String = ""
 @export var ending_reason: StringName = &""
+## Post-routing presentation. The terminal result above remains authoritative
+## simulation/history data; these two fields are the only result-level strings
+## presented as commentary.
+@export var commentary_headline: String = ""
+@export var commentary_analysis: String = ""
+@export var commentary_diagnostics: Array[String] = []
