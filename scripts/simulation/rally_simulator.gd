@@ -1468,6 +1468,20 @@ func resolve(
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
+			## **The budget `movement_target` was truncated against.**
+			##
+			## `movement_duration` is the time this journey would take to reach
+			## the *ball*; `movement_target` is as far as the body got in the time
+			## available. Two journeys, and playback was pairing the short one's
+			## distance with the long one's clock -- measured at 0.59 m/s for a
+			## beaten digger against a 2.05 m/s shuffle, a third of walking pace.
+			## See `docs/review/RALLY_MOVEMENT_TIMELINE_VERIFICATION.md`.
+			##
+			## Publishing the budget rather than re-timing the duration is
+			## deliberate: `movement_duration` feeds `_platform_body_velocity` and
+			## `MovementTimingRatioCalibration`, so its meaning is load-bearing on
+			## the simulation side and cannot be quietly moved.
+			"movement_available_seconds": reception_window,
 			## **The leg this contact actually received.** Publishing the
 			## untruncated serve here while the serve event publishes the sliced
 			## one is two records of one handover, which is precisely what the
@@ -3323,9 +3337,14 @@ func resolve(
 		var coverer_move_time := _movement_time(
 			coverer, coverer_start, recycle_target, "lateral"
 		) if coverer != null else 4.0
+		## Named rather than inlined so the span the arrival is truncated
+		## against and the span published as its budget are one expression.
+		var recycle_coverage_time := float(
+			opponent_block_trajectory.get("duration", 0.24)
+		)
 		var coverer_reach := _reached_point(
 			coverer, coverer_start, recycle_target,
-			float(opponent_block_trajectory.get("duration", 0.24)), "lateral",
+			recycle_coverage_time, "lateral",
 			0.0,
 			GeometricAttackPromotionModel.pass_contact_height_meters(coverer),
 			_incoming_ball_direction(
@@ -3380,6 +3399,12 @@ func resolve(
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
 			"movement_duration": coverer_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": recycle_coverage_time,
 			"arrival": coverage_contact_state.arrival,
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
@@ -3624,6 +3649,12 @@ func resolve(
 				opponent_live_positions, &"defending"
 			),
 			"movement_target": opponent_defender_reach,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": opponent_defense_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states. Deriving it from
 			## `rally_clock` instead misses the set flight that separates them.
@@ -4040,6 +4071,12 @@ func _resolve_home_serve(
 			"movement_start": receiver_start,
 			"movement_target": opponent_receiver_reach,
 			"movement_duration": receiver_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": reception_window,
 			## The three keys that made this side's timeline synthetic. Without an
 			## outgoing trajectory `_ensure_event_trajectories` invented one from
 			## `flight_time` -- which on a reception is the *incoming* serve's
@@ -5851,6 +5888,12 @@ func _resolve_opponent_transition(
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
 			"movement_duration": coverer_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": coverage_time,
 			"arrival": coverage_contact_state.arrival,
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
@@ -6143,6 +6186,12 @@ func _resolve_opponent_transition(
 			"movement_start": defender_start,
 			"movement_target": defender_reach,
 			"movement_duration": defender_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": attack_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states.
 			"contact_recovery": home_dig_recovery,
@@ -7441,6 +7490,12 @@ func _resolve_home_continuation(
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
 			"movement_duration": coverer_move_time,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": coverage_time,
 			"arrival": coverage_contact_state.arrival,
 			"contact_posture": coverage_contact_state.posture,
 			"pass_contact_height_meters": coverage_contact_state.contact_height,
@@ -7653,6 +7708,12 @@ func _resolve_home_continuation(
 			"incoming_trajectory": continuation_arriving_trajectory,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
+			## The budget `movement_target` was truncated against -- see the
+			## reception's own note. `movement_duration` keeps its meaning; this
+			## is the deadline playback needs so a truncated leg is drawn over
+			## the span it was truncated in rather than over the longer journey
+			## it never made.
+			"movement_available_seconds": cont_defense_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states.
 			"contact_recovery": cont_dig_recovery,

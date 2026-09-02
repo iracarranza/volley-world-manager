@@ -1629,6 +1629,16 @@ func _build_movement_plan(
 			plan[next_actor_id]["seconds"] = maxf(float(
 				next_contact.metadata["movement_duration"]
 			), 0.0)
+		## The deadline the resolver truncated this arrival against, where it
+		## publishes one. `movement_duration` times the journey to the *ball* and
+		## `movement_target` is as far as the body got in the time available, so
+		## pairing the two draws a short leg on a long clock -- 0.59 m/s for a
+		## beaten digger whose own shuffle is 2.05 m/s. `_pace_plan` clamps to
+		## this; families that publish no budget keep the old behaviour exactly.
+		if next_contact.metadata.has("movement_available_seconds"):
+			plan[next_actor_id]["available_seconds"] = maxf(float(
+				next_contact.metadata["movement_available_seconds"]
+			), 0.0)
 		if next_contact.event_type == RallyEventModel.EventType.ATTACK \
 				and next_contact.metadata.has("approach_speed_mps"):
 			plan[next_actor_id]["speed_mps"] = maxf(float(
@@ -1866,6 +1876,15 @@ func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) 
 					"event_type": _pacing_event_type,
 				})
 		var authored_seconds := maxf(float(movement.get("seconds", 0.0)), 0.0)
+		## A truncated arrival is *defined* as how far the body got inside its
+		## budget, so drawing it over that budget is what makes it arrive. The
+		## authored duration stays the ceiling for an untruncated leg, which may
+		## finish early and stand -- which is a thing a volleyball player does.
+		var available_seconds := maxf(float(
+			movement.get("available_seconds", 0.0)
+		), 0.0)
+		if authored_seconds > 0.0 and available_seconds > 0.0:
+			authored_seconds = minf(authored_seconds, available_seconds)
 		movement["seconds"] = maxf(
 			metres / speed,
 			authored_seconds if authored_seconds > 0.0 else active_window,
