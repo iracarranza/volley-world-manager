@@ -3022,6 +3022,21 @@ func resolve(
 		if opponent_block_stage.has(floor_id):
 			continue
 		opponent_block_stage[floor_id] = Vector2(opponent_floor_stage[raw_floor_id])
+	## Before the write below overwrites them. A wall close is timed from where
+	## the blocker was standing, and three lines later that is the wall.
+	var opponent_wall_starts := {}
+	if opponent_blocker != null:
+		opponent_wall_starts[opponent_blocker.id] = Vector2(
+			opponent_live_positions.get(
+				opponent_blocker.id, opponent_wall.primary_position
+			)
+		)
+	if assisting_blocker != null:
+		opponent_wall_starts[assisting_blocker.id] = Vector2(
+			opponent_live_positions.get(
+				assisting_blocker.id, opponent_wall.assist_position
+			)
+		)
 	for raw_player_id in opponent_block_stage:
 		opponent_live_positions[int(raw_player_id)] = Vector2(
 			opponent_block_stage[raw_player_id]
@@ -3041,13 +3056,23 @@ func resolve(
 			opponent_stage_intents[int(raw_floor_id)] = \
 				opponent_floor_intents[raw_floor_id]
 		if opponent_blocker != null:
-			opponent_stage_intents[opponent_blocker.id] = {
-				"intent": &"blocking", "progress": 0.0,
-			}
+			opponent_stage_intents[opponent_blocker.id] = _wall_close_intent(
+				opponent_blocker,
+				opponent_wall_starts.get(
+					opponent_blocker.id, Vector2(opponent_wall.primary_position)
+				),
+				Vector2(opponent_wall.primary_position),
+				float(set_flight_time),
+			)
 		if assisting_blocker != null:
-			opponent_stage_intents[assisting_blocker.id] = {
-				"intent": &"blocking", "progress": 0.0,
-			}
+			opponent_stage_intents[assisting_blocker.id] = _wall_close_intent(
+				assisting_blocker,
+				opponent_wall_starts.get(
+					assisting_blocker.id, Vector2(opponent_wall.assist_position)
+				),
+				Vector2(opponent_wall.assist_position),
+				float(set_flight_time),
+			)
 		attack_event.metadata["opponent_phase_intents"] = opponent_stage_intents
 	## NOTE FD-003, the attacking side's own six -- RALLY_SIMULATOR_NOTES.md
 	var home_cover_stage_intents := {}
@@ -5013,14 +5038,54 @@ func _resolve_opponent_transition(
 		staged_home_assist.id if staged_home_assist != null else -1,
 		live_positions,
 	)
+	## **The wall the home side actually forms, published as a phase target.**
+	##
+	## These two writes moved the resolver's live map and told playback nothing,
+	## so the only home-block destination that ever reached the screen was the
+	## *pre-release* stage published on the opponent set. The final wall was
+	## drawn nowhere and the blocker was left standing at a prediction. Merged
+	## over the pre-release map on the same event rather than published on a new
+	## one, because both legs happen inside the same opponent set flight and two
+	## keys for one window is the correct-then-clobbered shape this file has been
+	## bitten by before.
+	var home_wall_intents := {}
 	if staged_home_primary != null:
+		home_wall_intents[staged_home_primary.id] = _wall_close_intent(
+			staged_home_primary,
+			Vector2(live_positions.get(
+				staged_home_primary.id, home_wall_positions.primary_position
+			)),
+			Vector2(home_wall_positions.primary_position),
+			float(set_flight_time),
+		)
 		live_positions[staged_home_primary.id] = Vector2(
 			home_wall_positions.primary_position
 		)
 	if staged_home_assist != null:
+		home_wall_intents[staged_home_assist.id] = _wall_close_intent(
+			staged_home_assist,
+			Vector2(live_positions.get(
+				staged_home_assist.id, home_wall_positions.assist_position
+			)),
+			Vector2(home_wall_positions.assist_position),
+			float(set_flight_time),
+		)
 		live_positions[staged_home_assist.id] = Vector2(
 			home_wall_positions.assist_position
 		)
+	if opponent_set_event != null and not home_wall_intents.is_empty():
+		var home_stage_targets: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_targets", {}
+		)
+		var home_stage_intents: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_intents", {}
+		)
+		for raw_wall_id in home_wall_intents:
+			var wall_id := int(raw_wall_id)
+			home_stage_targets[wall_id] = Vector2(live_positions[wall_id])
+			home_stage_intents[wall_id] = home_wall_intents[raw_wall_id]
+		opponent_set_event.metadata["home_phase_targets"] = home_stage_targets
+		opponent_set_event.metadata["home_phase_intents"] = home_stage_intents
 	## Rebuilding the arc must not rebuild the clock with it. This passed
 	## `rally_clock`, so whenever the reachable-contact clamp moved the target --
 	## often -- the retarget silently restamped the set back to the moment of the
@@ -7168,6 +7233,26 @@ func _resolve_home_continuation(
 		var floor_id := int(raw_floor_id)
 		if not cont_block_stage.has(floor_id):
 			cont_block_stage[floor_id] = Vector2(cont_floor_stage[raw_floor_id])
+	## Same capture-before-write as the first-ball path above.
+	var cont_wall_intents := {}
+	if opponent_blocker != null:
+		cont_wall_intents[opponent_blocker.id] = _wall_close_intent(
+			opponent_blocker,
+			Vector2(opponent_live_positions.get(
+				opponent_blocker.id, cont_wall.primary_position
+			)),
+			Vector2(cont_wall.primary_position),
+			float(continuation_flight_time),
+		)
+	if assisting_blocker != null:
+		cont_wall_intents[assisting_blocker.id] = _wall_close_intent(
+			assisting_blocker,
+			Vector2(opponent_live_positions.get(
+				assisting_blocker.id, cont_wall.assist_position
+			)),
+			Vector2(cont_wall.assist_position),
+			float(continuation_flight_time),
+		)
 	for raw_player_id in cont_block_stage:
 		opponent_live_positions[int(raw_player_id)] = Vector2(
 			cont_block_stage[raw_player_id]
@@ -7177,8 +7262,15 @@ func _resolve_home_continuation(
 			cont_block_stage
 		## This site published where the continuation defence stood and never why
 		## or for how long, which the other two both did. Same map, same shape.
+		## The two at the net are blocking, not defending, and their close is
+		## timed rather than stamped -- the same split the first-ball path makes.
+		var cont_stage_intents := _defensive_intents(
+			cont_block_stage, cont_floor_intents
+		)
+		for raw_wall_id in cont_wall_intents:
+			cont_stage_intents[int(raw_wall_id)] = cont_wall_intents[raw_wall_id]
 		(result.events[-1] as RallyEvent).metadata["opponent_phase_intents"] = \
-			_defensive_intents(cont_block_stage, cont_floor_intents)
+			cont_stage_intents
 	## FD-003, on the continuation exchange: the attacking side walking into
 	## cover during its own set flight. See the home attack leg.
 	var cont_cover_stage_intents := {}
@@ -15893,6 +15985,30 @@ func _travel_fraction(from: Vector2, intended: Vector2, reached: Vector2) -> flo
 		return 1.0
 	return clampf(
 		RallyKinematics.court_distance_meters(from, reached) / asked, 0.0, 1.0
+	)
+
+
+## One wall close, timed like every other off-ball journey.
+##
+## The two blockers were the only off-ball population publishing a destination
+## and no clock -- 116 of 116 BLOCK contacts and 137 of 137 `blocking` legs --
+## because each staging site stamped `{intent, progress: 0.0}` and left the
+## timing to "the block path", which never described it. Playback then paced the
+## close at whatever the ball's flight was, uniformly 0.67 of the model's own.
+## See `docs/review/OFFBALL_TIMING_BASELINE.md`.
+##
+## `transition` rather than `lateral` because closing a wall is the one journey
+## on this ball that is a sprint -- `_establish_shape` says so where it charges
+## the four *behind* the wall laterally and notes the two in front are already
+## there.
+func _wall_close_intent(
+	blocker: VolleyballPlayer,
+	from: Vector2,
+	to: Vector2,
+	window_seconds: float,
+) -> Dictionary:
+	return _travel_intent(
+		blocker, &"blocking", from, to, to, "transition", window_seconds
 	)
 
 
