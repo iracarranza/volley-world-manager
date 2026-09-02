@@ -70,7 +70,7 @@ func _initialize() -> void:
 	var totals := {
 		"legs": 0, "unknown_start": 0, "too_short": 0, "unreachable": 0,
 		"early": 0, "cannot_complete": 0, "stretched": 0, "at_pace": 0,
-		"timed": 0, "untimed": 0,
+		"timed": 0, "untimed": 0, "stretched_new": 0, "at_pace_new": 0,
 	}
 	var rows: Array[String] = []
 	rows.append(
@@ -169,11 +169,31 @@ func _initialize() -> void:
 							totals["timed"] = int(totals.timed) + 1
 						else:
 							totals["untimed"] = int(totals.untimed) + 1
+						## What `_pace_plan` produces now that
+						## `_apply_explicit_targets` carries the intent's own
+						## clock. A leg whose intent publishes no traversal keeps
+						## the window, which is the old rule exactly.
+						var authored := published
+						var intent_window := float(intent_data.get(
+							"window_seconds", 0.0
+						))
+						if authored > 0.0 and intent_window > 0.0:
+							authored = minf(authored, intent_window)
+						var drawn_new := maxf(
+							distance / speed,
+							authored if authored > 0.0 else active_window,
+						)
+						var pace_new := natural / maxf(drawn_new, 0.0001)
+						if pace_new < 0.9:
+							totals["stretched_new"] = int(totals.stretched_new) + 1
+						else:
+							totals["at_pace_new"] = int(totals.at_pace_new) + 1
 						var bucket: Dictionary = families.get(family, {
 							"n": 0, "distance": 0.0, "window": 0.0,
 							"natural": 0.0, "drawn": 0.0, "pace": 0.0,
 							"completable": 0.0, "early": 0, "cannot": 0,
 							"timed": 0, "published": 0.0,
+							"pace_new": 0.0, "drawn_new": 0.0,
 						})
 						bucket["n"] = int(bucket.n) + 1
 						bucket["distance"] = float(bucket.distance) + distance
@@ -181,6 +201,8 @@ func _initialize() -> void:
 						bucket["natural"] = float(bucket.natural) + natural
 						bucket["drawn"] = float(bucket.drawn) + drawn
 						bucket["pace"] = float(bucket.pace) + pace
+						bucket["pace_new"] = float(bucket.pace_new) + pace_new
+						bucket["drawn_new"] = float(bucket.drawn_new) + drawn_new
 						bucket["completable"] = float(bucket.completable) + completable
 						if verdict == "early":
 							bucket["early"] = int(bucket.early) + 1
@@ -208,18 +230,19 @@ func _initialize() -> void:
 	print("--- by off-ball family")
 	print("family|n|mean_distance_m|mean_window_s|mean_natural_s|mean_drawn_s"
 		+ "|mean_pace_ratio|mean_completable|early|cannot_complete"
-		+ "|timed|mean_published_s")
+		+ "|timed|mean_published_s|mean_drawn_new_s|mean_pace_new")
 	var keys: Array = families.keys()
 	keys.sort()
 	for key in keys:
 		var b: Dictionary = families[key]
 		var n := maxf(float(b.n), 1.0)
 		var timed := maxf(float(b.timed), 1.0)
-		print("%s|%d|%.2f|%.3f|%.3f|%.3f|%.2f|%.2f|%d|%d|%d|%.3f" % [
+		print("%s|%d|%.2f|%.3f|%.3f|%.3f|%.2f|%.2f|%d|%d|%d|%.3f|%.3f|%.2f" % [
 			key, int(b.n), float(b.distance) / n, float(b.window) / n,
 			float(b.natural) / n, float(b.drawn) / n, float(b.pace) / n,
 			float(b.completable) / n, int(b.early), int(b.cannot),
 			int(b.timed), float(b.published) / timed,
+			float(b.drawn_new) / n, float(b.pace_new) / n,
 		])
 	quit()
 

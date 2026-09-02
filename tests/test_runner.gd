@@ -319,6 +319,7 @@ func _initialize() -> void:
 	_test_a_blocked_ball_has_somewhere_to_go()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
+	_test_movement_contract_completeness()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9423,6 +9424,75 @@ func _test_receive_shape_is_where_the_receivers_stand() -> void:
 ##
 ## The B0 census reports the same figures without asserting them, on 600 rallies.
 ## This asserts them on the suite's own budget.
+## The movement contract, asserted rather than assumed.
+##
+## Change 1 published `movement_available_seconds` and change 3 closed the
+## continuation dig's missing duration, and both were measured by a probe that
+## nothing runs on a schedule. These four checks are what stops either quietly
+## coming back: a platform contact that publishes where a body ended without
+## publishing how long it had is exactly the pairing that drew a beaten digger at
+## a third of walking pace. See `docs/review/MOVEMENT_BUDGET_PUBLICATION.md`.
+func _test_movement_contract_completeness() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	const PLATFORM_FAMILIES: Array[int] = [
+		RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+		RALLY_EVENT_SCRIPT.EventType.DIG,
+		RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
+	]
+	var platform_legs := 0
+	var missing_budget := 0
+	var missing_duration := 0
+	var contacts := 0
+	var missing_body := 0
+	var missing_time := 0
+	var continuing := 0
+	var missing_leg_start := 0
+	for seed_value in range(73000, 73200):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var seen := {}
+		for event in result.events:
+			if int(event.actor_id) < 0:
+				continue
+			contacts += 1
+			if not event.metadata.has("body_contact_position"):
+				missing_body += 1
+			if not event.metadata.has("physical_time"):
+				missing_time += 1
+			## A rally's first contact for this actor has no previous leg, so an
+			## absent `actor_leg_start` is honest there and only there.
+			if seen.has(int(event.actor_id)):
+				continuing += 1
+				if not event.metadata.has("actor_leg_start"):
+					missing_leg_start += 1
+			seen[int(event.actor_id)] = true
+			if not PLATFORM_FAMILIES.has(int(event.event_type)):
+				continue
+			if not event.metadata.has("movement_target"):
+				continue
+			platform_legs += 1
+			if not event.metadata.has("movement_available_seconds"):
+				missing_budget += 1
+			if not event.metadata.has("movement_duration"):
+				missing_duration += 1
+	_check(
+		platform_legs >= 200 and missing_budget == 0,
+		"every platform contact that publishes an endpoint publishes the budget it was truncated against",
+	)
+	_check(
+		platform_legs >= 200 and missing_duration == 0,
+		"every platform contact that publishes an endpoint publishes how long the journey took",
+	)
+	_check(
+		contacts >= 800 and missing_body == 0 and missing_time == 0,
+		"every contact publishes where the body was and when the contact happened",
+	)
+	_check(
+		continuing >= 200 and missing_leg_start == 0,
+		"every contact but an actor's first publishes where its leg began",
+	)
+
+
 func _test_one_ball_chain_by_launch_identity() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()

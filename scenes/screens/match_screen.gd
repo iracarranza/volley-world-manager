@@ -1526,8 +1526,16 @@ func _build_movement_plan(
 	## to publish it, not for playback to make it up.
 	_apply_base_positions(plan, event, next_contact)
 	_apply_cheat_steps(plan, action_target, next_contact)
-	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
-	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
+	_apply_explicit_targets(
+		plan,
+		next_contact.metadata.get("home_phase_targets", {}),
+		next_contact.metadata.get("home_phase_intents", {}),
+	)
+	_apply_explicit_targets(
+		plan,
+		next_contact.metadata.get("opponent_phase_targets", {}),
+		next_contact.metadata.get("opponent_phase_intents", {}),
+	)
 	## The player who just made this contact goes where their own event said they
 	## go afterwards.
 	##
@@ -2236,14 +2244,44 @@ static func _metres(from_position: Vector2, to_position: Vector2) -> float:
 	).length()
 
 
-func _apply_explicit_targets(plan: Dictionary, targets: Dictionary) -> void:
+func _apply_explicit_targets(
+	plan: Dictionary, targets: Dictionary, intents: Dictionary = {}
+) -> void:
 	for raw_player_id in targets:
 		## Resolver-authored ground is evidence, not a suggestion for playback's
 		## overlap cosmetic to move. In particular this protects a T1 hitter's
 		## release mark in the window before the set.
+		var player_id := int(raw_player_id)
 		_set_plan_target(
-			plan, int(raw_player_id), Vector2(targets[raw_player_id]), true
+			plan, player_id, Vector2(targets[raw_player_id]), true
 		)
+		if not plan.has(player_id):
+			continue
+		## **The off-ball leg's own clock, which the resolver has been computing
+		## and nobody has been reading.**
+		##
+		## `_travel_intent` publishes `traversal_seconds` and `window_seconds` per
+		## player and seven resolver call sites use it, but only the *targets* map
+		## ever reached here -- so `_pace_plan` fell back to `active_window` and
+		## stretched every one of these journeys across the ball's flight however
+		## far it was. Measured before this: 54% of off-ball legs drawn slower
+		## than the body moves, blockers uniformly at 0.67 of their own pace.
+		## `docs/review/OFFBALL_TIMING_BASELINE.md`.
+		##
+		## `_uniform_intents` publishes neither, and those legs keep the old
+		## behaviour exactly rather than being given an invented duration.
+		var raw_intent: Variant = intents.get(raw_player_id, null)
+		if not (raw_intent is Dictionary):
+			continue
+		var intent: Dictionary = raw_intent
+		if intent.has("traversal_seconds"):
+			plan[player_id]["seconds"] = maxf(
+				float(intent["traversal_seconds"]), 0.0
+			)
+		if intent.has("window_seconds"):
+			plan[player_id]["available_seconds"] = maxf(
+				float(intent["window_seconds"]), 0.0
+			)
 
 
 func _set_plan_target(

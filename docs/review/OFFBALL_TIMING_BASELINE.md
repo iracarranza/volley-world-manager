@@ -69,7 +69,9 @@ thing:
 - **`blocking` is stretched, uniformly.** Every one of 137 closes at 0.67 of the
   model's pace, every one completes, and not one publishes a duration. A blocker
   who could close in 0.89 s is drawn taking 1.35 s because that is how long the
-  set is in the air. This is the pure case of the defect and the cheapest to fix.
+  set is in the air. This is the purest case of the defect and, for the same
+  reason, the one change 5 cannot reach: with no duration published there is
+  nothing for playback to read.
 - **`preparing_attack` is compressed *and* short.** Drawn at 1.45x the pace the
   body can manage and still arriving 56% of the way. 227 of its 355 legs publish
   no duration. A hitter is being hurried toward a mark they then do not reach.
@@ -96,8 +98,8 @@ double the sample and the fastest way to make it meaningless.
 Re-run this probe after change 5 with the same seeds. The comparison to make is
 not "did the numbers improve" but:
 
-- `pace_ratio` should move toward 1.0 for `blocking` and `covering`, because
-  those legs will be drawn at the duration the resolver already computed;
+- `pace_ratio` should move toward 1.0 **for the timed families and only those**,
+  because only they have a duration for playback to read;
 - `completable` should be **unchanged**, because it is a property of the movement
   model and the window, and change 5 touches neither;
 - `cannot_complete` counts should be unchanged for the same reason -- what
@@ -106,3 +108,15 @@ not "did the numbers improve" but:
 
 A change that moves `completable` has moved the simulation, which change 5 is not
 supposed to do.
+
+### The first version of that prediction was wrong, and its own table said so
+
+It read "`pace_ratio` should move toward 1.0 for `blocking` and `covering`."
+`blocking` is the family with **0 of 137 timed** -- the column is in the table two
+sections up -- so it is precisely the one that cannot move. Measured after change
+5: `covering` 1.48 → 1.03, `defending` 0.82 → 0.94, `receiving` 0.87 → 1.00, and
+`blocking` 0.67 → **0.67**, unchanged, as it had to be.
+
+Recorded rather than quietly corrected, because a prediction that contradicts the
+evidence printed beside it is the same failure as a stale baseline: it reads
+plausibly and nobody rechecks it against the table it came from.

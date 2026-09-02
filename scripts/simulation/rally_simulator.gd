@@ -7714,6 +7714,12 @@ func _resolve_home_continuation(
 			"incoming_trajectory": continuation_arriving_trajectory,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
+			## The only dig family that published a start and an end and no time
+			## between them, so playback had to fall back to the whole window for
+			## twelve digs in every hundred rallies. The figure is not new: it is
+			## the same `cont_defense.travel_time` the body velocity two blocks up
+			## has always been built from.
+			"movement_duration": float(cont_defense.travel_time),
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
 			## is the deadline playback needs so a truncated leg is drawn over
