@@ -54,6 +54,18 @@ var playback_leg_overspeed: Array[Dictionary] = []
 ## receiver missing a ball the record has them passing -- and the overrun is
 ## recorded here instead. This list is the movement contract's own bug report.
 var playback_late_departures: Array[Dictionary] = []
+## Legs issued in the window before the one their contact ends on, because
+## `movement_start_time` says the journey begins there. The floor defender behind
+## an untouched block is the case: they set off at the hitter's contact and are
+## drawn from the net crossing. A leg appearing here and then continuing in the
+## next window is one journey drawn once; the same id appearing twice as an
+## `early_leg` would be one drawn twice.
+var playback_early_legs: Array[Dictionary] = []
+## The leg id each actor was last started on ahead of its own window, so the
+## window that owns the contact continues that journey instead of re-drawing it.
+## One field, keyed by player: the journey identity the movement contract was
+## missing, without a parallel record to carry it.
+var _legs_issued_early: Dictionary = {}
 ## Diagnostic: send everyone but the ball-handler to their own baseline.
 ## Toggled with M during playback; see `_apply_movement_proof`.
 var movement_proof: bool = false
@@ -173,6 +185,8 @@ func load_and_play_rally(
 	playback_start_mismatches.clear()
 	playback_leg_overspeed.clear()
 	playback_late_departures.clear()
+	playback_early_legs.clear()
+	_legs_issued_early.clear()
 	_previously_placed.clear()
 	progress_bar.value = 0.0
 	await _run_rally(generation)
@@ -1688,11 +1702,36 @@ func _build_movement_plan(
 					})
 				else:
 					plan[next_actor_id]["delay_seconds"] = ready
+		## **A leg that began before this window, continued rather than restarted.**
+		##
+		## `movement_start_time` is stamped beside `physical_time`, so a journey
+		## whose start is earlier than this window's start was already issued by
+		## `_issue_early_legs` while the previous ball was in the air. What is
+		## left to draw is the remainder, from wherever the body visibly got to
+		## -- which `plan[...]["start"] = visible_start` above has already set.
+		## Without this the whole journey is re-drawn in what is left of it, at a
+		## pace nothing authorised.
+		if next_contact.metadata.has("movement_start_time") \
+				and plan.has(next_actor_id) \
+				and str(_legs_issued_early.get(next_actor_id, "")) == str(
+					next_contact.metadata.get("movement_leg_id", "")
+				):
+			var leg_start := float(next_contact.metadata["movement_start_time"])
+			var window_start := _event_physical_time(event)
+			var already := window_start - leg_start
+			if already > 0.001:
+				var leg_seconds := float(plan[next_actor_id].get("seconds", 0.0))
+				if leg_seconds > already:
+					plan[next_actor_id]["seconds"] = leg_seconds - already
+				plan[next_actor_id]["continued_leg"] = str(
+					next_contact.metadata.get("movement_leg_id", "")
+				)
 		if next_contact.event_type == RallyEventModel.EventType.ATTACK \
 				and next_contact.metadata.has("approach_speed_mps"):
 			plan[next_actor_id]["speed_mps"] = maxf(float(
 				next_contact.metadata["approach_speed_mps"]
 			), 0.01)
+	_issue_early_legs(plan, event, next_contact, window_seconds)
 	## Who the resolver named this window, remembered for the next one.
 	_previously_placed = {}
 	for key in ["home_phase_targets", "opponent_phase_targets"]:
@@ -2104,6 +2143,95 @@ const COVERED_GROUND_METERS: float = 2.2
 ## about, never past `CHEAT_STEP_METERS`, and never at all once they are already
 ## closer than that. A voli reading the play leans a step toward it; they do not
 ## leave their zone, which is exactly the distinction the report drew.
+## A journey whose own window has not opened yet, started in the window it
+## actually begins in.
+##
+## The floor defender behind an untouched block is the case this exists for: the
+## resolver times their chase from the hitter's contact and playback draws them
+## in the window that starts at the *block*, which `_stamp_physical_times` puts
+## at the net crossing. Measured at a mean 0.2058 s of the swing spent before the
+## net, on 159 of 175 dig pairs -- see `docs/review/DIG_BUDGET_AND_WINDOW.md`.
+##
+## Only the contact *after* the one this window ends on, and only when its leg
+## genuinely starts inside this window. The resolver's own endpoint and duration
+## are used unchanged; the delay is the one thing computed here and it is a
+## subtraction of two published times.
+func _issue_early_legs(
+	plan: Dictionary,
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	window_seconds: float,
+) -> void:
+	if active_result == null or window_seconds <= 0.0:
+		return
+	var following := _contact_after(next_contact)
+	if following == null or not following.metadata.has("movement_start_time"):
+		return
+	var actor_id := int(following.actor_id)
+	if actor_id < 0:
+		return
+	## A cheat step or a base return is a suggestion and may be overridden; an
+	## entry the resolver named for *this* window is not -- unless what it names
+	## is where the body already stands. The floor defender behind a block is
+	## exactly that case: `home_phase_targets` on the BLOCK event is
+	## `floor_phase_positions.duplicate(true)`, a snapshot of the shape they took
+	## during the *set* flight, so it is a hold rather than a journey. A hold
+	## yields to the chase the same body is about to make; a real phase journey
+	## does not.
+	if bool(plan.get(actor_id, {}).get("protected", false)):
+		var held := Vector2(plan[actor_id].get("target", Vector2.ZERO))
+		var standing := Vector2(match_court_3d.live_positions[actor_id])
+		if _court_metres(standing, held) > BASE_RETURN_DEADBAND_METERS:
+			return
+	if not match_court_3d.live_positions.has(actor_id):
+		return
+	var leg_start := float(following.metadata["movement_start_time"])
+	var window_start := _event_physical_time(event)
+	if leg_start < window_start - 0.001 or leg_start >= window_start + window_seconds:
+		return
+	var target: Vector2 = Vector2(following.metadata.get(
+		"movement_target",
+		following.metadata.get(
+			"body_contact_position", following.start_position
+		),
+	))
+	_set_plan_target(plan, actor_id, target, true)
+	if not plan.has(actor_id):
+		return
+	plan[actor_id]["delay_seconds"] = maxf(leg_start - window_start, 0.0)
+	var authored := maxf(float(following.metadata.get(
+		"movement_duration", 0.0
+	)), 0.0)
+	var budget := maxf(float(following.metadata.get(
+		"movement_available_seconds", 0.0
+	)), 0.0)
+	if authored > 0.0 and budget > 0.0:
+		authored = minf(authored, budget)
+	if authored > 0.0:
+		plan[actor_id]["seconds"] = authored
+	var leg_id := str(following.metadata.get("movement_leg_id", ""))
+	plan[actor_id]["early_leg"] = leg_id
+	_legs_issued_early[actor_id] = leg_id
+	playback_early_legs.append({
+		"player_id": actor_id,
+		"leg_id": leg_id,
+		"issued_at": window_start,
+		"leg_start": leg_start,
+		"event_type": int(following.event_type),
+	})
+
+
+## The contact after this one, skipping `SET_DECISION` and `POINT`.
+func _contact_after(contact: RallyEvent) -> RallyEvent:
+	if active_result == null or contact == null:
+		return null
+	var events: Array[Resource] = active_result.events
+	var index := events.find(contact)
+	if index < 0:
+		return null
+	return _next_contact_event(events, index + 1)
+
+
 func _apply_cheat_steps(
 	plan: Dictionary, action_target: Vector2, next_contact: RallyEvent
 ) -> void:

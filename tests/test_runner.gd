@@ -9448,13 +9448,40 @@ func _test_movement_contract_completeness() -> void:
 	var missing_time := 0
 	var continuing := 0
 	var missing_leg_start := 0
+	var leg_ids := 0
+	var unnamed_legs := 0
+	var misdated_legs := 0
+	var collided_legs := 0
 	for seed_value in range(73000, 73200):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		var seen := {}
+		## Journey identity is per rally: two rallies may reuse a name, one
+		## rally may not, because within a rally it is what tells playback that
+		## the leg it is drawing is the leg it already started.
+		var seen_leg_ids := {}
 		for event in result.events:
 			if int(event.actor_id) < 0:
 				continue
 			contacts += 1
+			if event.metadata.has("movement_available_seconds"):
+				leg_ids += 1
+				var leg_id := str(event.metadata.get("movement_leg_id", ""))
+				if leg_id.is_empty():
+					unnamed_legs += 1
+				elif seen_leg_ids.has(leg_id):
+					collided_legs += 1
+				else:
+					seen_leg_ids[leg_id] = true
+				## The leg begins exactly its budget before the contact it ends
+				## on. Both numbers are on the record, so a disagreement means
+				## the stamp and the clock have drifted apart.
+				var leg_start := float(event.metadata.get(
+					"movement_start_time", -999.0
+				))
+				var contact_at := float(event.metadata.get("physical_time", 0.0))
+				var budget := float(event.metadata["movement_available_seconds"])
+				if not is_equal_approx(leg_start, contact_at - budget):
+					misdated_legs += 1
 			if not event.metadata.has("body_contact_position"):
 				missing_body += 1
 			if not event.metadata.has("physical_time"):
@@ -9490,6 +9517,14 @@ func _test_movement_contract_completeness() -> void:
 	_check(
 		continuing >= 200 and missing_leg_start == 0,
 		"every contact but an actor's first publishes where its leg began",
+	)
+	_check(
+		leg_ids >= 200 and unnamed_legs == 0 and misdated_legs == 0,
+		"every budgeted leg is named once and starts a budget before its contact",
+	)
+	_check(
+		leg_ids >= 200 and collided_legs == 0,
+		"no two journeys in one rally share a leg identity",
 	)
 
 

@@ -12715,6 +12715,25 @@ func _stamp_physical_times(result: Resource) -> int:
 			metadata["physical_time_floored"] = previous - moment
 			moment = previous
 		metadata["physical_time"] = moment
+		## **One journey, one name, whichever window is looking at it.**
+		##
+		## A floor defender sets off at the hitter's contact and is drawn in the
+		## window that starts at the block, because that is where
+		## `_net_crossing_time` above puts an untouched block -- measured at a
+		## mean 0.2058 s of the swing spent before the net, on 159 of 175 pairs.
+		## The leg spans two windows and nothing said so.
+		##
+		## Derived here rather than at the eight publishing sites because this is
+		## the one place `physical_time` is known, so the start and the id cannot
+		## disagree with the clock playback reads. Both are functions of facts
+		## already on the record: no new decision is taken.
+		var leg_budget := float(metadata.get("movement_available_seconds", -1.0))
+		if leg_budget >= 0.0 and int(event.actor_id) >= 0:
+			var leg_start := moment - leg_budget
+			metadata["movement_start_time"] = leg_start
+			metadata["movement_leg_id"] = "%d@%.3f" % [
+				int(event.actor_id), leg_start
+			]
 		event.metadata = metadata
 		previous = moment
 		if trajectory.has("end_time"):

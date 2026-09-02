@@ -39,6 +39,9 @@ func _ready() -> void:
 		"delayed": 0, "late_departures": 0, "overspeed": 0, "mismatches": 0,
 		"window_paced_contact_actor": 0, "window_paced_phase_entry": 0,
 		"window_paced_base_return": 0, "window_paced_staged": 0,
+		"early_legs": 0, "early_legs_duplicated": 0, "continued_legs": 0,
+		"following_has_start": 0, "following_starts_earlier": 0,
+		"following_starts_later": 0, "following_starts_inside": 0,
 	}
 	for seed_value in range(FIRST_SEED, FIRST_SEED + SEED_COUNT):
 		var result: Resource = manager.resolve_active_rally(seed_value)
@@ -72,6 +75,27 @@ func _ready() -> void:
 				- float(event.metadata.get("physical_time", 0.0))
 			if window <= 0.0:
 				continue
+			## Why an early leg was or was not issued, counted from the probe so
+			## the answer does not depend on reading the screen's control flow.
+			var following: Resource = screen._contact_after(next_contact)
+			if following != null and following.metadata.has("movement_start_time"):
+				totals["following_has_start"] = int(
+					totals.following_has_start
+				) + 1
+				var ls := float(following.metadata["movement_start_time"])
+				var ws := float(event.metadata.get("physical_time", 0.0))
+				if ls < ws - 0.001:
+					totals["following_starts_earlier"] = int(
+						totals.following_starts_earlier
+					) + 1
+				elif ls >= ws + window:
+					totals["following_starts_later"] = int(
+						totals.following_starts_later
+					) + 1
+				else:
+					totals["following_starts_inside"] = int(
+						totals.following_starts_inside
+					) + 1
 			var plan: Dictionary = screen._build_movement_plan(
 				event, next_contact, window
 			)
@@ -106,6 +130,8 @@ func _ready() -> void:
 						totals[source] = int(totals[source]) + 1
 				if movement.has("delay_seconds"):
 					totals["delayed"] = int(totals.delayed) + 1
+				if movement.has("continued_leg"):
+					totals["continued_legs"] = int(totals.continued_legs) + 1
 				if rows.size() < 20:
 					rows.append("%d|%d|%s->%s|%.2f|%.3f|%.3f|%.2f" % [
 						seed_value, int(raw_player_id),
@@ -117,6 +143,18 @@ func _ready() -> void:
 						metres / maxf(seconds, 0.0001),
 					])
 	totals["late_departures"] = screen.playback_late_departures.size()
+	totals["early_legs"] = screen.playback_early_legs.size()
+	## One journey drawn once. An id appearing twice would be a leg issued early
+	## in two different windows, which is the double-consumption the handoff
+	## forbids.
+	var seen_legs := {}
+	var duplicated := 0
+	for entry in screen.playback_early_legs:
+		var leg_id := str(entry.get("leg_id", ""))
+		if seen_legs.has(leg_id):
+			duplicated += 1
+		seen_legs[leg_id] = true
+	totals["early_legs_duplicated"] = duplicated
 	totals["overspeed"] = screen.playback_leg_overspeed.size()
 	totals["mismatches"] = screen.playback_start_mismatches.size()
 	print("seed|player|window_pair|metres|window_s|planned_s|drawn_mps")

@@ -59,6 +59,9 @@ func _initialize() -> void:
 	var over_total := 0.0
 	var pre_net_total := 0.0
 	var pre_net_pairs := 0
+	var attack_block_pairs := 0
+	var attack_block_total := 0.0
+	var attack_block_drawable := 0
 	var worst_inflation := 0.0
 	var credited_metres := 0.0
 	for serving_home in [false, true]:
@@ -77,6 +80,20 @@ func _initialize() -> void:
 					continue
 				if int(block_event.event_type) != RallyEventScript.EventType.BLOCK:
 					continue
+				## The window the block closes, measured whether or not a dig
+				## follows: it is the only place a dig's leg could be issued
+				## early, and `match_screen` skips a window of zero length.
+				if index > 0:
+					var attack_event: Resource = events[index - 1]
+					if attack_event != null and int(attack_event.event_type) \
+							== RallyEventScript.EventType.ATTACK:
+						var ab := float(block_event.metadata.get(
+							"physical_time", 0.0
+						)) - float(attack_event.metadata.get("physical_time", 0.0))
+						attack_block_pairs += 1
+						attack_block_total += ab
+						if ab > 0.005:
+							attack_block_drawable += 1
 				if int(dig_event.event_type) != RallyEventScript.EventType.DIG:
 					continue
 				var meta: Dictionary = dig_event.metadata
@@ -164,6 +181,12 @@ func _initialize() -> void:
 	print("mean_swing_before_the_net_s|%.4f" % (
 		pre_net_total / maxf(float(pre_net_pairs), 1.0)
 	))
+	print("--- the window the dig's leg would have to start in")
+	print("attack_to_block_pairs|%d" % attack_block_pairs)
+	print("mean_attack_to_block_window_s|%.4f" % (
+		attack_block_total / maxf(float(attack_block_pairs), 1.0)
+	))
+	print("attack_to_block_windows_over_5ms|%d" % attack_block_drawable)
 	quit()
 
 
