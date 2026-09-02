@@ -38,7 +38,7 @@ func _ready() -> void:
 		"legs": 0, "with_seconds": 0, "seconds_from_window": 0,
 		"delayed": 0, "late_departures": 0, "overspeed": 0, "mismatches": 0,
 		"window_paced_contact_actor": 0, "window_paced_phase_entry": 0,
-		"window_paced_unlisted": 0,
+		"window_paced_base_return": 0, "window_paced_staged": 0,
 	}
 	for seed_value in range(FIRST_SEED, FIRST_SEED + SEED_COUNT):
 		var result: Resource = manager.resolve_active_rally(seed_value)
@@ -99,11 +99,11 @@ func _ready() -> void:
 						## Which of the three movement sources left this leg
 						## unpaced. Without the split the total says a number is
 						## too high and cannot say what to fix.
-						totals[_window_paced_source(
-							next_contact, int(raw_player_id)
-						)] = int(totals[_window_paced_source(
-							next_contact, int(raw_player_id)
-						)]) + 1
+						var source := _window_paced_source(
+							result, event, next_contact,
+							int(raw_player_id), target,
+						)
+						totals[source] = int(totals[source]) + 1
 				if movement.has("delay_seconds"):
 					totals["delayed"] = int(totals.delayed) + 1
 				if rows.size() < 20:
@@ -134,21 +134,39 @@ func _ready() -> void:
 ## published no duration; it is in a phase map whose intent carries no
 ## `traversal_seconds`; or it is in no phase map at all, which means it came from
 ## a base return or a staged next position.
-func _window_paced_source(next_contact: Resource, player_id: int) -> String:
+func _window_paced_source(
+	result: Resource,
+	event: Resource,
+	next_contact: Resource,
+	player_id: int,
+	target: Vector2,
+) -> String:
 	if int(next_contact.actor_id) == player_id:
 		return "window_paced_contact_actor"
 	for side in ["home", "opponent"]:
-		var intents: Dictionary = next_contact.metadata.get(
-			"%s_phase_intents" % side, {}
-		)
 		var targets: Dictionary = next_contact.metadata.get(
 			"%s_phase_targets" % side, {}
 		)
 		if not targets.has(player_id):
 			continue
+		var intents: Dictionary = next_contact.metadata.get(
+			"%s_phase_intents" % side, {}
+		)
 		var raw_intent: Variant = intents.get(player_id, null)
 		if raw_intent is Dictionary \
 				and Dictionary(raw_intent).has("traversal_seconds"):
 			continue
 		return "window_paced_phase_entry"
-	return "window_paced_unlisted"
+	## **A reset is not a late journey and should not be counted as one.**
+	##
+	## `_apply_base_positions` sends a voli home when the resolver has stopped
+	## asking for them. There is no contact at the end of it and therefore no
+	## deadline to be late for, so drawing it across the window is a defensible
+	## pace rather than a missing fact. Separated from the staged legs, which do
+	## have a contact waiting.
+	for map_name in ["home_base_positions", "opponent_base_positions"]:
+		var bases: Dictionary = result.get(map_name)
+		if bases.has(player_id) \
+				and Vector2(bases[player_id]).distance_to(target) <= 0.002:
+			return "window_paced_base_return"
+	return "window_paced_staged"

@@ -1411,7 +1411,11 @@ func resolve(
 			## first contact of a rally, so that leg does not exist. Measured
 			## after the fact: 400 serves of 400 had no preceding flight.
 			"home_phase_targets": _lineup_live_shape(lineup, live_positions),
-			"home_phase_intents": receive_formation_intents,
+			"home_phase_intents": _shape_intents(
+				_lineup_live_shape(lineup, live_positions),
+				_lineup_players(players, lineup), _positions_at_last_contact,
+				serve_time, receive_formation_intents,
+			),
 			"opponent_phase_targets": opponent_serve_transition,
 			"opponent_phase_intents": opponent_serve_intents,
 			"planner_zone_center": Vector2(receiver_zone.center) \
@@ -2394,9 +2398,29 @@ func resolve(
 		var phase_intents: Dictionary = set_event_for_staging.metadata.get(
 			"home_phase_intents", {}
 		)
-		phase_intents[hitter.id] = {
-			"intent": &"preparing_attack", "progress": hitter_release_progress,
-		}
+		## The last off-ball population publishing a destination and no clock.
+		##
+		## The leg is `hitter_standing_at -> hitter_start`, captured above
+		## "before preparation relocates it" for exactly this reason, and it
+		## happens while the pass is in the air -- which is the window this map is
+		## consumed in. `progress` becomes the journey fraction every other
+		## `_travel_intent` entry carries; the tempo's release progress keeps its
+		## own name rather than sharing a key with a different quantity, and
+		## `tempo_coordination` on this same event carries it too.
+		var hitter_stage_intent := _travel_intent(
+			hitter, &"preparing_attack", hitter_standing_at, hitter_start,
+			hitter_start, "transition", float(second_contact_window),
+		)
+		## `progress` keeps the release progress it has always carried: it is the
+		## cogniticon fill `run_intent_progress_probe.gd` measures, and the
+		## journey fraction would be a constant 1.0 here because the resolver
+		## stages the hitter onto the mark rather than short of it. The travel
+		## fraction is published beside it rather than over it.
+		hitter_stage_intent["travel_progress"] = float(
+			hitter_stage_intent.get("progress", 1.0)
+		)
+		hitter_stage_intent["progress"] = hitter_release_progress
+		phase_intents[hitter.id] = hitter_stage_intent
 		set_event_for_staging.metadata["home_phase_intents"] = phase_intents
 		set_event_for_staging.metadata["tempo_coordination"] = \
 			home_tempo_timing.duplicate(true)
@@ -4067,7 +4091,15 @@ func _resolve_home_serve(
 				opponent_team.current_lineup() if opponent_team != null else null,
 				opponent_live_positions,
 			),
-			"opponent_phase_intents": receive_formation_intents,
+			"opponent_phase_intents": _shape_intents(
+				_lineup_live_shape(
+					opponent_team.current_lineup() if opponent_team != null else null,
+					opponent_live_positions,
+				),
+				opponent_team.on_court_players() if opponent_team != null else [],
+				_positions_at_last_contact, serve_time,
+				receive_formation_intents,
+			),
 			"home_phase_targets": home_serve_transition,
 			"home_phase_intents": home_serve_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
@@ -4761,9 +4793,30 @@ func _resolve_opponent_transition(
 	var pre_release_home_targets: Dictionary = pre_release_home_block.get(
 		"targets", {}
 	)
+	## The one phase map in the file that published a destination and no intent,
+	## and therefore the whole of the "target with no intent entry at all"
+	## population -- 231 before the wall closes were timed, 84 after. Timed
+	## against the pass that is in the air while it happens, which is what the
+	## comment above this block already says the map is consumed during.
+	var pre_release_home_intents := {}
+	for raw_player_id in pre_release_home_targets:
+		var pre_release_id := int(raw_player_id)
+		var stager := _player_by_id(players, pre_release_id)
+		if stager == null:
+			continue
+		pre_release_home_intents[pre_release_id] = _wall_close_intent(
+			stager,
+			Vector2(live_positions.get(
+				pre_release_id, pre_release_home_targets[raw_player_id]
+			)),
+			Vector2(pre_release_home_targets[raw_player_id]),
+			float(second_contact_window),
+		)
 	if opponent_set_event != null:
 		opponent_set_event.metadata["home_phase_targets"] = \
 			pre_release_home_targets.duplicate(true)
+		opponent_set_event.metadata["home_phase_intents"] = \
+			pre_release_home_intents.duplicate(true)
 		opponent_set_event.metadata["home_block_pre_release"] = Dictionary(
 			pre_release_home_block.get("prediction", {})
 		).duplicate(true)
@@ -5264,10 +5317,17 @@ func _resolve_opponent_transition(
 		var opponent_phase_intents: Dictionary = opponent_set_event.metadata.get(
 			"opponent_phase_intents", {}
 		)
-		opponent_phase_intents[opponent_hitter.id] = {
-			"intent": &"preparing_attack",
-			"progress": opponent_release_progress,
-		}
+		## Same staging leg as the home first ball, timed the same way.
+		var opponent_stage_intent := _travel_intent(
+			opponent_hitter, &"preparing_attack", opponent_standing_at,
+			opponent_approach_start, opponent_approach_start, "transition",
+			float(second_contact_window),
+		)
+		opponent_stage_intent["travel_progress"] = float(
+			opponent_stage_intent.get("progress", 1.0)
+		)
+		opponent_stage_intent["progress"] = opponent_release_progress
+		opponent_phase_intents[opponent_hitter.id] = opponent_stage_intent
 		opponent_set_event.metadata["opponent_phase_intents"] = \
 			opponent_phase_intents
 		opponent_set_event.metadata["tempo_coordination"] = \
@@ -6851,10 +6911,16 @@ func _resolve_home_continuation(
 			continuation_phase_targets
 		var continuation_phase_intents: Dictionary = \
 			set_event_for_staging.metadata.get("home_phase_intents", {})
-		continuation_phase_intents[hitter.id] = {
-			"intent": &"preparing_attack",
-			"progress": continuation_release_progress,
-		}
+		## Same staging leg as the home first ball, timed the same way.
+		var continuation_stage_intent := _travel_intent(
+			hitter, &"preparing_attack", hitter_standing_at, hitter_start,
+			hitter_start, "transition", float(second_contact_window),
+		)
+		continuation_stage_intent["travel_progress"] = float(
+			continuation_stage_intent.get("progress", 1.0)
+		)
+		continuation_stage_intent["progress"] = continuation_release_progress
+		continuation_phase_intents[hitter.id] = continuation_stage_intent
 		set_event_for_staging.metadata["home_phase_intents"] = \
 			continuation_phase_intents
 		set_event_for_staging.metadata["tempo_coordination"] = \
@@ -15865,6 +15931,48 @@ static func _uniform_intents(targets: Dictionary, intent: StringName) -> Diction
 	var intents := {}
 	for player_id in targets:
 		intents[int(player_id)] = {"intent": intent, "progress": 0.0}
+	return intents
+
+
+## The receive shape, described as the journey it was rather than the posture it
+## ends in.
+##
+## `_initial_home_positions` stamps `{intent, progress: 0.0}` once, at the start
+## of the rally, when it is exactly right -- nobody has travelled yet. Those same
+## intents are then republished on the reception event, by which point the bodies
+## have moved a mean 2.24 m and the stamp still says they have not. This rebuilds
+## them against `_positions_at_last_contact`, which is the resolver's own record
+## of where each body began the leg it has just finished.
+func _shape_intents(
+	shape: Dictionary,
+	roster: Array,
+	from_positions: Dictionary,
+	window_seconds: float,
+	fallback: Dictionary,
+) -> Dictionary:
+	var by_id := {}
+	for entry in roster:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var intents := {}
+	for raw_player_id in shape:
+		var player_id := int(raw_player_id)
+		var target := Vector2(shape[raw_player_id])
+		var mover := by_id.get(player_id, null) as VolleyballPlayer
+		var here := Vector2(from_positions.get(player_id, target))
+		if mover == null or window_seconds <= 0.0:
+			intents[player_id] = fallback.get(player_id, {
+				"intent": &"receiving", "progress": 0.0,
+			})
+			continue
+		var named: Dictionary = fallback.get(player_id, {})
+		var intent_name: StringName = StringName(str(
+			named.get("intent", &"receiving")
+		))
+		intents[player_id] = _travel_intent(
+			mover, intent_name, here, target, target, "lateral", window_seconds
+		)
 	return intents
 
 
