@@ -12,9 +12,20 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-30 at `0bf250c`, after the merge of
-the voli-body work at `5a55494`: **2 of 2,174 checks fail**. A *third* failure
-is a regression; these two are not.
+Current branch baseline, verified 2026-09-02 at `4b60055`, after the merge of
+`origin/main` at `e8ef68f` and the simulation/playback authority changes 1-5:
+**2 of 2,221 checks fail**. A *third* failure is a regression; these two are not.
+
+**The delta from that merge is not computable, and the reason is worth one
+line.** Two attempts to measure the merged tree's own predecessor were spoiled --
+the first had the working tree change underneath it mid-run, the second buffered
+its output through a pipe and outlived its timeout -- so 2,221 has no measured
+number before it on this tree. Four checks were authored
+(`_test_movement_contract_completeness`), and the balance probe over 700 rallies
+is byte-identical across all five changes, so no sampling population moved. What
+that *cannot* say is how much of the distance from 2,174 is the 84 commits the
+merge brought in. Quoting a difference against 2,174 would be comparing two
+different trees, which is the mistake the rest of this section is about.
 
 **The two are older than this branch and fail on `origin/main` unchanged.** Named
 so nobody re-derives them:
