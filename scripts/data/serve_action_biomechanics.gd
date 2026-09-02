@@ -15,6 +15,20 @@ const STYLES: Array[String] = [
 	STANDING, JUMP_TOPSPIN, JUMP_FLOAT, HYBRID, SKY_BALL,
 ]
 
+## Visual vocabulary semantics
+##
+## - standing: self-paced grounded overhead serve; compact toss, clean transfer,
+##   contact, follow-through, and step into court.
+## - jump topspin: aggressive approach and airborne overhead contact with a full
+##   trunk bow, fast wrap, landing, and forward recovery.
+## - jump float: compact airborne serve with controlled contact and an arrested
+##   hand rather than the topspin wrap.
+## - hybrid: airborne serve that shares the jump preparation while retaining a
+##   more controlled late hand action.
+## - sky ball: grounded underhand preparation and high lifting contact.
+## - routine variants: pre-toss personal preparation only; they settle into the
+##   same style-specific toss and never represent a separate contact outcome.
+
 
 static func canonical_style(raw_style: String) -> String:
 	for style in STYLES:

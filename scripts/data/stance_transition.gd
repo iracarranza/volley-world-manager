@@ -25,6 +25,14 @@ extends RefCounted
 ##
 ## Pure and deterministic, like the other pose modules.
 
+## Visual vocabulary semantics
+##
+## Stance transitions continuously connect watching, defending, and blocking
+## readiness instead of assigning a new idle silhouette. Floor transitions cover
+## controlled knee recovery, sideways fall/roll, forward reaching slide, and
+## backward blown-away recovery. Each is a recovery phase whose final body must
+## join standing or locomotion without a reset.
+
 ## ## How long
 ##
 ## **Derived from the distance between the two stances rather than tabulated.**

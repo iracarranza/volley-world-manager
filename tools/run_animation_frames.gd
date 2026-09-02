@@ -54,6 +54,43 @@ const CAMERAS := {
 ##   recovery -- the floor motion driven across `recovery` 0 to 1
 ##   pose     -- [event type, elevation, phase] driven across `phase` instead
 ##   signature-- a named rule-of-cool move at full charge
+##
+## Semantic vocabulary index (descriptive render metadata, never selection logic):
+##
+## - `recovery_fall_roll`: planted/off-axis emergency pass, sideways floor roll.
+## - `recovery_fall_slide`: moving/reaching emergency pass, forward floor slide.
+## - `recovery_blown_away`: hard contact impact, backward fall and recovery.
+## - `recovery_knee`: low controlled contact, supported kneeling recovery.
+## - `gait_ready_to_run`: settled readiness continuously opening into relocation.
+## - `gait_backpedal`: retreating adjustment while facing the play.
+## - `gait_shuffle`: lateral positional adjustment with uncrossed feet.
+## - `platform_aim`: clean settled reception contact across incoming directions.
+## - `approach_three_step`: normal attack preparation from run through plant.
+## - `serve_standing`: clean grounded overhead routine through step-in recovery.
+## - `serve_jump_topspin`: aggressive airborne serve, full wrap and landing.
+## - `serve_jump_float`: compact airborne float, arrested hand and landing.
+## - `serve_hybrid`: airborne preparation with a controlled late hand action.
+## - `serve_sky_ball`: grounded underhand lift and recovery.
+## - `receive_dive`: emergency airborne/reaching reception into floor recovery.
+## - `receive_moving`: bump while arriving and retaining the active step.
+## - `receive_strained`: extended/off-balance bump outside a settled platform.
+## - `set_front`: clean settled overhead set, gather through recovery.
+## - `set_back`: controlled back release with a late directional reveal.
+## - `set_moving`: overhead set while the final positional step is still active.
+## - `attack_power`: clean committed swing, contact, continuation, and landing.
+## - `attack_roll`: controlled soft attack after a power-shaped approach.
+## - `attack_dink`: compact intentional tip/feint with the hand forward.
+## - `attack_reaching`: extended strike after failed ideal body spacing.
+## - `attack_mistimed`: compromised/cramped strike with disrupted sequencing.
+## - `attack_missed`: committed swing after losing the ideal contact point.
+## - `block_impact`: wall absorbs a hard ball through hands and torso.
+## - `block_tool`: hand touch deflects/tooling the ball off the wall.
+## - `block_beaten`: late or incomplete wall responding after the ball passes.
+## - `idle_breath_sway`: settled non-contact breathing and weight drift.
+## - `standing_to_ready`: continuous transition into assigned readiness.
+## - `blink`: ordinary perceptive eye microexpression outside concentration.
+## - `signature_*`: stylized charged continuations of their named attack/block
+##   families; emphasis overlays, not alternate rally outcomes.
 const STRIPS: Array[Dictionary] = [
 	{
 		## `posture` has to be one of the four the pose actually knows -- the

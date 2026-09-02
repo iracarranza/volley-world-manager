@@ -110,7 +110,9 @@ var contact_platform_aim: Dictionary = {}
 ## rolls backward. The simulation still owns the cost and severity.
 var contact_recovery: String = "platform"
 
-## How much of a wall this blocker got up: `two`, `one`, or `none`.
+## Block silhouette vocabulary: `two` is a clean sealed wall, `one` is a late
+## reaching close, and `none` is a beaten/incomplete wall. These are descriptive
+## presentation states supplied by the resolver, not a second block decision.
 ##
 ## Carried as state for the same reason `contact_posture` is -- the resolver
 ## decided it and the court's job is to hand that verdict over, not to form a
@@ -1301,6 +1303,12 @@ func set_highlighted(highlighted: bool) -> void:
 ## therefore whatever the frame already had -- the gait, mid-stride -- so a
 ## passer running to the ball keeps running and the platform arrives under them.
 ## The recovery's own progress, from a pose phase that also carries the approach.
+##
+## Reception vocabulary: `planted` is clean/settled; `moving` is an arriving
+## contact that retains its final adjustment step; `reaching` is a strained late
+## extension outside a comfortable platform; `off-axis` is awkward body geometry
+## with a compromised lateral platform. Each covers preparation, contact,
+## follow-through, and handoff to its recovery without resetting locomotion.
 func _recovery_clock(phase: float) -> float:
 	return clampf(
 		inverse_lerp(RECOVERY_START_PHASE, RECOVERY_END_PHASE, phase), 0.0, 1.0
@@ -1888,6 +1896,11 @@ func _blend_upper_body_toward(captured: Dictionary, amount: float) -> void:
 ## Pure directional plan for a recovery. Keeping this separate from the rig
 ## makes "which way did they go?" a testable fact while the joint posing below
 ## remains free to change with the model.
+##
+## Recovery vocabulary: `platform` is a controlled on-feet continuation; `knee`
+## is a low but supported recovery; a planted/off-axis `fall` rolls sideways; a
+## moving/reaching `fall` slides forward; `blown_away` absorbs a hard impact
+## backward before gathering the legs and returning to stance.
 static func recovery_motion(
 	recovery_state: String,
 	posture: String,

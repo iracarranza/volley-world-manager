@@ -3,6 +3,14 @@ extends RefCounted
 
 ## Deterministic low-amplitude life layered under stance and action poses.
 
+## Visual vocabulary semantics
+##
+## Breathing and sway are settled non-contact micro-movement, not fatigue or a
+## rally outcome. Blink and pupil motion communicate ordinary attention; contact
+## concentration may suppress a blink without changing gaze ownership. These
+## overlays fade beneath locomotion and preparation so the same living body can
+## transition continuously into ready stance or action.
+
 const BREATH_SECONDS: float = 4.2
 const SWAY_SECONDS: float = 6.8
 const BLINK_CLOSE_SECONDS: float = 0.07

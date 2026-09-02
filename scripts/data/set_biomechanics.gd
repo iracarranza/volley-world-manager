@@ -43,6 +43,21 @@ extends RefCounted
 ##
 ## Pure and deterministic, and testable without a scene.
 
+## Visual vocabulary semantics
+##
+## - standing/front set: clean, settled overhead second contact with full-body
+##   extension toward the target.
+## - moving/adjusting set: the same hand and release chain layered over a live
+##   final step by `ContactArrivalBiomechanics`.
+## - jump set: controlled airborne contact followed by landing and recovery.
+## - back set: controlled overhead release behind the setter, preserving the
+##   front-facing preparation before the late directional reveal.
+## - underhand set: emergency low-ball second contact, not a generic overhead
+##   reaching-set substitute.
+##
+## There is no separate reaching-overhead-set family here yet; comments should
+## not imply a vocabulary the pose architecture cannot currently express.
+
 ## Where each stage begins on the signed timeline.
 ##
 ## A setter is under the ball early -- the hands are up long before the contact,

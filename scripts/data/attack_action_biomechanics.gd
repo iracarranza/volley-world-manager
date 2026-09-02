@@ -14,6 +14,22 @@ const ADJUSTMENT_REACHING := &"reaching"
 const ADJUSTMENT_MISTIMED := &"mistimed"
 const ADJUSTMENT_MISSED := &"missed"
 
+## Visual vocabulary semantics
+##
+## - power: normal committed swing; clean overhead contact and full continuation.
+## - roll: controlled soft attack; the approach sells power before a slower,
+##   shaped hand action and contained follow-through.
+## - dink/feint/tip: compact intentional touch with the hand forward at contact.
+## - clean adjustment: comfortable ideal contact position.
+## - reaching adjustment: poor spacing or late reach extends the striking side
+##   outside the ideal axis while the approach momentum remains visible.
+## - mistimed adjustment: compromised sequencing and cramped contact geometry.
+## - missed adjustment: attempted swing after the ideal meeting point was lost;
+##   the body still completes and recovers from the committed action.
+##
+## These labels describe pose meaning only. They do not define when playback or
+## simulation should select a family.
+
 
 static func family(attack_type: String) -> StringName:
 	var lowered := attack_type.to_lower()

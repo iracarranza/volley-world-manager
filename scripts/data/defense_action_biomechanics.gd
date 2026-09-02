@@ -4,6 +4,14 @@ extends RefCounted
 ## The pre-contact flight of a diving first contact. Floor recovery remains in
 ## the existing recovery model and starts only after phase zero.
 
+## Visual vocabulary semantics
+##
+## The dive is an emergency first-contact preparation: a moving or reaching voli
+## commits beyond a settled platform, contacts while airborne or descending, and
+## arrives at the floor before the shared recovery takes over. Non-diving clean,
+## moving, strained, and off-axis passes remain in the platform/contact-arrival
+## vocabulary; this overlay does not redefine them or their contact result.
+
 const DIVE_START: float = -0.42
 const CONTACT: float = 0.0
 const FLOOR_END: float = 0.34

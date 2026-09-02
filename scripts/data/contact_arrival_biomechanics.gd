@@ -9,6 +9,17 @@ extends RefCounted
 ## two, so upper-body preparation can overlap a final adjustment step without a
 ## root-position snap or a stride reset.
 
+## Visual vocabulary semantics
+##
+## - settled arrival: the voli reached the contact base early and can establish
+##   the platform or setting posture before contact.
+## - moving arrival: the voli is still stepping while the upper body prepares.
+## - reaching/off-axis arrival: late or awkward geometry retains more of the
+##   active step while the contact apparatus extends toward the ball.
+##
+## This is the continuous preparation handoff from locomotion to contact. It
+## describes carried stance and momentum, not contact quality or rally outcome.
+
 const SETTLED_SPEED_MPS: float = 0.45
 const MOVING_SPEED_MPS: float = 3.2
 

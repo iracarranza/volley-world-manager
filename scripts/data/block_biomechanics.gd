@@ -39,6 +39,15 @@ extends RefCounted
 ##
 ## Pure and deterministic, for the same reason as the other pose modules.
 
+## Visual vocabulary semantics
+##
+## The base family is a clean block attempt: read, load, jump, press, hold,
+## withdraw, land, and recover. A two-arm wall reads as sealed/controlled; one
+## arm is a late reach while closing; no committed arm is a beaten or incomplete
+## wall. Post-contact response variants distinguish a hard impact absorbed by
+## the hands, a touch/tooling deflection, and a beaten block after the ball has
+## passed. They describe the visible response, not the contest outcome rules.
+
 ## Where each stage begins on the signed timeline.
 ##
 ## The read takes most of the wind-up because that is what a blocker actually

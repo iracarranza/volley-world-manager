@@ -8,6 +8,15 @@ extends RefCounted
 ## shifts, attention lag and attached-part follow-through that make the existing
 ## biomechanical poses read as one continuous performance.
 
+## Visual vocabulary semantics
+##
+## Anticipation loads before commitment; commitment carries the body through the
+## contact; force marks the contact accent; continuation and settle preserve
+## inertia into recovery. Head/eye attention remains perceptive rather than
+## mechanically locked. Body-type anatomy responds passively to acceleration,
+## impact, and settling: it supports the primary action's meaning but never names
+## a new action quality or selects an outcome.
+
 const HEAD_RESPONSE_RADIANS_PER_SECOND := 7.4
 const HEAD_PITCH_RESPONSE_RADIANS_PER_SECOND := 5.8
 

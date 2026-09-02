@@ -34,6 +34,16 @@ extends RefCounted
 ##
 ## Pure and deterministic, like the other two pose modules.
 
+## Visual vocabulary semantics
+##
+## - attack landing: forward-carried, asymmetric touchdown after a swing.
+## - block landing: square, compact absorption and rapid return to net readiness.
+## - serve landing: forward court-entry after airborne service contact.
+## - default landing: neutral touchdown and recovery for an unclassified jump.
+##
+## Every family covers touchdown, absorption, settle, and handoff to stance; it
+## is the continuation of the preceding action, not an isolated landing pose.
+
 ## How long an absorb-and-recover takes, in seconds, for each action.
 ##
 ## A blocker's is shortest because they cannot afford a long one; a hitter's is

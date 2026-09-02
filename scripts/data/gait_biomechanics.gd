@@ -43,6 +43,19 @@ extends RefCounted
 ## Pure and deterministic, like `SpikeBiomechanics`, for the same reason: pose
 ## work that cannot be checked without eyes on a screen does not get checked.
 
+## Visual vocabulary semantics
+##
+## - ready/standing: settled, watchful non-contact base; preparation can grow
+##   out of it without first resetting the body.
+## - walk: controlled positional relocation with continuous grounded steps.
+## - run: urgent relocation with carried momentum and a flight-weighted stride.
+## - backpedal: retreating adjustment while the chest and attention stay in play.
+## - shuffle: lateral defensive or net movement with a low base and uncrossed feet.
+##
+## Contact families inherit the live stride phase from this vocabulary; a bump,
+## set, or attack preparation is something the moving body begins doing, not a
+## replacement pose that restarts its feet.
+
 ## Where the blend between the two gaits runs, in metres per second.
 ##
 ## The lower bound is a stroll and the upper an honest sprint. Real humans

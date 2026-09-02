@@ -37,6 +37,14 @@ const ApproachBiomechanics := preload("res://scripts/data/approach_biomechanics.
 ## 0 to 1 independently: the swing played out completely during the approach and
 ## then snapped back to fully cocked at the instant of contact and played again.
 
+## Visual vocabulary semantics
+##
+## This is the clean, fully committed overhead attack base: plant and takeoff,
+## high-elbow preparation, proximal-to-distal contact, follow-through, landing,
+## and recovery. It assumes comfortable ideal striking geometry. Soft-shot and
+## compromised/reaching families preserve this continuous chain and modify its
+## late intention or body response rather than replacing the approach or launch.
+
 ## Where each phase of the spike begins, on the signed timeline above.
 ##
 ## Chosen against the real proportions of the action rather than spaced evenly.

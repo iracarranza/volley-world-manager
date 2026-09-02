@@ -50,6 +50,13 @@ extends RefCounted
 ## arm never doubles back through the body to reach the next pose. Ending at -352
 ## rather than +8 is the whole trick: the two are the same arm and only one of
 ## them is reachable without unwinding the entire swing backwards.
+
+## Visual vocabulary semantics
+##
+## Generic clean overhead serve chain: settled preparation, toss, load, committed
+## contact, cross-body follow-through, and recovery step. Style-specific serve
+## families layer onto this base; this file supplies continuity and force rhythm,
+## not the volleyball result of the serve.
 ##
 ## ## Phase convention
 ##
