@@ -12,6 +12,15 @@ extends Node
 ## playback will actually draw -- including the clamps, the re-anchoring to
 ## `live_positions`, and the separation pass.
 ##
+## **Every leg is walked out before the next window is built.** The first version
+## of this probe built every window's plan against the court's *opening*
+## positions, because it never played anything -- so `_apply_cheat_steps`,
+## `_apply_base_positions` and the start re-anchoring all measured from a body
+## that had not moved since the serve. Metadata-derived figures were unaffected;
+## everything read off `live_positions` was measured against a stale court. The
+## plan's own targets are now applied at the end of each window, which is what a
+## completed leg does.
+##
 ## Not headless: `MatchCourt3D` needs a rendering context.
 
 const MANAGER := preload("res://scripts/managers/game_manager.gd")
@@ -34,6 +43,8 @@ func _ready() -> void:
 	var manager: Object = MANAGER.new()
 	manager.seed_vertical_slice_data()
 	var rows: Array[String] = []
+	var metres_by_source := {}
+	var count_by_source := {}
 	var totals := {
 		"legs": 0, "with_seconds": 0, "seconds_from_window": 0,
 		"delayed": 0, "late_departures": 0, "overspeed": 0, "mismatches": 0,
@@ -111,6 +122,18 @@ func _ready() -> void:
 				if metres <= 0.05:
 					continue
 				totals["legs"] = int(totals.legs) + 1
+				## Legs are counted and metres are counted, because a cheat step
+				## is capped at CHEAT_STEP_METERS and a chase is not: 55% of legs
+				## and 55% of the drawn travel are different claims.
+				var leg_source := _window_paced_source(
+					result, event, next_contact, int(raw_player_id), target
+				)
+				metres_by_source[leg_source] = float(
+					metres_by_source.get(leg_source, 0.0)
+				) + metres
+				count_by_source[leg_source] = int(
+					count_by_source.get(leg_source, 0)
+				) + 1
 				var seconds := float(movement.get("seconds", 0.0))
 				if seconds > 0.0:
 					totals["with_seconds"] = int(totals.with_seconds) + 1
@@ -143,6 +166,13 @@ func _ready() -> void:
 						metres, window, seconds,
 						metres / maxf(seconds, 0.0001),
 					])
+			## The window plays: bodies end where the plan sent them, which is what
+			## the next window has to build its legs from.
+			for raw_player_id in plan:
+				screen.match_court_3d.set_player_position(
+					int(raw_player_id),
+					Vector2(plan[raw_player_id].get("target", Vector2.ZERO)),
+				)
 	totals["late_departures"] = screen.playback_late_departures.size()
 	totals["early_legs"] = screen.playback_early_legs.size()
 	## One journey drawn once. An id appearing twice would be a leg issued early
@@ -161,6 +191,16 @@ func _ready() -> void:
 	print("seed|player|window_pair|metres|window_s|planned_s|drawn_mps")
 	for row in rows:
 		print(row)
+	print("--- every drawn leg by where its destination came from")
+	print("source|legs|metres|mean_m")
+	var source_keys: Array = metres_by_source.keys()
+	source_keys.sort()
+	for key in source_keys:
+		var n := maxf(float(count_by_source[key]), 1.0)
+		print("%s|%d|%.1f|%.2f" % [
+			key, int(count_by_source[key]), float(metres_by_source[key]),
+			float(metres_by_source[key]) / n,
+		])
 	print("--- totals over %d rallies" % SEED_COUNT)
 	var keys: Array = totals.keys()
 	keys.sort()
