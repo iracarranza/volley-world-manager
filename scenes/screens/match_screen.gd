@@ -46,6 +46,14 @@ var playback_start_mismatches: Array[Dictionary] = []
 ## has drifted far enough from the timed one that the touch cannot be reached
 ## honestly.
 var playback_leg_overspeed: Array[Dictionary] = []
+## Legs whose actor could not legitimately have left in time to make the contact
+## the record says they made. The resolver times every defensive traversal from
+## the instant the ball is struck, but `BallReadSystem` says a body cannot know
+## where a ball is going for the first 0.07-0.34 s of its flight. Where the two
+## cannot both be true the delay is *not* applied -- drawing it would show a
+## receiver missing a ball the record has them passing -- and the overrun is
+## recorded here instead. This list is the movement contract's own bug report.
+var playback_late_departures: Array[Dictionary] = []
 ## Diagnostic: send everyone but the ball-handler to their own baseline.
 ## Toggled with M during playback; see `_apply_movement_proof`.
 var movement_proof: bool = false
@@ -164,6 +172,7 @@ func load_and_play_rally(
 	match_court_3d.ball_actor.reset_flight()
 	playback_start_mismatches.clear()
 	playback_leg_overspeed.clear()
+	playback_late_departures.clear()
 	_previously_placed.clear()
 	progress_bar.value = 0.0
 	await _run_rally(generation)
@@ -1639,6 +1648,38 @@ func _build_movement_plan(
 			plan[next_actor_id]["available_seconds"] = maxf(float(
 				next_contact.metadata["movement_available_seconds"]
 			), 0.0)
+		## When the actor could first have known where the ball was going.
+		##
+		## Applied only where the journey still fits behind it, and that
+		## condition is the whole point rather than a safety rail: the resolver
+		## granted this leg the *entire* flight, so a departure it did not
+		## account for cannot be honoured without drawing a body that misses a
+		## contact the record says it made. Where it does not fit the delay is
+		## counted, not applied, and `playback_late_departures` is what carries
+		## that count to the movement-contract question.
+		if next_contact.metadata.has("movement_ready_seconds") \
+				and plan.has(next_actor_id):
+			var ready := maxf(float(
+				next_contact.metadata["movement_ready_seconds"]
+			), 0.0)
+			var authored := float(next_contact.metadata.get(
+				"movement_duration", 0.0
+			))
+			var budget := float(next_contact.metadata.get(
+				"movement_available_seconds", 0.0
+			))
+			if ready > 0.0:
+				if budget > 0.0 and ready + minf(authored, budget) > budget:
+					playback_late_departures.append({
+						"player_id": next_actor_id,
+						"event_type": int(next_contact.event_type),
+						"ready_seconds": ready,
+						"authored_seconds": authored,
+						"available_seconds": budget,
+						"overrun": ready + minf(authored, budget) - budget,
+					})
+				else:
+					plan[next_actor_id]["delay_seconds"] = ready
 		if next_contact.event_type == RallyEventModel.EventType.ATTACK \
 				and next_contact.metadata.has("approach_speed_mps"):
 			plan[next_actor_id]["speed_mps"] = maxf(float(
@@ -2298,6 +2339,32 @@ func playback_geometry_report() -> Dictionary:
 		"worst_meters": worst * scale,
 		"mean_meters": total / float(playback_start_mismatches.size()) * scale,
 		"by_event": by_event,
+		"late_departures": playback_late_departure_report(),
+	}
+
+
+## Contacts whose actor could not legitimately have set off in time to make them.
+##
+## Reported beside the geometry mismatches because they are the same defect
+## measured on the other axis: that list says the drawn body started somewhere
+## the resolver did not time it from, this one says it started *when* the
+## resolver did not time it from. A non-zero count here is not a playback bug to
+## fix in playback -- it is the resolver granting a journey the whole flight
+## while the read model says the body could not have moved for the first part of
+## it, and only the movement contract can reconcile the two.
+func playback_late_departure_report() -> Dictionary:
+	if playback_late_departures.is_empty():
+		return {"count": 0, "worst_seconds": 0.0, "mean_seconds": 0.0}
+	var total := 0.0
+	var worst := 0.0
+	for entry in playback_late_departures:
+		var overrun := float(entry.get("overrun", 0.0))
+		total += overrun
+		worst = maxf(worst, overrun)
+	return {
+		"count": playback_late_departures.size(),
+		"worst_seconds": worst,
+		"mean_seconds": total / float(playback_late_departures.size()),
 	}
 
 

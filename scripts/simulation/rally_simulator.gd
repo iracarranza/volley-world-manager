@@ -1482,6 +1482,12 @@ func resolve(
 			## `MovementTimingRatioCalibration`, so its meaning is load-bearing on
 			## the simulation side and cannot be quietly moved.
 			"movement_available_seconds": reception_window,
+			## When this receiver could first have known where the serve was
+			## going. See `_read_ready_delay`: derived, not drawn, and already
+			## computed every rally by a shadow evaluation nothing reads.
+			"movement_ready_seconds": _read_ready_delay(
+				shadow_reception_trace, receiver.id
+			),
 			## **The leg this contact actually received.** Publishing the
 			## untruncated serve here while the serve event publishes the sliced
 			## one is two records of one handover, which is precisely what the
@@ -14692,6 +14698,35 @@ func _read_error_meters(
 
 
 ## NOTE The arrival a defender actually has, once they have gone to the wrong place -- RALLY_SIMULATOR_NOTES.md
+## When this voli could first have known where the ball was going, in seconds
+## after the flight began.
+##
+## `BallReadSystem` derives `recognition_time` with no random draw at all -- it is
+## `lerp(0.34, 0.07, reading) + novelty * 0.18 - observation_progress * 0.05`,
+## clamped -- and `ShadowReceptionSystem.evaluate` already runs on every rally
+## regardless of the promotion gate, so this number is computed today and thrown
+## away today. Reading it costs nothing and moves nothing.
+##
+## Published rather than applied. The resolver granted this journey the *whole*
+## flight; a departure later than the flight's start is a fact about the body
+## that the arrival it produced does not account for. Playback applies the delay
+## only where the leg still fits inside its budget, and the cases where it does
+## not are the question for the movement-contract gate rather than something to
+## silently absorb here.
+func _read_ready_delay(trace: Resource, player_id: int) -> float:
+	if trace == null or player_id < 0:
+		return 0.0
+	var summary: Dictionary = trace.summary
+	var flight_start := float(summary.get("flight_start_time", 0.0))
+	for raw_entry in trace.entries:
+		var entry: Dictionary = raw_entry
+		if int(entry.get("player_id", -1)) != player_id:
+			continue
+		return maxf(float(entry.get("recognition_time", flight_start))
+			- flight_start, 0.0)
+	return 0.0
+
+
 func _read_adjusted_arrival(
 	arrival: Dictionary, read_error_meters: float
 ) -> Dictionary:

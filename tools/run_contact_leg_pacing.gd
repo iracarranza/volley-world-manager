@@ -88,6 +88,7 @@ func _initialize() -> void:
 					"old_fits": 0, "new_fits": 0, "early": 0,
 					"window": 0.0, "old_s": 0.0, "new_s": 0.0,
 					"budget": 0.0, "over_window": 0,
+					"ready": 0.0, "ready_n": 0, "ready_fits": 0, "overrun": 0.0,
 				})
 				bucket["n"] = int(bucket.n) + 1
 				bucket["distance"] = float(bucket.distance) + distance
@@ -109,6 +110,16 @@ func _initialize() -> void:
 						## stands. That is a thing a volleyball player does and
 						## the old rule could not express it.
 						bucket["early"] = int(bucket.early) + 1
+				var ready := float(meta.get("movement_ready_seconds", -1.0))
+				if ready >= 0.0:
+					bucket["ready_n"] = int(bucket.ready_n) + 1
+					bucket["ready"] = float(bucket.ready) + ready
+					if budget > 0.0:
+						var overrun := ready + clamped - budget
+						if overrun <= 0.0:
+							bucket["ready_fits"] = int(bucket.ready_fits) + 1
+						else:
+							bucket["overrun"] = float(bucket.overrun) + overrun
 				if window > 0.0:
 					if old_seconds <= window:
 						bucket["old_fits"] = int(bucket.old_fits) + 1
@@ -117,18 +128,21 @@ func _initialize() -> void:
 				families[key] = bucket
 	print("family|n|budgeted|truncated|arrive_early|mean_dist_m|mean_window_s"
 		+ "|old_s|new_s|old_mps|new_mps|old_fits|new_fits"
-		+ "|mean_budget_s|budget>window")
+		+ "|mean_budget_s|budget>window|ready_n|mean_ready_s|ready_fits|mean_overrun_s")
 	var keys: Array = families.keys()
 	keys.sort()
 	for key in keys:
 		var b: Dictionary = families[key]
 		var n := maxf(float(b.n), 1.0)
-		print("%s|%d|%d|%d|%d|%.2f|%.3f|%.3f|%.3f|%.2f|%.2f|%d|%d|%.3f|%d" % [
+		print("%s|%d|%d|%d|%d|%.2f|%.3f|%.3f|%.3f|%.2f|%.2f|%d|%d|%.3f|%d|%d|%.3f|%d|%.3f" % [
 			key, int(b.n), int(b.budgeted), int(b.truncated), int(b.early),
 			float(b.distance) / n, float(b.window) / n,
 			float(b.old_s) / n, float(b.new_s) / n,
 			float(b.old_v) / n, float(b.new_v) / n,
 			int(b.old_fits), int(b.new_fits),
 			float(b.budget) / maxf(float(b.budgeted), 1.0), int(b.over_window),
+			int(b.ready_n), float(b.ready) / maxf(float(b.ready_n), 1.0),
+			int(b.ready_fits),
+			float(b.overrun) / maxf(float(int(b.ready_n) - int(b.ready_fits)), 1.0),
 		])
 	quit()
