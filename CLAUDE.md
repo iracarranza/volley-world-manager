@@ -12,9 +12,17 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-02 at `4b60055`, after the merge of
-`origin/main` at `e8ef68f` and the simulation/playback authority changes 1-5:
-**2 of 2,221 checks fail**. A *third* failure is a regression; these two are not.
+Current branch baseline, verified 2026-09-02 at `528ca7f`, after the
+simulation/playback authority repairs 1-4: **2 of 2,223 checks fail**. A *third*
+failure is a regression; these two are not.
+
+**Two checks written, two gained, and the predecessor was measured on this
+tree** -- so the delta is attributable and says no sampling population moved.
+2,221 at `4b60055` is directly comparable: same tree, same seeds, four repairs
+in between. The balance probe agrees independently, byte-identical over 700
+rallies after every one of the four.
+
+Before it, 2,221 at `4b60055`.
 
 **The delta from that merge is not computable, and the reason is worth one
 line.** Two attempts to measure the merged tree's own predecessor were spoiled --

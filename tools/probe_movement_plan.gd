@@ -39,6 +39,7 @@ func _ready() -> void:
 		"delayed": 0, "late_departures": 0, "overspeed": 0, "mismatches": 0,
 		"window_paced_contact_actor": 0, "window_paced_phase_entry": 0,
 		"window_paced_base_return": 0, "window_paced_staged": 0,
+		"window_paced_cheat_step": 0,
 		"early_legs": 0, "early_legs_duplicated": 0, "continued_legs": 0,
 		"following_has_start": 0, "following_starts_earlier": 0,
 		"following_starts_later": 0, "following_starts_inside": 0,
@@ -207,4 +208,16 @@ func _window_paced_source(
 		if bases.has(player_id) \
 				and Vector2(bases[player_id]).distance_to(target) <= 0.002:
 			return "window_paced_base_return"
-	return "window_paced_staged"
+	## A staging mark the resolver named for the contact after this one.
+	for source in [event, next_contact]:
+		if int(source.metadata.get("staged_next_actor_id", -1)) != player_id:
+			continue
+		if Vector2(source.metadata.get(
+			"staged_next_position", Vector2(-9, -9)
+		)).distance_to(target) <= 0.002:
+			return "window_paced_staged"
+	## **Nothing on the record put this body here.** `_apply_cheat_steps` hands a
+	## target to every voli not otherwise in the plan: a bounded step toward a
+	## lerp between their responsibility position and the ball. The destination
+	## is playback's, not the resolver's.
+	return "window_paced_cheat_step"
