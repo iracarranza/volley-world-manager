@@ -37,6 +37,35 @@ func _run() -> void:
 	var highlight := button.get_node_or_null("InkHighlight") as Control
 	_expect(highlight != null and highlight.show_behind_parent,
 		"animated highlighter owns a separate behind-button layer")
+	var preview_card := PanelContainer.new()
+	preview_card.name = "GameplayPreview"
+	preview_card.size = Vector2(300.0, 120.0)
+	host.add_child(preview_card)
+	UIStyleSystem.apply(preview_card, false, UIStyleSystem.MEDIUM_DRAWN)
+	await process_frame
+	var preview_outline := preview_card.get_node_or_null("InkOutline")
+	_expect(
+		preview_card.theme_type_variation == &"InsetPanel"
+			and preview_outline != null
+			and not bool(preview_outline.hover_highlight)
+			and preview_card.get_node_or_null("InkHighlight") == null,
+		"preview surface keeps its card edge without becoming a highlighted button",
+	)
+	var dashboard_card := Button.new()
+	dashboard_card.name = "RosterCard"
+	dashboard_card.text = "ROSTER"
+	dashboard_card.size = Vector2(280.0, 120.0)
+	host.add_child(dashboard_card)
+	UIStyleSystem.apply(dashboard_card, false, UIStyleSystem.MEDIUM_DRAWN)
+	await process_frame
+	var dashboard_outline := dashboard_card.get_node_or_null("InkOutline")
+	_expect(
+		dashboard_card.theme_type_variation == &"DashboardCard"
+			and dashboard_outline != null
+			and not bool(dashboard_outline.hover_highlight)
+			and dashboard_card.get_node_or_null("InkHighlight") == null,
+		"pressable card remains a card rather than a highlighted menu action",
+	)
 	var nav := Button.new()
 	nav.name = "MenuItem"
 	nav.text = "01  NEW CAREER"
