@@ -138,7 +138,7 @@ static func display_trajectory(
 		elif not _next_contact_states_ball_height(next_contact):
 			end_height = maxf(
 				start_height + float(display.launch_vertical_mps) * flown
-					- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * flown * flown,
+					- 0.5 * gravity * flown * flown,
 				FLOOR_CONTACT_HEIGHT_METERS,
 			)
 	display["start_height_meters"] = start_height
@@ -211,6 +211,12 @@ static func _serve_reception_prefix(
 	prefix["end_position"] = contact
 	prefix["control_position"] = start.lerp(contact, 0.5)
 	prefix["duration"] = duration
+	## The visible prefix is also the physical prefix. Retaining the natural
+	## floor flight's longer `physical_duration_seconds` made the caller
+	## integrate the serve launch past this receiver contact after its horizontal
+	## endpoint had already been shortened. The reception then began at the real
+	## platform height, producing a vertical teleport at the shared frame.
+	prefix["physical_duration_seconds"] = duration
 	prefix["end_time"] = float(natural.get("start_time", 0.0)) + duration
 	prefix["end_height_meters"] = end_height
 	prefix["reception_contact_semantics"] = "displayed_descending_platform_crossing"

@@ -319,6 +319,7 @@ func _initialize() -> void:
 	_test_block_contact_is_an_intersection()
 	_test_block_event_publishes_the_contact_it_proved()
 	_test_the_set_publishes_the_heights_it_was_solved_between()
+	_test_playback_contact_seams_and_cover_fans()
 	_test_a_miss_pose_means_the_ball_was_not_touched()
 	_test_a_beaten_block_reaches_without_the_ball_arriving()
 	_test_a_missed_contact_has_no_follow_through()
@@ -23737,6 +23738,98 @@ func _test_the_set_publishes_the_heights_it_was_solved_between() -> void:
 		attack_agrees == attack_stamped,
 		"the attack's contact height is the set flight's own far end, copied",
 	)
+
+
+## The drawn ball and the body agree at every shared contact seam.
+##
+## Two regressions shared one mistaken proxy: `success`. A failed set may still
+## launch the attack, and therefore still needs its limb fitted to the ball; a
+## successful reception may shorten a serve's natural floor flight, and both
+## halves must use the same spin-adjusted gravity and elapsed prefix. The cover
+## assertion holds the other exact-seed defect from the same report: a ring is a
+## fan, not four players at one duplicated deep coordinate.
+func _test_playback_contact_seams_and_cover_fans() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var seam_rows := 0
+	var failed_contacts := 0
+	var failed_contacts_with_anchor := 0
+	var cover_rows := 0
+	var duplicated_cover_rows := 0
+	var screen: Object = MATCH_SCREEN_SCRIPT.new()
+	for seed_value in range(170700, 170760):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		screen.player_physical_profiles = result.player_physical_profiles.duplicate(true)
+		for index in range(result.events.size()):
+			var event := result.events[index] as RallyEvent
+			if event == null:
+				continue
+			var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if not bool(event.success) and not outgoing.is_empty():
+				failed_contacts += 1
+				if screen._action_context(event, int(event.actor_id)).has(
+						"contact_anchor_height_meters"):
+					failed_contacts_with_anchor += 1
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SERVE:
+				var receiver := screen._next_contact_event(
+					result.events, index + 1
+				) as RallyEvent
+				if receiver != null \
+						and receiver.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+						and not outgoing.is_empty():
+					var arriving := BallPresentation.display_trajectory(
+						event, receiver, outgoing, result.player_physical_profiles
+					)
+					var leaving_source: Dictionary = receiver.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if not leaving_source.is_empty():
+						var after_receiver := screen._next_contact_event(
+							result.events, result.events.find(receiver) + 1
+						) as RallyEvent
+						var leaving := BallPresentation.display_trajectory(
+							receiver, after_receiver, leaving_source,
+							result.player_physical_profiles,
+						)
+						seam_rows += 1
+						if not is_equal_approx(
+							float(arriving.end_height_meters),
+							float(leaving.start_height_meters),
+						):
+							seam_rows = -1000000
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.ATTACK:
+				continue
+			var own_key := "home_phase_targets" \
+				if str(event.metadata.get("side", "")) == "home" \
+				else "opponent_phase_targets"
+			var cover: Dictionary = event.metadata.get(own_key, {})
+			if cover.size() < 3:
+				continue
+			cover_rows += 1
+			var occupied := {}
+			for raw_position in cover.values():
+				var position := Vector2(raw_position)
+				var key := "%0.5f/%0.5f" % [position.x, position.y]
+				if occupied.has(key):
+					duplicated_cover_rows += 1
+					break
+				occupied[key] = true
+	_check(
+		seam_rows > 0,
+		"serve reception prefixes and outgoing passes share one contact height",
+	)
+	_check(
+		failed_contacts > 0 and failed_contacts_with_anchor == failed_contacts,
+		"a failed contact that launched a ball still receives limb-anchor alignment",
+	)
+	_check(
+		cover_rows > 0 and duplicated_cover_rows == 0,
+		"attack coverers occupy distinct positions in the canonical cover fan",
+	)
+	screen.free()
+	manager.free()
 
 
 ## A pose says the ball was touched only when it was.

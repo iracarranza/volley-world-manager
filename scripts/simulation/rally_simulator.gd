@@ -15604,7 +15604,36 @@ func _cover_phase_map(
 		var candidate := entry as VolleyballPlayer
 		if candidate != null:
 			by_id[candidate.id] = candidate
-	var tight_taken := false
+	## Count the ordinary coverers before placing them. The former loop gave the
+	## first one the tight ring and every remaining one the *same* deep-ring
+	## coordinate (`contact.x + 0.16`). In a six-player side that routinely put
+	## four bodies on one spot and made them read as an extra block wall at the
+	## net. A cover ring is a fan, so preserve the existing 0.16 lateral spacing
+	## while walking successive coverers toward the side with more open court.
+	var ordinary_cover_count := 0
+	for slot_number in range(1, 7):
+		var counted := by_id.get(
+			int(lineup.player_at_slot(slot_number)), null
+		) as VolleyballPlayer
+		if counted == null or counted.id == hitter_id:
+			continue
+		var counted_assignment: Resource = defensive_plan.assignment_for(counted.id) \
+			if defensive_plan != null else null
+		var counted_responsibility := str(
+			counted_assignment.attack_coverage_responsibility
+		) if counted_assignment != null else "Cover nearest attacker"
+		if counted_responsibility not in [
+			"Release for transition", "Take second contact"
+		]:
+			ordinary_cover_count += 1
+	var ordinary_cover_index := 0
+	var fan_direction := 1.0 if contact.x <= 0.50 else -1.0
+	var available_width := (0.94 - contact.x) if fan_direction > 0.0 \
+		else (contact.x - 0.06)
+	var deep_cover_count := maxi(ordinary_cover_count - 1, 0)
+	var fan_step := minf(
+		0.16, available_width / float(maxi(deep_cover_count, 1))
+	)
 	for slot_number in range(1, 7):
 		var player := by_id.get(
 			int(lineup.player_at_slot(slot_number)), null
@@ -15630,14 +15659,17 @@ func _cover_phase_map(
 			"Take second contact":
 				intent = Vector2(0.50, tight_depth)
 			_:
-				## The first voli to claim it takes the tight ring, everyone else
-				## fills the deeper one -- so two people do not stand on the same
-				## square metre behind the hitter.
+				## The first ordinary coverer takes the tight ring. The others fan
+				## across the deeper ring instead of sharing one coordinate.
+				var deep_index := maxi(ordinary_cover_index, 1)
 				intent = Vector2(
-					clampf(contact.x + (0.0 if not tight_taken else 0.16), 0.06, 0.94),
-					tight_depth if not tight_taken else deep_depth,
+					contact.x if ordinary_cover_index == 0 else clampf(
+						contact.x + fan_direction * fan_step * float(deep_index),
+						0.06, 0.94,
+					),
+					tight_depth if ordinary_cover_index == 0 else deep_depth,
 				)
-				tight_taken = true
+				ordinary_cover_index += 1
 				mode = "transition"
 		var reached := _reached_point(player, here, intent, window_seconds, mode)
 		targets[player.id] = reached

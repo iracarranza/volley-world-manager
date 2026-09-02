@@ -240,10 +240,32 @@ func _run_rally(generation: int) -> void:
 			## differs exactly when the next contact never touched it.
 			movement_contact = next_contact
 			var played_index := next_index
-			while played_index >= 0 and not events[played_index].success:
+			while played_index >= 0 \
+					and not _touched_the_ball(events[played_index] as RallyEvent):
 				played_index = _next_contact_index(events, played_index + 1)
 			if played_index >= 0:
 				movement_contact = events[played_index] as RallyEvent
+		## A flight can arrive before the next contact's physical stamp. The set
+		## decision in particular marks the ball reaching the setter; release can
+		## follow several tenths later. Skipping that interval jumped the progress
+		## bar and began the outgoing flight while the setter was still travelling.
+		## Keep the ball at the resolved arrival point and draw only the remaining
+		## body journey. No trajectory is stretched or retimed.
+		var event_time := _event_physical_time(event)
+		var arrival_gap := 0.0 if is_inf(drawn_until) \
+			else maxf(event_time - drawn_until, 0.0)
+		if arrival_gap > 0.001:
+			var sender := _sender_of(
+				events, event_index,
+				Dictionary(event.metadata.get("incoming_trajectory", {})),
+			)
+			if sender != null:
+				await _play_contact_arrival(
+					sender, event, next_contact, arrival_gap, drawn_until, generation
+				)
+				if generation != playback_generation or skip_requested:
+					break
+			drawn_until = event_time
 		if event_index == 0 \
 				and event.event_type == RallyEventModel.EventType.SERVE:
 			await _play_serve_preparation(event, next_contact, generation)
@@ -495,6 +517,45 @@ func _play_flight(
 	return duration
 
 
+## Draw time between a resolved incoming flight and the later contact stamp.
+## The ball has already arrived, so this is movement and pose only: holding its
+## last sample makes any disagreement visible and, crucially, does not invent a
+## second flight to bridge a timeline gap.
+func _play_contact_arrival(
+	sender: RallyEvent,
+	contact: RallyEvent,
+	after_contact: RallyEvent,
+	duration: float,
+	start_time: float,
+	generation: int,
+) -> void:
+	var movement_plan := _build_movement_plan(sender, contact, duration)
+	var elapsed := 0.0
+	while elapsed < duration:
+		if generation != playback_generation or skip_requested:
+			break
+		if playback_paused:
+			await get_tree().process_frame
+			continue
+		elapsed += get_process_delta_time() * playback_speed
+		var progress := clampf(elapsed / duration, 0.0, 1.0)
+		match_court_3d.apply_movement_plan(
+			movement_plan, progress, duration, int(contact.actor_id)
+		)
+		## The incoming flight already carried the anticipation to contact phase
+		## zero. Hold that prepared shape while the resolved release clock finishes.
+		_apply_contact_poses(sender, contact, after_contact, 1.0, duration)
+		progress_bar.value = maxf(
+			progress_bar.value,
+			playback_clock_percent(
+				lerpf(start_time, start_time + duration, progress),
+				playback_clock_start, playback_clock_end,
+			),
+		)
+		await get_tree().process_frame
+	match_court_3d.finish_movement_plan(movement_plan, duration)
+
+
 ## A window the ball spends no time on, but the players do.
 ##
 ## **This is where off-ball movement was going.** Everything the resolver
@@ -576,6 +637,7 @@ func _play_contact_pulse(
 			peak * sin(progress * PI), progress, direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
+			_platform_aim(event),
 			_action_context(event, int(event.actor_id)),
 		)
 		await get_tree().process_frame
@@ -795,7 +857,10 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 	if event == null:
 		return {}
 	var context := {}
-	if event.success and int(event.event_type) in [
+	## Outcome is not contact. A shanked pass, an out serve and an unsuccessful
+	## set can all publish a ball. The outgoing trajectory is the authoritative
+	## proof that the limb anchor must meet it.
+	if _touched_the_ball(event) and int(event.event_type) in [
 		RallyEventModel.EventType.SERVE,
 		RallyEventModel.EventType.RECEPTION,
 		RallyEventModel.EventType.DIG,
@@ -1035,6 +1100,7 @@ func _apply_contact_poses(
 			next_actor, int(next_contact.event_type),
 			next_peak * next_lift, next_phase, next_direction, true,
 			_contact_posture(next_contact), _contact_recovery(next_contact),
+			_platform_aim(next_contact),
 			_action_context(next_contact, next_actor),
 		)
 	_apply_early_approach(
@@ -2719,7 +2785,7 @@ func _platform_aim(event: RallyEvent) -> Dictionary:
 func _cache_contact_body_targets(events: Array) -> void:
 	for raw_event in events:
 		var event := raw_event as RallyEvent
-		if event == null or not event.success or int(event.event_type) not in [
+		if event == null or not _touched_the_ball(event) or int(event.event_type) not in [
 			RallyEventModel.EventType.SERVE,
 			RallyEventModel.EventType.RECEPTION,
 			RallyEventModel.EventType.DIG,
