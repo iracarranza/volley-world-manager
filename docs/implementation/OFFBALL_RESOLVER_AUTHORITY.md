@@ -119,8 +119,10 @@ Ordered by flights × unnamed, which is drawn legs recovered per unit of work.
    six and six already complete; the recurring omission is the receiver (36
    liberos and 86 outsides), who should be `recovering`, not absent. The earlier
    2.98 was the fixed home-side aggregate, not the receiving side.
-4. **`DIG→SET`, opposing side (60 flights, 4.30 unnamed).** The side that has
-   just been dug on, re-forming.
+4. **`DIG→SET`, dug-on side (59 flights, 4.98 unnamed at `9d07f7f`).** The
+   side that has just been dug on, re-forming. Direct actor-side measurement
+   finds 39 flights with none named and 20 with only the three pre-release
+   blockers; the earlier 4.30 was a fixed opponent-side aggregate.
 5. **`SET_DECISION→SET`, opposing side (114 flights, 6.00 unnamed).** Nobody on
    the far side has any opinion during the setter's decision. Check first whether
    this window is long enough to matter -- if it is consistently under about a

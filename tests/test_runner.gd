@@ -323,6 +323,7 @@ func _initialize() -> void:
 	_test_block_to_dig_offball_authority()
 	_test_attack_to_block_offball_authority()
 	_test_reception_to_set_offball_authority()
+	_test_dig_to_set_offball_authority()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9686,6 +9687,54 @@ func _test_reception_to_set_offball_authority() -> void:
 	_check(
 		pairs >= 30 and incomplete == 0,
 		"every live RECEPTION to SET flight names all six receiving intentions",
+	)
+
+
+func _test_dig_to_set_offball_authority() -> void:
+	var pairs := 0
+	var incomplete := 0
+	for serving_home in [false, true]:
+		for seed_value in range(61000, 61060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			var home_ids := {}
+			for raw_id in result.initial_home_positions:
+				home_ids[int(raw_id)] = true
+			for index in range(result.events.size() - 1):
+				var dig: Resource = result.events[index]
+				var set_event: Resource = result.events[index + 1]
+				if int(dig.event_type) != RALLY_EVENT_SCRIPT.EventType.DIG \
+						or int(set_event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+					continue
+				if float(set_event.metadata.get("physical_time", 0.0)) \
+						<= float(dig.metadata.get("physical_time", 0.0)):
+					continue
+				pairs += 1
+				var dug_on_home := not home_ids.has(int(dig.actor_id))
+				var side := "home" if dug_on_home else "opponent"
+				var targets: Dictionary = set_event.metadata.get(
+					"%s_phase_targets" % side, {}
+				)
+				var intents: Dictionary = set_event.metadata.get(
+					"%s_phase_intents" % side, {}
+				)
+				if targets.size() != 6 or intents.size() != 6:
+					incomplete += 1
+					continue
+				for raw_id in targets:
+					var raw_intent: Variant = intents.get(int(raw_id), null)
+					if not raw_intent is Dictionary:
+						incomplete += 1
+						continue
+					var intent: Dictionary = raw_intent
+					if not intent.has("traversal_seconds") \
+							or not intent.has("window_seconds"):
+						incomplete += 1
+	_check(
+		pairs >= 15 and incomplete == 0,
+		"every live DIG to SET flight names all six dug-on-side intentions",
 	)
 
 

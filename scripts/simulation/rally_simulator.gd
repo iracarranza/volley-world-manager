@@ -4704,6 +4704,17 @@ func _resolve_opponent_transition(
 		float(physical_choice.contact_time) + opponent_release_interval
 	) if not physical_choice.is_empty() \
 		else rally_clock + opponent_second_contact_window + opponent_release_interval
+	## NOTE The side just dug on re-forms during the resolved pass -- OFFBALL_DIG_SET_AUTHORITY.md
+	var home_reform_intents := {}
+	var home_reform_targets := {}
+	if not result.events.is_empty() \
+			and int((result.events[-1] as RallyEvent).event_type) \
+				== RallyEventModel.EventType.DIG:
+		home_reform_targets = _post_attack_phase_map(
+			players, lineup, defensive_plan,
+			original_hitter.id if original_hitter != null else -1,
+			dig_position.x, second_contact_window, false, home_reform_intents,
+		)
 	## **The set begins where the setter actually touched the ball.**
 	## `dig_position` is where the feeding contact was *aimed*; under a physical
 	## interception `opponent_setter_position` is where a body actually met the
@@ -4721,6 +4732,8 @@ func _resolve_opponent_transition(
 			"set_path": "opponent_first_ball" if first_ball else "opponent_transition",
 			"opponent_phase_targets": opponent_transition_targets,
 			"opponent_phase_intents": opponent_transition_intents,
+			"home_phase_targets": home_reform_targets,
+			"home_phase_intents": home_reform_intents,
 			"set_terms": opponent_set_terms,
 			## The capability read this side has always computed and never
 			## published, so the only path whose penalty could be decomposed was
@@ -4830,10 +4843,16 @@ func _resolve_opponent_transition(
 			float(second_contact_window),
 		)
 	if opponent_set_event != null:
-		opponent_set_event.metadata["home_phase_targets"] = \
-			pre_release_home_targets.duplicate(true)
-		opponent_set_event.metadata["home_phase_intents"] = \
-			pre_release_home_intents.duplicate(true)
+		var resolved_home_targets: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_targets", {}
+		).duplicate(true)
+		resolved_home_targets.merge(pre_release_home_targets, true)
+		var resolved_home_intents: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_intents", {}
+		).duplicate(true)
+		resolved_home_intents.merge(pre_release_home_intents, true)
+		opponent_set_event.metadata["home_phase_targets"] = resolved_home_targets
+		opponent_set_event.metadata["home_phase_intents"] = resolved_home_intents
 		opponent_set_event.metadata["home_block_pre_release"] = Dictionary(
 			pre_release_home_block.get("prediction", {})
 		).duplicate(true)
@@ -6669,6 +6688,18 @@ func _resolve_home_continuation(
 	## without it the set flight would start after the attack flight it feeds.
 	var cont_set_contact_time := rally_clock + second_contact_window + cont_release_interval
 	var continuation_intents := {}
+	## NOTE Mirror the dug-on side's re-forming opinion -- OFFBALL_DIG_SET_AUTHORITY.md
+	var opponent_reform_intents := {}
+	var opponent_reform_targets := {}
+	if not result.events.is_empty() \
+			and int((result.events[-1] as RallyEvent).event_type) \
+				== RallyEventModel.EventType.DIG:
+		var prior_attacker := _latest_attack_credit(result, "opponent")
+		opponent_reform_targets = _post_attack_phase_map(
+			opponent_team.on_court_players(), opponent_team.current_lineup(),
+			_opponent_defensive_plan(opponent_team), int(prior_attacker.id),
+			dig_position.x, second_contact_window, true, opponent_reform_intents,
+		)
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, set_quality >= 0.20, set_quality,
 		("Emergency second-contact set" if emergency_setter else "Transition set") \
@@ -6688,6 +6719,8 @@ func _resolve_home_continuation(
 				continuation_intents,
 			),
 			"home_phase_intents": continuation_intents,
+			"opponent_phase_targets": opponent_reform_targets,
+			"opponent_phase_intents": opponent_reform_intents,
 			"set_terms": cont_set_terms,
 			"setter_capability": setter_capability.duplicate(true),
 			"set_distance_meters": cont_set_geometry.distance_meters,
