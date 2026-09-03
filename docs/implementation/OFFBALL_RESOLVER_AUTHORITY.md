@@ -123,11 +123,12 @@ Ordered by flights × unnamed, which is drawn legs recovered per unit of work.
    side that has just been dug on, re-forming. Direct actor-side measurement
    finds 39 flights with none named and 20 with only the three pre-release
    blockers; the earlier 4.30 was a fixed opponent-side aggregate.
-5. **`SET_DECISION→SET`, opposing side (114 flights, 6.00 unnamed).** Nobody on
-   the far side has any opinion during the setter's decision. Check first whether
-   this window is long enough to matter -- if it is consistently under about a
-   tenth of a second, "nobody moves" is the right answer and the entry is
-   `watching` rather than a target.
+5. **`SET_DECISION→SET`, opposing side (114 flights, 6.00 unnamed at
+   `47121c8`).** Nobody on the far side has any published opinion during the
+   setter's decision. The resolved release window is 0.218–0.513 seconds
+   (median 0.277), not under a tenth. The block resolver already derives the
+   front row's setter pull across that interval; publish those targets and let
+   the other three authoritatively hold with `watching` intents.
 6. **`RECEPTION→SET_DECISION` (114 flights, 11 unnamed).** Same question, more
    sharply.
 

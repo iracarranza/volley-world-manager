@@ -2446,6 +2446,18 @@ func resolve(
 		float(result.set_quality), set_contact.x, set_flight_time,
 		second_contact_window + release_interval, hitter, set_height_extra,
 	)
+	## NOTE Publish the far side's resolved setter read during release -- OFFBALL_SET_DECISION_SET_AUTHORITY.md
+	var opponent_setter_read_intents := {}
+	var opponent_setter_read_targets := _setter_read_phase(
+		opponent_team.on_court_players(), opponent_live_positions,
+		Dictionary(opponent_block_formation.get("setter_pull_positions", {})),
+		release_interval, opponent_setter_read_intents,
+	)
+	if set_event != null:
+		set_event.metadata["opponent_phase_targets"] = \
+			opponent_setter_read_targets
+		set_event.metadata["opponent_phase_intents"] = \
+			opponent_setter_read_intents
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
 	## margin, its own close threshold and its own recycle rule -- a second copy
@@ -8033,11 +8045,13 @@ func _form_opponent_block(
 		if opponent_team != null else null
 	var front_blockers: Array[VolleyballPlayer] = []
 	var setter_pull := {}
+	var setter_pull_positions := {}
 	if opponent_team == null or lineup == null:
 		return {
 			"primary": null, "assist": null, "primary_close": 0.0,
 			"assist_close": 0.0, "quality": 0.0, "outcome": "miss",
 			"coverage_segments": [], "setter_pull": setter_pull,
+			"setter_pull_positions": setter_pull_positions,
 		}
 	for player_id in lineup.front_row_player_ids():
 		var player := opponent_team.player_by_id(player_id) as VolleyballPlayer
@@ -8054,11 +8068,13 @@ func _form_opponent_block(
 			var pull_weight := (1.0 - discipline) * 0.18
 			var pulled_x := lerpf(start.x, setter_x, pull_weight)
 			setter_pull[player.id] = absf(pulled_x - start.x)
+			setter_pull_positions[player.id] = Vector2(pulled_x, start.y)
 	if front_blockers.is_empty():
 		return {
 			"primary": null, "assist": null, "primary_close": 0.0,
 			"assist_close": 0.0, "quality": 0.0, "outcome": "miss",
 			"coverage_segments": [], "setter_pull": setter_pull,
+			"setter_pull_positions": setter_pull_positions,
 		}
 	var primary: VolleyballPlayer
 	var primary_distance := 1000.0
@@ -8202,6 +8218,7 @@ func _form_opponent_block(
 			formation_target_x, primary, primary_close, assist, assist_close
 		),
 		"setter_pull": setter_pull,
+		"setter_pull_positions": setter_pull_positions,
 		"read_quality": read_quality,
 	}
 
@@ -16032,6 +16049,41 @@ func _cover_phase_map(
 			opponent_live_positions[player.id] = reached
 		else:
 			live_positions[player.id] = reached
+	return targets
+
+
+## NOTE A side may authoritatively hold while reading the setter -- OFFBALL_SET_DECISION_SET_AUTHORITY.md
+func _setter_read_phase(
+	players: Array,
+	live: Dictionary,
+	pull_positions: Dictionary,
+	window_seconds: float,
+	out_intents: Dictionary,
+) -> Dictionary:
+	var targets := {}
+	for entry in players:
+		var player := entry as VolleyballPlayer
+		if player == null:
+			continue
+		var here: Vector2 = live.get(player.id, pull_positions.get(
+			player.id, Vector2.ZERO
+		))
+		if pull_positions.has(player.id):
+			var intended := Vector2(pull_positions[player.id])
+			var reached := _reached_point(
+				player, here, intended, window_seconds, "lateral",
+				0.0, 0.0, Vector2.ZERO, false,
+			)
+			targets[player.id] = reached
+			out_intents[player.id] = _travel_intent(
+				player, &"blocking", here, intended, reached,
+				"lateral", window_seconds,
+			)
+		else:
+			out_intents[player.id] = _travel_intent(
+				player, &"watching", here, here, here,
+				"lateral", window_seconds,
+			)
 	return targets
 
 

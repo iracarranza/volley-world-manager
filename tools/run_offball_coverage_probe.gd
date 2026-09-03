@@ -15,8 +15,10 @@ extends SceneTree
 ## population playback is guessing for -- 1,194 legs of 1,507 and two thirds of
 ## drawn travel, at `6ae238e`.
 ##
-## Named = in a phase map, the contact actor, or a staged next actor. Nothing
-## here reads the screen; it is the record's own coverage of its own court.
+## Named = in a phase target or intent map, the contact actor, or a staged next
+## actor. An intent-only `watching` record is an authoritative hold rather than
+## missing authority. Nothing here reads the screen; it is the record's own
+## coverage of its own court.
 
 const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
 const RallyEventScript := preload("res://scripts/models/rally_event.gd")
@@ -60,6 +62,10 @@ func _initialize() -> void:
 				for side in ["home", "opponent"]:
 					for raw_id in Dictionary(next_contact.metadata.get(
 						"%s_phase_targets" % side, {}
+					)):
+						named[int(raw_id)] = true
+					for raw_id in Dictionary(next_contact.metadata.get(
+						"%s_phase_intents" % side, {}
 					)):
 						named[int(raw_id)] = true
 				if int(next_contact.actor_id) >= 0:

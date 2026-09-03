@@ -2240,6 +2240,9 @@ func _apply_cheat_steps(
 		if plan.has(player_id):
 			continue
 		var id := int(player_id)
+		## NOTE An intent-only record is authoritative stillness -- OFFBALL_SET_DECISION_SET_AUTHORITY.md
+		if _has_phase_intent(next_contact, id):
+			continue
 		var start := Vector2(match_court_3d.live_positions[id])
 		var step := cheat_step(
 			start, action_target, _responsibility_position(id),
@@ -2248,6 +2251,17 @@ func _apply_cheat_steps(
 		if step == start:
 			continue
 		_set_plan_target(plan, id, step)
+
+
+static func _has_phase_intent(event: RallyEvent, player_id: int) -> bool:
+	if event == null:
+		return false
+	for side in ["home", "opponent"]:
+		if Dictionary(event.metadata.get(
+			"%s_phase_intents" % side, {}
+		)).has(player_id):
+			return true
+	return false
 
 
 ## Where the teammates who *are* participating have committed to stand.
