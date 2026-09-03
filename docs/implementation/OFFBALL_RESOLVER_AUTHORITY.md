@@ -129,8 +129,11 @@ Ordered by flights × unnamed, which is drawn legs recovered per unit of work.
    (median 0.277), not under a tenth. The block resolver already derives the
    front row's setter pull across that interval; publish those targets and let
    the other three authoritatively hold with `watching` intents.
-6. **`RECEPTION→SET_DECISION` (114 flights, 11 unnamed).** Same question, more
-   sharply.
+6. **`RECEPTION→SET_DECISION` (114 flights, 11.00 unnamed at `efbf820`).** The
+   resolved pass window is 0.243–1.203 seconds (median 1.066), and the existing
+   home transition records carry those exact clocks while being stored on the
+   later SET. Publish them on SET_DECISION, alongside the opposing block read,
+   and leave timed holds rather than replaying either journey during release.
 
 **Holes 5 and 6 may resolve to "publish an intent and no movement".** That is a
 legitimate outcome and it is still an improvement: it replaces an invented cheat

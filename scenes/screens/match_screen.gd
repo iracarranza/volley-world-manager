@@ -1576,7 +1576,9 @@ func _build_movement_plan(
 	## that movement belongs in this incoming pass window, not compressed into the
 	## short outgoing set flight. T3 has zero release progress and intentionally
 	## starts after the ball leaves the setter.
-	if next_contact.event_type == RallyEventModel.EventType.SET:
+	## NOTE A published SET_DECISION already owns the pass-window staging -- OFFBALL_RECEPTION_SET_DECISION_AUTHORITY.md
+	if next_contact.event_type == RallyEventModel.EventType.SET \
+			and event.event_type != RallyEventModel.EventType.SET_DECISION:
 		var timing: Dictionary = next_contact.metadata.get(
 			"tempo_coordination", {}
 		)

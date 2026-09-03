@@ -1855,6 +1855,7 @@ func resolve(
 			"event_time": set_decision_moment,
 			"deadline": set_decision_moment + second_contact_window,
 			"incoming_trajectory": pass_trajectory})
+	var set_decision_event := result.events[-1] as RallyEvent
 
 	## What this setter can do with the ball they are about to receive, and what
 	## it costs them if they try for more. Nothing is forbidden here: a setter
@@ -2446,18 +2447,48 @@ func resolve(
 		float(result.set_quality), set_contact.x, set_flight_time,
 		second_contact_window + release_interval, hitter, set_height_extra,
 	)
-	## NOTE Publish the far side's resolved setter read during release -- OFFBALL_SET_DECISION_SET_AUTHORITY.md
+	## NOTE Publish the far side's resolved setter read in the pass window -- OFFBALL_RECEPTION_SET_DECISION_AUTHORITY.md
 	var opponent_setter_read_intents := {}
 	var opponent_setter_read_targets := _setter_read_phase(
 		opponent_team.on_court_players(), opponent_live_positions,
 		Dictionary(opponent_block_formation.get("setter_pull_positions", {})),
-		release_interval, opponent_setter_read_intents,
+		second_contact_window, opponent_setter_read_intents,
 	)
-	if set_event != null:
-		set_event.metadata["opponent_phase_targets"] = \
+	if set_event != null and set_decision_event != null:
+		var home_pass_targets: Dictionary = set_event.metadata.get(
+			"home_phase_targets", {}
+		).duplicate(true)
+		var home_pass_intents: Dictionary = set_event.metadata.get(
+			"home_phase_intents", {}
+		).duplicate(true)
+		if not home_pass_intents.has(receiver.id):
+			var receiver_hold := Vector2(live_positions.get(
+				receiver.id, reception_pass.get("body_position", set_contact)
+			))
+			home_pass_targets[receiver.id] = receiver_hold
+			home_pass_intents[receiver.id] = _travel_intent(
+				receiver, &"recovering", receiver_hold, receiver_hold,
+				receiver_hold, "lateral", second_contact_window,
+			)
+		set_decision_event.metadata["home_phase_targets"] = home_pass_targets
+		set_decision_event.metadata["home_phase_intents"] = home_pass_intents
+		set_decision_event.metadata["opponent_phase_targets"] = \
 			opponent_setter_read_targets
-		set_event.metadata["opponent_phase_intents"] = \
+		set_decision_event.metadata["opponent_phase_intents"] = \
 			opponent_setter_read_intents
+		var home_release_sources := home_pass_intents.duplicate(true)
+		home_release_sources[setter.id] = {"intent": &"setting"}
+		set_event.metadata["home_phase_targets"] = {}
+		set_event.metadata["home_phase_intents"] = _hold_phase_intents(
+			_lineup_players(players, lineup), live_positions, home_pass_targets,
+			home_release_sources, release_interval,
+		)
+		set_event.metadata["opponent_phase_targets"] = {}
+		set_event.metadata["opponent_phase_intents"] = _hold_phase_intents(
+			opponent_team.on_court_players(), opponent_live_positions,
+			opponent_setter_read_targets, opponent_setter_read_intents,
+			release_interval,
+		)
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
 	## margin, its own close threshold and its own recycle rule -- a second copy
@@ -16085,6 +16116,30 @@ func _setter_read_phase(
 				"lateral", window_seconds,
 			)
 	return targets
+
+
+## NOTE Keep completed pass movement out of the later release interval -- OFFBALL_RECEPTION_SET_DECISION_AUTHORITY.md
+func _hold_phase_intents(
+	players: Array,
+	live: Dictionary,
+	resolved_positions: Dictionary,
+	source_intents: Dictionary,
+	window_seconds: float,
+) -> Dictionary:
+	var intents := {}
+	for entry in players:
+		var player := entry as VolleyballPlayer
+		if player == null:
+			continue
+		var here: Vector2 = resolved_positions.get(
+			player.id, live.get(player.id, Vector2.ZERO)
+		)
+		var source: Dictionary = source_intents.get(player.id, {})
+		intents[player.id] = _travel_intent(
+			player, StringName(source.get("intent", &"watching")),
+			here, here, here, "lateral", window_seconds,
+		)
+	return intents
 
 
 ## NOTE How much of an intended journey a voli actually covered, 0 to 1 -- RALLY_SIMULATOR_NOTES.md

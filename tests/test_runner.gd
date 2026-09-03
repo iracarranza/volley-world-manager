@@ -325,6 +325,7 @@ func _initialize() -> void:
 	_test_reception_to_set_offball_authority()
 	_test_dig_to_set_offball_authority()
 	_test_set_decision_to_set_offball_authority()
+	_test_reception_to_set_decision_offball_authority()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9766,9 +9767,10 @@ func _test_set_decision_to_set_offball_authority() -> void:
 				var intents: Dictionary = set_event.metadata.get(
 					"opponent_phase_intents", {}
 				)
-				if intents.size() != 6 or targets.is_empty():
+				if intents.size() != 6:
 					incomplete += 1
 					continue
+				var blocking_intents := 0
 				for raw_id in result.initial_opponent_positions:
 					var player_id := int(raw_id)
 					var raw_intent: Variant = intents.get(player_id, null)
@@ -9784,15 +9786,89 @@ func _test_set_decision_to_set_offball_authority() -> void:
 							or str(intent.get("intent", "")) \
 								not in ["blocking", "watching"]:
 						incomplete += 1
+					if str(intent.get("intent", "")) == "blocking":
+						blocking_intents += 1
 				for raw_id in targets:
 					if not intents.has(int(raw_id)) \
 							or str(Dictionary(intents[int(raw_id)]).get(
 								"intent", ""
 							)) != "blocking":
 						incomplete += 1
+				if blocking_intents == 0:
+					incomplete += 1
 	_check(
 		pairs >= 30 and incomplete == 0,
 		"every live SET_DECISION to SET flight publishes the far-side setter read",
+	)
+
+
+func _test_reception_to_set_decision_offball_authority() -> void:
+	var pairs := 0
+	var incomplete := 0
+	for serving_home in [false, true]:
+		for seed_value in range(61000, 61060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			for index in range(result.events.size() - 2):
+				var reception: Resource = result.events[index]
+				var decision: Resource = result.events[index + 1]
+				var set_event: Resource = result.events[index + 2]
+				if int(reception.event_type) \
+						!= RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+						or int(decision.event_type) \
+							!= RALLY_EVENT_SCRIPT.EventType.SET_DECISION \
+						or int(set_event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+					continue
+				var pass_window := float(decision.metadata.get("physical_time", 0.0)) \
+					- float(reception.metadata.get("physical_time", 0.0))
+				var release_window := float(set_event.metadata.get("physical_time", 0.0)) \
+					- float(decision.metadata.get("physical_time", 0.0))
+				if pass_window <= 0.0 or release_window <= 0.0:
+					continue
+				pairs += 1
+				var named := {int(decision.actor_id): true}
+				for side in ["home", "opponent"]:
+					var pass_targets: Dictionary = decision.metadata.get(
+						"%s_phase_targets" % side, {}
+					)
+					var pass_intents: Dictionary = decision.metadata.get(
+						"%s_phase_intents" % side, {}
+					)
+					for raw_id in pass_targets:
+						if not pass_intents.has(int(raw_id)):
+							incomplete += 1
+					for raw_id in pass_intents:
+						named[int(raw_id)] = true
+						var intent: Dictionary = pass_intents[raw_id]
+						if not intent.has("traversal_seconds") \
+								or absf(float(intent.get(
+									"window_seconds", -1.0
+								)) - pass_window) > 0.001:
+							incomplete += 1
+					var release_targets: Dictionary = set_event.metadata.get(
+						"%s_phase_targets" % side, {}
+					)
+					var release_intents: Dictionary = set_event.metadata.get(
+						"%s_phase_intents" % side, {}
+					)
+					if not release_targets.is_empty() or release_intents.size() != 6:
+						incomplete += 1
+					for raw_id in release_intents:
+						var player_id := int(raw_id)
+						var intent: Dictionary = release_intents[raw_id]
+						if not MATCH_SCREEN_SCRIPT._has_phase_intent(
+								set_event, player_id
+							) or absf(float(intent.get(
+								"window_seconds", -1.0
+							)) - release_window) > 0.001:
+							incomplete += 1
+				if named.size() != 12:
+					incomplete += 1
+	_check(
+		pairs >= 30 and incomplete == 0,
+		"every live RECEPTION to SET_DECISION flight publishes all twelve reads",
 	)
 
 
