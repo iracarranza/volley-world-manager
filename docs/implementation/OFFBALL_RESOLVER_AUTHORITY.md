@@ -114,10 +114,11 @@ Ordered by flights × unnamed, which is drawn legs recovered per unit of work.
    `attack_coverage_responsibility` and reaches exactly five of six; only the
    hitter's recovery is absent. The earlier 2.80 was the fixed opponent-side
    aggregate, not the attacking side.
-3. **`RECEPTION→SET`, receiving side (128 flights, 2.98 unnamed).** The
-   transition. `_transition_phase_map` excludes receiver, setter and hitter by
-   name; the libero and the outsides fall through. The receiver in particular
-   should be `recovering`, not absent.
+3. **`RECEPTION→SET`, receiving side (128 flights, 0.95 unnamed at `8d6f8d5`).**
+   The transition. Direct actor-side measurement finds 122 flights at five of
+   six and six already complete; the recurring omission is the receiver (36
+   liberos and 86 outsides), who should be `recovering`, not absent. The earlier
+   2.98 was the fixed home-side aggregate, not the receiving side.
 4. **`DIG→SET`, opposing side (60 flights, 4.30 unnamed).** The side that has
    just been dug on, re-forming.
 5. **`SET_DECISION→SET`, opposing side (114 flights, 6.00 unnamed).** Nobody on

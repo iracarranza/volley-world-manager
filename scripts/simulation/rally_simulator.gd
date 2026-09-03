@@ -4419,13 +4419,18 @@ func _resolve_opponent_transition(
 	## the SET event below for the same reason the home map is -- a leg's targets
 	## live on the contact it flies toward.
 	var opponent_transition_intents := {}
+	## NOTE Reception recovery follows the resolved feeding event -- OFFBALL_RECEPTION_SET_AUTHORITY.md
+	var first_contact_was_reception: bool = not result.events.is_empty() \
+		and int((result.events[-1] as RallyEvent).event_type) \
+			== RallyEventModel.EventType.RECEPTION
 	var opponent_transition_targets := _opponent_transition_phase_map(
 		opponent_team, first_contact_player_id, opponent_setter.id,
 		## The realized pass's own flight, not the 0.68 literal. The other five
 		## volis were being moved on a fixed budget while the ball they are
 		## transitioning behind took whatever time it took.
 		opponent_setter_position, second_contact_window,
-		setter_arrival_margin, opponent_transition_intents,
+		setter_arrival_margin, first_contact_was_reception,
+		opponent_transition_intents,
 	)
 	## NOTE Same model as the home transition set, and now the same attributes -- RALLY_SIMULATOR_NOTES.md
 	var opponent_tempo_call := _tempo_call(
@@ -15848,6 +15853,7 @@ func _opponent_transition_phase_map(
 	set_contact: Vector2,
 	window_seconds: float,
 	setter_margin: float,
+	publish_first_contact_recovery: bool,
 	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
@@ -15856,6 +15862,17 @@ func _opponent_transition_phase_map(
 	var off_ball: Array[VolleyballPlayer] = []
 	for entry in opponent_team.on_court_players():
 		var player := entry as VolleyballPlayer
+		## NOTE A first-ball passer recovers where the platform resolved -- OFFBALL_RECEPTION_SET_AUTHORITY.md
+		if player != null and player.id == first_contact_id \
+				and publish_first_contact_recovery:
+			var here := Vector2(opponent_live_positions.get(
+				player.id, opponent_team.court_position(player.id, "transition")
+			))
+			targets[player.id] = here
+			out_intents[player.id] = _travel_intent(
+				player, &"recovering", here, here, here, "lateral", window_seconds
+			)
+			continue
 		if player == null or player.id == first_contact_id or player.id == setter_id:
 			continue
 		off_ball.append(player)

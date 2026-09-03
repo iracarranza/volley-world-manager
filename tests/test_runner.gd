@@ -322,6 +322,7 @@ func _initialize() -> void:
 	_test_movement_contract_completeness()
 	_test_block_to_dig_offball_authority()
 	_test_attack_to_block_offball_authority()
+	_test_reception_to_set_offball_authority()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9622,6 +9623,69 @@ func _test_attack_to_block_offball_authority() -> void:
 	_check(
 		pairs >= 30 and incomplete == 0,
 		"every live ATTACK to BLOCK flight names all six attacking intentions",
+	)
+
+
+func _test_reception_to_set_offball_authority() -> void:
+	var pairs := 0
+	var incomplete := 0
+	for serving_home in [false, true]:
+		for seed_value in range(61000, 61060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			var home_ids := {}
+			for raw_id in result.initial_home_positions:
+				home_ids[int(raw_id)] = true
+			for index in range(result.events.size() - 1):
+				var reception: Resource = result.events[index]
+				var set_event: Resource = result.events[index + 1]
+				if int(reception.event_type) \
+						!= RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+						or int(set_event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+					continue
+				if float(set_event.metadata.get("physical_time", 0.0)) \
+						<= float(reception.metadata.get("physical_time", 0.0)):
+					continue
+				pairs += 1
+				var receiving_home := home_ids.has(int(reception.actor_id))
+				var side := "home" if receiving_home else "opponent"
+				var targets: Dictionary = set_event.metadata.get(
+					"%s_phase_targets" % side, {}
+				)
+				var intents: Dictionary = set_event.metadata.get(
+					"%s_phase_intents" % side, {}
+				)
+				var named := {}
+				for raw_id in targets:
+					named[int(raw_id)] = true
+				if home_ids.has(int(set_event.actor_id)) == receiving_home:
+					named[int(set_event.actor_id)] = true
+				for source in [reception, set_event]:
+					var staged := int(source.metadata.get("staged_next_actor_id", -1))
+					if staged >= 0 and home_ids.has(staged) == receiving_home:
+						named[staged] = true
+				if named.size() != 6:
+					incomplete += 1
+				if not receiving_home:
+					var raw_intent: Variant = intents.get(int(reception.actor_id), null)
+					if not targets.has(int(reception.actor_id)) \
+							or not raw_intent is Dictionary:
+						incomplete += 1
+					else:
+						var receiver_intent: Dictionary = raw_intent
+						var intent_name := str(receiver_intent.get("intent", ""))
+						var staged_hitter := int(set_event.metadata.get(
+							"staged_next_actor_id", -1
+						)) == int(reception.actor_id)
+						if intent_name != "recovering" \
+								and not (intent_name == "preparing_attack" \
+									and staged_hitter):
+							incomplete += 1
+	_check(
+		pairs >= 30 and incomplete == 0,
+		"every live RECEPTION to SET flight names all six receiving intentions",
 	)
 
 
