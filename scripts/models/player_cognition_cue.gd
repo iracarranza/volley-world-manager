@@ -49,7 +49,8 @@ const AFFECTS: Array[StringName] = [
 ## to the icons, and it is worse there because it is a claim about a mind.
 const INTENTS: Array[StringName] = [
 	&"serving", &"receiving", &"defending", &"covering", &"preparing_attack",
-	&"approaching", &"blocking", &"setting", &"watching",
+	&"approaching", &"blocking", &"setting", &"chasing", &"recovering",
+	&"watching",
 ]
 ## How the eyes are being spent, which is not the same question as where they
 ## point.

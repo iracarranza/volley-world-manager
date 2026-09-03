@@ -320,6 +320,7 @@ func _initialize() -> void:
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_movement_contract_completeness()
+	_test_block_to_dig_offball_authority()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9525,6 +9526,54 @@ func _test_movement_contract_completeness() -> void:
 	_check(
 		leg_ids >= 200 and collided_legs == 0,
 		"no two journeys in one rally share a leg identity",
+	)
+
+
+func _test_block_to_dig_offball_authority() -> void:
+	var pairs := 0
+	var under_eleven := 0
+	var incomplete_intents := 0
+	for serving_home in [false, true]:
+		for seed_value in range(61000, 61060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			for index in range(result.events.size() - 1):
+				var block: Resource = result.events[index]
+				var dig: Resource = result.events[index + 1]
+				if int(block.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+						or int(dig.event_type) != RALLY_EVENT_SCRIPT.EventType.DIG:
+					continue
+				if float(dig.metadata.get("physical_time", 0.0)) \
+						<= float(block.metadata.get("physical_time", 0.0)):
+					continue
+				pairs += 1
+				var named := {int(dig.actor_id): true}
+				for side in ["home", "opponent"]:
+					var targets: Dictionary = dig.metadata.get(
+						"%s_phase_targets" % side, {}
+					)
+					var intents: Dictionary = dig.metadata.get(
+						"%s_phase_intents" % side, {}
+					)
+					for raw_player_id in targets:
+						var player_id := int(raw_player_id)
+						named[player_id] = true
+						var raw_intent: Variant = intents.get(player_id, null)
+						if not raw_intent is Dictionary:
+							incomplete_intents += 1
+							continue
+						var intent: Dictionary = raw_intent
+						if not intent.has("intent") \
+								or not intent.has("traversal_seconds") \
+								or not intent.has("window_seconds"):
+							incomplete_intents += 1
+				if named.size() < 11:
+					under_eleven += 1
+	_check(
+		pairs >= 30 and under_eleven == 0 and incomplete_intents == 0,
+		"every live BLOCK to DIG flight names at least eleven timed intentions",
 	)
 
 

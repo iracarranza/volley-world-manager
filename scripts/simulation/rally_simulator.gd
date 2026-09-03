@@ -3672,6 +3672,23 @@ func resolve(
 		opponent_pass_target = Vector2(opponent_dig_pass.destination)
 	## NOTE Where they actually ended up, not where the ball was -- RALLY_SIMULATOR_NOTES.md
 	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
+	var opponent_scramble_by_id := {}
+	for raw_opponent in opponent_team.on_court_players():
+		var opponent_scramble_player := raw_opponent as VolleyballPlayer
+		if opponent_scramble_player != null:
+			opponent_scramble_by_id[opponent_scramble_player.id] = \
+				opponent_scramble_player
+	var opponent_scramble_intents := {}
+	var opponent_scramble_targets := _deflection_adjust_map(
+		opponent_live_positions.duplicate(true), attack_target, opponent_defender.id,
+		opponent_defense_time, true, opponent_scramble_by_id,
+		opponent_scramble_intents, false,
+	)
+	var home_post_attack_intents := {}
+	var home_post_attack_targets := _post_attack_phase_map(
+		players, lineup, defensive_plan, hitter.id, attack_target.x,
+		opponent_defense_time, false, home_post_attack_intents,
+	)
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
@@ -3693,16 +3710,11 @@ func resolve(
 			"claimed": bool(opponent_defense.get("claimed", false)),
 			"flight_time": opponent_defense_time,
 			"incoming_trajectory": opponent_arriving_trajectory,
-			## The shape this dig was claimed out of. The home dig event has
-			## carried `home_phase_targets` all along and this one carried
-			## nothing, so the two sides' defensive shapes could not be compared
-			## -- only the distance each ended up covering, which is the result
-			## rather than the reason. Without it the opponent's best-available
-			## defender is unmeasurable and "their shape is worse" stays a guess.
-			"opponent_phase_targets": opponent_live_positions.duplicate(true),
-			"opponent_phase_intents": _uniform_intents(
-				opponent_live_positions, &"defending"
-			),
+			## NOTE The five non-claimants pursue the deflection -- OFFBALL_BLOCK_DIG_AUTHORITY.md
+			"opponent_phase_targets": opponent_scramble_targets,
+			"opponent_phase_intents": opponent_scramble_intents,
+			"home_phase_targets": home_post_attack_targets,
+			"home_phase_intents": home_post_attack_intents,
 			"movement_target": opponent_defender_reach,
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
@@ -6270,6 +6282,13 @@ func _resolve_opponent_transition(
 			home_arriving_trajectory,
 		)
 		defense_pass_target = Vector2(home_dig_pass.destination)
+	var opponent_post_attack_intents := {}
+	var opponent_post_attack_targets := _post_attack_phase_map(
+		opponent_team.on_court_players(), opponent_team.current_lineup(),
+		_opponent_defensive_plan(opponent_team),
+		opponent_hitter.id if opponent_hitter != null else -1,
+		home_target.x, attack_time, true, opponent_post_attack_intents,
+	)
 	_add_event(result, RallyEventModel.EventType.DIG, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
 		home_dig_control, "%s defends" % defender.display_name,
@@ -6309,6 +6328,8 @@ func _resolve_opponent_transition(
 				false, home_by_id_for_defense, home_defense_intents,
 			),
 			"home_phase_intents": home_defense_intents,
+			"opponent_phase_targets": opponent_post_attack_targets,
+			"opponent_phase_intents": opponent_post_attack_intents,
 			"responsibility_fit": responsibility_fit,
 			"flight_time": attack_time, "arrival": defense_arrival,
 			"incoming_trajectory": home_arriving_trajectory,
@@ -7862,6 +7883,22 @@ func _resolve_home_continuation(
 			cont_dig_intent,
 		)
 		cont_desired_target = Vector2(cont_dig_pass.destination)
+	var cont_scramble_by_id := {}
+	for raw_opponent in opponent_team.on_court_players():
+		var cont_scramble_player := raw_opponent as VolleyballPlayer
+		if cont_scramble_player != null:
+			cont_scramble_by_id[cont_scramble_player.id] = cont_scramble_player
+	var cont_scramble_intents := {}
+	var cont_scramble_targets := _deflection_adjust_map(
+		opponent_live_positions.duplicate(true), attack_target,
+		opponent_defender.id, cont_defense_time, true, cont_scramble_by_id,
+		cont_scramble_intents, false,
+	)
+	var cont_post_attack_intents := {}
+	var cont_post_attack_targets := _post_attack_phase_map(
+		players, lineup, defensive_plan, hitter.id, attack_target.x,
+		cont_defense_time, false, cont_post_attack_intents,
+	)
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
 		cont_desired_target, dug, cont_dig_control,
@@ -7870,6 +7907,10 @@ func _resolve_home_continuation(
 		{"side": "opponent",
 			"platform_intent": cont_dig_intent,
 			"incoming_trajectory": continuation_arriving_trajectory,
+			"opponent_phase_targets": cont_scramble_targets,
+			"opponent_phase_intents": cont_scramble_intents,
+			"home_phase_targets": cont_post_attack_targets,
+			"home_phase_intents": cont_post_attack_intents,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
 			## The only dig family that published a start and an end and no time
@@ -8795,13 +8836,14 @@ func _reached_point(
 	## before every caller was migrated. See `docs/review/BODY_CENTRE_SCOPE.md`.
 	contact_height_meters: float = 0.0,
 	incoming_direction: Vector2 = Vector2.ZERO,
+	charge_exertion: bool = true,
 ) -> Vector2:
-	## **Every journey in the game passes through here**, which is what makes this
-	## the honest place to charge for one. Charged on the distance *asked for*
+	## **Every committed journey in the game passes through here**, which is what
+	## makes this the honest place to charge for one. Charged on the distance *asked for*
 	## rather than the distance reached, because a defender who sprints and comes
 	## up half a metre short has done the running either way -- and charging the
 	## arrival would refund the hardest efforts in the sport.
-	if mover != null:
+	if mover != null and charge_exertion:
 		_charge_exertion(
 			mover,
 			RallyKinematics.court_distance_meters(start, target)
@@ -16049,6 +16091,7 @@ func _deflection_adjust_map(
 	opponent_side: bool,
 	players_by_id: Dictionary,
 	out_intents: Dictionary = {},
+	commit_journey: bool = true,
 ) -> Dictionary:
 	var targets := {}
 	if window_seconds <= 0.0:
@@ -16063,12 +16106,61 @@ func _deflection_adjust_map(
 			continue
 		var here: Vector2 = live.get(player_id, Vector2(floor_positions[raw_player_id]))
 		var intended := here.lerp(dig_position, DEFLECTION_LEAN)
-		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
+		var reached := _reached_point(
+			player, here, intended, window_seconds, "lateral", 0.0, 0.0,
+			Vector2.ZERO, commit_journey,
+		)
 		targets[player_id] = reached
 		out_intents[player_id] = _travel_intent(
 			player, &"defending", here, intended, reached, "lateral", window_seconds
 		)
-		live[player_id] = reached
+		if commit_journey:
+			live[player_id] = reached
+	return targets
+
+
+## NOTE Post-swing recovery is published without opening claimant authority -- OFFBALL_BLOCK_DIG_AUTHORITY.md
+func _post_attack_phase_map(
+	players: Array,
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	hitter_id: int,
+	attack_x: float,
+	window_seconds: float,
+	opponent_side: bool,
+	out_intents: Dictionary = {},
+) -> Dictionary:
+	var targets := {}
+	if lineup == null or window_seconds <= 0.0:
+		return targets
+	var by_id := {}
+	for entry in players:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var shape := _floor_phase_positions(
+		lineup, defensive_plan, attack_x, -1, -1, opponent_side
+	)
+	var live: Dictionary = opponent_live_positions if opponent_side else live_positions
+	for raw_player_id in shape:
+		var player_id := int(raw_player_id)
+		var player := by_id.get(player_id, null) as VolleyballPlayer
+		if player == null:
+			continue
+		var here: Vector2 = live.get(player_id, Vector2(shape[raw_player_id]))
+		var intended := Vector2(shape[raw_player_id])
+		var intent := &"defending"
+		if player_id == hitter_id:
+			intended = here
+			intent = &"recovering"
+		var reached := _reached_point(
+			player, here, intended, window_seconds, "lateral", 0.0, 0.0,
+			Vector2.ZERO, false,
+		)
+		targets[player_id] = reached
+		out_intents[player_id] = _travel_intent(
+			player, intent, here, intended, reached, "lateral", window_seconds
+		)
 	return targets
 
 
