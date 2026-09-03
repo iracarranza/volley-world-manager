@@ -75,3 +75,7 @@ const ENABLE_PERPENDICULAR_APPROACH: bool = true
 
 ## NOTE times a set by how high it was put up, not by a ground-to-ground lob
 const ENABLE_SET_HEIGHT_TIMING: bool = true
+
+## NOTE lets published off-ball bodies enter later claim searches -- OFFBALL_PHASE_TWO_BASELINE.md
+const ENABLE_OFFBALL_POSITION_CLAIMANTS: bool = false
+const ALLOW_DEVELOPMENT_OFFBALL_POSITION_CLAIMANTS: bool = true

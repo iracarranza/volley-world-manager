@@ -701,6 +701,8 @@ var platform_dig_development_force_legacy: bool = false
 ## physical reception without the dig's dev override reaching it (or vice versa).
 ## The legacy-force above is shared: forcing legacy forces it for every family.
 var platform_reception_development_open: bool = false
+## NOTE paired Phase Two census only; production stays behind its closed flag -- OFFBALL_PHASE_TWO_BASELINE.md
+var offball_claimants_development_open: bool = false
 ## The opponent's defensive plan for this rally, built on first use.
 var opponent_plan: Resource = null
 var rally_clock: float = 0.0
@@ -835,6 +837,7 @@ func resolve(
 	match_flow: float = 0.0,
 	development_legacy_platform_dig: bool = false,
 	development_physical_reception: bool = false,
+	development_offball_position_claimants: bool = false,
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
@@ -856,6 +859,9 @@ func resolve(
 	geometric_development_open = development_continuous_reception
 	platform_dig_development_open = development_physical_platform_dig
 	platform_reception_development_open = development_physical_reception
+	offball_claimants_development_open = development_offball_position_claimants \
+		and OS.is_debug_build() \
+		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_OFFBALL_POSITION_CLAIMANTS
 	platform_dig_development_force_legacy = development_legacy_platform_dig \
 		and OS.is_debug_build()
 	opponent_plan = null

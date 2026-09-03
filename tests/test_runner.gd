@@ -100,6 +100,9 @@ const RECEPTION_ROLLOUT_AUDIT_SCRIPT := preload(
 const RALLY_ROLLOUT_POLICY_SCRIPT := preload(
 	"res://scripts/simulation/rally_rollout_policy.gd"
 )
+const RALLY_FEATURE_FLAGS_SCRIPT := preload(
+	"res://scripts/simulation/rally_feature_flags.gd"
+)
 const BALL_CONTACT_SIGNATURE_SCRIPT := preload("res://scripts/models/ball_contact_signature.gd")
 const BALL_FLIGHT_SCRIPT := preload("res://scripts/models/ball_flight.gd")
 const BALL_READ_SCRIPT := preload("res://scripts/simulation/ball_read_system.gd")
@@ -326,6 +329,7 @@ func _initialize() -> void:
 	_test_dig_to_set_offball_authority()
 	_test_set_decision_to_set_offball_authority()
 	_test_reception_to_set_decision_offball_authority()
+	_test_offball_position_claimant_rollout_starts_closed()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9869,6 +9873,14 @@ func _test_reception_to_set_decision_offball_authority() -> void:
 	_check(
 		pairs >= 30 and incomplete == 0,
 		"every live RECEPTION to SET_DECISION flight publishes all twelve reads",
+	)
+
+
+func _test_offball_position_claimant_rollout_starts_closed() -> void:
+	_check(
+		not RALLY_FEATURE_FLAGS_SCRIPT.ENABLE_OFFBALL_POSITION_CLAIMANTS
+			and RALLY_FEATURE_FLAGS_SCRIPT.ALLOW_DEVELOPMENT_OFFBALL_POSITION_CLAIMANTS,
+		"off-ball position claimants start production-closed with a census override",
 	)
 
 

@@ -502,6 +502,7 @@ func resolve_active_rally(
 	development_physical_platform_dig: bool = false,
 	development_legacy_platform_dig: bool = false,
 	development_physical_reception: bool = false,
+	development_offball_position_claimants: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
 	last_tactical_input_manifest = tactical_input_manifest(seed_value)
@@ -528,6 +529,7 @@ func resolve_active_rally(
 		float(match_state.match_flow) if match_state != null else 0.0,
 		development_legacy_platform_dig,
 		development_physical_reception,
+		development_offball_position_claimants,
 	)
 
 
