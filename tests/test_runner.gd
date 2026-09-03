@@ -321,6 +321,7 @@ func _initialize() -> void:
 	_test_post_block_trajectory_chain()
 	_test_movement_contract_completeness()
 	_test_block_to_dig_offball_authority()
+	_test_attack_to_block_offball_authority()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9574,6 +9575,53 @@ func _test_block_to_dig_offball_authority() -> void:
 	_check(
 		pairs >= 30 and under_eleven == 0 and incomplete_intents == 0,
 		"every live BLOCK to DIG flight names at least eleven timed intentions",
+	)
+
+
+func _test_attack_to_block_offball_authority() -> void:
+	var pairs := 0
+	var incomplete := 0
+	for serving_home in [false, true]:
+		for seed_value in range(61000, 61060):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			var home_ids := {}
+			for raw_id in result.initial_home_positions:
+				home_ids[int(raw_id)] = true
+			for index in range(result.events.size() - 1):
+				var attack: Resource = result.events[index]
+				var block: Resource = result.events[index + 1]
+				if int(attack.event_type) != RALLY_EVENT_SCRIPT.EventType.ATTACK \
+						or int(block.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+					continue
+				if float(block.metadata.get("physical_time", 0.0)) \
+						<= float(attack.metadata.get("physical_time", 0.0)):
+					continue
+				pairs += 1
+				var side := "home" if home_ids.has(int(attack.actor_id)) \
+					else "opponent"
+				var targets: Dictionary = block.metadata.get(
+					"%s_phase_targets" % side, {}
+				)
+				var intents: Dictionary = block.metadata.get(
+					"%s_phase_intents" % side, {}
+				)
+				if targets.size() != 6 or not targets.has(int(attack.actor_id)):
+					incomplete += 1
+					continue
+				for raw_id in targets:
+					var raw_intent: Variant = intents.get(int(raw_id), null)
+					if not raw_intent is Dictionary:
+						incomplete += 1
+						continue
+					var intent: Dictionary = raw_intent
+					if not intent.has("window_seconds"):
+						incomplete += 1
+	_check(
+		pairs >= 30 and incomplete == 0,
+		"every live ATTACK to BLOCK flight names all six attacking intentions",
 	)
 
 

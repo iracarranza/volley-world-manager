@@ -15930,11 +15930,18 @@ func _cover_phase_map(
 		var player := by_id.get(
 			int(lineup.player_at_slot(slot_number)), null
 		) as VolleyballPlayer
-		if player == null or player.id == hitter_id:
+		if player == null:
 			continue
 		var here: Vector2 = (
 			opponent_live_positions if opponent_side else live_positions
 		).get(player.id, CourtConstants.slot_position(slot_number))
+		## NOTE The hitter recovers at the resolved contact point -- OFFBALL_ATTACK_BLOCK_AUTHORITY.md
+		if player.id == hitter_id:
+			targets[player.id] = here
+			out_intents[player.id] = _travel_intent(
+				player, &"recovering", here, here, here, "lateral", window_seconds
+			)
+			continue
 		var assignment: Resource = defensive_plan.assignment_for(player.id) \
 			if defensive_plan != null else null
 		var responsibility := str(assignment.attack_coverage_responsibility) \

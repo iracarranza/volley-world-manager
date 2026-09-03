@@ -109,9 +109,11 @@ Ordered by flights × unnamed, which is drawn legs recovered per unit of work.
    the one the design doc cares most about -- this is where a deflected ball is
    either contested or conceded. `_deflection_adjust_map` exists for the home
    defence; the attacking side has nothing.
-2. **`ATTACK→BLOCK`, attacking side (217 flights, 2.80 unnamed).** Cover, while
-   their own spike is in the air. `_cover_phase_map` exists and reads
-   `attack_coverage_responsibility`; it is reaching about three of six.
+2. **`ATTACK→BLOCK`, attacking side (216 flights, 1.00 unnamed at `1a00781`).**
+   Cover, while their own spike is in the air. `_cover_phase_map` reads
+   `attack_coverage_responsibility` and reaches exactly five of six; only the
+   hitter's recovery is absent. The earlier 2.80 was the fixed opponent-side
+   aggregate, not the attacking side.
 3. **`RECEPTION→SET`, receiving side (128 flights, 2.98 unnamed).** The
    transition. `_transition_phase_map` excludes receiver, setter and hitter by
    name; the libero and the outsides fall through. The receiver in particular
