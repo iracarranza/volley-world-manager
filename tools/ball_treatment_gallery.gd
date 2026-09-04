@@ -28,9 +28,6 @@ const VOLI_AIRBORNE_SECONDS: float = 0.85
 ## speed -- a 0.55 s spike is 1.1 s on screen, which is the difference between
 ## reading a treatment and watching it flicker past.
 const DT: float = 1.0 / 120.0
-const CONTACT := Vector3(-2.5, 3.3, 0.0)
-const INCOMING_FROM := Vector3(-6.5, 1.7, 0.0)
-const INCOMING_SECONDS: float = 0.8
 const HOLD_SECONDS: float = 0.35
 const GRAVITY: float = 9.8
 const BALL_RADIUS: float = 0.105
@@ -92,19 +89,97 @@ const SHELL_FLATTEN: float = 0.30
 const SHELL_BAND_MIN: float = 0.26 * PI
 const SHELL_BAND_MAX: float = 0.74 * PI
 
-## Speed and launch elevation per shot. The set and the bump exist for one
-## argument only: if every ball gets the same treatment at the same strength,
-## nothing reads as hard, so the soft contacts have to be in the comparison.
+## A contact each, with the geometry that makes it that contact.
+##
+## `heading` is which way down the court the ball leaves, so a block can send it
+## back where it came from. The incoming leg matters as much as the outgoing one
+## here: a dig is defined by a ball arriving at fifteen metres a second and
+## leaving at seven, and that is not visible from the launch alone.
 const SHOTS := {
-	"spike": {"speed": 16.0, "elevation": -12.0, "spin_rps": 16.0},
-	"set": {"speed": 8.0, "elevation": 45.0, "spin_rps": 3.0},
-	"bump": {"speed": 7.0, "elevation": 55.0, "spin_rps": 1.5},
+	"spike": {
+		"contact": Vector3(-2.5, 3.3, 0.0), "from": Vector3(-6.5, 1.7, 0.0),
+		"approach": 0.80, "speed": 16.0, "elevation": -12.0,
+		"heading": 1.0, "spin_rps": 16.0,
+	},
+	"set": {
+		"contact": Vector3(-4.0, 2.35, 0.0), "from": Vector3(-6.8, 1.2, 0.0),
+		"approach": 0.60, "speed": 8.5, "elevation": 62.0,
+		"heading": 1.0, "spin_rps": 1.2,
+	},
+	"dig": {
+		"contact": Vector3(2.2, 0.55, 0.0), "from": Vector3(-2.0, 3.1, 0.0),
+		"approach": 0.32, "speed": 7.5, "elevation": 72.0,
+		"heading": 1.0, "spin_rps": 0.8,
+	},
+	"serve": {
+		"contact": Vector3(-7.5, 2.90, 0.0), "from": Vector3(-7.7, 2.05, 0.0),
+		"approach": 0.45, "speed": 15.5, "elevation": 7.0,
+		"heading": 1.0, "spin_rps": 14.0,
+	},
+	"block": {
+		"contact": Vector3(0.25, 2.95, 0.0), "from": Vector3(-3.2, 3.35, 0.0),
+		"approach": 0.22, "speed": 8.0, "elevation": -40.0,
+		"heading": -1.0, "spin_rps": 9.0,
+	},
+	"bump": {
+		"contact": Vector3(-2.5, 1.1, 0.0), "from": Vector3(-6.0, 2.4, 0.0),
+		"approach": 0.55, "speed": 7.0, "elevation": 55.0,
+		"heading": 1.0, "spin_rps": 0.6,
+	},
+}
+
+## **Which language each contact speaks.**
+##
+## Not a scalar deciding how much of one treatment to draw: a different
+## vocabulary per contact, the way `UI_VISUAL_SYSTEM` gives each object on the
+## desk a whole material rather than the same material with a different edge. A
+## dig drawn as a spike with fewer speed lines is the clipboard drawn as the
+## journal with a different outline.
+##
+## Each assignment still has to be a depiction rather than a label, so each one
+## is the thing that is physically distinctive about that contact:
+##
+##   spike  the most violent change of velocity in the sport -- impact and pace
+##   set    the only contact whose meaning *is* its trajectory
+##   dig    the one contact where a fast ball is stopped: air, and little else
+##   serve  the shot chosen for its spin, and the only one hit from a standstill
+##   block  a wall; the force goes back where it came from
+##   bump   a guided contact that barely disturbs anything, and reads that way
+const PROFILES := {
+	"spike": ["speed_lines", "stretch", "squash", "shell", "spin"],
+	"set": ["history"],
+	"dig": ["wake", "shell", "squash"],
+	"serve": ["ribbon", "spin", "speed_lines"],
+	"block": ["shell", "squash", "speed_lines"],
+	"bump": ["history"],
 }
 
 const TREATMENTS: Array[String] = [
 	"blank", "history", "speed_lines", "wake", "ribbon", "skew", "leading",
 	"spin", "stretch", "squash", "stamp", "air", "acquire", "combined",
+	"profile",
 ]
+
+## What each named treatment actually draws. `profile` is the interesting one:
+## it draws whatever this contact's own language says, so the gallery stops
+## showing every treatment on every ball and starts showing each contact as it
+## would be played.
+const COMPONENTS := {
+	"blank": [],
+	"history": ["history"],
+	"speed_lines": ["speed_lines"],
+	"wake": ["wake"],
+	"ribbon": ["ribbon", "spin"],
+	"skew": ["skew"],
+	"leading": ["leading"],
+	"spin": ["spin"],
+	"stretch": ["stretch"],
+	"squash": ["squash"],
+	"stamp": ["shell"],
+	"air": ["shell", "wake"],
+	"acquire": ["acquire"],
+	"combined": ["speed_lines", "wake", "shell", "spin", "stretch", "squash"],
+}
 
 const CAPTIONS := {
 	"blank": "BLANK - no trail at all. The floor everything else reads against.",
@@ -121,6 +196,7 @@ const CAPTIONS := {
 	"air": "AIR - the shell and the wake as one system: displaced air.",
 	"acquire": "ACQUIRE - the ball takes its spin over ~0.15 s, not instantly.",
 	"combined": "COMBINED - speed lines + air + spin + stretch + squash.",
+	"profile": "this contact, in its own language",
 }
 
 ## A symmetric ellipsoid has no way to say which end is leading, so it cannot be
@@ -206,6 +282,9 @@ var _shot: String = "spike"
 var _launch: Vector3 = Vector3.ZERO
 var _flight_seconds: float = 0.0
 var _first_impact: Vector3 = Vector3.ZERO
+var CONTACT: Vector3 = Vector3(-2.5, 3.3, 0.0)
+var INCOMING_FROM: Vector3 = Vector3(-6.5, 1.7, 0.0)
+var INCOMING_SECONDS: float = 0.8
 
 
 func _ready() -> void:
@@ -249,9 +328,15 @@ func _ready() -> void:
 ## being placed by hand at a number that then disagrees with the arc.
 func _solve_flight() -> void:
 	var shot: Dictionary = SHOTS[_shot]
+	CONTACT = Vector3(shot.contact)
+	INCOMING_FROM = Vector3(shot["from"])
+	INCOMING_SECONDS = float(shot.approach)
 	var elevation := deg_to_rad(float(shot.elevation))
 	var speed := float(shot.speed)
-	_launch = Vector3(cos(elevation) * speed, sin(elevation) * speed, 0.0)
+	_launch = Vector3(
+		float(shot.heading) * cos(elevation) * speed,
+		sin(elevation) * speed, 0.0
+	)
 	var vy := _launch.y
 	_flight_seconds = (vy + sqrt(
 		vy * vy + 2.0 * GRAVITY * (CONTACT.y - BALL_RADIUS)
@@ -632,6 +717,11 @@ func _render_treatment(treatment: String) -> void:
 	_stroke_mesh.clear_surfaces()
 	_label.text = "%s  /  %s" % [treatment.to_upper(), _shot]
 	_caption.text = str(CAPTIONS.get(treatment, ""))
+	if treatment == "profile":
+		var spoken: Array = PROFILES.get(_shot, [])
+		_caption.text = "speaks: %s" % (
+			", ".join(spoken) if not spoken.is_empty() else "nothing"
+		)
 	var directory := "%s/%s/%s" % [_out_dir, _shot, treatment]
 	DirAccess.make_dir_recursive_absolute(directory)
 	var last := _last_second if _last_second > 0.0 else _total_seconds()
@@ -685,36 +775,41 @@ func _apply(treatment: String, t: float) -> void:
 
 	_push_history(position)
 	_push_strands(position, velocity, t)
-	_spin_angle += _spin_rate(treatment, since_contact, int(state.bounces)) \
-		* TAU * DT
-	_apply_spin(treatment, velocity)
+	var parts := _components(treatment)
+	_spin_angle += _spin_rate(parts, since_contact, int(state.bounces)) * TAU * DT
+	_apply_spin(parts, velocity)
 	## Everything about an impact now comes off one vector. Its direction is the
 	## axis the ball deforms along and the shell expands about; its magnitude is
 	## how deep the deformation goes and how big the shell gets.
-	_apply_deform(treatment, position, state, t - float(state.anchor_time))
+	_apply_deform(parts, position, state, t - float(state.anchor_time))
 
 	for ghost in _ghosts:
 		ghost.visible = false
 	_stroke_mesh.clear_surfaces()
-	match treatment:
-		"history":
-			_draw_history(0.0)
-		"skew":
-			_draw_history(1.0)
-		"leading":
-			_draw_leading(t)
-		"speed_lines", "combined":
-			_draw_strands(t)
-		"wake":
-			_draw_wake(position, velocity)
-		"air":
-			_draw_wake(position, velocity)
-		"ribbon":
-			_draw_ribbon(t)
-	if treatment == "combined":
-		_draw_wake(position, velocity)
-	if treatment in ["stamp", "air", "combined"]:
-		_draw_shell(state, t - float(state.anchor_time))
+	for part in parts:
+		match part:
+			"history":
+				_draw_history(0.0)
+			"skew":
+				_draw_history(1.0)
+			"leading":
+				_draw_leading(t)
+			"speed_lines":
+				_draw_strands(t)
+			"wake":
+				_draw_wake(position, velocity)
+			"ribbon":
+				_draw_ribbon(t)
+			"shell":
+				_draw_shell(state, t - float(state.anchor_time))
+
+
+## Which parts this treatment draws. A named treatment is a fixed list; the
+## `profile` treatment asks the contact what its own language is.
+func _components(treatment: String) -> Array:
+	if treatment == "profile":
+		return PROFILES.get(_shot, [])
+	return COMPONENTS.get(treatment, [])
 
 
 func _push_history(position: Vector3) -> void:
@@ -1023,25 +1118,25 @@ func _shell_point(
 		+ (side * cos(u) + other * sin(u)) * sin(v)) * radius
 
 
-func _spin_rate(treatment: String, since_contact: float, bounces: int) -> float:
+func _spin_rate(parts: Array, since_contact: float, bounces: int) -> float:
 	var shot: Dictionary = SHOTS[_shot]
 	## Each floor contact spends some of the rotation -- part into the forward
 	## kick the bounce already takes, the rest into the floor.
 	var outgoing := float(shot.spin_rps) \
 		* pow(SPIN_LOSS_PER_BOUNCE, float(bounces))
-	if treatment == "acquire":
+	if parts.has("acquire"):
 		if since_contact < 0.0:
 			return 1.5
 		## The ball takes the spin over the contact rather than at it.
 		return lerpf(1.5, outgoing, clampf(since_contact / 0.15, 0.0, 1.0))
-	if treatment in ["spin", "combined", "ribbon"]:
+	if parts.has("spin") or parts.has("ribbon"):
 		return 1.5 if since_contact < 0.0 else outgoing
 	## Today's behaviour: a fixed axis at a rate keyed to speed, not to spin.
 	return 0.0
 
 
-func _apply_spin(treatment: String, velocity: Vector3) -> void:
-	if treatment in ["spin", "acquire", "combined", "ribbon"]:
+func _apply_spin(parts: Array, velocity: Vector3) -> void:
+	if parts.has("spin") or parts.has("acquire") or parts.has("ribbon"):
 		var direction := velocity.normalized() if velocity.length() > 0.01 \
 			else Vector3.RIGHT
 		## `direction.cross(UP)` carries the *front* of the ball upward, which is
@@ -1069,13 +1164,13 @@ func _apply_spin(treatment: String, velocity: Vector3) -> void:
 ## the squash branch then assigned over it, so a combined ball silently lost its
 ## stretch for the squash's duration and snapped back when it ended.
 func _apply_deform(
-	treatment: String, position: Vector3, state: Dictionary, since_event: float
+	parts: Array, position: Vector3, state: Dictionary, since_event: float
 ) -> void:
 	_ball_root.scale = Vector3.ONE
 	_ball_root.position = position
-	_apply_stretch(treatment, Vector3(state.velocity))
+	_apply_stretch(parts, Vector3(state.velocity))
 	var impulse: Vector3 = state.impulse
-	if not treatment in ["squash", "combined"] or since_event < 0.0 \
+	if not parts.has("squash") or since_event < 0.0 \
 			or since_event >= SQUASH_SECONDS or impulse.length() <= 0.5:
 		_deform.transform.basis = Basis.IDENTITY
 		return
@@ -1122,10 +1217,10 @@ func _apply_deform(
 ## recomputed every frame, so the taper stays put in the world while the ball
 ## rotates through it -- which is what a deformation does and what spinning the
 ## teardrop with the ball would not.
-func _apply_stretch(treatment: String, velocity: Vector3) -> void:
+func _apply_stretch(parts: Array, velocity: Vector3) -> void:
 	if _stretch_material == null:
 		return
-	if not treatment in ["stretch", "combined"] or velocity.length() < 0.01:
+	if not parts.has("stretch") or velocity.length() < 0.01:
 		_stretch_material.set_shader_parameter("tail_length", 0.0)
 		_stretch_material.set_shader_parameter("tail_narrow", 1.0)
 		_stretch_material.set_shader_parameter("tail_fade", 0.0)
