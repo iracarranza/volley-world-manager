@@ -111,11 +111,15 @@ uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
 uniform float ball_radius = 0.105;
 uniform float tail_length = 0.0;
 uniform float tail_narrow = 1.0;
+uniform float tail_fade = 0.0;
+
+varying float lead_fraction;
 
 void vertex() {
 	float along = dot(VERTEX, stretch_axis);
 	// 1 at the leading pole, 0 at the trailing one.
 	float lead = clamp(along / ball_radius * 0.5 + 0.5, 0.0, 1.0);
+	lead_fraction = lead;
 	vec3 across = VERTEX - stretch_axis * along;
 	float narrow = mix(tail_narrow, 1.0, smoothstep(0.0, 1.0, lead));
 	float trail = -tail_length * ball_radius * pow(1.0 - lead, 2.0);
@@ -129,6 +133,10 @@ void vertex() {
 void fragment() {
 	ALBEDO = texture(panels, UV).rgb;
 	ROUGHNESS = 0.55;
+	// The leading hemisphere stays solid so the ball keeps a readable position
+	// and size; only the drawn-out tail thins, which is what a shutter does to a
+	// ball that was only briefly in that part of the frame.
+	ALPHA = mix(1.0 - tail_fade, 1.0, smoothstep(0.0, 0.62, lead_fraction));
 }
 """
 
@@ -419,6 +427,7 @@ func _add_ball() -> void:
 	_stretch_material.set_shader_parameter("stretch_axis", Vector3.RIGHT)
 	_stretch_material.set_shader_parameter("tail_length", 0.0)
 	_stretch_material.set_shader_parameter("tail_narrow", 1.0)
+	_stretch_material.set_shader_parameter("tail_fade", 0.0)
 	_ball_mesh.material_override = _stretch_material
 	_spinner.add_child(_ball_mesh)
 	_deform.add_child(_spinner)
@@ -965,14 +974,18 @@ func _apply_stretch(treatment: String, velocity: Vector3) -> void:
 	if not treatment in ["stretch", "combined"] or velocity.length() < 0.01:
 		_stretch_material.set_shader_parameter("tail_length", 0.0)
 		_stretch_material.set_shader_parameter("tail_narrow", 1.0)
+		_stretch_material.set_shader_parameter("tail_fade", 0.0)
 		return
 	var power := clampf(inverse_lerp(4.0, 20.0, velocity.length()), 0.0, 1.0)
 	var local := _ball_mesh.global_transform.basis.inverse() * velocity
 	if local.length() < 0.00001:
 		return
 	_stretch_material.set_shader_parameter("stretch_axis", local.normalized())
-	_stretch_material.set_shader_parameter("tail_length", lerpf(0.0, 0.95, power))
-	_stretch_material.set_shader_parameter("tail_narrow", lerpf(1.0, 0.42, power))
+	## Shorter and blunter than the first draft, which read as the ball's own
+	## shape rather than as its speed, and thinned rather than solid.
+	_stretch_material.set_shader_parameter("tail_length", lerpf(0.0, 0.58, power))
+	_stretch_material.set_shader_parameter("tail_narrow", lerpf(1.0, 0.58, power))
+	_stretch_material.set_shader_parameter("tail_fade", lerpf(0.0, 0.82, power))
 
 
 # --- drawing helpers -------------------------------------------------------
