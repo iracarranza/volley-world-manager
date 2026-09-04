@@ -878,3 +878,19 @@ opponent kill rate  0.276    0.415
 swing balance       0.681    0.767   near 1.00
 
 `tools/run_rally_balance_probe.gd` is that reading.
+
+## `ENABLE_OFFBALL_POSITION_CLAIMANTS`
+
+```gdscript
+const ENABLE_OFFBALL_POSITION_CLAIMANTS: bool = false
+```
+
+Let phase-established off-ball bodies without a floor zone enter the existing
+claimant search. **Off, because the measured candidate population does not
+contain such a body.**
+
+Every current defensive plan creates six enabled floor zones. Both sides
+already give `CoverageCalculator.choose_claimant` all six players and their
+resolved phase/live positions. The development-open and closed arms therefore
+produce identical signatures across 700 paired rallies and zero delta in every
+balance measure. This is a corrected premise, not a rollout awaiting tuning.

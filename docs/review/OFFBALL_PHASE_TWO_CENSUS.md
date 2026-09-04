@@ -18,3 +18,7 @@ candidate population did not change: all six already own enabled floor zones,
 and the two searches already consume their resolved positions. The expected
 direction in the implementation spec therefore does not apply to this proposed
 gate. No calibration is justified.
+
+The full suite reports the baseline two failures in 2,232 checks: the known
+strict-tempo assertion and stacked-blockers assertion. The three Phase Two
+contract checks add no regression.
