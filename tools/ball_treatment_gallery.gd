@@ -77,6 +77,13 @@ var _caption: Label
 var _history: Array[Vector3] = []
 var _spin_angle: float = 0.0
 var _camera_focus: Vector3 = Vector3.ZERO
+## A close, fixed camera on the contact point. The travelling shot is right for a
+## trail and useless for a deformation: at 4.9 m the ball is 25 px and a squash
+## is invisible, which is the whole reason this mode exists.
+var _hold_on_contact: bool = false
+var _zoom: float = 1.0
+var _first_second: float = 0.0
+var _last_second: float = -1.0
 var _out_dir: String = ""
 var _shot: String = "spike"
 var _launch: Vector3 = Vector3.ZERO
@@ -91,6 +98,10 @@ func _ready() -> void:
 		push_error("unknown shot '%s'" % _shot)
 		get_tree().quit(2)
 		return
+	_hold_on_contact = str(args.get("focus", "")) == "contact"
+	_zoom = float(args.get("zoom", "1.0"))
+	_first_second = float(args.get("start", "0.0"))
+	_last_second = float(args.get("end", "-1.0"))
 	get_window().size = OUT_SIZE
 	_solve_flight()
 	_build_world()
@@ -311,7 +322,8 @@ func _add_overlay() -> void:
 func _render_treatment(treatment: String) -> void:
 	_history.clear()
 	_spin_angle = 0.0
-	_camera_focus = Vector3(_state_at(0.0).position)
+	_camera_focus = CONTACT if _hold_on_contact \
+		else Vector3(_state_at(0.0).position)
 	_track_camera()
 	for ghost in _ghosts:
 		ghost.visible = false
@@ -320,14 +332,23 @@ func _render_treatment(treatment: String) -> void:
 	_caption.text = str(CAPTIONS.get(treatment, ""))
 	var directory := "%s/%s/%s" % [_out_dir, _shot, treatment]
 	DirAccess.make_dir_recursive_absolute(directory)
-	var frames := int(ceil(_total_seconds() / DT))
+	var last := _last_second if _last_second > 0.0 else _total_seconds()
+	var first_frame := int(floor(_first_second / DT))
+	var frames := int(ceil(last / DT))
+	## The state is stepped from zero whatever the window is, because a trail is
+	## a function of where the ball has already been -- starting the loop late
+	## would draw a ball with no history behind it.
+	var written := 0
 	for frame in range(frames):
 		_apply(treatment, float(frame) * DT)
+		if frame < first_frame:
+			continue
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		var image := get_viewport().get_texture().get_image()
-		image.save_png("%s/f_%04d.png" % [directory, frame])
-	print("rendered %s/%s %d frames" % [_shot, treatment, frames])
+		image.save_png("%s/f_%04d.png" % [directory, written])
+		written += 1
+	print("rendered %s/%s %d frames" % [_shot, treatment, written])
 
 
 func _apply(treatment: String, t: float) -> void:
@@ -339,7 +360,7 @@ func _apply(treatment: String, t: float) -> void:
 	_ball_root.position = position
 	## Lagged rather than locked. A camera welded to the ball would hold it dead
 	## centre and hide the one thing a speed treatment is trying to show.
-	_camera_focus = _camera_focus.lerp(position, 0.10)
+	_camera_focus = _camera_focus.lerp(position, 0.16 if _hold_on_contact else 0.10)
 	_track_camera()
 
 	_push_history(position)
@@ -596,7 +617,7 @@ func _apply_deform(treatment: String, velocity: Vector3, since_contact: float) -
 # --- drawing helpers -------------------------------------------------------
 
 func _track_camera() -> void:
-	var eye := _camera_focus + Vector3(0.0, 0.75, 4.9)
+	var eye := _camera_focus + Vector3(0.0, 0.75, 4.9) * _zoom
 	_camera.look_at_from_position(eye, _camera_focus, Vector3.UP)
 
 
