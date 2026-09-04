@@ -27,6 +27,17 @@ const INCOMING_SECONDS: float = 0.8
 const HOLD_SECONDS: float = 0.35
 const GRAVITY: float = 9.8
 const BALL_RADIUS: float = 0.105
+## How long the ball is followed after it first reaches the floor.
+const BOUNCE_SECONDS: float = 1.9
+const MAX_BOUNCES: int = 4
+## A volleyball is light and soft; it does not come off a gym floor like a
+## basketball. Half the vertical speed back, and a little horizontal lost.
+const RESTITUTION: float = 0.50
+const FLOOR_KEEP: float = 0.86
+const ROLL_DRAG: float = 0.55
+## What topspin buys at the floor, in metres per second of forward speed.
+const TOPSPIN_FLOOR_KICK: float = 1.9
+const SPIN_LOSS_PER_BOUNCE: float = 0.62
 
 ## Speed and launch elevation per shot. The set and the bump exist for one
 ## argument only: if every ball gets the same treatment at the same strength,
@@ -58,6 +69,11 @@ const CAPTIONS := {
 	"combined": "COMBINED - speed lines + spin + stretch + squash + stamp.",
 }
 
+## How far back in time a trail remembers. Its drawn length is capped by the
+## distance the ball actually covered over this window, which is what stops a
+## streak from appearing at full length the instant the ball is struck.
+const TRAIL_MEMORY_SECONDS: float = 0.11
+
 const TRAIL_COLOR := Color(1.0, 0.94, 0.82)
 const MAX_GHOSTS: int = 14
 const GHOST_SPACING: float = 0.16
@@ -76,11 +92,14 @@ var _caption: Label
 
 var _history: Array[Vector3] = []
 var _spin_angle: float = 0.0
+var _eased_power: float = 0.0
+var _travelled: float = 0.0
 var _camera_focus: Vector3 = Vector3.ZERO
 ## A close, fixed camera on the contact point. The travelling shot is right for a
 ## trail and useless for a deformation: at 4.9 m the ball is 25 px and a squash
 ## is invisible, which is the whole reason this mode exists.
 var _hold_on_contact: bool = false
+var _focus: String = ""
 var _zoom: float = 1.0
 var _first_second: float = 0.0
 var _last_second: float = -1.0
@@ -88,6 +107,7 @@ var _out_dir: String = ""
 var _shot: String = "spike"
 var _launch: Vector3 = Vector3.ZERO
 var _flight_seconds: float = 0.0
+var _first_impact: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -98,7 +118,8 @@ func _ready() -> void:
 		push_error("unknown shot '%s'" % _shot)
 		get_tree().quit(2)
 		return
-	_hold_on_contact = str(args.get("focus", "")) == "contact"
+	_focus = str(args.get("focus", ""))
+	_hold_on_contact = _focus in ["contact", "floor"]
 	_zoom = float(args.get("zoom", "1.0"))
 	_first_second = float(args.get("start", "0.0"))
 	_last_second = float(args.get("end", "-1.0"))
@@ -123,16 +144,27 @@ func _solve_flight() -> void:
 	var speed := float(shot.speed)
 	_launch = Vector3(cos(elevation) * speed, sin(elevation) * speed, 0.0)
 	var vy := _launch.y
-	_flight_seconds = (vy + sqrt(vy * vy + 2.0 * GRAVITY * CONTACT.y)) / GRAVITY
+	_flight_seconds = (vy + sqrt(
+		vy * vy + 2.0 * GRAVITY * (CONTACT.y - BALL_RADIUS)
+	)) / GRAVITY
+	_first_impact = CONTACT + _launch * _flight_seconds \
+		- Vector3.UP * 0.5 * GRAVITY * _flight_seconds * _flight_seconds
+	_first_impact.y = BALL_RADIUS
 
 
 func _total_seconds() -> float:
-	return INCOMING_SECONDS + _flight_seconds + HOLD_SECONDS
+	return INCOMING_SECONDS + _flight_seconds + BOUNCE_SECONDS + HOLD_SECONDS
 
 
 ## Position and velocity at a moment, for the whole shot including the leg
-## before the contact. One function so a trail that samples the past and a trail
-## that samples the future are reading the same flight.
+## before the contact and the bounces after it. One function so a trail that
+## samples the past and a trail that samples the future read the same flight.
+##
+## The ball used to stop dead at the landing point, which is what playback does
+## today: `display_trajectory` runs contact-to-contact and there is no leg after
+## the last one, so a ball reaching the floor neither bounces nor carries on.
+## Drawn here because a squash and a spin have their most obvious moment at a
+## floor impact and there was nothing for them to respond to.
 func _state_at(t: float) -> Dictionary:
 	if t < INCOMING_SECONDS:
 		## The incoming set, solved backwards so it *arrives* at the contact.
@@ -141,14 +173,53 @@ func _state_at(t: float) -> Dictionary:
 		return {
 			"position": INCOMING_FROM + v0 * t - Vector3.UP * 0.5 * GRAVITY * t * t,
 			"velocity": v0 - Vector3.UP * GRAVITY * t,
-			"phase": "incoming",
+			"phase": "incoming", "bounces": 0, "last_impact": -1.0,
 		}
-	var f := minf(t - INCOMING_SECONDS, _flight_seconds)
-	var landed := (t - INCOMING_SECONDS) > _flight_seconds
+	var remaining := t - INCOMING_SECONDS
+	var position := CONTACT
+	var velocity := _launch
+	var bounces := 0
+	var last_impact := -1.0
+	while true:
+		## Time from here to the floor. Always positive: the ball is above it.
+		## The floor for the ball's *centre* is one radius up, so the squash
+		## fires when the surface touches rather than when the centre does.
+		var fall := (velocity.y + sqrt(
+			velocity.y * velocity.y
+				+ 2.0 * GRAVITY * maxf(position.y - BALL_RADIUS, 0.0)
+		)) / GRAVITY
+		if bounces >= MAX_BOUNCES or fall <= 0.0001:
+			## Rolling. Friction only, and it stays on the floor.
+			position += Vector3(velocity.x, 0.0, velocity.z) * remaining
+			velocity = Vector3(velocity.x, 0.0, velocity.z) \
+				* maxf(1.0 - ROLL_DRAG * remaining, 0.0)
+			position.y = BALL_RADIUS
+			break
+		if remaining < fall:
+			position += velocity * remaining \
+				- Vector3.UP * 0.5 * GRAVITY * remaining * remaining
+			velocity -= Vector3.UP * GRAVITY * remaining
+			break
+		position += velocity * fall - Vector3.UP * 0.5 * GRAVITY * fall * fall
+		velocity -= Vector3.UP * GRAVITY * fall
+		remaining -= fall
+		bounces += 1
+		last_impact = t - remaining
+		position.y = BALL_RADIUS
+		## A topspin ball grabs the floor and kicks forward off it: the spin is
+		## spent buying horizontal speed, which is why a hard-driven ball skids
+		## away low rather than sitting up.
+		var topspin_kick := TOPSPIN_FLOOR_KICK \
+			* float(SHOTS[_shot].spin_rps) / 16.0 \
+			* pow(SPIN_LOSS_PER_BOUNCE, float(bounces - 1))
+		velocity.y = -velocity.y * RESTITUTION
+		velocity.x = velocity.x * FLOOR_KEEP + topspin_kick
+		velocity.z = velocity.z * FLOOR_KEEP
 	return {
-		"position": CONTACT + _launch * f - Vector3.UP * 0.5 * GRAVITY * f * f,
-		"velocity": Vector3.ZERO if landed else _launch - Vector3.UP * GRAVITY * f,
-		"phase": "landed" if landed else "outgoing",
+		"position": Vector3(position.x, maxf(position.y, BALL_RADIUS), position.z),
+		"velocity": velocity,
+		"phase": "outgoing" if bounces == 0 else "bouncing",
+		"bounces": bounces, "last_impact": last_impact,
 	}
 
 
@@ -322,8 +393,9 @@ func _add_overlay() -> void:
 func _render_treatment(treatment: String) -> void:
 	_history.clear()
 	_spin_angle = 0.0
-	_camera_focus = CONTACT if _hold_on_contact \
-		else Vector3(_state_at(0.0).position)
+	_eased_power = 0.0
+	_travelled = 0.0
+	_camera_focus = _opening_focus()
 	_track_camera()
 	for ghost in _ghosts:
 		ghost.visible = false
@@ -363,10 +435,26 @@ func _apply(treatment: String, t: float) -> void:
 	_camera_focus = _camera_focus.lerp(position, 0.16 if _hold_on_contact else 0.10)
 	_track_camera()
 
+	## **A trail cannot be longer than the path the ball has actually taken.**
+	## The first draft sized every stroke from instantaneous speed, so at the
+	## contact the streak appeared at full length in one frame -- reaching back
+	## through ground the ball had crossed slowly, or had not crossed at all.
+	## Two corrections, and they do different halves of the job: the length is
+	## capped by the distance genuinely covered in the trail's own memory, and
+	## the weight eases in rather than stepping.
+	_eased_power = lerpf(
+		_eased_power, clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0), 0.09
+	)
+	_travelled = _travelled_within(t, TRAIL_MEMORY_SECONDS)
+
 	_push_history(position)
-	_spin_angle += _spin_rate(treatment, since_contact) * TAU * DT
+	_spin_angle += _spin_rate(treatment, since_contact, int(state.bounces)) \
+		* TAU * DT
 	_apply_spin(treatment, velocity)
-	_apply_deform(treatment, velocity, since_contact)
+	_apply_deform(
+		treatment, velocity, since_contact, t - float(state.last_impact) \
+			if float(state.last_impact) >= 0.0 else -1.0
+	)
 
 	for ghost in _ghosts:
 		ghost.visible = false
@@ -400,8 +488,8 @@ func _push_history(position: Vector3) -> void:
 ## Faithful to `BallActor3D`: count and head width come from speed, the taper is
 ## the ghost's own place in the tail. `skew` is the same trail with a lateral
 ## offset that grows with age, which is what a curving ball leaves behind.
-func _draw_history(speed: float, skew: float) -> void:
-	var power := clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0)
+func _draw_history(_speed: float, skew: float) -> void:
+	var power := _eased_power
 	var live := int(round(lerpf(2.0, float(MAX_GHOSTS), power)))
 	var head_scale := lerpf(0.44, 0.86, power)
 	var head_alpha := lerpf(0.26, 0.72, power)
@@ -445,8 +533,8 @@ func _draw_speed_lines(position: Vector3, velocity: Vector3) -> void:
 	if speed < 0.5:
 		return
 	var direction := velocity.normalized()
-	var power := clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0)
-	var length := lerpf(0.18, 1.55, power)
+	var power := _eased_power
+	var length := minf(lerpf(0.18, 1.55, power), _travelled)
 	var side := direction.cross(_to_camera(position)).normalized()
 	var up := side.cross(direction).normalized()
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -474,8 +562,8 @@ func _draw_wake(position: Vector3, velocity: Vector3) -> void:
 	if speed < 0.5:
 		return
 	var direction := velocity.normalized()
-	var power := clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0)
-	var length := lerpf(0.3, 2.6, power)
+	var power := _eased_power
+	var length := minf(lerpf(0.3, 2.6, power), _travelled * 1.4)
 	var flare := lerpf(0.06, 0.42, power)
 	var side := direction.cross(_to_camera(position)).normalized()
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -573,9 +661,12 @@ func _draw_stamp(since_contact: float) -> void:
 	_stroke_mesh.surface_end()
 
 
-func _spin_rate(treatment: String, since_contact: float) -> float:
+func _spin_rate(treatment: String, since_contact: float, bounces: int) -> float:
 	var shot: Dictionary = SHOTS[_shot]
-	var outgoing := float(shot.spin_rps)
+	## Each floor contact spends some of the rotation -- part into the forward
+	## kick the bounce already takes, the rest into the floor.
+	var outgoing := float(shot.spin_rps) \
+		* pow(SPIN_LOSS_PER_BOUNCE, float(bounces))
 	if treatment == "acquire":
 		if since_contact < 0.0:
 			return 1.5
@@ -591,18 +682,36 @@ func _apply_spin(treatment: String, velocity: Vector3) -> void:
 	if treatment in ["spin", "acquire", "combined", "ribbon"]:
 		var direction := velocity.normalized() if velocity.length() > 0.01 \
 			else Vector3.RIGHT
-		## Topspin turns about the horizontal axis across the flight, which is
-		## the axis a viewer can actually see turning from side on.
-		var axis := direction.cross(Vector3.UP).normalized()
+		## `direction.cross(UP)` carries the *front* of the ball upward, which is
+		## backspin. Topspin is the top of the ball moving the way the ball is
+		## going, so the axis is the other one.
+		var axis := Vector3.UP.cross(direction).normalized()
 		_spinner.transform.basis = Basis(axis, _spin_angle)
 		return
 	## Everything else keeps the ball's current stand-in: a fixed local axis.
 	_spinner.transform.basis = Basis(Vector3.RIGHT, _spin_angle)
 
 
-func _apply_deform(treatment: String, velocity: Vector3, since_contact: float) -> void:
+func _apply_deform(
+	treatment: String, velocity: Vector3, since_contact: float,
+	since_impact: float
+) -> void:
 	var long_scale := 1.0
 	var perp_scale := 1.0
+	## The floor squash is a separate deformation on a separate axis -- the hit
+	## compresses the ball along the swing, the landing compresses it against the
+	## floor -- so it cannot share the frame the flight one is built in.
+	if treatment in ["squash", "combined"] and since_impact >= 0.0 \
+			and since_impact < 0.5:
+		var floor_amplitude := 0.46 * exp(-since_impact / 0.075) \
+			* cos(TAU * 10.0 * since_impact)
+		_ball_root.scale = Vector3(
+			1.0 + floor_amplitude * 0.5,
+			1.0 - floor_amplitude,
+			1.0 + floor_amplitude * 0.5,
+		)
+	else:
+		_ball_root.scale = Vector3.ONE
 	if treatment in ["stretch", "combined"]:
 		var power := clampf(inverse_lerp(4.0, 20.0, velocity.length()), 0.0, 1.0)
 		long_scale *= lerpf(1.0, 1.55, power)
@@ -628,6 +737,35 @@ func _apply_deform(treatment: String, velocity: Vector3, since_contact: float) -
 
 
 # --- drawing helpers -------------------------------------------------------
+
+## Path length actually covered over the last `window` seconds, integrated along
+## the flight rather than estimated from the current speed. Crossing the contact
+## it correctly returns a short distance, because most of that window was the
+## slow ball arriving.
+func _travelled_within(t: float, window: float) -> float:
+	var first := maxf(t - window, 0.0)
+	var steps := 10
+	var total := 0.0
+	var previous := Vector3(_state_at(first).position)
+	for step in range(1, steps + 1):
+		var sample := lerpf(first, t, float(step) / float(steps))
+		var point := Vector3(_state_at(sample).position)
+		total += previous.distance_to(point)
+		previous = point
+	return total
+
+
+## Where the camera starts. A landing shot has to open on the floor rather than
+## on the ball, or the first bounce happens before the camera has caught up.
+func _opening_focus() -> Vector3:
+	match _focus:
+		"contact":
+			return CONTACT
+		"floor":
+			return _first_impact + Vector3.UP * 0.45
+		_:
+			return Vector3(_state_at(0.0).position)
+
 
 func _track_camera() -> void:
 	var eye := _camera_focus + Vector3(0.0, 0.75, 4.9) * _zoom
