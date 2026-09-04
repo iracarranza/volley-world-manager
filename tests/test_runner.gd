@@ -330,6 +330,7 @@ func _initialize() -> void:
 	_test_set_decision_to_set_offball_authority()
 	_test_reception_to_set_decision_offball_authority()
 	_test_offball_position_claimant_rollout_starts_closed()
+	_test_offball_position_claimant_gate_opens_unassigned_bodies()
 	_test_one_ball_chain_by_launch_identity()
 	_test_receive_shape_is_where_the_receivers_stand()
 	_test_opponent_setter_release_is_clear()
@@ -9881,6 +9882,19 @@ func _test_offball_position_claimant_rollout_starts_closed() -> void:
 		not RALLY_FEATURE_FLAGS_SCRIPT.ENABLE_OFFBALL_POSITION_CLAIMANTS
 			and RALLY_FEATURE_FLAGS_SCRIPT.ALLOW_DEVELOPMENT_OFFBALL_POSITION_CLAIMANTS,
 		"off-ball position claimants start production-closed with a census override",
+	)
+
+
+func _test_offball_position_claimant_gate_opens_unassigned_bodies() -> void:
+	var simulator := RALLY_SIMULATOR_SCRIPT.new()
+	_check(
+		float(simulator._offball_unassigned_reach_meters()) < 0.0,
+		"closed off-ball claimant gate excludes bodies without a floor zone",
+	)
+	simulator.offball_claimants_development_open = true
+	_check(
+		is_zero_approx(float(simulator._offball_unassigned_reach_meters())),
+		"open off-ball claimant gate admits published bodies without inventing reach",
 	)
 
 

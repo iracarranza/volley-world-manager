@@ -33,6 +33,8 @@ const FIRST_SEED: int = 20000
 
 
 func _initialize() -> void:
+	var offball_claimants_open := \
+		"--offball-position-claimants" in OS.get_cmdline_user_args()
 	var tally := {
 		"rallies": 0, "contacts": 0,
 		"home_swings": 0, "opponent_swings": 0,
@@ -53,7 +55,9 @@ func _initialize() -> void:
 		manager.seed_vertical_slice_data()
 		manager.match_state.serving_home = serving_home
 		for seed_value in range(FIRST_SEED, FIRST_SEED + RALLIES):
-			var result: Resource = manager.resolve_active_rally(seed_value)
+			var result: Resource = manager.resolve_active_rally(
+				seed_value, false, false, false, false, offball_claimants_open
+			)
 			if result != null:
 				_collect(result, tally)
 		manager.free()

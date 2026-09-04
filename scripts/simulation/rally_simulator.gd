@@ -6203,7 +6203,7 @@ func _resolve_opponent_transition(
 		## this one.
 		_recovery_time_penalties(rally_clock),
 		floor_phase_positions,
-		-1.0,
+		_offball_unassigned_reach_meters(),
 		## And which way each of them is set. A ball arriving behind a defender
 		## costs them the turn their own locomotion prices.
 		_ready_facings(floor_phase_positions.keys(), &"home"),
@@ -8762,7 +8762,7 @@ func _choose_opponent_defender(
 	var claim := CoverageModel.choose_claimant(
 		defenders, zones, target, flight_time, "reception",
 		_recovery_time_penalties(rally_clock),
-		opponent_live_positions, -1.0,
+		opponent_live_positions, _offball_unassigned_reach_meters(),
 		_ready_facings(opponent_live_positions.keys(), &"opponent"),
 	)
 	var claimant := claim.get("player") as VolleyballPlayer
@@ -8838,6 +8838,13 @@ func _nearest_opponent_body(
 			best = distance
 			nearest = defender
 	return nearest if nearest != null else opponent_team.best_defender()
+
+
+## NOTE Published bodies may claim only behind the Phase Two gate -- OFFBALL_PHASE_TWO_BASELINE.md
+func _offball_unassigned_reach_meters() -> float:
+	var enabled := RallyFeatureFlagsModel.ENABLE_OFFBALL_POSITION_CLAIMANTS \
+		or offball_claimants_development_open
+	return 0.0 if enabled else -1.0
 
 
 ## Where this opponent hitter can legally and physically contact the ball.
