@@ -98,6 +98,40 @@ const CAPTIONS := {
 	"combined": "COMBINED - speed lines + air + spin + stretch + squash.",
 }
 
+## A symmetric ellipsoid has no way to say which end is leading, so it cannot be
+## told apart from a ball compressed the other way -- which is exactly what made
+## the bounce apex read as a squash. A smear is not an ellipse: animators keep
+## the leading form and draw the *tail* out behind it. This does the same, by
+## holding the front hemisphere and pulling the back one into a point.
+const STRETCH_SHADER: String = """
+shader_type spatial;
+
+uniform sampler2D panels : source_color;
+uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
+uniform float ball_radius = 0.105;
+uniform float tail_length = 0.0;
+uniform float tail_narrow = 1.0;
+
+void vertex() {
+	float along = dot(VERTEX, stretch_axis);
+	// 1 at the leading pole, 0 at the trailing one.
+	float lead = clamp(along / ball_radius * 0.5 + 0.5, 0.0, 1.0);
+	vec3 across = VERTEX - stretch_axis * along;
+	float narrow = mix(tail_narrow, 1.0, smoothstep(0.0, 1.0, lead));
+	float trail = -tail_length * ball_radius * pow(1.0 - lead, 2.0);
+	VERTEX = across * narrow + stretch_axis * (along + trail);
+	// Normals of a scaled surface go by the inverse, or the ball lights flat.
+	float n_along = dot(NORMAL, stretch_axis);
+	vec3 n_across = NORMAL - stretch_axis * n_along;
+	NORMAL = normalize(n_across / max(narrow, 0.05) + stretch_axis * n_along);
+}
+
+void fragment() {
+	ALBEDO = texture(panels, UV).rgb;
+	ROUGHNESS = 0.55;
+}
+"""
+
 const TRAIL_COLOR := Color(1.0, 0.94, 0.82)
 const MAX_GHOSTS: int = 14
 const GHOST_SPACING: float = 0.16
@@ -111,6 +145,7 @@ var _ghosts: Array[MeshInstance3D] = []
 var _strokes: MeshInstance3D
 var _stroke_mesh: ImmediateMesh
 var _stroke_material: StandardMaterial3D
+var _stretch_material: ShaderMaterial
 var _label: Label
 var _caption: Label
 
@@ -371,10 +406,20 @@ func _add_ball() -> void:
 	sphere.radial_segments = 32
 	sphere.rings = 16
 	_ball_mesh.mesh = sphere
-	var material := StandardMaterial3D.new()
-	material.albedo_texture = _panel_texture()
-	material.roughness = 0.55
-	_ball_mesh.material_override = material
+	## A teardrop is not a linear transform, so it cannot be a node basis -- the
+	## taper has to happen per vertex. Moving it here also settles the collision
+	## with the squash by construction: the squash owns the node's basis and the
+	## stretch no longer writes to it at all.
+	var shader := Shader.new()
+	shader.code = STRETCH_SHADER
+	_stretch_material = ShaderMaterial.new()
+	_stretch_material.shader = shader
+	_stretch_material.set_shader_parameter("panels", _panel_texture())
+	_stretch_material.set_shader_parameter("ball_radius", BALL_RADIUS)
+	_stretch_material.set_shader_parameter("stretch_axis", Vector3.RIGHT)
+	_stretch_material.set_shader_parameter("tail_length", 0.0)
+	_stretch_material.set_shader_parameter("tail_narrow", 1.0)
+	_ball_mesh.material_override = _stretch_material
 	_spinner.add_child(_ball_mesh)
 	_deform.add_child(_spinner)
 	_ball_root.add_child(_deform)
@@ -855,42 +900,33 @@ func _apply_spin(treatment: String, velocity: Vector3) -> void:
 ## direction the ball was actually struck. The axis is the change in velocity,
 ## which is the impulse, which is the direction the force was applied. One rule,
 ## and the floor and the hand stop being special cases of each other.
+##
+## The squash owns the node's basis and the stretch owns the shader, so they can
+## no longer overwrite each other. They did: `_apply_stretch` set the basis and
+## the squash branch then assigned over it, so a combined ball silently lost its
+## stretch for the squash's duration and snapped back when it ended.
 func _apply_deform(
 	treatment: String, position: Vector3, state: Dictionary, since_event: float
 ) -> void:
 	_ball_root.scale = Vector3.ONE
 	_ball_root.position = position
-	var long_scale := 1.0
-	var perp_scale := 1.0
+	_apply_stretch(treatment, Vector3(state.velocity))
 	var impulse: Vector3 = state.impulse
-	var squashing := treatment in ["squash", "combined"] \
-		and since_event >= 0.0 and since_event < SQUASH_SECONDS \
-		and impulse.length() > 0.5
-	var axis := impulse.normalized() if impulse.length() > 0.001 else Vector3.UP
-	var amplitude := 0.0
-	if squashing:
-		## Damped and *oscillating*: the overshoot is what makes it read as a
-		## material with a skin on it rather than as a scale glitch. Depth comes
-		## from the same vector as the axis, so a soft touch barely moves.
-		var swing := cos(TAU * SQUASH_HZ * since_event)
-		## Damped and *oscillating*, but not evenly: the rebound past round is a
-		## fraction of the compression into it.
-		if swing < 0.0:
-			swing *= SQUASH_REBOUND
-		amplitude = MAX_SQUASH \
-			* clampf(impulse.length() / IMPULSE_REFERENCE, 0.0, 1.0) \
-			* exp(-since_event / SQUASH_DECAY) * swing
-		long_scale *= 1.0 - amplitude
-		perp_scale *= 1.0 + amplitude * 0.5
-	if treatment in ["stretch", "combined"]:
-		var velocity: Vector3 = state.velocity
-		var power := clampf(inverse_lerp(4.0, 20.0, velocity.length()), 0.0, 1.0)
-		## Stretch runs along the flight, not along the blow, so it needs its own
-		## frame -- it is the only deformation here that is not an impact.
-		_apply_stretch(velocity, power)
-	if not squashing or is_equal_approx(amplitude, 0.0):
-		if not treatment in ["stretch", "combined"]:
-			_deform.transform.basis = Basis.IDENTITY
+	if not treatment in ["squash", "combined"] or since_event < 0.0 \
+			or since_event >= SQUASH_SECONDS or impulse.length() <= 0.5:
+		_deform.transform.basis = Basis.IDENTITY
+		return
+	var axis := impulse.normalized()
+	var swing := cos(TAU * SQUASH_HZ * since_event)
+	## Damped and *oscillating*, but not evenly: the rebound past round is a
+	## fraction of the compression into it.
+	if swing < 0.0:
+		swing *= SQUASH_REBOUND
+	var amplitude := MAX_SQUASH \
+		* clampf(impulse.length() / IMPULSE_REFERENCE, 0.0, 1.0) \
+		* exp(-since_event / SQUASH_DECAY) * swing
+	if is_equal_approx(amplitude, 0.0):
+		_deform.transform.basis = Basis.IDENTITY
 		return
 	## **The contact point stays where it is and the centre moves.** Scaling about
 	## the centre lifts a flattening ball off the floor it is flattening against,
@@ -902,36 +938,41 @@ func _apply_deform(
 	var arriving: Vector3 = state.arriving
 	var tangent := arriving - axis * arriving.dot(axis)
 	var shear := 0.0
-	var tangent_direction := Vector3.ZERO
+	var tangent_direction := axis.cross(Vector3.RIGHT).normalized() \
+		if absf(axis.dot(Vector3.RIGHT)) < 0.99 \
+		else axis.cross(Vector3.UP).normalized()
 	if tangent.length() > 0.01:
 		tangent_direction = tangent.normalized()
 		shear = -SHEAR_GAIN * amplitude \
 			* clampf(tangent.length() / IMPULSE_REFERENCE, 0.0, 1.0)
-	else:
-		tangent_direction = axis.cross(Vector3.RIGHT).normalized() \
-			if absf(axis.dot(Vector3.RIGHT)) < 0.99 \
-			else axis.cross(Vector3.UP).normalized()
 	var third := axis.cross(tangent_direction).normalized()
 	var frame := Basis(axis, tangent_direction, third)
 	var local := Basis(
-		Vector3(long_scale, shear, 0.0),
-		Vector3(0.0, perp_scale, 0.0),
-		Vector3(0.0, 0.0, perp_scale),
+		Vector3(1.0 - amplitude, shear, 0.0),
+		Vector3(0.0, 1.0 + amplitude * 0.5, 0.0),
+		Vector3(0.0, 0.0, 1.0 + amplitude * 0.5),
 	)
 	_deform.transform.basis = frame * local * frame.transposed()
 
 
-func _apply_stretch(velocity: Vector3, power: float) -> void:
-	var long_scale := lerpf(1.0, 1.55, power)
-	var perp_scale := lerpf(1.0, 0.82, power)
-	var direction := velocity.normalized() if velocity.length() > 0.01 \
-		else Vector3.RIGHT
-	var side := direction.cross(Vector3.UP).normalized()
-	var up := side.cross(direction).normalized()
-	var frame := Basis(direction, up, side)
-	_deform.transform.basis = frame \
-		* Basis.from_scale(Vector3(long_scale, perp_scale, perp_scale)) \
-		* frame.transposed()
+## The tail, in the shader. The axis is handed over in the mesh's own space and
+## recomputed every frame, so the taper stays put in the world while the ball
+## rotates through it -- which is what a deformation does and what spinning the
+## teardrop with the ball would not.
+func _apply_stretch(treatment: String, velocity: Vector3) -> void:
+	if _stretch_material == null:
+		return
+	if not treatment in ["stretch", "combined"] or velocity.length() < 0.01:
+		_stretch_material.set_shader_parameter("tail_length", 0.0)
+		_stretch_material.set_shader_parameter("tail_narrow", 1.0)
+		return
+	var power := clampf(inverse_lerp(4.0, 20.0, velocity.length()), 0.0, 1.0)
+	var local := _ball_mesh.global_transform.basis.inverse() * velocity
+	if local.length() < 0.00001:
+		return
+	_stretch_material.set_shader_parameter("stretch_axis", local.normalized())
+	_stretch_material.set_shader_parameter("tail_length", lerpf(0.0, 0.95, power))
+	_stretch_material.set_shader_parameter("tail_narrow", lerpf(1.0, 0.42, power))
 
 
 # --- drawing helpers -------------------------------------------------------
