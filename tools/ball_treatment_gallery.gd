@@ -42,10 +42,25 @@ const SPIN_LOSS_PER_BOUNCE: float = 0.62
 ## treatment is scaled against this one number, so a set moves nothing and a
 ## driven spike moves everything.
 const IMPULSE_REFERENCE: float = 20.0
-const MAX_SQUASH: float = 0.46
+const MAX_SQUASH: float = 0.30
+## How fast the ball recovers its shape, and how much it rings on the way. The
+## first version used 9 Hz decaying over 0.085 s, which rings four or five times
+## across a quarter second -- a water balloon. A volleyball is inflated and
+## stiff: it compresses hard, overshoots once by a fraction of that, and stops.
+const SQUASH_HZ: float = 19.0
+const SQUASH_DECAY: float = 0.030
+const SQUASH_SECONDS: float = 0.17
+## The rebound is not as big as the compression. Symmetric ringing is most of
+## what reads as gelatinous.
+const SQUASH_REBOUND: float = 0.40
+## Speed lines are emitted rather than attached: each strand records where the
+## ball actually was, so it cannot reach back before the contact and its length
+## is the distance covered in this window rather than a number.
+const STRAND_COUNT: int = 8
+const STRAND_SECONDS: float = 0.085
 ## How far the contact patch smears along the surface, per unit of compression.
 const SHEAR_GAIN: float = 0.55
-const SHELL_SECONDS: float = 0.30
+const SHELL_SECONDS: float = 0.16
 ## Flattened along the impulse. A round shell reads as a bubble.
 const SHELL_FLATTEN: float = 0.30
 ## The band of the shell that is actually drawn, in latitude about the impulse.
@@ -69,7 +84,7 @@ const TREATMENTS: Array[String] = [
 const CAPTIONS := {
 	"blank": "BLANK - no trail at all. The floor everything else reads against.",
 	"history": "HISTORY - ghosts along the path already travelled. Today's trail.",
-	"speed_lines": "SPEED LINES - strokes along velocity. No path memory.",
+	"speed_lines": "SPEED LINES - strands emitted into the court and left behind.",
 	"wake": "WAKE - displaced air behind the ball. Costs no colour.",
 	"ribbon": "RIBBON - a band twisting at the spin rate. Rotation, depicted.",
 	"skew": "SKEW - the trail peeled to one side. Sidespin, before it kicks.",
@@ -100,6 +115,7 @@ var _label: Label
 var _caption: Label
 
 var _history: Array[Vector3] = []
+var _strands: Array = []
 var _spin_angle: float = 0.0
 var _power: float = 0.0
 var _travelled: float = 0.0
@@ -435,6 +451,7 @@ func _render_treatment(treatment: String) -> void:
 	_power = 0.0
 	_travelled = 0.0
 	_anchor_time = -1.0
+	_reset_strands()
 	_camera_focus = _opening_focus()
 	_track_camera()
 	for ghost in _ghosts:
@@ -490,8 +507,10 @@ func _apply(treatment: String, t: float) -> void:
 	if not is_equal_approx(_anchor_time, float(state.anchor_time)):
 		_anchor_time = float(state.anchor_time)
 		_history.clear()
+		_reset_strands()
 
 	_push_history(position)
+	_push_strands(position, velocity)
 	_spin_angle += _spin_rate(treatment, since_contact, int(state.bounces)) \
 		* TAU * DT
 	_apply_spin(treatment, velocity)
@@ -511,7 +530,7 @@ func _apply(treatment: String, t: float) -> void:
 		"leading":
 			_draw_leading(t)
 		"speed_lines", "combined":
-			_draw_speed_lines(position, velocity)
+			_draw_strands()
 		"wake":
 			_draw_wake(position, velocity)
 		"air":
@@ -575,31 +594,86 @@ func _draw_leading(t: float) -> void:
 		material.albedo_color = Color(TRAIL_COLOR, 0.50 * fade * fade)
 
 
-func _draw_speed_lines(position: Vector3, velocity: Vector3) -> void:
-	var speed := velocity.length()
-	if speed < 0.5:
+## Speed lines, emitted into the court rather than parented to the ball.
+##
+## The first version hung nine strokes off the ball on a fixed ring, so they
+## travelled with it and the only thing that ever changed was their length --
+## which is why they read as a decoration that stretches rather than as motion.
+## Animators do the opposite: a mark is made at a moment and left behind, and the
+## object moves on out of it.
+##
+## Two things stop being authored as a result. The length is now the distance the
+## ball covered in `STRAND_SECONDS`, so it scales with speed by itself and needs
+## no cap; and because every point is somewhere the ball actually was, a strand
+## *cannot* reach back before the contact. The anchor rule stops being a clamp
+## and becomes a property of how the marks are made.
+func _push_strands(position: Vector3, velocity: Vector3) -> void:
+	if _strands.is_empty():
+		_reset_strands()
+	if velocity.length() < 0.5:
+		for strand in _strands:
+			strand.clear()
 		return
 	var direction := velocity.normalized()
-	var power := _power
-	var length := minf(lerpf(0.18, 1.55, power), _travelled)
 	var side := direction.cross(_to_camera(position)).normalized()
 	var up := side.cross(direction).normalized()
+	var keep := maxi(int(round(STRAND_SECONDS / DT)), 2)
+	for index in range(STRAND_COUNT):
+		## A fixed angle and radius per strand, so the sheaf holds together frame
+		## to frame instead of sparkling.
+		var angle := TAU * float(index) / float(STRAND_COUNT) + 0.4
+		var radius := lerpf(0.015, 0.115, fmod(float(index) * 0.37, 1.0))
+		var strand: Array = _strands[index]
+		strand.append(position + (side * cos(angle) + up * sin(angle)) * radius)
+		while strand.size() > keep:
+			strand.pop_front()
+
+
+func _reset_strands() -> void:
+	_strands.clear()
+	for _index in range(STRAND_COUNT):
+		_strands.append([])
+
+
+func _draw_strands() -> void:
+	var head_width := lerpf(0.005, 0.014, _power)
+	var head_alpha := 0.62 * _power + 0.10
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	## Nine strokes on a fixed ring, so the pattern is stable frame to frame
-	## rather than sparkling -- a randomised offset per frame reads as noise.
-	for index in range(9):
-		var angle := TAU * float(index) / 9.0
-		var radial := (side * cos(angle) + up * sin(angle)) \
-			* lerpf(0.02, 0.15, fmod(float(index) * 0.37, 1.0))
-		var gap := lerpf(0.05, 0.18, fmod(float(index) * 0.61, 1.0))
-		var tail_length := length * lerpf(0.55, 1.0, fmod(float(index) * 0.29, 1.0))
-		var head := position + radial - direction * gap
-		var tail := head - direction * tail_length
-		_add_spindle(
-			head, tail, lerpf(0.006, 0.014, power),
-			Color(TRAIL_COLOR, 0.62 * power + 0.10)
-		)
+	for strand in _strands:
+		var points: Array = strand
+		if points.size() < 2:
+			continue
+		for index in range(points.size() - 1):
+			var a: Vector3 = points[index]
+			var b: Vector3 = points[index + 1]
+			## Newest point is the head, so a strand tapers and fades backwards
+			## from the ball into the court it was laid down in.
+			var fa := float(index) / float(points.size() - 1)
+			var fb := float(index + 1) / float(points.size() - 1)
+			_add_taper(
+				a, b, head_width * fa * fa, head_width * fb * fb,
+				Color(TRAIL_COLOR, head_alpha * fa * fa * fa),
+				Color(TRAIL_COLOR, head_alpha * fb * fb * fb)
+			)
 	_stroke_mesh.surface_end()
+
+
+## A segment whose width differs at each end, so a chain of them is a smooth
+## taper rather than a row of bars.
+func _add_taper(
+	a: Vector3, b: Vector3, half_a: float, half_b: float,
+	colour_a: Color, colour_b: Color
+) -> void:
+	var along := b - a
+	if along.length() < 0.00001:
+		return
+	var facing := _to_camera(a)
+	var side := along.normalized().cross(facing).normalized()
+	_add_quad(
+		a + side * half_a, a - side * half_a,
+		b - side * half_b, b + side * half_b,
+		colour_a, colour_a, colour_b, colour_b
+	)
 
 
 ## Air, not light. Wide, dim and colourless, so it can sit under a trail that is
@@ -790,16 +864,22 @@ func _apply_deform(
 	var perp_scale := 1.0
 	var impulse: Vector3 = state.impulse
 	var squashing := treatment in ["squash", "combined"] \
-		and since_event >= 0.0 and since_event < 0.6 and impulse.length() > 0.5
+		and since_event >= 0.0 and since_event < SQUASH_SECONDS \
+		and impulse.length() > 0.5
 	var axis := impulse.normalized() if impulse.length() > 0.001 else Vector3.UP
 	var amplitude := 0.0
 	if squashing:
 		## Damped and *oscillating*: the overshoot is what makes it read as a
 		## material with a skin on it rather than as a scale glitch. Depth comes
 		## from the same vector as the axis, so a soft touch barely moves.
+		var swing := cos(TAU * SQUASH_HZ * since_event)
+		## Damped and *oscillating*, but not evenly: the rebound past round is a
+		## fraction of the compression into it.
+		if swing < 0.0:
+			swing *= SQUASH_REBOUND
 		amplitude = MAX_SQUASH \
 			* clampf(impulse.length() / IMPULSE_REFERENCE, 0.0, 1.0) \
-			* exp(-since_event / 0.085) * cos(TAU * 9.0 * since_event)
+			* exp(-since_event / SQUASH_DECAY) * swing
 		long_scale *= 1.0 - amplitude
 		perp_scale *= 1.0 + amplitude * 0.5
 	if treatment in ["stretch", "combined"]:
