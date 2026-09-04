@@ -38,6 +38,19 @@ const ROLL_DRAG: float = 0.55
 ## What topspin buys at the floor, in metres per second of forward speed.
 const TOPSPIN_FLOOR_KICK: float = 1.9
 const SPIN_LOSS_PER_BOUNCE: float = 0.62
+## The change in velocity a hard swing makes, in metres per second. Every impact
+## treatment is scaled against this one number, so a set moves nothing and a
+## driven spike moves everything.
+const IMPULSE_REFERENCE: float = 20.0
+const MAX_SQUASH: float = 0.46
+## How far the contact patch smears along the surface, per unit of compression.
+const SHEAR_GAIN: float = 0.55
+const SHELL_SECONDS: float = 0.30
+## Flattened along the impulse. A round shell reads as a bubble.
+const SHELL_FLATTEN: float = 0.30
+## The band of the shell that is actually drawn, in latitude about the impulse.
+const SHELL_BAND_MIN: float = 0.26 * PI
+const SHELL_BAND_MAX: float = 0.74 * PI
 
 ## Speed and launch elevation per shot. The set and the bump exist for one
 ## argument only: if every ball gets the same treatment at the same strength,
@@ -50,7 +63,7 @@ const SHOTS := {
 
 const TREATMENTS: Array[String] = [
 	"blank", "history", "speed_lines", "wake", "ribbon", "skew", "leading",
-	"spin", "stretch", "squash", "stamp", "acquire", "combined",
+	"spin", "stretch", "squash", "stamp", "air", "acquire", "combined",
 ]
 
 const CAPTIONS := {
@@ -64,15 +77,11 @@ const CAPTIONS := {
 	"spin": "TRUE SPIN - rotation about a real axis at a real rate.",
 	"stretch": "STRETCH - elongated along velocity. Physically false, reads fast.",
 	"squash": "SQUASH - flattened at the hit, overshooting back. Impact.",
-	"stamp": "STAMP - a ring thrown off the contact. Punctuation, not a trail.",
+	"stamp": "SHELL - air thrown outward by the blow, flattened along it.",
+	"air": "AIR - the shell and the wake as one system: displaced air.",
 	"acquire": "ACQUIRE - the ball takes its spin over ~0.15 s, not instantly.",
-	"combined": "COMBINED - speed lines + spin + stretch + squash + stamp.",
+	"combined": "COMBINED - speed lines + air + spin + stretch + squash.",
 }
-
-## How far back in time a trail remembers. Its drawn length is capped by the
-## distance the ball actually covered over this window, which is what stops a
-## streak from appearing at full length the instant the ball is struck.
-const TRAIL_MEMORY_SECONDS: float = 0.11
 
 const TRAIL_COLOR := Color(1.0, 0.94, 0.82)
 const MAX_GHOSTS: int = 14
@@ -92,8 +101,9 @@ var _caption: Label
 
 var _history: Array[Vector3] = []
 var _spin_angle: float = 0.0
-var _eased_power: float = 0.0
+var _power: float = 0.0
 var _travelled: float = 0.0
+var _anchor_time: float = -1.0
 var _camera_focus: Vector3 = Vector3.ZERO
 ## A close, fixed camera on the contact point. The travelling shot is right for a
 ## trail and useless for a deformation: at 4.9 m the ball is 25 px and a squash
@@ -174,12 +184,24 @@ func _state_at(t: float) -> Dictionary:
 			"position": INCOMING_FROM + v0 * t - Vector3.UP * 0.5 * GRAVITY * t * t,
 			"velocity": v0 - Vector3.UP * GRAVITY * t,
 			"phase": "incoming", "bounces": 0, "last_impact": -1.0,
+			## The ball acquired this velocity when it was launched, so that is
+			## as far back as anything drawing its recent past may reach.
+			"anchor": INCOMING_FROM, "anchor_time": 0.0,
+			"impulse": Vector3.ZERO, "arriving": Vector3.ZERO,
 		}
 	var remaining := t - INCOMING_SECONDS
 	var position := CONTACT
 	var velocity := _launch
 	var bounces := 0
 	var last_impact := -1.0
+	var anchor := CONTACT
+	var anchor_time := INCOMING_SECONDS
+	## The swing, as a change of velocity rather than as a new one. Newton's
+	## third law is the whole content of the impact treatments: the axis the ball
+	## deforms along and the size of the deformation are the direction and the
+	## magnitude of this one vector.
+	var impulse := _launch - _incoming_velocity()
+	var arriving := _incoming_velocity()
 	while true:
 		## Time from here to the floor. Always positive: the ball is above it.
 		## The floor for the ball's *centre* is one radius up, so the squash
@@ -206,6 +228,12 @@ func _state_at(t: float) -> Dictionary:
 		bounces += 1
 		last_impact = t - remaining
 		position.y = BALL_RADIUS
+		## Every velocity discontinuity re-anchors: a bounce is an impact like
+		## any other, so the trail starts again from here too.
+		anchor = position
+		anchor_time = last_impact
+		arriving = velocity
+		var before := velocity
 		## A topspin ball grabs the floor and kicks forward off it: the spin is
 		## spent buying horizontal speed, which is why a hard-driven ball skids
 		## away low rather than sitting up.
@@ -215,12 +243,23 @@ func _state_at(t: float) -> Dictionary:
 		velocity.y = -velocity.y * RESTITUTION
 		velocity.x = velocity.x * FLOOR_KEEP + topspin_kick
 		velocity.z = velocity.z * FLOOR_KEEP
+		impulse = velocity - before
 	return {
 		"position": Vector3(position.x, maxf(position.y, BALL_RADIUS), position.z),
 		"velocity": velocity,
 		"phase": "outgoing" if bounces == 0 else "bouncing",
 		"bounces": bounces, "last_impact": last_impact,
+		"anchor": anchor, "anchor_time": anchor_time,
+		"impulse": impulse, "arriving": arriving,
 	}
+
+
+## The ball's velocity as it reaches the hitter, which the swing's impulse is
+## measured against. A swing is not "the outgoing velocity" -- a dig sends a ball
+## back the way it came and the two differ by more than either of them.
+func _incoming_velocity() -> Vector3:
+	return (CONTACT - INCOMING_FROM) / INCOMING_SECONDS \
+		- Vector3.UP * 0.5 * GRAVITY * INCOMING_SECONDS
 
 
 # --- the scene -------------------------------------------------------------
@@ -393,8 +432,9 @@ func _add_overlay() -> void:
 func _render_treatment(treatment: String) -> void:
 	_history.clear()
 	_spin_angle = 0.0
-	_eased_power = 0.0
+	_power = 0.0
 	_travelled = 0.0
+	_anchor_time = -1.0
 	_camera_focus = _opening_focus()
 	_track_camera()
 	for ghost in _ghosts:
@@ -435,46 +475,53 @@ func _apply(treatment: String, t: float) -> void:
 	_camera_focus = _camera_focus.lerp(position, 0.16 if _hold_on_contact else 0.10)
 	_track_camera()
 
-	## **A trail cannot be longer than the path the ball has actually taken.**
-	## The first draft sized every stroke from instantaneous speed, so at the
-	## contact the streak appeared at full length in one frame -- reaching back
-	## through ground the ball had crossed slowly, or had not crossed at all.
-	## Two corrections, and they do different halves of the job: the length is
-	## capped by the distance genuinely covered in the trail's own memory, and
-	## the weight eases in rather than stepping.
-	_eased_power = lerpf(
-		_eased_power, clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0), 0.09
-	)
-	_travelled = _travelled_within(t, TRAIL_MEMORY_SECONDS)
+	## **A trail may reach back to where the ball acquired this velocity, and no
+	## further.** Speed still decides how long a streak wants to be; the anchor
+	## decides how much of that it is allowed to have yet. The earlier version
+	## capped it against a rolling window instead, which approximated this by
+	## accident and needed a memory constant to do it -- the anchor is a physical
+	## event and needs nothing. The growth time falls out as length over speed,
+	## so a slow ball's trail also grows in slowly, which the window got wrong.
+	_power = clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0)
+	_travelled = position.distance_to(Vector3(state.anchor))
+	## A trail that survives a contact says the ball was redirected. One that
+	## dies at the contact and grows again says it was struck, which is the
+	## distinction the whole exercise is about.
+	if not is_equal_approx(_anchor_time, float(state.anchor_time)):
+		_anchor_time = float(state.anchor_time)
+		_history.clear()
 
 	_push_history(position)
 	_spin_angle += _spin_rate(treatment, since_contact, int(state.bounces)) \
 		* TAU * DT
 	_apply_spin(treatment, velocity)
-	_apply_deform(
-		treatment, velocity, since_contact, t - float(state.last_impact) \
-			if float(state.last_impact) >= 0.0 else -1.0
-	)
+	## Everything about an impact now comes off one vector. Its direction is the
+	## axis the ball deforms along and the shell expands about; its magnitude is
+	## how deep the deformation goes and how big the shell gets.
+	_apply_deform(treatment, position, state, t - float(state.anchor_time))
 
 	for ghost in _ghosts:
 		ghost.visible = false
 	_stroke_mesh.clear_surfaces()
 	match treatment:
-		"history", "spin", "stretch", "squash", "stamp", "acquire":
-			if treatment == "history":
-				_draw_history(speed, 0.0)
+		"history":
+			_draw_history(0.0)
 		"skew":
-			_draw_history(speed, 1.0)
+			_draw_history(1.0)
 		"leading":
-			_draw_leading(t, speed)
+			_draw_leading(t)
 		"speed_lines", "combined":
 			_draw_speed_lines(position, velocity)
 		"wake":
 			_draw_wake(position, velocity)
+		"air":
+			_draw_wake(position, velocity)
 		"ribbon":
 			_draw_ribbon(t)
-	if treatment in ["stamp", "combined"]:
-		_draw_stamp(since_contact)
+	if treatment == "combined":
+		_draw_wake(position, velocity)
+	if treatment in ["stamp", "air", "combined"]:
+		_draw_shell(state, t - float(state.anchor_time))
 
 
 func _push_history(position: Vector3) -> void:
@@ -488,8 +535,8 @@ func _push_history(position: Vector3) -> void:
 ## Faithful to `BallActor3D`: count and head width come from speed, the taper is
 ## the ghost's own place in the tail. `skew` is the same trail with a lateral
 ## offset that grows with age, which is what a curving ball leaves behind.
-func _draw_history(_speed: float, skew: float) -> void:
-	var power := _eased_power
+func _draw_history(skew: float) -> void:
+	var power := _power
 	var live := int(round(lerpf(2.0, float(MAX_GHOSTS), power)))
 	var head_scale := lerpf(0.44, 0.86, power)
 	var head_alpha := lerpf(0.26, 0.72, power)
@@ -512,8 +559,8 @@ func _draw_history(_speed: float, skew: float) -> void:
 
 ## Drawn ahead instead of behind, which is the whole argument about it: it is
 ## the only treatment that tells a viewer something before it happens.
-func _draw_leading(t: float, speed: float) -> void:
-	var power := clampf(inverse_lerp(4.0, 20.0, speed), 0.0, 1.0)
+func _draw_leading(t: float) -> void:
+	var power := _power
 	var live := int(round(lerpf(2.0, 10.0, power)))
 	for index in range(live):
 		var ahead := t + float(index + 1) * 0.022
@@ -533,7 +580,7 @@ func _draw_speed_lines(position: Vector3, velocity: Vector3) -> void:
 	if speed < 0.5:
 		return
 	var direction := velocity.normalized()
-	var power := _eased_power
+	var power := _power
 	var length := minf(lerpf(0.18, 1.55, power), _travelled)
 	var side := direction.cross(_to_camera(position)).normalized()
 	var up := side.cross(direction).normalized()
@@ -562,8 +609,8 @@ func _draw_wake(position: Vector3, velocity: Vector3) -> void:
 	if speed < 0.5:
 		return
 	var direction := velocity.normalized()
-	var power := _eased_power
-	var length := minf(lerpf(0.3, 2.6, power), _travelled * 1.4)
+	var power := _power
+	var length := minf(lerpf(0.3, 2.6, power), _travelled)
 	var flare := lerpf(0.06, 0.42, power)
 	var side := direction.cross(_to_camera(position)).normalized()
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -629,36 +676,69 @@ func _draw_ribbon(t: float) -> void:
 	_stroke_mesh.surface_end()
 
 
-## A ring thrown off the hit, in the plane the hand struck through. It lives for
-## a fifth of a second and is gone -- punctuation, not a trail.
-func _draw_stamp(since_contact: float) -> void:
-	if since_contact < 0.0 or since_contact > 0.24:
+## The air the contact threw outward, as a shell rather than a ring.
+##
+## The first version drew a flat ring perpendicular to the swing, which is where
+## the physics puts it and which is edge-on from a side camera -- a shockwave
+## drawn as a vertical line. Billboarding it fixed the silhouette and broke
+## something worse: a disc that always faces the viewer reads as decal on the
+## screen instead of as something in the room.
+##
+## A shell has no orientation to get wrong. It is flattened along the impulse,
+## so it still says which way the force went, and because it is drawn additively
+## the surface self-brightens where it runs edge-on to the camera -- the rim
+## comes free rather than being drawn. It stays where it was made, so the ball
+## departing is what makes it read as sweeping backwards.
+func _draw_shell(state: Dictionary, since_event: float) -> void:
+	var impulse: Vector3 = state.impulse
+	if since_event < 0.0 or since_event > SHELL_SECONDS or impulse.length() < 0.5:
 		return
-	var age := since_contact / 0.24
-	var radius := lerpf(0.12, 1.15, sqrt(age))
-	var alpha := (1.0 - age) * (1.0 - age) * 0.85
-	## Billboarded rather than held in the plane the hand struck through. The
-	## physical ring is perpendicular to the swing, and from a side-on camera
-	## that is edge-on -- a shockwave drawn as a vertical line.
-	var facing := _to_camera(CONTACT)
-	var side := facing.cross(Vector3.UP).normalized()
-	var up := side.cross(facing).normalized()
+	var strength := clampf(impulse.length() / IMPULSE_REFERENCE, 0.0, 1.0)
+	var age := since_event / SHELL_SECONDS
+	var origin: Vector3 = state.anchor
+	var radius := lerpf(0.16, 0.30 + 0.62 * strength, sqrt(age))
+	var alpha := (1.0 - age) * (1.0 - age) * 0.075 * (0.35 + 0.65 * strength)
+	var axis := impulse.normalized()
+	var side := axis.cross(Vector3.UP)
+	if side.length() < 0.001:
+		side = axis.cross(Vector3.RIGHT)
+	side = side.normalized()
+	var other := side.cross(axis).normalized()
+	## A band around the equator rather than a closed surface. A full shell is
+	## crossed twice by every ray and piles up at its poles, and additively that
+	## is a solid grey egg -- the first attempt looked like a boulder. Fading the
+	## band to nothing at both edges leaves an expanding ring with no rim to it.
+	var rings := 6
+	var segments := 24
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	var segments := 40
-	var thickness := lerpf(0.10, 0.02, age)
-	for segment in range(segments):
-		var a := TAU * float(segment) / float(segments)
-		var b := TAU * float(segment + 1) / float(segments)
-		var ra := side * cos(a) + up * sin(a)
-		var rb := side * cos(b) + up * sin(b)
-		var colour := Color(1.0, 0.93, 0.78, alpha)
-		var fade := Color(1.0, 0.93, 0.78, 0.0)
-		_add_quad(
-			CONTACT + ra * (radius - thickness), CONTACT + ra * (radius + thickness),
-			CONTACT + rb * (radius + thickness), CONTACT + rb * (radius - thickness),
-			fade, colour, colour, fade
-		)
+	for ring in range(rings):
+		var f0 := float(ring) / float(rings)
+		var f1 := float(ring + 1) / float(rings)
+		var v0 := lerpf(SHELL_BAND_MIN, SHELL_BAND_MAX, f0)
+		var v1 := lerpf(SHELL_BAND_MIN, SHELL_BAND_MAX, f1)
+		var a0 := Color(0.84, 0.90, 0.98, alpha * sin(PI * f0))
+		var a1 := Color(0.84, 0.90, 0.98, alpha * sin(PI * f1))
+		for segment in range(segments):
+			var u0 := TAU * float(segment) / float(segments)
+			var u1 := TAU * float(segment + 1) / float(segments)
+			_add_quad(
+				origin + _shell_point(axis, side, other, u0, v0, radius),
+				origin + _shell_point(axis, side, other, u1, v0, radius),
+				origin + _shell_point(axis, side, other, u1, v1, radius),
+				origin + _shell_point(axis, side, other, u0, v1, radius),
+				a0, a0, a1, a1
+			)
 	_stroke_mesh.surface_end()
+
+
+## Flattened along the impulse, so the shell is a disc of air pushed out sideways
+## from the blow rather than a bubble.
+func _shell_point(
+	axis: Vector3, side: Vector3, other: Vector3,
+	u: float, v: float, radius: float
+) -> Vector3:
+	return (axis * cos(v) * SHELL_FLATTEN
+		+ (side * cos(u) + other * sin(u)) * sin(v)) * radius
 
 
 func _spin_rate(treatment: String, since_contact: float, bounces: int) -> float:
@@ -692,40 +772,78 @@ func _apply_spin(treatment: String, velocity: Vector3) -> void:
 	_spinner.transform.basis = Basis(Vector3.RIGHT, _spin_angle)
 
 
+## Deformation, from the impulse and nothing else.
+##
+## Every earlier version hard-coded an axis: the hit compressed along the
+## outgoing velocity, the landing compressed along world up. Both are wrong in
+## general and right by luck in the case they were written for -- a dig sends the
+## ball back the way it came, so its outgoing velocity points nowhere near the
+## direction the ball was actually struck. The axis is the change in velocity,
+## which is the impulse, which is the direction the force was applied. One rule,
+## and the floor and the hand stop being special cases of each other.
 func _apply_deform(
-	treatment: String, velocity: Vector3, since_contact: float,
-	since_impact: float
+	treatment: String, position: Vector3, state: Dictionary, since_event: float
 ) -> void:
+	_ball_root.scale = Vector3.ONE
+	_ball_root.position = position
 	var long_scale := 1.0
 	var perp_scale := 1.0
-	## The floor squash is a separate deformation on a separate axis -- the hit
-	## compresses the ball along the swing, the landing compresses it against the
-	## floor -- so it cannot share the frame the flight one is built in.
-	if treatment in ["squash", "combined"] and since_impact >= 0.0 \
-			and since_impact < 0.5:
-		var floor_amplitude := 0.46 * exp(-since_impact / 0.075) \
-			* cos(TAU * 10.0 * since_impact)
-		_ball_root.scale = Vector3(
-			1.0 + floor_amplitude * 0.5,
-			1.0 - floor_amplitude,
-			1.0 + floor_amplitude * 0.5,
-		)
-	else:
-		_ball_root.scale = Vector3.ONE
-	if treatment in ["stretch", "combined"]:
-		var power := clampf(inverse_lerp(4.0, 20.0, velocity.length()), 0.0, 1.0)
-		long_scale *= lerpf(1.0, 1.55, power)
-		perp_scale *= lerpf(1.0, 0.82, power)
-	if treatment in ["squash", "combined"] and since_contact >= 0.0:
+	var impulse: Vector3 = state.impulse
+	var squashing := treatment in ["squash", "combined"] \
+		and since_event >= 0.0 and since_event < 0.6 and impulse.length() > 0.5
+	var axis := impulse.normalized() if impulse.length() > 0.001 else Vector3.UP
+	var amplitude := 0.0
+	if squashing:
 		## Damped and *oscillating*: the overshoot is what makes it read as a
-		## material with a skin on it rather than as a scale glitch.
-		var amplitude := 0.42 * exp(-since_contact / 0.085) \
-			* cos(TAU * 9.0 * since_contact)
+		## material with a skin on it rather than as a scale glitch. Depth comes
+		## from the same vector as the axis, so a soft touch barely moves.
+		amplitude = MAX_SQUASH \
+			* clampf(impulse.length() / IMPULSE_REFERENCE, 0.0, 1.0) \
+			* exp(-since_event / 0.085) * cos(TAU * 9.0 * since_event)
 		long_scale *= 1.0 - amplitude
 		perp_scale *= 1.0 + amplitude * 0.5
-	if is_equal_approx(long_scale, 1.0) and is_equal_approx(perp_scale, 1.0):
-		_deform.transform.basis = Basis.IDENTITY
+	if treatment in ["stretch", "combined"]:
+		var velocity: Vector3 = state.velocity
+		var power := clampf(inverse_lerp(4.0, 20.0, velocity.length()), 0.0, 1.0)
+		## Stretch runs along the flight, not along the blow, so it needs its own
+		## frame -- it is the only deformation here that is not an impact.
+		_apply_stretch(velocity, power)
+	if not squashing or is_equal_approx(amplitude, 0.0):
+		if not treatment in ["stretch", "combined"]:
+			_deform.transform.basis = Basis.IDENTITY
 		return
+	## **The contact point stays where it is and the centre moves.** Scaling about
+	## the centre lifts a flattening ball off the floor it is flattening against,
+	## which is most of why it read as a scaled sphere rather than as a ball
+	## hitting something.
+	_ball_root.position = position - axis * BALL_RADIUS * amplitude
+	## The ball is also sliding along the surface while it is being compressed, so
+	## the contact patch smears. Pure axial compression is the cartoon version.
+	var arriving: Vector3 = state.arriving
+	var tangent := arriving - axis * arriving.dot(axis)
+	var shear := 0.0
+	var tangent_direction := Vector3.ZERO
+	if tangent.length() > 0.01:
+		tangent_direction = tangent.normalized()
+		shear = -SHEAR_GAIN * amplitude \
+			* clampf(tangent.length() / IMPULSE_REFERENCE, 0.0, 1.0)
+	else:
+		tangent_direction = axis.cross(Vector3.RIGHT).normalized() \
+			if absf(axis.dot(Vector3.RIGHT)) < 0.99 \
+			else axis.cross(Vector3.UP).normalized()
+	var third := axis.cross(tangent_direction).normalized()
+	var frame := Basis(axis, tangent_direction, third)
+	var local := Basis(
+		Vector3(long_scale, shear, 0.0),
+		Vector3(0.0, perp_scale, 0.0),
+		Vector3(0.0, 0.0, perp_scale),
+	)
+	_deform.transform.basis = frame * local * frame.transposed()
+
+
+func _apply_stretch(velocity: Vector3, power: float) -> void:
+	var long_scale := lerpf(1.0, 1.55, power)
+	var perp_scale := lerpf(1.0, 0.82, power)
 	var direction := velocity.normalized() if velocity.length() > 0.01 \
 		else Vector3.RIGHT
 	var side := direction.cross(Vector3.UP).normalized()
@@ -737,23 +855,6 @@ func _apply_deform(
 
 
 # --- drawing helpers -------------------------------------------------------
-
-## Path length actually covered over the last `window` seconds, integrated along
-## the flight rather than estimated from the current speed. Crossing the contact
-## it correctly returns a short distance, because most of that window was the
-## slow ball arriving.
-func _travelled_within(t: float, window: float) -> float:
-	var first := maxf(t - window, 0.0)
-	var steps := 10
-	var total := 0.0
-	var previous := Vector3(_state_at(first).position)
-	for step in range(1, steps + 1):
-		var sample := lerpf(first, t, float(step) / float(steps))
-		var point := Vector3(_state_at(sample).position)
-		total += previous.distance_to(point)
-		previous = point
-	return total
-
 
 ## Where the camera starts. A landing shot has to open on the floor rather than
 ## on the ball, or the first bounce happens before the camera has caught up.
