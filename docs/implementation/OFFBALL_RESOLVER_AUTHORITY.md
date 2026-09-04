@@ -166,10 +166,17 @@ harm the invented movement does.
 
 ## Phase two: let the positions be claimed
 
+**Measured correction at `ee7c798`.** Both floor-defence branches already pass
+all six on-court players, their phase-established live positions and six enabled
+floor zones to `CoverageModel.choose_claimant`. Opening its unassigned-player
+argument adds zero candidates: the paired 700-rally census is identical. The
+premise below described work that had already landed before this phase split;
+do not widen claimant ownership merely to manufacture the predicted movement.
+
 **Behind a flag, in `rally_feature_flags.gd`, closed until a calibration gate
 opens it** -- the convention every other rollout in that file follows.
 
-Phase one publishes where the other five are. Phase two lets
+The intended boundary was: phase one publishes where the other five are; phase two lets
 `CoverageModel.choose_claimant` and the floor-defence search consider them, which
 is what makes a shanked pass playable rather than structurally conceded. **This
 moves rally outcomes and that is the point**, so it needs the treatment a
