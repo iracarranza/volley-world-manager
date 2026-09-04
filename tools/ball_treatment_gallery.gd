@@ -63,8 +63,14 @@ const SQUASH_REBOUND: float = 0.40
 ## Speed lines are emitted rather than attached: each strand records where the
 ## ball actually was, so it cannot reach back before the contact and its length
 ## is the distance covered in this window rather than a number.
-const STRAND_COUNT: int = 8
-const STRAND_SECONDS: float = 0.085
+const STRAND_COUNT: int = 11
+## **A range, not a value.** Eight strands sharing one lifespan gave the sheaf a
+## single period, and evenly staggered births across identical oscillators are a
+## travelling wave -- which read as one texture pulsing diagonally rather than as
+## marks being made. Varying where they sit did not help, because the timing
+## never desynchronised. Drawing each life from a range removes the period.
+const STRAND_SECONDS_MIN: float = 0.042
+const STRAND_SECONDS_MAX: float = 0.135
 
 ## Where the camera sits relative to what it is watching. A treatment that only
 ## works from one angle is not finished -- the shell had to become a volume
@@ -192,6 +198,7 @@ var _angle: String = "side"
 var _show_voli: bool = false
 var _voli: Node3D = null
 var _zoom: float = 1.0
+var _stride: int = 1
 var _first_second: float = 0.0
 var _last_second: float = -1.0
 var _out_dir: String = ""
@@ -219,6 +226,9 @@ func _ready() -> void:
 	_hold_on_contact = _focus in ["contact", "floor"]
 	_zoom = float(args.get("zoom", "1.0"))
 	_first_second = float(args.get("start", "0.0"))
+	## Simulation still steps at 1/120 s; this decides how many of those frames
+	## are written. Two of three, at 60 fps out, is real time.
+	_stride = maxi(int(args.get("stride", "1")), 1)
 	_last_second = float(args.get("end", "-1.0"))
 	get_window().size = OUT_SIZE
 	_solve_flight()
@@ -633,7 +643,7 @@ func _render_treatment(treatment: String) -> void:
 	var written := 0
 	for frame in range(frames):
 		_apply(treatment, float(frame) * DT)
-		if frame < first_frame:
+		if frame < first_frame or (frame - first_frame) % _stride != 0:
 			continue
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
@@ -784,9 +794,10 @@ func _push_strands(position: Vector3, velocity: Vector3, t: float) -> void:
 	var up := side.cross(direction).normalized()
 	for index in range(_strands.size()):
 		var strand: Dictionary = _strands[index]
-		if t - float(strand.born) > STRAND_SECONDS:
+		if t - float(strand.born) > float(strand.life):
 			strand["born"] = t
 			strand["generation"] = int(strand.generation) + 1
+			strand["life"] = _strand_life(index, int(strand.generation))
 			strand.points.clear()
 		var offset := _strand_offset(index, int(strand.generation))
 		strand.points.append(
@@ -801,9 +812,20 @@ func _reset_strands() -> void:
 		## the sheaf would blink rather than churn.
 		_strands.append({
 			"points": [],
-			"born": -STRAND_SECONDS * float(index) / float(STRAND_COUNT),
+			"born": -STRAND_SECONDS_MAX * _strand_life(index, index)
+				/ STRAND_SECONDS_MAX * float(index) / float(STRAND_COUNT),
 			"generation": index,
+			"life": _strand_life(index, index),
 		})
+
+
+## How long this strand lives this time round.
+func _strand_life(index: int, generation: int) -> float:
+	var seed_value := float(index) * 37.719 + float(generation) * 91.137
+	return lerpf(
+		STRAND_SECONDS_MIN, STRAND_SECONDS_MAX,
+		fmod(absf(sin(seed_value) * 31871.4271), 1.0)
+	)
 
 
 ## Where on the ring this strand sits for this life. Deterministic, so a rerun
@@ -825,7 +847,9 @@ func _draw_strands(t: float) -> void:
 			continue
 		## In fast and out slow. A mark that appears at full strength pops; one
 		## that fades out over the back half of its life reads as being spent.
-		var life := clampf((t - float(strand.born)) / STRAND_SECONDS, 0.0, 1.0)
+		var life := clampf(
+			(t - float(strand.born)) / maxf(float(strand.life), 0.001), 0.0, 1.0
+		)
 		var envelope := smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.55, 1.0, life))
 		if envelope <= 0.001:
 			continue
