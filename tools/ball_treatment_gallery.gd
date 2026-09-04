@@ -503,8 +503,12 @@ func _draw_ribbon(t: float) -> void:
 	## Was 0.16 s at 0.16 m half-width -- a band three ball diameters across with
 	## a hard edge on both sides, which read as a physical object rather than as
 	## a ball turning. Narrower, shorter, and feathered to nothing at its edges.
-	var span := 0.095
-	var half_width := 0.062
+	## Two passes to land this. At 0.16 m and 0.55 alpha it was an object; at
+	## 0.062 and 0.30 the twist stopped being legible at all. The edge feathering
+	## below is what actually removed the "structural" read, so the width and the
+	## alpha can come most of the way back.
+	var span := 0.115
+	var half_width := 0.105
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for index in range(samples - 1):
 		var t_a := t - span * float(index) / float(samples)
@@ -526,8 +530,8 @@ func _draw_ribbon(t: float) -> void:
 		var fade_a := 1.0 - float(index) / float(samples)
 		var fade_b := 1.0 - float(index + 1) / float(samples)
 		var band := 0.55 + 0.45 * absf(cos(phase_a))
-		var ca := Color(TRAIL_COLOR, 0.30 * fade_a * fade_a * band)
-		var cb := Color(TRAIL_COLOR, 0.30 * fade_b * fade_b * band)
+		var ca := Color(TRAIL_COLOR, 0.46 * fade_a * fade_a * band)
+		var cb := Color(TRAIL_COLOR, 0.46 * fade_b * fade_b * band)
 		var clear_a := Color(TRAIL_COLOR, 0.0)
 		var clear_b := Color(TRAIL_COLOR, 0.0)
 		## Two quads per segment, bright along the centre line and transparent at
