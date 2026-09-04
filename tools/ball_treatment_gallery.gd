@@ -16,7 +16,14 @@ extends Node3D
 ## quality on hue, and letting it vary here would make two treatments differ for
 ## a reason that has nothing to do with what is being compared.
 
+const RallyEventScript := preload("res://scripts/models/rally_event.gd")
+
 const OUT_SIZE := Vector2i(1280, 720)
+## Where the hitter stands relative to the ball they are about to strike.
+const VOLI_STANCE_BEHIND: float = 0.34
+const VOLI_STANCE_SIDE: float = 0.20
+const VOLI_SWING_SECONDS: float = 0.55
+const VOLI_AIRBORNE_SECONDS: float = 0.85
 ## Simulated step. Output is written at 60 fps, so everything renders at half
 ## speed -- a 0.55 s spike is 1.1 s on screen, which is the difference between
 ## reading a treatment and watching it flicker past.
@@ -58,6 +65,18 @@ const SQUASH_REBOUND: float = 0.40
 ## is the distance covered in this window rather than a number.
 const STRAND_COUNT: int = 8
 const STRAND_SECONDS: float = 0.085
+
+## Where the camera sits relative to what it is watching. A treatment that only
+## works from one angle is not finished -- the shell had to become a volume
+## precisely because a flat ring was edge-on from side on, and nothing would have
+## caught that from a single view.
+const ANGLES := {
+	"side": Vector3(0.0, 0.75, 4.9),
+	"low": Vector3(0.9, -0.55, 3.6),
+	"behind": Vector3(-4.4, 1.5, 1.4),
+	"high": Vector3(1.4, 3.4, 3.9),
+	"end": Vector3(4.8, 1.1, 0.9),
+}
 ## How far the contact patch smears along the surface, per unit of compression.
 const SHEAR_GAIN: float = 0.55
 const SHELL_SECONDS: float = 0.16
@@ -169,6 +188,9 @@ var _camera_focus: Vector3 = Vector3.ZERO
 ## is invisible, which is the whole reason this mode exists.
 var _hold_on_contact: bool = false
 var _focus: String = ""
+var _angle: String = "side"
+var _show_voli: bool = false
+var _voli: Node3D = null
 var _zoom: float = 1.0
 var _first_second: float = 0.0
 var _last_second: float = -1.0
@@ -188,6 +210,12 @@ func _ready() -> void:
 		get_tree().quit(2)
 		return
 	_focus = str(args.get("focus", ""))
+	_angle = str(args.get("angle", "side"))
+	if not ANGLES.has(_angle):
+		push_error("unknown angle '%s'" % _angle)
+		get_tree().quit(2)
+		return
+	_show_voli = str(args.get("voli", "0")) == "1"
 	_hold_on_contact = _focus in ["contact", "floor"]
 	_zoom = float(args.get("zoom", "1.0"))
 	_first_second = float(args.get("start", "0.0"))
@@ -195,6 +223,8 @@ func _ready() -> void:
 	get_window().size = OUT_SIZE
 	_solve_flight()
 	_build_world()
+	await get_tree().process_frame
+	await _seat_voli_to_contact()
 	await get_tree().process_frame
 	var only := str(args.get("only", "")).split(",", false)
 	for treatment in TREATMENTS:
@@ -345,9 +375,88 @@ func _build_world() -> void:
 
 	_add_floor()
 	_add_net()
+	_add_voli()
 	_add_ball()
 	_add_trail_nodes()
 	_add_overlay()
+
+
+## A hitter, so the contact has somebody making it.
+##
+## Placed by its striking hand rather than by its feet: what has to line up is
+## the hand and the ball, and a body positioned by its origin puts the hand
+## wherever its own proportions happen to leave it.
+func _add_voli() -> void:
+	if not _show_voli:
+		return
+	var scene: PackedScene = load("res://scenes/components/player_actor_3d.tscn")
+	if scene == null:
+		push_warning("no player actor scene; drawing the ball alone")
+		return
+	_voli = scene.instantiate()
+	add_child(_voli)
+	_voli.call(
+		"configure", 1, true, "Draft", "Right", {"height_cm": 196.0}
+	)
+	_voli.position = Vector3(CONTACT.x - VOLI_STANCE_BEHIND, 0.0, VOLI_STANCE_SIDE)
+	## The rig steers itself from `facing_yaw` and overwrites `rotation.y`, so
+	## setting the node's rotation alone leaves the hitter facing the camera.
+	_voli.set("facing_yaw", -PI * 0.5)
+	_voli.set("has_facing", true)
+	_voli.rotation.y = -PI * 0.5
+
+
+## Lift the hitter until their striking hand is where the ball is struck.
+##
+## Placing them by the feet and hoping puts the hand about a metre short, because
+## a 196 cm voli's reach plus the pose's own lift is not the contact height and
+## was never going to be. The rig has no hand node -- the forearm mesh carries
+## it -- so the tip is built from the elbow the way `measure_spike_swing.gd`
+## builds it, and the body is moved by whatever is left over.
+func _seat_voli_to_contact() -> void:
+	if _voli == null:
+		return
+	_voli.call(
+		"set_pose", RallyEventScript.EventType.ATTACK, 1.0, 0.0,
+		Vector2(1.0, 0.0), true
+	)
+	await get_tree().process_frame
+	var arm := _voli.get_node_or_null("BodyPivot/RightArm") as Node3D
+	var elbow: Node3D = arm.get_node_or_null("Elbow") if arm != null else null
+	if elbow == null:
+		push_warning("no striking arm on the rig; leaving the hitter on the floor")
+		return
+	var mesh := elbow.get_node_or_null("Mesh") as MeshInstance3D
+	var forearm := 0.32
+	if mesh != null and mesh.mesh != null:
+		forearm = mesh.mesh.get_aabb().size.y * elbow.scale.y
+	var tip: Vector3 = elbow.global_transform * Vector3(0.0, -forearm, 0.0)
+	## The hand strikes the *back* of the ball, not its centre -- which is both
+	## the truer placement and what stops the striking arm sitting on top of the
+	## thing the gallery exists to look at.
+	_voli.position += CONTACT - _launch.normalized() * BALL_RADIUS - tip
+	## Never underground, whatever the reach turns out to be.
+	_voli.position.y = maxf(_voli.position.y, 0.0)
+
+
+func _pose_voli(t: float) -> void:
+	if _voli == null:
+		return
+	## Phase is signed across two flights: -1 winding up through the set, 0 at
+	## the contact, +1 landed. `measure_spike_swing.gd` drives the same rig the
+	## same way.
+	var since := t - INCOMING_SECONDS
+	var phase := clampf(
+		since / VOLI_SWING_SECONDS if since >= 0.0 else since / INCOMING_SECONDS,
+		-1.0, 1.0,
+	)
+	var elevation := clampf(
+		1.0 - absf(since) / VOLI_AIRBORNE_SECONDS, 0.0, 1.0
+	)
+	_voli.call(
+		"set_pose", RallyEventScript.EventType.ATTACK, elevation, phase,
+		Vector2(1.0, 0.0), true
+	)
 
 
 func _add_floor() -> void:
@@ -541,6 +650,7 @@ func _apply(treatment: String, t: float) -> void:
 	var speed := velocity.length()
 	var since_contact := t - INCOMING_SECONDS
 	_ball_root.position = position
+	_pose_voli(t)
 	## Lagged rather than locked. A camera welded to the ball would hold it dead
 	## centre and hide the one thing a speed treatment is trying to show.
 	_camera_focus = _camera_focus.lerp(position, 0.16 if _hold_on_contact else 0.10)
@@ -564,7 +674,7 @@ func _apply(treatment: String, t: float) -> void:
 		_reset_strands()
 
 	_push_history(position)
-	_push_strands(position, velocity)
+	_push_strands(position, velocity, t)
 	_spin_angle += _spin_rate(treatment, since_contact, int(state.bounces)) \
 		* TAU * DT
 	_apply_spin(treatment, velocity)
@@ -584,7 +694,7 @@ func _apply(treatment: String, t: float) -> void:
 		"leading":
 			_draw_leading(t)
 		"speed_lines", "combined":
-			_draw_strands()
+			_draw_strands(t)
 		"wake":
 			_draw_wake(position, velocity)
 		"air":
@@ -648,66 +758,86 @@ func _draw_leading(t: float) -> void:
 		material.albedo_color = Color(TRAIL_COLOR, 0.50 * fade * fade)
 
 
-## Speed lines, emitted into the court rather than parented to the ball.
+## Speed lines, emitted into the court rather than parented to the ball, and
+## laid down in *cycles* rather than held.
 ##
-## The first version hung nine strokes off the ball on a fixed ring, so they
-## travelled with it and the only thing that ever changed was their length --
-## which is why they read as a decoration that stretches rather than as motion.
-## Animators do the opposite: a mark is made at a moment and left behind, and the
-## object moves on out of it.
+## Two versions were wrong before this one. The first hung eight strokes off the
+## ball on a fixed ring, so they travelled with it and only their length changed.
+## The second recorded real positions -- better, and it fixed the length and the
+## anchor for free -- but each strand lived for the whole flight, so the sheaf
+## was still a constant thing attached to the ball. A mark that never ends reads
+## as a texture on the object.
 ##
-## Two things stop being authored as a result. The length is now the distance the
-## ball covered in `STRAND_SECONDS`, so it scales with speed by itself and needs
-## no cap; and because every point is somewhere the ball actually was, a strand
-## *cannot* reach back before the contact. The anchor rule stops being a clamp
-## and becomes a property of how the marks are made.
-func _push_strands(position: Vector3, velocity: Vector3) -> void:
+## Each strand now has a life: it is born, records the path for a fraction of a
+## second, fades and dies, and is reborn somewhere else on the ring. Their births
+## are staggered, so at any instant some are new and some are going, and the
+## whole sheaf forms and reforms instead of sitting there.
+func _push_strands(position: Vector3, velocity: Vector3, t: float) -> void:
 	if _strands.is_empty():
 		_reset_strands()
 	if velocity.length() < 0.5:
 		for strand in _strands:
-			strand.clear()
+			strand.points.clear()
 		return
 	var direction := velocity.normalized()
 	var side := direction.cross(_to_camera(position)).normalized()
 	var up := side.cross(direction).normalized()
-	var keep := maxi(int(round(STRAND_SECONDS / DT)), 2)
-	for index in range(STRAND_COUNT):
-		## A fixed angle and radius per strand, so the sheaf holds together frame
-		## to frame instead of sparkling.
-		var angle := TAU * float(index) / float(STRAND_COUNT) + 0.4
-		var radius := lerpf(0.015, 0.115, fmod(float(index) * 0.37, 1.0))
-		var strand: Array = _strands[index]
-		strand.append(position + (side * cos(angle) + up * sin(angle)) * radius)
-		while strand.size() > keep:
-			strand.pop_front()
+	for index in range(_strands.size()):
+		var strand: Dictionary = _strands[index]
+		if t - float(strand.born) > STRAND_SECONDS:
+			strand["born"] = t
+			strand["generation"] = int(strand.generation) + 1
+			strand.points.clear()
+		var offset := _strand_offset(index, int(strand.generation))
+		strand.points.append(
+			position + (side * cos(offset.x) + up * sin(offset.x)) * offset.y
+		)
 
 
 func _reset_strands() -> void:
 	_strands.clear()
-	for _index in range(STRAND_COUNT):
-		_strands.append([])
+	for index in range(STRAND_COUNT):
+		## Staggered births, or every strand would appear and vanish together and
+		## the sheaf would blink rather than churn.
+		_strands.append({
+			"points": [],
+			"born": -STRAND_SECONDS * float(index) / float(STRAND_COUNT),
+			"generation": index,
+		})
 
 
-func _draw_strands() -> void:
+## Where on the ring this strand sits for this life. Deterministic, so a rerun
+## draws the same marks, but different every time a strand is reborn.
+func _strand_offset(index: int, generation: int) -> Vector2:
+	var seed_value := float(index) * 12.9898 + float(generation) * 78.233
+	var angle := fmod(absf(sin(seed_value) * 43758.5453), 1.0)
+	var radius := fmod(absf(sin(seed_value + 4.1) * 24634.6345), 1.0)
+	return Vector2(angle * TAU, lerpf(0.015, 0.115, radius))
+
+
+func _draw_strands(t: float) -> void:
 	var head_width := lerpf(0.005, 0.014, _power)
 	var head_alpha := 0.62 * _power + 0.10
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for strand in _strands:
-		var points: Array = strand
+		var points: Array = strand.points
 		if points.size() < 2:
+			continue
+		## In fast and out slow. A mark that appears at full strength pops; one
+		## that fades out over the back half of its life reads as being spent.
+		var life := clampf((t - float(strand.born)) / STRAND_SECONDS, 0.0, 1.0)
+		var envelope := smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.55, 1.0, life))
+		if envelope <= 0.001:
 			continue
 		for index in range(points.size() - 1):
 			var a: Vector3 = points[index]
 			var b: Vector3 = points[index + 1]
-			## Newest point is the head, so a strand tapers and fades backwards
-			## from the ball into the court it was laid down in.
 			var fa := float(index) / float(points.size() - 1)
 			var fb := float(index + 1) / float(points.size() - 1)
 			_add_taper(
 				a, b, head_width * fa * fa, head_width * fb * fb,
-				Color(TRAIL_COLOR, head_alpha * fa * fa * fa),
-				Color(TRAIL_COLOR, head_alpha * fb * fb * fb)
+				Color(TRAIL_COLOR, head_alpha * envelope * fa * fa * fa),
+				Color(TRAIL_COLOR, head_alpha * envelope * fb * fb * fb)
 			)
 	_stroke_mesh.surface_end()
 
@@ -1003,7 +1133,10 @@ func _opening_focus() -> Vector3:
 
 
 func _track_camera() -> void:
-	var eye := _camera_focus + Vector3(0.0, 0.75, 4.9) * _zoom
+	var offset: Vector3 = ANGLES.get(_angle, ANGLES.side)
+	var eye := _camera_focus + offset * _zoom
+	## Never from below the floor, whatever the preset and zoom ask for.
+	eye.y = maxf(eye.y, 0.25)
 	_camera.look_at_from_position(eye, _camera_focus, Vector3.UP)
 
 
