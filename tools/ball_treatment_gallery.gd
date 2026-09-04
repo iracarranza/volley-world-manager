@@ -82,9 +82,34 @@ const ANGLES := {
 }
 ## How far the contact patch smears along the surface, per unit of compression.
 const SHEAR_GAIN: float = 0.55
-const SHELL_SECONDS: float = 0.16
-## Flattened along the impulse. A round shell reads as a bubble.
-const SHELL_FLATTEN: float = 0.30
+## Three characters of impact air, because they are three different events.
+##
+##   shell  a struck ball: the air leaves the contact and keeps opening out
+##   stop   a ball arrested against a wall: it reaches its extent at once and
+##          cuts off, because nothing carried on afterwards
+##   boom   a hard ball killed on a platform: wide, soft and colourless, and
+##          gone almost as fast as it arrived
+##
+## `growth` is what separates them. Near zero the shell is at full extent in its
+## first frames and then simply ends, which is what arresting a ball looks like;
+## at a half it keeps opening, which is what a struck one does.
+const SHELL_STYLES := {
+	"shell": {
+		"seconds": 0.16, "from": 0.16, "to": 0.30, "gain": 0.62,
+		"flatten": 0.30, "alpha": 0.075, "growth": 0.50,
+		"color": Color(0.84, 0.90, 0.98),
+	},
+	"stop": {
+		"seconds": 0.10, "from": 0.21, "to": 0.34, "gain": 0.20,
+		"flatten": 0.10, "alpha": 0.12, "growth": 0.16,
+		"color": Color(0.88, 0.92, 0.98),
+	},
+	"boom": {
+		"seconds": 0.20, "from": 0.12, "to": 0.44, "gain": 1.05,
+		"flatten": 0.58, "alpha": 0.055, "growth": 0.60,
+		"color": Color(0.78, 0.85, 0.94),
+	},
+}
 ## The band of the shell that is actually drawn, in latitude about the impulse.
 const SHELL_BAND_MIN: float = 0.26 * PI
 const SHELL_BAND_MAX: float = 0.74 * PI
@@ -148,9 +173,12 @@ const SHOTS := {
 const PROFILES := {
 	"spike": ["speed_lines", "stretch", "squash", "shell", "spin"],
 	"set": ["history"],
-	"dig": ["wake", "shell", "squash"],
+	## No wake on the way in -- a ball is not disturbed by being about to be dug.
+	## The whole signature is at the contact: the air booms outward there and
+	## nowhere else, and the deformation runs along the platform's own force.
+	"dig": ["boom", "squash", "stretch"],
 	"serve": ["ribbon", "spin", "speed_lines"],
-	"block": ["shell", "squash", "speed_lines"],
+	"block": ["stop", "squash", "speed_lines"],
 	"bump": ["history"],
 }
 
@@ -176,6 +204,8 @@ const COMPONENTS := {
 	"stretch": ["stretch"],
 	"squash": ["squash"],
 	"stamp": ["shell"],
+	"stop": ["stop"],
+	"boom": ["boom"],
 	"air": ["shell", "wake"],
 	"acquire": ["acquire"],
 	"combined": ["speed_lines", "wake", "shell", "spin", "stretch", "squash"],
@@ -800,8 +830,8 @@ func _apply(treatment: String, t: float) -> void:
 				_draw_wake(position, velocity)
 			"ribbon":
 				_draw_ribbon(t)
-			"shell":
-				_draw_shell(state, t - float(state.anchor_time))
+			"shell", "stop", "boom":
+				_draw_shell(state, t - float(state.anchor_time), part)
 
 
 ## Which parts this treatment draws. A named treatment is a fixed list; the
@@ -1066,15 +1096,23 @@ func _draw_ribbon(t: float) -> void:
 ## the surface self-brightens where it runs edge-on to the camera -- the rim
 ## comes free rather than being drawn. It stays where it was made, so the ball
 ## departing is what makes it read as sweeping backwards.
-func _draw_shell(state: Dictionary, since_event: float) -> void:
+func _draw_shell(
+	state: Dictionary, since_event: float, style_name: String
+) -> void:
+	var style: Dictionary = SHELL_STYLES.get(style_name, SHELL_STYLES.shell)
+	var seconds := float(style.seconds)
 	var impulse: Vector3 = state.impulse
-	if since_event < 0.0 or since_event > SHELL_SECONDS or impulse.length() < 0.5:
+	if since_event < 0.0 or since_event > seconds or impulse.length() < 0.5:
 		return
 	var strength := clampf(impulse.length() / IMPULSE_REFERENCE, 0.0, 1.0)
-	var age := since_event / SHELL_SECONDS
+	var age := since_event / seconds
 	var origin: Vector3 = state.anchor
-	var radius := lerpf(0.16, 0.30 + 0.62 * strength, sqrt(age))
-	var alpha := (1.0 - age) * (1.0 - age) * 0.075 * (0.35 + 0.65 * strength)
+	var radius := lerpf(
+		float(style["from"]), float(style.to) + float(style.gain) * strength,
+		clampf(pow(age, maxf(float(style.growth), 0.01)), 0.0, 1.0)
+	)
+	var alpha := (1.0 - age) * (1.0 - age) * float(style.alpha) \
+		* (0.35 + 0.65 * strength)
 	var axis := impulse.normalized()
 	var side := axis.cross(Vector3.UP)
 	if side.length() < 0.001:
@@ -1085,6 +1123,7 @@ func _draw_shell(state: Dictionary, since_event: float) -> void:
 	## crossed twice by every ray and piles up at its poles, and additively that
 	## is a solid grey egg -- the first attempt looked like a boulder. Fading the
 	## band to nothing at both edges leaves an expanding ring with no rim to it.
+	var flatten := float(style.flatten)
 	var rings := 6
 	var segments := 24
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -1093,16 +1132,16 @@ func _draw_shell(state: Dictionary, since_event: float) -> void:
 		var f1 := float(ring + 1) / float(rings)
 		var v0 := lerpf(SHELL_BAND_MIN, SHELL_BAND_MAX, f0)
 		var v1 := lerpf(SHELL_BAND_MIN, SHELL_BAND_MAX, f1)
-		var a0 := Color(0.84, 0.90, 0.98, alpha * sin(PI * f0))
-		var a1 := Color(0.84, 0.90, 0.98, alpha * sin(PI * f1))
+		var a0 := Color(style.color, alpha * sin(PI * f0))
+		var a1 := Color(style.color, alpha * sin(PI * f1))
 		for segment in range(segments):
 			var u0 := TAU * float(segment) / float(segments)
 			var u1 := TAU * float(segment + 1) / float(segments)
 			_add_quad(
-				origin + _shell_point(axis, side, other, u0, v0, radius),
-				origin + _shell_point(axis, side, other, u1, v0, radius),
-				origin + _shell_point(axis, side, other, u1, v1, radius),
-				origin + _shell_point(axis, side, other, u0, v1, radius),
+				origin + _shell_point(axis, side, other, u0, v0, radius, flatten),
+				origin + _shell_point(axis, side, other, u1, v0, radius, flatten),
+				origin + _shell_point(axis, side, other, u1, v1, radius, flatten),
+				origin + _shell_point(axis, side, other, u0, v1, radius, flatten),
 				a0, a0, a1, a1
 			)
 	_stroke_mesh.surface_end()
@@ -1112,9 +1151,9 @@ func _draw_shell(state: Dictionary, since_event: float) -> void:
 ## from the blow rather than a bubble.
 func _shell_point(
 	axis: Vector3, side: Vector3, other: Vector3,
-	u: float, v: float, radius: float
+	u: float, v: float, radius: float, flatten: float
 ) -> Vector3:
-	return (axis * cos(v) * SHELL_FLATTEN
+	return (axis * cos(v) * flatten
 		+ (side * cos(u) + other * sin(u)) * sin(v)) * radius
 
 
