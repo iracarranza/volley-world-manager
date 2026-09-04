@@ -460,9 +460,9 @@ func _draw_speed_lines(position: Vector3, velocity: Vector3) -> void:
 		var tail_length := length * lerpf(0.55, 1.0, fmod(float(index) * 0.29, 1.0))
 		var head := position + radial - direction * gap
 		var tail := head - direction * tail_length
-		_add_stroke(
-			head, tail, lerpf(0.010, 0.024, power),
-			Color(TRAIL_COLOR, 0.72 * power + 0.12), Color(TRAIL_COLOR, 0.0)
+		_add_spindle(
+			head, tail, lerpf(0.006, 0.014, power),
+			Color(TRAIL_COLOR, 0.62 * power + 0.10)
 		)
 	_stroke_mesh.surface_end()
 
@@ -500,7 +500,11 @@ func _draw_ribbon(t: float) -> void:
 	var shot: Dictionary = SHOTS[_shot]
 	var rate := float(shot.spin_rps) if t >= INCOMING_SECONDS else 2.0
 	var samples := 22
-	var span := 0.16
+	## Was 0.16 s at 0.16 m half-width -- a band three ball diameters across with
+	## a hard edge on both sides, which read as a physical object rather than as
+	## a ball turning. Narrower, shorter, and feathered to nothing at its edges.
+	var span := 0.095
+	var half_width := 0.062
 	_stroke_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for index in range(samples - 1):
 		var t_a := t - span * float(index) / float(samples)
@@ -517,14 +521,19 @@ func _draw_ribbon(t: float) -> void:
 		var up := side.cross(tangent).normalized()
 		var phase_a := (t_a) * rate * TAU
 		var phase_b := (t_b) * rate * TAU
-		var wa := (side * cos(phase_a) + up * sin(phase_a)) * 0.16
-		var wb := (side * cos(phase_b) + up * sin(phase_b)) * 0.16
+		var wa := (side * cos(phase_a) + up * sin(phase_a)) * half_width
+		var wb := (side * cos(phase_b) + up * sin(phase_b)) * half_width
 		var fade_a := 1.0 - float(index) / float(samples)
 		var fade_b := 1.0 - float(index + 1) / float(samples)
-		var band := 0.45 + 0.55 * absf(cos(phase_a))
-		var ca := Color(TRAIL_COLOR, 0.55 * fade_a * fade_a * band)
-		var cb := Color(TRAIL_COLOR, 0.55 * fade_b * fade_b * band)
-		_add_quad(a + wa, a - wa, b - wb, b + wb, ca, ca, cb, cb)
+		var band := 0.55 + 0.45 * absf(cos(phase_a))
+		var ca := Color(TRAIL_COLOR, 0.30 * fade_a * fade_a * band)
+		var cb := Color(TRAIL_COLOR, 0.30 * fade_b * fade_b * band)
+		var clear_a := Color(TRAIL_COLOR, 0.0)
+		var clear_b := Color(TRAIL_COLOR, 0.0)
+		## Two quads per segment, bright along the centre line and transparent at
+		## both edges, so the band has no silhouette to read as an object.
+		_add_quad(a - wa, a, b, b - wb, clear_a, ca, cb, clear_b)
+		_add_quad(a, a + wa, b + wb, b, ca, clear_a, clear_b, cb)
 	_stroke_mesh.surface_end()
 
 
@@ -625,19 +634,33 @@ func _to_camera(from: Vector3) -> Vector3:
 	return (_camera.global_position - from).normalized()
 
 
-func _add_stroke(
-	head: Vector3, tail: Vector3, half_width: float,
-	head_color: Color, tail_color: Color
+## A stroke that comes to a point at both ends, rather than a rectangle.
+##
+## The first draft drew each speed line as a constant-width quad, which put a
+## square cap at full alpha immediately beside the ball -- the corners are what
+## made them read as solid bars instead of as motion.
+func _add_spindle(
+	head: Vector3, tail: Vector3, half_width: float, peak: Color
 ) -> void:
-	var direction := (head - tail)
+	var direction := head - tail
 	if direction.length() < 0.0001:
 		return
 	var side := direction.normalized().cross(_to_camera(head)).normalized() \
 		* half_width
-	_add_quad(
-		head + side, head - side, tail - side, tail + side,
-		head_color, head_color, tail_color, tail_color
-	)
+	## The widest point sits a quarter of the way back, so the stroke is dense
+	## near the ball and draws out to nothing behind it.
+	var waist := head.lerp(tail, 0.25)
+	var clear := Color(peak, 0.0)
+	_add_tri(head, waist + side, waist - side, clear, peak, peak)
+	_add_tri(tail, waist - side, waist + side, clear, peak, peak)
+
+
+func _add_tri(
+	a: Vector3, b: Vector3, c: Vector3, ca: Color, cb: Color, cc: Color
+) -> void:
+	for entry in [[a, ca], [b, cb], [c, cc]]:
+		_stroke_mesh.surface_set_color(entry[1])
+		_stroke_mesh.surface_add_vertex(entry[0])
 
 
 func _add_quad(
