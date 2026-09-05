@@ -358,3 +358,68 @@ count: migrating six legs to the authoritative path moved no outcome and no
 sampling population.
 
 **G2 PASSES.** → P4.
+
+---
+
+## P4 — RECEIVE PREP · **already implemented, one gap**
+
+P4 asks for reception's two separate clocks. **Both exist.** This pass is
+therefore verification with evidence, not construction — and the spec's rule
+"repo truth wins" makes that the correct outcome rather than a shortfall.
+
+### P4.1 Clock one — feet, from the ball read
+
+The authoritative movement path, migrated in P2. Starts at `rally_clock` when
+the serve is struck and runs for the leg's own duration. Before this work it was
+a scalar duration that playback reconstructed; it is now the solved leg.
+
+### P4.2 Clock two — platform, from predicted contact
+
+`match_screen.gd:1152`:
+
+> "Every other contact is prepared for while the ball is on its way: the phase
+> runs **-1 to 0 across the incoming flight** and the contact lands at the end
+> of it."
+
+So reception already gets a full pre-contact window, scaled by the incoming
+flight rather than by a fixed number of milliseconds. Within it,
+`player_actor_3d.gd`:
+
+| Constant | Phase | Meaning |
+|---|---:|---|
+| `SQUARE_UP_PHASE[RECEPTION]` | **-0.85** | turns to face the ball early — "the platform has to be pointed at the ball well before it arrives" |
+| `PLATFORM_PHASE` | **-0.34** | arms start coming together |
+| `PLATFORM_SET_PHASE` | **-0.08** | platform fully formed — "complete a little *before* contact" |
+| `PLATFORM_DRIVE_START` | **-0.14** | legs begin driving |
+| `PLATFORM_DRIVE_END` | **+0.34** | drive continues past contact |
+
+**"Platform must emerge pre-contact; no contact-frame pose snap"** — satisfied by
+construction. Every one of those numbers is negative.
+
+Two related behaviours worth recording as already-correct:
+
+- a serve has no incoming flight, so it gets a **1.12 s pre-roll**
+  (`SERVE_PREPARATION_SECONDS`), without which "every authored toss, load and
+  overhead swing existed only in diagnostics";
+- a block's wind-up is deliberately moved onto the *set's* flight, because the
+  wall must peak when the hitter swings, not when the ball arrives — measured at
+  up to 1.19 s late when drawn the other way.
+
+### P4.3 The gap: prep is timed on true flight, not perceived flight
+
+P4 requires *"Use perceived/predicted flight, not true future knowledge."*
+
+**Not met.** `match_screen.gd`, `match_court_3d.gd` and `player_actor_3d.gd`
+contain **no** reference to `perceived_arrival`, `BallFlightEstimate` or
+`read_error`. The pose phase runs across the **true** incoming flight, so a
+passer who misreads still begins forming their platform on the ball's real
+schedule.
+
+Partially compensated: `contact_posture` is resolver-carried
+(`rally_simulator.gd:1514`) and does encode strain, so a bad read degrades the
+*pose*, just not its *timing*.
+
+**Not built here.** Retiming prep against `BallFlightEstimate` changes drawn
+timing for every contact and needs its own before/after render comparison, which
+is P7 tooling. Recorded as the second genuine gap this work has surfaced, after
+the `_reached_point` defect in P3.3.
