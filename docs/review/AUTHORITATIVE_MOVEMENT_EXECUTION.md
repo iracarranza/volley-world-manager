@@ -266,3 +266,80 @@ no outcome and no sampling population — which is what a change that must
 preserve outcomes has to look like.
 
 **G1 PASSES.** → P3.
+
+---
+
+## P3 — PROPAGATE
+
+### P3.1 Scope
+
+`_reached_point` has **18 call sites** — its own comment calls it the place
+"every committed journey in the game passes through". Six are contact-actor
+legs and are now migrated:
+
+| Site | Leg |
+|---|---|
+| `:1284` | home reception *(P2)* |
+| `:4069` | opponent reception *(P2)* |
+| `:3439` | recycle coverage |
+| `:3680` | opponent defence |
+| `:6038` | home coverage |
+| `:6282` | home defence |
+| `:7694` | continuation coverage |
+| `:7889` | transition defence |
+
+The remaining sites are off-ball staging and unit rebase. They feed
+`unit_movement_targets` for **support** players, and playback's
+`_authoritative_phase_path` deliberately serves only `movement_player_id`, so
+migrating them requires a playback change as well. Deferred to P6, which is
+where the spec reassesses off-ball.
+
+### P3.2 Agreement after propagation
+
+120 seeds, all events carrying a path:
+
+| Event type | n | reached | worst landing vs committed |
+|---|---:|---:|---:|
+| RECEPTION | 84 | 84 | **0.000000** |
+| DIG | 38 | 38 | **0.000000** |
+| ATTACK_COVERAGE | 10 | 8 | **0.014978** |
+
+Worst start vs committed, all types: **0.000000**.
+
+### P3.3 The coverage residual is a sim defect, and it was previously hidden
+
+Two of ten coverage legs land 0.015 court units (~0.15 m) short of the position
+the event commits them to. **This is not a path error.**
+
+`_reached_point`'s reachable branch tests one point and returns another:
+
+```gdscript
+if _movement_time(mover, start, target, mode) <= available_time:
+    ...
+    return _body_behind_contact(mover, target, contact_height, incoming_direction)
+```
+
+It asks whether `target` is reachable in the window, then commits the body to
+`_body_behind_contact(target, …)` — an offset point **whose reachability is
+never tested**. On coverage legs that offset can push the endpoint further from
+the start than the point that was tested, so the resolver commits a body to a
+position its own movement model says it cannot reach in time.
+
+Confirmed by construction: capping the path's duration at
+`min(_movement_time(start→committed), window)` changed the residual by
+**exactly zero**, which can only happen if the closed form already says the
+journey exceeds the window.
+
+**Why it appears now.** The old playback forced the final sample onto the
+target — *"The event's endpoint is authoritative; end exactly on it."* The snap
+was hiding this. Removing the snap did not create the disagreement; it made an
+existing one measurable, which is the point of the pass.
+
+**Not fixed here, deliberately.** Correcting `_reached_point` moves committed
+body positions and therefore outcomes. Per the spec that needs its own pass with
+its own before/after measurement, not a change smuggled into a propagation.
+Recorded as the first genuine sim defect this work has surfaced.
+
+**Not fudged either.** The path reports where the body can actually get. A
+0.15 m honest shortfall on 2 of 10 coverage legs is preferable to a snap that
+made every leg look exact.

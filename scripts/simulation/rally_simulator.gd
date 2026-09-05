@@ -3492,6 +3492,11 @@ func resolve(
 			"blocked_hitter_id": hitter.id,
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
+			## The leg, solved once -- same contract as the reception slice.
+			"movement_path": _committed_path(
+				coverer, coverer_start, coverer_reach,
+				recycle_coverage_time, "lateral", rally_clock,
+			),
 			"movement_duration": coverer_move_time,
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
@@ -3753,6 +3758,11 @@ func resolve(
 			"home_phase_targets": home_post_attack_targets,
 			"home_phase_intents": home_post_attack_intents,
 			"movement_target": opponent_defender_reach,
+			## The leg, solved once -- same contract as the reception slice.
+			"movement_path": _committed_path(
+				opponent_defender, Vector2(opponent_defense.start), opponent_defender_reach,
+				opponent_defense_time, "lateral", rally_clock,
+			),
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
 			## is the deadline playback needs so a truncated leg is drawn over
@@ -6082,6 +6092,11 @@ func _resolve_opponent_transition(
 			"blocked_hitter_id": opponent_hitter.id,
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
+			## The leg, solved once -- same contract as the reception slice.
+			"movement_path": _committed_path(
+				coverer, coverer_start, coverer_reach,
+				coverage_time, "lateral", rally_clock,
+			),
 			"movement_duration": coverer_move_time,
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
@@ -6387,6 +6402,11 @@ func _resolve_opponent_transition(
 			"support_count": support_count,
 			"movement_start": defender_start,
 			"movement_target": defender_reach,
+			## The leg, solved once -- same contract as the reception slice.
+			"movement_path": _committed_path(
+				defender, defender_start, defender_reach,
+				attack_time, "lateral", rally_clock,
+			),
 			"movement_duration": defender_move_time,
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
@@ -7736,6 +7756,11 @@ func _resolve_home_continuation(
 			"blocked_hitter_id": hitter.id,
 			"movement_start": coverer_start,
 			"movement_target": coverer_reach,
+			## The leg, solved once -- same contract as the reception slice.
+			"movement_path": _committed_path(
+				coverer, coverer_start, coverer_reach,
+				coverage_time, "lateral", rally_clock,
+			),
 			"movement_duration": coverer_move_time,
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
@@ -7964,6 +7989,11 @@ func _resolve_home_continuation(
 			"home_phase_intents": cont_post_attack_intents,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
+			## The leg, solved once -- same contract as the reception slice.
+			"movement_path": _committed_path(
+				opponent_defender, transition_defender_start, transition_defender_reach,
+				cont_defense_time, "lateral", rally_clock,
+			),
 			## The only dig family that published a start and an end and no time
 			## between them, so playback had to fall back to the whole window for
 			## twelve digs in every hundred rallies. The figure is not new: it is
@@ -8905,8 +8935,26 @@ func _committed_path(
 	var actor := RallyPlayerState.create(mover, &"home", -1, start)
 	actor.velocity = entry_velocity
 	actor.facing = entry_facing
+	## **Timed to the committed endpoint, not to the phase window.**
+	##
+	## `target` here is already `_reached_point`'s answer -- the place the body
+	## ended up. Integrating that journey for the *window* overshoots the
+	## question: on the reachable branch `_reached_point` returns
+	## `_body_behind_contact`, which offsets the endpoint off the lane and can
+	## put it further from the start than the point whose reachability was
+	## tested. Measured on attack coverage, that left the drawn body 0.015 court
+	## units short of its committed position on truncated legs.
+	##
+	## The journey to a committed endpoint takes as long as that journey takes.
+	## Capped by the window so a leg can still be cut short by its phase.
+	var leg_seconds := minf(
+		_movement_time(mover, start, target, mode, waypoint, entry_velocity),
+		available_time,
+	)
+	if leg_seconds <= 0.0:
+		return null
 	var integration: Dictionary = ShadowMovementModel.integrate(
-		actor, target, available_time, _movement_mode_for_kind(mode),
+		actor, target, leg_seconds, _movement_mode_for_kind(mode),
 		ShadowMovementModel.DEFAULT_STEP_SECONDS, waypoint,
 	)
 	return RallyMovementPathModel.from_integration(integration, leg_start_time)
