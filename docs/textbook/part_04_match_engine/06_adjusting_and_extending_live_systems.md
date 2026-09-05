@@ -12,7 +12,33 @@ This chapter is the practical map for changing what a match does and what a play
 
 If a change crosses all three, implement and test all three deliberately.
 
-## The current live path
+## Prerequisites
+
+- [P4-C1 Current Rally Pipeline](01_current_rally_pipeline.md) — the resolver you will be changing
+- [P3-C1 Safe Change Workflow](../part_03_workflow/01_safe_change_workflow.md) — the loop every recipe here assumes
+
+## Learning goals
+
+After this chapter you should be able to:
+
+1. keep the planner / simulator / playback responsibilities separate while changing all three;
+2. adjust the playback feed without changing simulator timing;
+3. trace a dragged planner marker all the way into a rally outcome;
+4. add a visualizer, a tactical system, or a rally event using the recipes here;
+5. verify any of it against the minimum checklist.
+
+## Vocabulary
+
+| Term | Meaning |
+|---|---|
+| **Playback feed** | The three text areas reporting a rally as it plays. |
+| **Planner** | The tactical editor where a coach's instruction is stored. |
+| **Coverage zone** | A stored position and radius a defender is responsible for. |
+| **Visualization layer** | A toggleable court overlay. Presentation only. |
+| **Metadata key** | A named extra on a `RallyEvent`; part of the shared contract. |
+| **Recipe** | A stepwise procedure in this chapter. **GUIDANCE**, verify after use. |
+
+## 1. The current live path
 
 For a normal match rally, the active call path is:
 
@@ -27,7 +53,7 @@ main.gd::_resolve_rally
 
 `RallySimulator` remains the authoritative normal-match resolver. Persistent rally classes and development rollouts must not be mistaken for normal live behavior; check [STATUS.md](../STATUS.md) before editing them.
 
-## Adjusting the playback feed
+## 2. Adjusting the playback feed
 
 The match dashboard uses three different text areas:
 
@@ -49,7 +75,7 @@ After changing the feed:
 4. Confirm post-point analysis scrolls without resizing the dashboard.
 5. Test replay, skip, and auto-rallies.
 
-## How tactical positions become gameplay
+## 3. How tactical positions become gameplay
 
 Serve-receive and floor-defense positions are stored on the current `DefensivePlan`.
 
@@ -90,7 +116,7 @@ This means a planner edit needs two kinds of proof:
 
 A visual marker moving is not enough. A changed event caption without changed simulator data is not enough either.
 
-## Adjusting an existing planner mechanic
+## 4. Adjusting an existing planner mechanic
 
 Use this sequence for serve receive, floor defense, setter release, hitter lanes, or a similar instruction:
 
@@ -105,7 +131,7 @@ Use this sequence for serve receive, floor defense, setter release, hitter lanes
 
 Avoid reading marker coordinates directly from the UI during simulation. The simulator should receive model data through `GameManager`, not inspect a `Control` node.
 
-## Visualization controls
+## 5. Visualization controls
 
 The main-screen **Visuals** menu applies one bit mask to both the full tactical court and the dashboard preview. The current public layers are:
 
@@ -124,7 +150,7 @@ diagnostics, not ordinary visualizers. Normal `_play_rally()` calls clear those
 traces even in editor/debug builds. Only the explicit shadow-debug fixture (or
 an explicit interaction with its debug controls) requests them.
 
-## Adding a new visualizer
+## 6. Adding a new visualizer
 
 Suppose you want a “defensive seams” overlay.
 
@@ -139,7 +165,7 @@ Suppose you want a “defensive seams” overlay.
 
 A visualizer may read resolved data, model instructions, or debug evidence. It must not mutate the rally, select an actor, change quality, or become an input to simulation.
 
-## Adding a new tactical system
+## 7. Adding a new tactical system
 
 For a new instruction such as “libero release depth”:
 
@@ -155,7 +181,7 @@ For a new instruction such as “libero release depth”:
 
 If the system changes player knowledge rather than physical truth, pass a player-specific observation into the decision. Do not give the decision function hidden access to the entire authoritative game state.
 
-## Changing movement-to-action mechanics
+## 8. Changing movement-to-action mechanics
 
 The attack path is a worked example of a causal system. Do not tune the visible
 approach animation to change an outcome. Follow the data in this order:
@@ -189,7 +215,7 @@ For opponent attacks, reuse the same profile contract after opponent player
 state and perception have migrated. Do not mirror a home-only shortcut and call
 it opponent simulation.
 
-## Adding a new rally event or contact
+## 9. Adding a new rally event or contact
 
 Before adding an event type, decide whether it is:
 
@@ -209,7 +235,7 @@ For a real event:
 
 Do not create a second hidden event schema only for one screen. Extend the shared contract when the information is genuinely part of the resolved rally.
 
-## Minimum verification checklist
+## 10. Minimum verification checklist
 
 For any new or adjusted match system, verify:
 
@@ -224,3 +250,34 @@ For any new or adjusted match system, verify:
 - UI bindings, parser scan, textbook validation, and the full test suite pass.
 
 Use the exact commands in [VALIDATION.md](../VALIDATION.md).
+
+---
+
+## 11. Common mistakes
+
+| Mistake | Consequence |
+|---|---|
+| Changing simulator event times to slow playback | Presentation concern corrupting the simulation record |
+| Turning a history label back into a fitting label | A long rally resizes the dashboard and moves the court |
+| A second event schema for one screen | Two contracts that drift apart |
+| A visualizer that reads back into the resolver | A toggle now changes results |
+| Editing persistent classes expecting live effect | They are flag-gated; check STATUS.md first |
+| Adding a metadata key at the producer only | The consumer never learns it exists |
+
+---
+
+## 12. Check yourself
+
+1. You want playback to feel slower. Which file, and which not? *(`Main._play_rally()` minimum durations — not simulator event times.)*
+2. A dragged marker changes nothing in the rally. Where does the chain break? *(Trace `coverage_zone_position_changed` → `GameManager.set_coverage_zone_center` → `DefensivePlan` → `resolve` reading the plan.)*
+3. Why must a visualizer never feed the resolver? *(A presentation toggle would change simulation results.)*
+4. You add a metadata key. What are the two places to document it? *(Its producer and its consumer.)*
+5. Your new persistent code has no live effect. First check? *(STATUS.md — production rollout flags are off by design.)*
+
+---
+
+## Where this leads
+
+- [P4-C5 Migration and Visible Proof](05_migration_and_visible_proof.md) — how new systems earn promotion
+- [P7-C5 Rendering, Probes and Validation](../part_07_art_and_assets/05_rendering_probes_and_validation.md) — verifying anything visual
+- [VALIDATION.md](../VALIDATION.md) — the exact commands
