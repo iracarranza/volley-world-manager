@@ -64,7 +64,7 @@ the ends. The rule attached to them is absolute:
 
 > **Nothing structural may stand inside this.**
 
-### The two bugs this constant exists to prevent
+### 2.1 The two bugs this constant exists to prevent
 
 **Pillars on the court.** The first pass put Blôc's pillars at `z = -6.6` —
 inside the free zone, *on the court, in play*, where a voli chasing a ball would
@@ -108,9 +108,13 @@ or in shadow; there was no third state, which is what 'harsh' means."*
 > measurable condition: a two-state lighting solution with no mid-tone. If you
 > can only describe a render as "harsh", look for a missing third state.
 
+### 3.1 Why the lights are warm
+
 **Both lights are warm, and near each other.** *"near enough to each other that
 the court does not read as two-toned."* The fill is warmer because it stands in
 for bounce off a wooden floor — a light's colour should have a physical excuse.
+
+### 3.2 Exposure is a prerequisite, not a polish step
 
 **Exposure is `0.42`, and it is load-bearing.** From the venue probe: at the old
 stop *"the floor was already clipping, so a deliberate glare and an accidental
@@ -183,7 +187,7 @@ capture)."* One source, so a venue cannot be right in a render and wrong in a
 match. The venue probe carefully does *not* preload the court in return, because
 that would create a circular resource dependency.
 
-### What a venue is allowed to be
+### 5.1 What a venue is allowed to be
 
 From the probe's header:
 

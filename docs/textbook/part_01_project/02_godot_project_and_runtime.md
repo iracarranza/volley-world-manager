@@ -48,7 +48,8 @@ CareerManager="*res://scripts/managers/career_manager.gd"
 renderer/rendering_method="gl_compatibility"
 ```
 
-Four things to take from this:
+### 1.1 Four things to take from it
+
 
 - **The engine version is pinned by feature tag** — `"4.7"`. CI installs
   **4.7.2** specifically. Opening the project in an older Godot will not work
@@ -57,6 +58,8 @@ Four things to take from this:
 - **There are exactly two autoloads.** Two, not twelve — see §3.
 - **The renderer is `gl_compatibility`.** This is why visual probes are run with
   `--rendering-method gl_compatibility`; it makes the tool match the game.
+
+### 1.2 What not to edit
 
 > Do not edit generated files inside `.godot/`. Godot recreates them. If that
 > directory seems wrong, run `godot --headless --path . --import`.
@@ -68,11 +71,15 @@ switching functions include `_show_title`, `_show_new_career`, `_show_journal`,
 `_show_desk`, `_show_lock_in`, `_show_accommodation`, `_show_kitchen`,
 `_show_encyclopedia` and `_show_match`, all routed through one `_show_only()`.
 
+### 2.1 Dead names
+
 > **Names are load-bearing here.** There is no `_show_dashboard`. "Career
 > dashboard" and "recruitment" are **dead names** — the manager's working
 > knowledge lives in the *journal*. If you find either word in code or in a
 > chapter, it is a leftover and should be corrected. See the names table in
 > `CLAUDE.md`.
+
+### 2.2 What must never live here
 
 The application scene coordinates screens. **It must not contain volleyball
 probability formulas.** A calculation that ends up here is unreachable from a
@@ -93,7 +100,7 @@ Use this separation:
 | **managers** | long-lived state and workflows | `CareerManager` (seasons, saves) |
 | **scene scripts** | presentation and input translation | `journal_screen.gd` |
 
-### The test that decides
+### 3.1 The test that decides
 
 Ask: **would this need to change if the interface were replaced?**
 
@@ -119,6 +126,8 @@ The distribution tells you something about the project:
 | `scripts/domain/` | 4 | Shared vocabulary — attributes, body types |
 | `scripts/managers/` | 2 | Exactly the two autoloads |
 
+### 4.1 What the distribution tells you
+
 **Two managers and eighty-four simulation files is the shape you want.** If
 `scripts/managers/` starts growing, something that should be a system has become
 a workflow.
@@ -137,7 +146,7 @@ This is more reliable than searching for a plausible function name and assuming
 it is active. **This codebase contains superseded paths that still parse.** A
 function can look exactly like the one that runs and never be called.
 
-### Worked example
+### 5.1 Worked example
 
 *"Where does the light/dark theme actually get applied?"*
 

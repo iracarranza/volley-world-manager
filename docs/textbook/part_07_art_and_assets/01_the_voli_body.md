@@ -47,6 +47,8 @@ const BODY_TYPES: Array[String] = ["Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi"
 It carries `BODY_TYPE_METRICS` (height, mass, wingspan offsets) and
 `BODY_TYPE_ATTRIBUTES` (ceiling modifiers). The simulator can read all of it.
 
+### 1.1 Produce: presentation only
+
 **Produce** is a *presentation* fact, and `BodyTypeModels` owns it alone:
 
 ```gdscript
@@ -91,7 +93,7 @@ Two consequences follow, and both are deliberate:
    here would reroll every player created afterwards. This is a general rule in
    this codebase — *presentation must never consume simulation randomness.*
 
-### Worked example: predicting a voli's produce
+### 2.1 Worked example: predicting a voli's produce
 
 `produce_for(1)` returns `Pepper`. You can verify any id in a throwaway script:
 
@@ -132,7 +134,7 @@ typo therefore does not raise an error; it produces a rod where you expected a
 wing, which is a much harder bug to see. Check spelling first when a part looks
 wrong.
 
-### Reading a real profile
+### 3.1 Reading a real profile
 
 Here is the `Stalk` torso:
 
@@ -184,7 +186,7 @@ literal colour. Use `color_value` only when a part needs a colour the palette
 does not name — the white base of a leek uses `color_value`, because it is one
 part's exception rather than a palette entry.
 
-### Worked example: giving a body a horizontal collar
+### 4.1 Worked example: giving a body a horizontal collar
 
 Suppose you want a band lying *across* a body rather than along it. Parts default
 to standing on their own Y axis, so the band needs a rotation:
@@ -212,6 +214,8 @@ func configure(
 ) -> void:
 ```
 
+### 5.1 The physical_profile contract
+
 The `physical_profile` dictionary is the contract between simulation and
 presentation. The keys it reads include:
 
@@ -226,6 +230,8 @@ presentation. The keys it reads include:
 | `position_role` | `"Libero"` changes the strip |
 | `expression` | Which face to build — see [P7-C4](04_faces_and_expressions.md) |
 | `appearance` | Per-voli cosmetic overrides, including `produce` |
+
+### 5.2 Clamps, and the bug they cause
 
 Those clamps are not decoration. Passing a height of 300 does not produce a tall
 voli; it produces a 220 cm voli, silently. If a body is not responding to a

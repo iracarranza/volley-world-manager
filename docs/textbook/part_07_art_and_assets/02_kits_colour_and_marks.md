@@ -80,7 +80,7 @@ _check(
 )
 ```
 
-### Why 1.6, and why not 3
+### 3.1 Why 1.6, and why not 3
 
 This is the most instructive number in the file, and the reasoning is worth
 following closely because it is a pattern you will meet again.
@@ -106,7 +106,7 @@ against the interface's own background, and nine of fourteen failed once they
 were put on a court. **The ground you evaluate against is part of the
 measurement.**
 
-### Worked example: checking a kit by hand
+### 3.2 Worked example: checking a kit by hand
 
 Suppose you propose `Color("6B5A44")`, a mid tan, for a new region.
 
@@ -137,11 +137,14 @@ const BUILD := {
 > nameable in a black-and-white frame and at the distance a match is actually
 > watched from."
 
+### 4.1 The grayscale test
+
 **The grayscale test is the real test.** If you desaturate a frame and cannot
 name the two sides, the kits have failed regardless of what the contrast gate
 says.
 
-Two details that carry design intent:
+### 4.2 Two details that carry design intent
+
 
 - `Landavol` is `"reference"` — *"not an absence of design: a placket and a
   collar, cleanly made, so it reads as the canonical strip rather than as one

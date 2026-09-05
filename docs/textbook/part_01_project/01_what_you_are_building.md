@@ -37,6 +37,8 @@ After this chapter you should be able to:
 > develops a volleyball team, prepares tactics, and observes those choices
 > resolve into rallies and match outcomes.
 
+### 1.1 Why the verb is "observes"
+
 Note the verb **observes**. The user does not play the rally. Everything they
 did earlier has to survive into something watchable, or it did not happen as far
 as they are concerned. That single constraint drives most of the architecture in
@@ -62,6 +64,8 @@ movement, contacts, and rally outcomes
 results and new management decisions
 ```
 
+### 2.1 Reading the chain
+
 Read that as a **causal chain with no gaps**. Every arrow is a place where a
 management decision could quietly stop mattering, and every one of them is a
 place this project has had to defend.
@@ -77,7 +81,7 @@ Improvement must create perceptible consequences:
 - a more familiar team can execute a complex tempo reliably;
 - better scouting can reveal information the user can act upon.
 
-### The distinction, worked
+### 3.1 The distinction, worked
 
 Suppose training raises a defender's `lateral_speed` by 4.
 
@@ -105,6 +109,8 @@ number changed *one specific thing they can name*.
 event list. It uses considerable spatial and tactical calculation, but much of
 the control flow still advances **phase by phase**.
 
+### 4.1 The proposed model
+
 **PROPOSED:** the destination is a **persistent state** simulation. Position and
 velocity determine reachable actions; a chosen action changes ball state; the
 ball's future path creates new movement decisions; movement then changes the
@@ -114,6 +120,8 @@ The difference is not cosmetic. In a phase model, "who receives this serve?" is
 answered by a function that picks a receiver. In a persistent model, nobody
 answers it — the receiver is whoever can physically get there, which means the
 question can have the answer *nobody*, and the rally has to cope.
+
+### 4.2 Why the labels matter
 
 > **Reading the labels.** **VERIFIED** and **PROPOSED** are not decoration. This
 > book is used by people making changes, and a claim about behaviour that does
@@ -126,6 +134,8 @@ One more product fact, because it governs where UI work belongs: the interface
 is not a dashboard. It is a **desk with objects on it** — a journal, a
 clipboard, a cork board, a planner, a folder, a phone. Each object has its own
 material and its own way of being marked.
+
+### 5.1 Names are load-bearing
 
 This is why you will see names like `journal_screen.gd` rather than
 `player_list_screen.gd`. The names are load-bearing; see

@@ -92,6 +92,14 @@ scenes/components/*.gd              draws the treatments a tier implies
 scenes/themes/*.tres                padding, fonts, colours copied from the palette
 ```
 
+### 3.1 The four files a visual change could belong in
+
+The table above is the decision. Most mistakes here are putting a colour in a
+theme resource (where it becomes a second source of truth) instead of in
+`ui_palette.gd`.
+
+### 3.2 The treatments, and why you cannot find them
+
 The drawn components include `ink_outline.gd` (the sewn seam and the nib, plus
 the highlighter), `tape_measure.gd` (the section menu), `paper_window.gd`
 (scroll regions), `paper_tabs.gd` (tab rows) and `star_sticker.gd`.
@@ -113,7 +121,7 @@ Ask what the file owns:
 - "What constant data is shared?" → **data**
 - "What vocabulary do several layers share?" → **domain**
 
-### Worked example: a new "fatigue resistance" concept
+### 4.1 Worked example: a new "fatigue resistance" concept
 
 Four pieces, four homes:
 
@@ -125,7 +133,7 @@ Four pieces, four homes:
 Putting all four in one file is the most common structural mistake in this
 codebase, and it is invisible until someone needs one piece without the others.
 
-### The `domain/` test
+### 4.2 The `domain/` test
 
 `scripts/domain/` is small (4 files) and should stay small. A file belongs there
 only if **both** simulation and presentation must agree about it.
@@ -155,7 +163,9 @@ rg -n "func resolve_active_rally" scripts scenes
 rg -n "outgoing_trajectory" scripts scenes tests
 ```
 
-`rg` is ripgrep. Two habits worth forming:
+### 6.1 Two habits worth forming
+
+`rg` is ripgrep.
 
 - **Search for the definition, not the mention.** `class_name X` and `func X`
   find one line each; the bare name finds fifty.

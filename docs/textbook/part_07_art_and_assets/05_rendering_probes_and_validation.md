@@ -46,7 +46,7 @@ went negative on a body you did not photograph.
 
 ## 2. Running things
 
-### Always import after adding a script with a `class_name`
+### 2.1 Always import after adding a script with a `class_name`
 
 ```bash
 godot --headless --path . --import
@@ -55,7 +55,7 @@ godot --headless --path . --import
 Skipping this produces a stale class cache, which has previously turned into
 roughly 200 script errors that had nothing to do with the actual change.
 
-### The suite
+### 2.2 The suite
 
 ```bash
 godot --headless --path . --script res://tests/test_runner.gd
@@ -65,7 +65,7 @@ Read the **FAIL line**, not the total. The count moves for reasons unrelated to
 correctness — sampling gates emit a variable number of checks — and `CLAUDE.md`
 records several passes where reading the total misled someone.
 
-### A validator
+### 2.3 A validator
 
 ```bash
 godot --headless --path . --script res://tools/validate_voli_body_construction.gd
@@ -73,7 +73,7 @@ godot --headless --path . --script res://tools/validate_voli_body_construction.g
 
 Prints `VOLI BODY CONSTRUCTION: PASS (…)` or `FAIL (n)` and exits accordingly.
 
-### A probe with a rendering context
+### 2.4 A probe with a rendering context
 
 Some probes need real meshes built, so they cannot be `--headless`:
 
@@ -82,7 +82,7 @@ godot --path . --rendering-method gl_compatibility res://tools/garment_clearance
 godot --path . --rendering-method gl_compatibility res://tools/sole_contact.tscn
 ```
 
-### A render harness
+### 2.5 A render harness
 
 ```bash
 godot --path . res://tools/voli_portfolio.tscn
@@ -95,7 +95,7 @@ godot --path . res://tools/venue_probe.tscn
 > that silently does nothing because `xvfb-run` was not found is easy to mistake
 > for a tool that ran and produced no output.
 
-### Where the PNGs go
+### 2.6 Where the PNGs go
 
 Renders write to `user://`, which on macOS resolves to:
 
@@ -149,7 +149,7 @@ the plate's authored yaws are part of the test, so if you temporarily zero them
 to look at something straight on — a reasonable thing to do — **restore them
 before committing**, or you have quietly removed the test.
 
-### Worked example: the verification that caught a real defect
+### 4.1 Worked example: the verification that caught a real defect
 
 A crown was rebuilt so its blades folded outward. Head-on it read correctly.
 At the plate's authored yaw of 70° the whole bundle collapsed into vertical

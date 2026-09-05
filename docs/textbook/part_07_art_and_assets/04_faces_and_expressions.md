@@ -75,7 +75,7 @@ const GRID := {
 lookup. `GRID` is "the single source of truth for which expressions exist.
 Adding a row or a column adds faces without touching anything else."
 
-### The failure this replaced, and why it matters
+### 2.1 The failure this replaced, and why it matters
 
 The first version worked the other way round: five named faces, each with
 hand-picked numbers. It produced a `happy` that everybody read as **devious** —
@@ -92,7 +92,7 @@ The fix was to stop naming the *intent* and start naming the *combination*:
 > the labels are the problem. Derive the name from the parts and the
 > disagreement becomes impossible by construction.
 
-### The arithmetic of adding a row
+### 2.2 The arithmetic of adding a row
 
 Three eyes × three mouths = nine faces from six authored entries. Add a fourth
 eye state — say `wide` — and you get **three more faces for one entry**, and you
@@ -103,7 +103,7 @@ have to name them, but you do not have to draw them.
 > grid is exhaustive by construction, which is exactly why it is the source of
 > truth.
 
-### `components()` and `label()` are inverses
+### 2.3 `components()` and `label()` are inverses
 
 ```gdscript
 static func components(expression: String) -> Array[String]
@@ -133,7 +133,7 @@ seventh the day a body is added, and would drift.
 > **Transferable rule.** If a number would need one value per type, check whether
 > it can be expressed as a fraction of something the type already has.
 
-### Worked example: placing a feature
+### 3.1 Worked example: placing a feature
 
 To add a nose 40% of the way up from centre and slightly left:
 
@@ -194,7 +194,7 @@ Three reasons are given, and all three are worth knowing:
 3. **a pure function can be gated headlessly**, which is how every other claim in
    this repository is checked.
 
-### Envelopes are in seconds, and that was measured
+### 6.1 Envelopes are in seconds, and that was measured
 
 The obvious design is to run each envelope across its window as a 0-to-1
 progress. A probe over 936 windows across 180 rallies says that breaks: the
@@ -207,7 +207,7 @@ on a fast swing and stretch over a second and a half on a roll shot.
 So every envelope is in real seconds, clamped, and allowed to keep running past
 the end of its window.
 
-### The blink
+### 6.2 The blink
 
 The module contains a complete idle-liveness model, described as "the whole of
 what makes an idle mark feel alive": fast down and slower up, "which is what a

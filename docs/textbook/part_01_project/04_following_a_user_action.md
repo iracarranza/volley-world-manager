@@ -49,6 +49,8 @@ Main._play_rally(result, ...)              scenes/main/main.gd:1974
 2D tactical court playback and result recording
 ```
 
+### 1.1 What the shape tells you
+
 Notice the layers: **scene → manager → simulation → back to scene**. That is
 P1-C2's architecture in one path, and the shape is the point. The simulation
 never calls back into the scene.
@@ -77,7 +79,8 @@ have found either hidden state or unseeded randomness — both are bugs, and
 [P3-C2](../part_03_workflow/02_debugging_testing_and_git.md) explains how to
 hunt them.
 
-Three observations worth making:
+### 2.1 Three observations worth making
+
 
 - **`seed_value` is a parameter, not a global.** The same inputs must produce the
   same rally.
@@ -98,7 +101,7 @@ especially on exact metadata contracts such as `outgoing_trajectory`.
 > "fix" a drawing transform can corrupt correct outcomes. **Always identify which
 > side of the contract failed.**
 
-### Diagnosing by symptom
+### 3.1 Diagnosing by symptom
 
 | Symptom | Failed side | Where to look |
 |---|---|---|
@@ -113,7 +116,7 @@ especially on exact metadata contracts such as `outgoing_trajectory`.
 almost never a simulation bug — the simulation decided a correct destination and
 the drawing did not receive or respect it.
 
-### Worked example
+### 3.2 Worked example
 
 *The ball jumps at the moment of a set.*
 
@@ -131,6 +134,8 @@ the drawing did not receive or respect it.
 
 A seed buys **reproducibility**: the same inputs give the same rally, so a bug
 can be re-run and a change can be compared against a known baseline.
+
+### 4.1 What it does not buy
 
 It does **not** buy stability across code changes. A change to how a contact is
 resolved will produce a different rally from the same seed, and that is correct
