@@ -252,4 +252,17 @@ work.
 - no endpoint snap — **yes**, the path's landing *is* the endpoint
 - determinism — contract test asserts sample-for-sample equality
 
+### P2.7 Suite
+
+| Run | Result |
+|---|---|
+| Baseline (`3c2cb2d`, before this work) | 2 of 2,251 |
+| P1 (`402ca56`) | 2 of 2,261 — +10 contract assertions |
+| **P2 (`ab4e37a`)** | **2 of 2,261** |
+
+Both failures are the two known pre-existing ones in `CLAUDE.md`. P2's count is
+**identical to P1's**, so publishing the path and consuming it in playback moved
+no outcome and no sampling population — which is what a change that must
+preserve outcomes has to look like.
+
 **G1 PASSES.** → P3.
