@@ -18,6 +18,26 @@ This book explains the project that actually exists. It also explains the persis
 6. Follow source links and inspect the named class or function before changing code.
 7. Run the checks in [VALIDATION.md](VALIDATION.md) after making changes.
 
+## How a chapter is organised
+
+Every numbered chapter follows the same shape, so you can navigate one you have
+never opened:
+
+| Element | What it is for |
+|---|---|
+| **Status / Keywords / Primary sources** | What is verified, and which files back it |
+| **Prerequisites** | What to read first |
+| **Learning goals** | What you should be able to *do* afterwards |
+| **Vocabulary** | Terms defined once, before they are used |
+| **Numbered sections** (`1`, `2`, …) | One concept each |
+| **Numbered subsections** (`1.1`, `1.2`, …) | One specific, lookup-able thing each |
+| **Common mistakes** | Usually drawn from mistakes actually made here |
+| **Check yourself** | Questions with answers |
+| **Where this leads** | Forward references |
+
+Sections and subsections are numbered so they can be cited: "P2-C3 §4.3" is a
+precise address. Use them in commit messages and code comments.
+
 ## Truth labels
 
 - **VERIFIED:** directly supported by a named source file and symbol.
