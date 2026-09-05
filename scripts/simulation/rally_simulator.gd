@@ -2754,6 +2754,7 @@ func resolve(
 		if hitter_arrival_margin >= 0.0 else \
 		" Arrived %.2fs late and lost the approach window." \
 			% absf(hitter_arrival_margin)
+	_stamp_spin(attack_trajectory, attack_spin)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, result.attack_quality >= 0.25,
 		result.attack_quality, "%s: %s" % [hitter.display_name, hit_type],
@@ -5471,6 +5472,7 @@ func _resolve_opponent_transition(
 			str(attack_choice.attack_type), str(attack_choice.direction),
 			roundi(opponent_attack * 100.0),
 		]
+	_stamp_spin(opponent_attack_trajectory, opponent_attack_spin)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
 		opponent_contact, home_target,
@@ -7229,6 +7231,7 @@ func _resolve_home_continuation(
 		"Contact 3 of 3 · %d%% attack quality." % roundi(
 			attack_quality * 100.0
 		)
+	_stamp_spin(continuation_attack_trajectory, continuation_attack_spin)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target,
 		not attack_missed and attack_quality >= 0.25, attack_quality,
@@ -10374,7 +10377,24 @@ func _stamp_launch_state(trajectory: Dictionary, resolved: Dictionary) -> void:
 	)
 	trajectory["launch_vertical_mps"] = float(launch.get("vertical_speed_mps", 0.0))
 	trajectory["launch_gravity_mps2"] = float(launch.get("gravity_mps2", 0.0))
+	_stamp_spin(trajectory, Dictionary(launch.get("spin", {})))
 	trajectory["launch_source"] = "resolver"
+
+
+## The rotation this ball actually left with.
+##
+## `BallSpin` has resolved `axis` and `rate_rps` since it was written and only
+## `gravity_for` ever left the resolver, so a topspin serve and a float have been
+## indistinguishable to everything downstream -- including anything that wants to
+## draw a spinning ball. **The serve resolver sweeps its spin down until the ball
+## clears the tape**, so the intended spin and the flown spin differ and only the
+## flown one is worth publishing.
+##
+## NOTE `_stamp_launch_state` is serve-only; the three swings stamp their own -- BALL_SPIN_PUBLICATION.md
+func _stamp_spin(trajectory: Dictionary, spin_state: Dictionary) -> void:
+	if trajectory.is_empty() or spin_state.is_empty():
+		return
+	trajectory["launch_spin"] = spin_state.duplicate(true)
 
 
 ## The marker a platform-contact intent field carries when there is genuinely no
