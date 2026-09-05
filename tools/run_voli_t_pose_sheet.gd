@@ -13,48 +13,37 @@ extends Node
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const BodyTypeGameplayScript := preload("res://scripts/domain/body_type_gameplay.gd")
+const Stage := preload("res://tools/preview/voli_sheet_stage.gd")
 
 ## Matched, so what differs across the sheet is shape rather than scale.
 const HEIGHT_CM := 188.0
 const WINGSPAN_CM := 191.0
 
 const COLUMNS := 5
-## Wide enough that a fully extended arm clears its neighbour, which is a
-## bigger number than a standing row needs -- see the span table this prints.
+## Wide enough that a fully extended arm clears its neighbour, which is a bigger
+## number than a standing row needs -- see the span table this prints.
 const SPACING := 2.55
 ## Rows are stacked in Y under an orthogonal camera, where a raised subject is
 ## drawn at the same size rather than a smaller one.
 const ROW_RISE := 3.00
 
+## What this sheet calls a produce, where that differs from what the world calls
+## it. `PRODUCE` is the authority everywhere else and is not touched: this is a
+## caption table for one plate, and the entry exists because "eggplant" is what
+## the reader of this sheet calls the thing.
+const SHEET_NAMES := {"Aubergine": "Eggplant"}
+
 
 func _ready() -> void:
 	## Fixed here rather than left to the run command, so the plate is the same
 	## size every time it is regenerated.
-	get_window().size = Vector2i(1920, 1080)
+	get_window().size = Stage.RESOLUTION
 	await get_tree().process_frame
 	var subjects := _subjects()
 	var root := get_tree().root
-	var stage := Node3D.new()
-	root.add_child(stage)
-
-	var light := DirectionalLight3D.new()
-	## Lit from the camera's side. The rig faces -Z.
-	light.rotation_degrees = Vector3(-32.0, 158.0, 0.0)
-	light.light_energy = 1.25
-	stage.add_child(light)
-
-	var environment := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("101722")
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("53637d")
-	env.ambient_light_energy = 0.95
-	environment.environment = env
-	stage.add_child(environment)
+	var stage := Stage.build_stage(root)
 
 	var rows := int(ceil(float(subjects.size()) / float(COLUMNS)))
-
 	var start := -SPACING * float(COLUMNS - 1) * 0.5
 	for index in range(subjects.size()):
 		var subject: Dictionary = subjects[index]
@@ -81,43 +70,20 @@ func _ready() -> void:
 		)
 		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 		_t_pose(actor)
-		actor.set_highlighted(true)
-		actor.identity_label.text = str(subject.label)
-		## Cleared above the head rather than resting on it: the Stalk's leaves
-		## are the tallest thing on any of these bodies and the default seat puts
-		## the caption through them.
-		actor.identity_label.position.y += 0.55
-		## A ground shadow and a floor ring under a subject lifted into its row
-		## are both drawn in mid-air, and neither is part of the body.
-		actor.shadow.visible = false
-		actor.focus_ring.visible = false
+		Stage.present(actor, str(subject.label))
 
 	for _frame in range(8):
 		await get_tree().process_frame
 	var spans := _report_spans(stage)
-	## Framed against the reach that was *measured*, not against an assumed one.
-	## A guessed padding cropped Simi's hands, which is the one subject the sheet
-	## most needs to show whole.
-	var camera := Camera3D.new()
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.rotation_degrees = Vector3(0.0, 180.0, 0.0)
-	## `size` is the vertical extent, so a sheet wider than it is tall is fitted
-	## through the aspect rather than by passing the width in.
-	var content_width: float = SPACING * float(COLUMNS - 1) + float(spans.widest) + 0.8
-	var content_height := ROW_RISE * float(rows - 1) + 3.2
-	camera.size = maxf(
-		content_height,
-		content_width * float(root.size.y) / maxf(float(root.size.x), 1.0),
+	Stage.frame_camera(
+		root, stage,
+		SPACING * float(COLUMNS - 1) + float(spans.widest) + 0.8,
+		ROW_RISE * float(rows - 1) + 3.2,
+		1.30 + ROW_RISE * float(rows - 1) * 0.5,
 	)
-	camera.position = Vector3(
-		0.0, 1.30 + ROW_RISE * float(rows - 1) * 0.5, -9.0
-	)
-	stage.add_child(camera)
 	for _frame in range(4):
 		await get_tree().process_frame
-	var path := "user://voli_t_pose_sheet.png"
-	root.get_texture().get_image().save_png(path)
-	print("saved %s" % ProjectSettings.globalize_path(path))
+	Stage.save(root, "voli_t_pose_sheet")
 	get_tree().quit()
 
 
@@ -132,7 +98,7 @@ func _subjects() -> Array:
 	for produce in BodyTypeModelsScript.PRODUCE:
 		out.append({
 			"type": "Vegi",
-			"label": "Vegi · %s" % str(produce),
+			"label": "Vegi (%s)" % str(SHEET_NAMES.get(produce, produce)),
 			## Searched rather than assigned, so the sheet runs through the same
 			## deterministic selection a match does.
 			"id": _id_growing(str(produce)),

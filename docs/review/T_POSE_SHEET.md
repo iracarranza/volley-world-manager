@@ -31,11 +31,11 @@ rig directly, so the tool prints one. Drawn hand-to-hand span against the
 | Feli | 2.287 | 1.20 |
 | Ursi | 2.481 | 1.30 |
 | Simi | 3.252 | **1.70** |
-| Vegi · Tomato | 2.164 | 1.13 |
-| Vegi · Aubergine | 1.881 | 0.98 |
-| Vegi · Pear | 1.973 | 1.03 |
-| Vegi · Stalk | 1.766 | 0.92 |
-| Vegi · Pepper | 2.138 | 1.12 |
+| Vegi (Tomato) | 2.164 | 1.13 |
+| Vegi (Eggplant) | 1.881 | 0.98 |
+| Vegi (Pear) | 1.973 | 1.03 |
+| Vegi (Stalk) | 1.766 | 0.92 |
+| Vegi (Pepper) | 2.138 | 1.12 |
 
 **This is an observation, not a defect report, and the distinction is the whole
 of what is worth saying about it.** No claim anywhere states that a drawn span
@@ -56,6 +56,16 @@ reads the mesh at all.
 Simi is the outlier by a distance and it is the authored one: `arm.height` is
 0.98 against 0.72-0.86 for the rest, and the comment on the neighbouring block
 says the reach is the point of the type.
+
+## Two caption notes
+
+Vegi rows read `Vegi (Produce)`. The produce is in parentheses because it is not
+a second name for the type -- `run_body_type_preview.gd` prints the type alone
+for exactly that reason, and a bracket says "this Vegi, grown this way" where a
+separator says "a species".
+
+Aubergine is captioned **Eggplant** on this sheet and nowhere else. `PRODUCE` is
+the authority and is untouched; `SHEET_NAMES` is a caption table for one plate.
 
 ## Framing note
 
