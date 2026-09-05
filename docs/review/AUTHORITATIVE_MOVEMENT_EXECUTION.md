@@ -499,3 +499,89 @@ actor, so a compromised contact changes the drawn pose.
 
 **No change made in P5.** The pass is verification, and two claims in my own
 prior artifact are corrected by it.
+
+---
+
+## P6 — REMAINING CONTINUITY · **YES, the architecture expresses it**
+
+The spec's question: can the current hybrid/event architecture express off-ball
+transition, rebase, approach prep, block close, recovery and continuation
+convincingly using authoritative paths — or is a scheduler required?
+
+**YES. No scheduler needed, and the evidence is the work above rather than an
+architectural preference.**
+
+| Evidence | Value |
+|---|---|
+| Legs migrated with no outcome movement | 6 |
+| Suite across P1→P3 | 2 of 2,261, **unchanged three times** |
+| Landing vs committed, reception + dig | 0.000000 |
+| Start vs committed, all types | 0.000000 |
+| Analytical ↔ stepped agreement | 0.18 mm worst over 768 samples |
+
+Nothing in the six migrated legs needed a rally clock stepping agents. A leg is
+solved once, published, and interpolated — the event architecture carries that
+fine, because a path is just a richer event payload.
+
+### P6.1 What the remaining legs actually need
+
+The 10 unmigrated `_reached_point` sites are off-ball staging and unit rebase.
+They are blocked on **one bounded playback change, not on architecture**:
+`_authoritative_phase_path` serves only `movement_player_id`, so support players
+fall through to the legacy re-solve. Serving paths per-player instead is a
+dictionary lookup, not a scheduler.
+
+### P6.2 What would require a scheduler, stated so the bar is on record
+
+Nothing encountered in P0–P5. A scheduler becomes necessary only for behaviour
+that cannot be expressed as *"a leg, solved at a known time, with a known
+duration"* — e.g. a player changing target **mid-leg** in response to something
+that happens during it. Every leg in this engine is committed against a contact
+that is already scheduled, so that case has not arisen.
+
+**`RallyScheduler` remains uncalled by production, correctly.**
+
+---
+
+## P7 — VALIDATE / CLEAN
+
+### P7.1 Before → after
+
+| Measure | Before | After |
+|---|---|---|
+| Movement solves per migrated leg | **3** (price, re-integrate, re-derive speed) | **1** (2D consumer); 3D replay still re-derives — unmigrated |
+| Endpoint snap on migrated legs | forced onto `movement_target` | **none** — the path's landing *is* the endpoint |
+| Facing pre-align on migrated legs | required to hit the endpoint | **none** |
+| Time normalisation | trail times discarded, renormalised | rally-clock absolute, normalised only for the progress index |
+| Momentum state carried | 3 hitter legs only | unchanged — see below |
+| Suite | 2 of 2,251 | 2 of 2,261, same two known failures |
+| Contact error, reception + dig | not measurable (snapped) | **0.000000** |
+
+### P7.2 Reconstruction sites remaining
+
+| Site | Status |
+|---|---|
+| `tactical_court._integrate_phase_path` | **kept**, as the documented fallback for the 10 unmigrated off-ball legs |
+| `player_actor_3d.gd:1005` delta→speed | **kept** — the 3D replay is a separate, unmigrated consumer |
+| `_reached_point` reachability/commit mismatch | **open sim defect**, P3.3 |
+| Prep timed on true rather than perceived flight | **open gap**, P4.3 |
+
+Nothing was removed that is still load-bearing, and nothing was left that is
+merely redundant.
+
+### P7.3 DONE criteria
+
+| Criterion | State |
+|---|---|
+| No migrated playback re-solve | **met** for the 6 migrated legs |
+| No competing actor movement truth | **not met** — 3D replay unmigrated (P2.5) |
+| Momentum verified | **met as classification** (P0.3); the fix is a contract consequence, not yet applied to non-hitter legs |
+| Receive moves + preps pre-contact | **met** (P4) |
+| State/recovery continuity where supported | **met** (P5) |
+| No endpoint cheats | **met** on migrated legs |
+| Deterministic suite passes | **met**, 2 of 2,261 three times |
+| No unjustified scheduler/AAA expansion | **met** — nothing added |
+
+**Not fully DONE.** Two criteria are outstanding and both are scoped, not
+blocked: migrate the 3D replay consumer, and migrate the 10 off-ball legs behind
+the one playback change in P6.1.
