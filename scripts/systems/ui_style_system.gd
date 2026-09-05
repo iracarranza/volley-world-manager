@@ -53,6 +53,18 @@ const STITCHED_TIERS: Array[StringName] = [
 	&"CardPanel", &"DashboardCard", &"InsetPanel", &"RaisedPanel",
 ]
 
+## Controls that can take the animated marker gesture.
+##
+## This is deliberately a positive list rather than "everything drawn". A
+## panel can be outlined in ink because it is a piece of the page without being
+## an action the reader can point at. Letting every inked tier highlight made
+## preview cards, the character editor's containing card and the Match Centre's
+## entire tactical court sweep like oversized menu buttons on hover.
+const HIGHLIGHTED_TIERS: Array[StringName] = [
+	&"PrimaryAction", &"SecondaryAction", &"QuietAction", &"DangerAction",
+	&"NavAction", &"ChoiceChip",
+]
+
 ## How far apart two patches can be in tone. Small: the surfaces should read as
 ## cut from related cloth, not as a colour-coded key.
 const PATCH_TINT_SPREAD: float = 0.045
@@ -558,7 +570,8 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	## already declines it because you do not highlight a sewn patch; melamine
 	## declines it for a different reason and both are stated rather than one
 	## being folded into the other.
-	var highlighted := medium != MEDIUM_SEWN and medium != MEDIUM_BOARD \
+	var highlighted := control.theme_type_variation in HIGHLIGHTED_TIERS \
+		and medium != MEDIUM_SEWN and medium != MEDIUM_BOARD \
 		and medium != MEDIUM_PINNED
 	var sewn := medium == MEDIUM_SEWN \
 		and control.theme_type_variation in STITCHED_TIERS
@@ -577,6 +590,7 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 		## would otherwise keep whichever one it was born with.
 		existing.stroke_style = wanted_style
 		existing.hover_highlight = highlighted
+		existing.draw_perimeter = control.theme_type_variation != &"NavAction"
 		existing.queue_redraw()
 		return
 	var outline := UIInkOutline.new()
@@ -586,6 +600,10 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	## word, and hovering is the act of going over it. Surfaces are sewn and get
 	## neither.
 	outline.hover_highlight = highlighted
+	## Navigation items are written menu rows, not enclosed controls. They keep
+	## the same animated underline/highlighter instrument but not the closed
+	## perimeter that makes an action read as a button.
+	outline.draw_perimeter = control.theme_type_variation != &"NavAction"
 	## Seeded from the panel's own name, so a card's edge is stable across runs
 	## and two cards side by side never draw the same imperfection.
 	outline.ink_seed = int(String(control.name).hash() & 0x7FFFFFFF)
@@ -740,6 +758,11 @@ static func _style_button(button: Button) -> void:
 	var node_name := String(button.name)
 	if _is_hit_area(button):
 		button.theme_type_variation = &"HitArea"
+	elif button.theme_type_variation == &"NavAction":
+		## An authored navigation row is already classified. In particular, the
+		## title menu's New/Load/Options/Exit rows must not be reinterpreted from
+		## their names as primary, secondary and danger buttons.
+		pass
 	elif node_name in PRIMARY_ACTIONS:
 		button.theme_type_variation = &"PrimaryAction"
 	elif node_name in DANGER_ACTIONS:

@@ -590,6 +590,64 @@ static func build_wedge(
 ## Swept along -y from the root, because that is the direction a limb hangs in
 ## the rig and the fan is parented to a limb. `sweep` trails the tip backward in
 ## +z so the trailing edge rakes instead of squaring off; zero is a straight fan.
+## A blade still wrapped around the thing it grew out of.
+##
+## A leek's shaft *is* the rolled bundle of its blade bases: each blade is a
+## C-shaped sheath enclosing the ones inside it, and only its upper length peels
+## away and flattens. Four versions of the crown drew every blade as a flat box,
+## which is why they read as protrusions stuck on a stem rather than as leaves --
+## a plank cannot enclose anything.
+##
+## The arc is centred on local +X and swept about local +Y, so a sheath is placed
+## on the shaft axis rather than beside it, and `yaw` turns which way it opens.
+## Nesting is then just a radius: an outer blade at a larger radius encloses an
+## inner one at a smaller, the way the vegetable does it.
+static func build_sheath(
+	radius: float,
+	arc_degrees: float,
+	height: float,
+	thickness: float,
+	taper: float = 1.0,
+) -> ArrayMesh:
+	var arc_steps := 8
+	var half := maxf(thickness, 0.001) * 0.5
+	var half_height := height * 0.5
+	var outer: Array = [[], []]
+	var inner: Array = [[], []]
+	for level in range(2):
+		var y := -half_height if level == 0 else half_height
+		## The mouth of the sheath opens as it rises, which is the taper.
+		var level_arc := deg_to_rad(arc_degrees) * (1.0 if level == 0 else taper)
+		for index in range(arc_steps + 1):
+			var angle := -level_arc * 0.5 \
+				+ level_arc * float(index) / float(arc_steps)
+			var direction := Vector3(cos(angle), 0.0, sin(angle))
+			outer[level].append(direction * (radius + half) + Vector3(0.0, y, 0.0))
+			inner[level].append(direction * (radius - half) + Vector3(0.0, y, 0.0))
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index in range(arc_steps):
+		var step := index + 1
+		## Convex face outward, concave face inward, wound opposite ways.
+		_patch_quad(tool, 1.0,
+			outer[0][index], outer[0][step], outer[1][step], outer[1][index])
+		_patch_quad(tool, 1.0,
+			inner[1][index], inner[1][step], inner[0][step], inner[0][index])
+		## The rims, which are the edges a viewer actually reads the curl from.
+		_patch_quad(tool, 1.0,
+			outer[1][index], outer[1][step], inner[1][step], inner[1][index])
+		_patch_quad(tool, 1.0,
+			inner[0][index], inner[0][step], outer[0][step], outer[0][index])
+	var last := arc_steps
+	## The two cut sides, so the shell has a visible thickness where it ends.
+	_patch_quad(tool, 1.0,
+		outer[0][0], inner[0][0], inner[1][0], outer[1][0])
+	_patch_quad(tool, 1.0,
+		inner[0][last], outer[0][last], outer[1][last], inner[1][last])
+	tool.generate_normals()
+	return tool.commit()
+
+
 static func build_fan(
 	root_chord: float,
 	tip_chord: float,
@@ -2719,6 +2777,14 @@ static func build_mesh(spec: Dictionary) -> Mesh:
 				float(spec.get("depth", 0.12)),
 				clampf(float(spec.get("taper_width", 0.66)), 0.05, 1.0),
 				clampf(float(spec.get("taper_height", 0.72)), 0.05, 1.0),
+			)
+		"sheath":
+			return build_sheath(
+				float(spec.get("radius", 0.14)),
+				float(spec.get("arc", 170.0)),
+				float(spec.get("height", 0.3)),
+				float(spec.get("thickness", 0.018)),
+				clampf(float(spec.get("taper", 1.0)), 0.05, 1.4),
 			)
 		"fan":
 			return build_fan(

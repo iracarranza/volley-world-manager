@@ -7246,6 +7246,159 @@ Worth knowing before either is attempted: inside a normal defensive window
 almost nothing for the balls a defender actually plays and only pays on long
 pursuits.
 
+## The leek reads as a shaft in a fan headdress, and the fix is staggered emergence
+
+Reported 2026-08-31 from the `01b_bodies_vegi` plate, after the Stalk was
+rebuilt as a leek at `0bf250c`. The rebuild did what it was for -- the widest
+part of the silhouette is now at the top, and the read it was fixing is gone --
+but what replaced it is **a stalk wearing a fan headdress**, not a leek.
+
+**Why, precisely.** All six blades emerge from a single point. `_produce_crown`
+computes one `top` from `head_y + head_radius * 0.92` and every leaf pivots about
+its own base at that same height, evenly spaced across `[-64, -39, -12, 15, 43,
+67]` degrees with lengths inside one narrow band. A ring of similar things
+radiating from one origin is a **rosette**, and a rosette on a stem is a
+headdress. Irregular leans were enough to stop it being a *starburst*; they were
+never going to make it foliage.
+
+A leek's blades do three things this does none of:
+
+1. **Emerge at staggered heights** along the shaft, peeling away one at a time,
+   rather than all from a crown point.
+2. **Rank by size.** One or two dominant blades with the rest clearly
+   subordinate, not six near-equals.
+3. **Sheath and overlap** each other, so an inner blade is read through the gap
+   between two outer ones.
+
+The proposal on the table, and it goes straight at (1) and (2): **two exterior
+primary stalks and a few interior secondary smaller ones** -- or, as the minimum
+version, **one main larger branch plus a single secondary smaller one set higher
+up the shaft.** The minimum version is worth trying first: it is two parts
+instead of six, and if a hierarchy of two plus a height offset is enough to read
+as a plant, the rest is decoration.
+
+**Nothing in the code blocks this.** The crown returns an array of parts each
+carrying its own `position`, so a per-leaf emergence height is already
+expressible -- the single shared `top` is a choice inside `_produce_crown`, not a
+constraint of the vocabulary.
+
+**Two things a fix must not lose.** The widest point of the silhouette has to
+stay at the top; that is what removed the original read and it is the whole
+reason the leek was chosen over celery (see `docs/design/BODY_TYPES.md` §3). And
+the shaft has to stay at radius 0.19, because the Stalk's traffic inflection
+keys off being the thinnest produce. Two primaries splaying in a V satisfy both.
+
+Also still open from that pass: the head is largely swallowed by the shaft, so
+the face reads only at close range.
+
+## Idle motion, and the four other things it keeps getting confused with
+
+Reviewed 2026-08-31 against the rig. Recorded because the ordering is the
+finding, not the list.
+
+**The observation.** Movement reads as reaching for realism and landing on
+jittery and over-segmented: run cycles with too many steps, jarring segues
+between actions, and no life at all in a body that is not currently playing the
+ball. The proposal was to slow the pace and quantise toward a 30 fps animatic
+look -- segmented on purpose rather than by accident.
+
+**Three complaints, three different causes, one of them an animation problem.**
+
+- *Too many steps* is arithmetic. `MODE_CADENCE_BAND` tops out at 5.00 Hz for
+  LATERAL against `STEPS_PER_GAIT_CYCLE = 2.0`: a step every 200 ms, six frames
+  at 30 fps, **three poses per step on twos**. The bands are defensible
+  biomechanics -- elite sprint cadence really is near 5 Hz -- which makes this
+  `FAILURE_MODES.md` §0 again: the right instrument for the wrong question.
+  Honest turnover on a stylised body at broadcast distance reads as scurrying.
+- *Jitter* is inherited rather than authored. The gait is distance-driven off the
+  **drawn** position (`ground_speed_mps` is derived "from the distance between
+  successive placements ... because playback interpolates positions"), and
+  `player_actor_3d.gd` records chasing that noise twice already. There is a
+  26-degree bounded plant corrector paying off foot slip every frame; that is a
+  system absorbing incoherence, and it has a ceiling.
+- *Jarring segues* is already named in `MOVEMENT_FLUIDITY_DRAFT.md` §Remaining:
+  movement is *resolver-allotted* rather than resolver-integrated, so every
+  traversal is its own animation with its own duration and the seams are
+  structural. Blocked on Gate 50. Styling does not touch it.
+
+**On quantising: jittery and segmented are opposites, and the order matters.**
+Stepped animation is intentional low-frequency quantisation of a *coherent*
+signal. Quantise a noisy one and the jitter survives and starts strobing -- the
+image gets worse and the conclusion drawn would be that the animatic look does
+not work, which would be wrong. Clean the signal, lower the turnover, then
+quantise. Two traps: quantise in **phase** rather than in display frames, because
+`match_screen.gd` carries a `playback_speed` of 0.1 to 4.0 and fixed 30 fps
+stepping at 0.25x is a slideshow; and "slower" has to mean **fewer steps for the
+same distance**, not a slower playback of the same cycle, or the feet slip and
+the corrector saturates. That second one is a *simulation* change, because
+cadence feeds traversal time and `stride x cadence` is a gated identity.
+
+**What exists already, so none of it gets rebuilt.** `ReadyStance` owns three
+stances -- `defending`, `blocking`, `watching` -- and `StanceTransition` prices
+the blends (0.14 to 0.42 s, floor recoveries 0.55 / 0.95 / 1.35 s).
+`ServeBiomechanics` covers "stand, toss, load, swing, contact, follow through,
+step in", the toss included. And `cogniticon_motion.gd` is already a complete
+idle-liveness module for the 2D marks -- a blink called "the whole of what makes
+an idle mark feel alive", fast down and slower up, desynchronised per voli so "no
+two volis blink together" -- with a stated contract that any idle module should
+copy: pure functions of **seconds**, no node state, no frame delta, headlessly
+gateable. `block_phase_model.gd:9` already concedes "the blocker has no idle
+pose". There is **no** reaction, celebration or gesture system, and `ego` /
+`leadership` / `confidence` do not reach the actor.
+
+**Build order, which is not the order these occur to anyone.**
+
+1. **Idle micro-motion.** Breath, ocular drift, blink, weight shift, and the face
+   settling back to the voli's default. First because it multiplies everything
+   else, and because the *settling* is the load-bearing half: a face with a
+   resting state is what makes a departure from it legible.
+2. **More ready stances.** Rows in `ReadyStance`. Note that "holding the head
+   against a serve" is a **flinch**, not a stance -- a stance is what you hold, a
+   flinch is what you do, and it needs a trigger and a duration. It belongs with
+   (4) or the table grows a member that does not behave like the others.
+3. **The serve routine.** The highest-value single item after idle, for a
+   structural reason: the serve is the **only moment in volleyball with
+   guaranteed dead time, one subject, and an uncontested clock.** Real routines
+   are idiosyncratic, so a per-voli one reads as characterisation rather than
+   filler, and it repeats every rally so the manager learns it. Appends cleanly:
+   `ServeBiomechanics` begins *at the toss*, so the routine is what precedes it.
+4. **Post-rally beats, designed as information rather than garnish.** You watch
+   from a distance and cannot see intent. Who raises a hand in apology tells you
+   who *believes* they erred, which may differ from who the sim blames; who
+   crosses to console them says something about leadership; who does not react
+   says something too. None of that is in a box score, and it is what the journal
+   accumulates. Derive it -- attributed error x `ego` x composure for the
+   apology, `leadership` and `_pair_fraction` for the high five -- rather than
+   authoring per event, so "this voli never apologises" is discovered instead of
+   flagged. Two real costs: those traits do not reach the actor, and **there is
+   no post-rally clock at all.**
+5. **Somebody at the office door.** Not an animation problem yet. The desk is
+   "the home state, not a menu", so a person entering is the first time it has an
+   **event** rather than a state, and that is a desk question first. It also
+   competes with an existing channel: the phone already owns information arrival
+   (`THE_DESK_AND_THE_PHONE.md`). **Do not build the door until it carries
+   something a call cannot** -- physically handing an object over, or someone
+   whose presence is itself the point -- or it is a second phone with a walk
+   cycle. Rendering precedent exists: the actor is already instantiated outside
+   the rally in `journal_screen.gd` and `new_career_screen.gd`.
+
+**The seam that determines cost.** (1) to (3) need only poses and a clock that is
+already owned. (4) and (5) need a trigger channel that does not exist: outcome
+attribution and personality reaching presentation, and a time budget after the
+whistle.
+
+## The body construction validator is not in CI, and a merge broke it unnoticed
+
+`tools/validate_voli_body_construction.gd` appears in no workflow.
+`.github/workflows/` runs the headless suite, the M9 probe, the signature-VFX
+gallery and the court gallery cert -- not this. It is the only gate on produce
+and animal silhouettes, and it went red across the `5a55494` merge without
+anybody seeing it, because seeing it requires remembering to run it by hand.
+
+Fixed at the point of failure (`80a9fa1` interleaved pupils into a positionally
+indexed `Faces.parts()` read, which retargeted the mouth assertion onto the right
+eye), but the gap is the reason the break survived. Adding it to `godot-ci.yml`
+is a few lines and it does not need a display -- it runs under `--headless`.
 ## The creation flow's three open steps, and why the copy no longer says so
 
 The career builder's subtitles used to announce their own incompleteness inside

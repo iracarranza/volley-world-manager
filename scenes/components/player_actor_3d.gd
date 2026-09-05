@@ -16,13 +16,31 @@ const LandingBiomechanicsScript := preload(
 const ServeBiomechanicsScript := preload(
 	"res://scripts/data/serve_biomechanics.gd"
 )
+const ServeActionBiomechanicsScript := preload(
+	"res://scripts/data/serve_action_biomechanics.gd"
+)
 const SetBiomechanicsScript := preload("res://scripts/data/set_biomechanics.gd")
+const AttackActionBiomechanicsScript := preload(
+	"res://scripts/data/attack_action_biomechanics.gd"
+)
+const DefenseActionBiomechanicsScript := preload(
+	"res://scripts/data/defense_action_biomechanics.gd"
+)
+const ContactArrivalBiomechanicsScript := preload(
+	"res://scripts/data/contact_arrival_biomechanics.gd"
+)
+const IdleBiomechanicsScript := preload("res://scripts/data/idle_biomechanics.gd")
+const CoreVoliPerformanceScript := preload(
+	"res://scripts/data/core_voli_performance.gd"
+)
 
 @onready var body_pivot: Node3D = $BodyPivot
 @onready var torso: MeshInstance3D = $BodyPivot/Torso
 @onready var head: MeshInstance3D = $BodyPivot/Head
 @onready var left_arm: Node3D = $BodyPivot/LeftArm
 @onready var right_arm: Node3D = $BodyPivot/RightArm
+@onready var left_wrist: Node3D = $BodyPivot/LeftArm/Elbow/Wrist
+@onready var right_wrist: Node3D = $BodyPivot/RightArm/Elbow/Wrist
 @onready var left_leg: Node3D = $BodyPivot/LeftLeg
 @onready var right_leg: Node3D = $BodyPivot/RightLeg
 @onready var shadow: MeshInstance3D = $Shadow
@@ -67,6 +85,11 @@ var arm_length_scale: float = 1.0
 ## The authored torso scale after height/stride fitting. Pose deformation always
 ## starts here, so squash and extension do not accumulate from frame to frame.
 var torso_rest_scale: Vector3 = Vector3.ONE
+## Structural anchors after silhouette and physical-profile fitting. Attack
+## performance rewrites them from these values every frame, never from the
+## previous pose, so chest separation and squash/stretch cannot accumulate.
+var torso_rest_position: Vector3 = Vector3.ZERO
+var head_rest_position: Vector3 = Vector3.ZERO
 ## How long this voli's legs are for their height, from `stride_length_m`.
 var leg_length_scale: float = 1.0
 var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
@@ -94,7 +117,9 @@ var contact_platform_aim: Dictionary = {}
 ## rolls backward. The simulation still owns the cost and severity.
 var contact_recovery: String = "platform"
 
-## How much of a wall this blocker got up: `two`, `one`, or `none`.
+## Block silhouette vocabulary: `two` is a clean sealed wall, `one` is a late
+## reaching close, and `none` is a beaten/incomplete wall. These are descriptive
+## presentation states supplied by the resolver, not a second block decision.
 ##
 ## Carried as state for the same reason `contact_posture` is -- the resolver
 ## decided it and the court's job is to hand that verdict over, not to form a
@@ -139,6 +164,10 @@ var ready_stance: String = "defending":
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
 ## than being derived from state that does not exist.
 var expression: String = FaceExpressionsScript.NEUTRAL
+## Generated nodes are static between configure/expression changes. These
+## caches keep the per-frame pose path out of SceneTree.find_children().
+var _cosmetic_cache: Array[MeshInstance3D] = []
+var _face_feature_cache: Array[MeshInstance3D] = []
 ## Produce, colourway and coat, when somebody chose them rather than the id
 ## deciding. Empty means the hash, which is every generated voli.
 var appearance: Dictionary = {}
@@ -156,6 +185,13 @@ var has_facing: bool = false
 ## actor being a mannequin that swivels as one piece.
 var look_yaw: float = 0.0
 var look_pitch: float = 0.0
+## Ball attention arrives at the eyes before the mass of the head catches it.
+## These are presentation targets only; simulation and body facing never read
+## them. Action-specific safety poses (a dive chin tuck, for example) continue
+## to write `look_yaw`/`look_pitch` directly and remain authoritative.
+var _look_target_yaw: float = 0.0
+var _look_target_pitch: float = 0.0
+var _has_attention_target: bool = false
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
 ## `VolleyballPlayer.stride_length_m` is metres per *step*: the locomotion
@@ -190,6 +226,17 @@ var _floor_posture: String = "planted"
 var _floor_direction: Vector2 = Vector2.ZERO
 var _floor_remaining: float = 0.0
 var _floor_duration: float = 0.0
+## A short grounded handoff from the last authored contact pose into the gait.
+## Landing, floor recovery and stance transitions already own their continuity;
+## this state fills only the ordinary gap between those systems.
+var _last_contact_joints: Dictionary = {}
+var _last_contact_event: int = -1
+var _last_contact_phase: float = -1.0
+var _last_contact_performance: Dictionary = {}
+var _last_pose_was_contact: bool = false
+var _handoff_joints: Dictionary = {}
+var _handoff_remaining: float = 0.0
+var _handoff_duration: float = 0.0
 ## Which way this voli is travelling relative to the way they are facing, in
 ## radians: 0 straight ahead, PI a backpedal, plus or minus a right angle a
 ## lateral shuffle.
@@ -230,6 +277,10 @@ var _airborne_action: String = "default"
 ## Seconds remaining in the current landing, counting down from the action's own
 ## duration. Zero means the voli is on their feet.
 var _landing_remaining: float = 0.0
+## Local presentation time for breathing, weight shift and blinking. It advances
+## only while the actor is in the tree, and every resolver adds a stable player
+## offset so a court of twelve bodies never moves in lockstep.
+var _presentation_time_seconds: float = 0.0
 ## Whether the pose that just ran already put the feet on the floor itself, in
 ## which case `_ground_the_feet` must not do it a second time. Consumed on read.
 var _feet_already_grounded: bool = false
@@ -451,6 +502,13 @@ func configure(
 	physical_profile: Dictionary = {},
 ) -> void:
 	_ensure_node_bindings()
+	look_yaw = 0.0
+	look_pitch = 0.0
+	_look_target_yaw = 0.0
+	_look_target_pitch = 0.0
+	_has_attention_target = false
+	_handoff_remaining = 0.0
+	_last_pose_was_contact = false
 	player_id = p_player_id
 	voli_name = display_name
 	is_home_team = home_team
@@ -498,6 +556,8 @@ func configure(
 	_build_silhouette()
 	_apply_physical_profile(physical_profile)
 	torso_rest_scale = torso.scale
+	torso_rest_position = torso.position
+	head_rest_position = head.position
 	## Name and position. It used to read `name · 200 cm · R`, which spent both
 	## its fields on things the body already shows -- height in how tall the rig
 	## is drawn, handedness in which arm swings -- and never said who this voli
@@ -509,6 +569,45 @@ func configure(
 	identity_label.visible = false
 	apply_ui_palette(false)
 	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+	_refresh_surface_marks()
+
+
+## Reset presentation-only state without rebuilding meshes, materials, faces or
+## surface marks. Used when the same roster begins another rally.
+func reset_for_rally(position: Vector2, world_position: Vector3) -> void:
+	has_world_position = false
+	ground_speed_mps = 0.0
+	gait_blend = 0.0
+	stride_cycle = 0.0
+	_heading_travel_accumulator = Vector3.ZERO
+	_landing_remaining = 0.0
+	_floor_remaining = 0.0
+	_handoff_remaining = 0.0
+	_last_pose_was_contact = false
+	contact_posture = "planted"
+	contact_recovery = "platform"
+	contact_platform_aim.clear()
+	hide_cognition_cue()
+	clear_look()
+	set_tactical_position(position, world_position)
+	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+
+
+## The match already draws a stable blob shadow under every voli. Avoid making
+## the full articulated mesh a second animated shadow caster as well.
+func set_realtime_shadows_enabled(enabled: bool) -> void:
+	var setting := GeometryInstance3D.SHADOW_CASTING_SETTING_ON if enabled \
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for node in find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if mesh != null:
+			mesh.cast_shadow = setting
+
+
+func _refresh_surface_marks() -> void:
+	var renderer := get_node_or_null("SurfaceMarkRenderer3D")
+	if renderer != null and renderer.has_method("refresh"):
+		renderer.call("refresh")
 
 
 ## The centre of the forearm surface that a reception or dig is visibly played
@@ -555,6 +654,11 @@ func _hand_world_position(arm: Node3D) -> Vector3:
 	var elbow := arm.get_node_or_null("Elbow") as Node3D
 	if elbow == null:
 		return arm.global_position
+	## The wrist is seated at the exact endpoint the legacy inferred chain used.
+	## Its local rotation may turn the palm, but its origin preserves reach.
+	var wrist := elbow.get_node_or_null("Wrist") as Node3D
+	if wrist != null:
+		return wrist.global_position
 	var forearm_length := arm_bone_lengths.y * arm_length_scale
 	return elbow.global_transform * Vector3(0.0, -forearm_length, 0.0)
 
@@ -674,7 +778,9 @@ func arm_meshes() -> Array[MeshInstance3D]:
 	_ensure_node_bindings()
 	var out: Array[MeshInstance3D] = []
 	for arm in [left_arm, right_arm]:
-		for path in ["Mesh", "Joint", "Elbow/Mesh", "Elbow/Joint"]:
+		for path in [
+			"Mesh", "Joint", "Elbow/Mesh", "Elbow/Joint", "Elbow/Wrist/Palm"
+		]:
 			var mesh := arm.get_node_or_null(path) as MeshInstance3D
 			if mesh != null:
 				out.append(mesh)
@@ -706,6 +812,7 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 			ink_material.grow = true
 			ink_material.grow_amount = _ink_weight_for(mesh)
 			ink.material_override = ink_material
+	_refresh_surface_marks()
 
 
 ## How heavy a line this mesh takes.
@@ -794,6 +901,9 @@ func apply_ui_palette(light_mode: bool) -> void:
 		## Two bones, as the legs have been since the knee.
 		_apply_material_color(arm.get_node("Mesh"), skin_color)
 		_apply_material_color(arm.get_node("Elbow/Mesh"), skin_color)
+		var palm := arm.get_node_or_null("Elbow/Wrist/Palm") as MeshInstance3D
+		if palm != null:
+			_apply_material_color(palm, skin_color)
 		## The joints are skin too. Left out of this list they kept the default
 		## grey and turned every shoulder and elbow into a bead -- a worse read
 		## than the gap they were added to close.
@@ -892,6 +1002,7 @@ func apply_ui_palette(light_mode: bool) -> void:
 			_:
 				_apply_material_color(cosmetic, skin_color, part_alpha)
 	_apply_material_color(focus_ring, accent_color)
+	_refresh_surface_marks()
 
 
 func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
@@ -1211,6 +1322,12 @@ func set_highlighted(highlighted: bool) -> void:
 ## therefore whatever the frame already had -- the gait, mid-stride -- so a
 ## passer running to the ball keeps running and the platform arrives under them.
 ## The recovery's own progress, from a pose phase that also carries the approach.
+##
+## Reception vocabulary: `planted` is clean/settled; `moving` is an arriving
+## contact that retains its final adjustment step; `reaching` is a strained late
+## extension outside a comfortable platform; `off-axis` is awkward body geometry
+## with a compromised lateral platform. Each covers preparation, contact,
+## follow-through, and handoff to its recovery without resetting locomotion.
 func _recovery_clock(phase: float) -> float:
 	return clampf(
 		inverse_lerp(RECOVERY_START_PHASE, RECOVERY_END_PHASE, phase), 0.0, 1.0
@@ -1222,6 +1339,7 @@ func _apply_dig_posture(
 	drive: float = 0.0,
 	recovery_progress: float = 0.0,
 	contact_direction: Vector2 = Vector2.ZERO,
+	phase: float = 0.0,
 ) -> void:
 	var blend := clampf(weight, 0.0, 1.0)
 	var push := clampf(drive, 0.0, 1.0)
@@ -1511,6 +1629,13 @@ func _apply_dig_posture(
 	_set_elbow(right_arm, 0.0)
 	if blend < 0.999:
 		_blend_joints_toward(before, 1.0 - blend)
+	var arrival := ContactArrivalBiomechanicsScript.resolve(
+		phase, ground_speed_mps, stride_cycle, contact_posture
+	)
+	_blend_lower_body_toward(
+		before, 1.0 - float(arrival.lower_body_weight)
+	)
+	body_pivot.rotation.z += deg_to_rad(float(arrival.momentum_roll_degrees))
 	_ground_the_dig(blend)
 	## Recovery starts after contact and is layered over a properly grounded dig.
 	## That ordering matters: grounding a fallen pose by its shoe afterwards lifts
@@ -1745,9 +1870,56 @@ func _blend_joints_toward(captured: Dictionary, amount: float) -> void:
 	)
 
 
+## Preserve the live support step while the contact apparatus prepares above it.
+## This deliberately excludes root court position: locomotion remains its sole
+## owner, and the action can only blend joint presentation.
+func _blend_lower_body_toward(captured: Dictionary, amount: float) -> void:
+	var t := clampf(amount, 0.0, 1.0)
+	left_leg.rotation_degrees = left_leg.rotation_degrees.lerp(
+		Vector3(captured.left_leg), t
+	)
+	right_leg.rotation_degrees = right_leg.rotation_degrees.lerp(
+		Vector3(captured.right_leg), t
+	)
+	var left_knee := left_leg.get_node("Knee") as Node3D
+	var right_knee := right_leg.get_node("Knee") as Node3D
+	left_knee.rotation_degrees = left_knee.rotation_degrees.lerp(
+		Vector3(captured.left_knee), t
+	)
+	right_knee.rotation_degrees = right_knee.rotation_degrees.lerp(
+		Vector3(captured.right_knee), t
+	)
+
+
+func _blend_upper_body_toward(captured: Dictionary, amount: float) -> void:
+	var t := clampf(amount, 0.0, 1.0)
+	body_pivot.rotation = body_pivot.rotation.lerp(
+		Vector3(captured.pivot_rotation), t
+	)
+	left_arm.rotation_degrees = left_arm.rotation_degrees.lerp(
+		Vector3(captured.left_arm), t
+	)
+	right_arm.rotation_degrees = right_arm.rotation_degrees.lerp(
+		Vector3(captured.right_arm), t
+	)
+	var left_elbow := left_arm.get_node("Elbow") as Node3D
+	var right_elbow := right_arm.get_node("Elbow") as Node3D
+	left_elbow.rotation_degrees = left_elbow.rotation_degrees.lerp(
+		Vector3(captured.left_elbow), t
+	)
+	right_elbow.rotation_degrees = right_elbow.rotation_degrees.lerp(
+		Vector3(captured.right_elbow), t
+	)
+
+
 ## Pure directional plan for a recovery. Keeping this separate from the rig
 ## makes "which way did they go?" a testable fact while the joint posing below
 ## remains free to change with the model.
+##
+## Recovery vocabulary: `platform` is a controlled on-feet continuation; `knee`
+## is a low but supported recovery; a planted/off-axis `fall` rolls sideways; a
+## moving/reaching `fall` slides forward; `blown_away` absorbs a hard impact
+## backward before gathering the legs and returning to stance.
 static func recovery_motion(
 	recovery_state: String,
 	posture: String,
@@ -1857,9 +2029,15 @@ static func recovery_motion(
 		"fall":
 			if posture in ["moving", "reaching"]:
 				mode = "slide_forward"
-				pitch = deg_to_rad(-56.0) * down
-				body_roll = deg_to_rad(7.0) * side * roll
-				offset.z = -0.48 * travel
+				# A slide still has to hand back a standing body. `rise` begins only
+				# after the chest and hips have reached the floor, then unwinds the
+				# presentation overlay without changing simulation position.
+				# Preserve the established full-travel read through phase 0.82; only
+				# the final hand-back unwinds this local presentation displacement.
+				var slide_hold := 1.0 - smoothstep(0.84, 1.0, recovery)
+				pitch = deg_to_rad(-56.0) * down * slide_hold
+				body_roll = deg_to_rad(7.0) * side * roll * slide_hold
+				offset.z = -0.48 * travel * slide_hold
 			else:
 				mode = "roll_sideways"
 				## A full turn, because the roll ends on the feet. The old
@@ -2189,6 +2367,29 @@ func _settle_to_floor(floor_height: float, hips: Vector3) -> void:
 	body_pivot.position.y += floor_height - _lowest_body_point()
 
 
+## A pre-contact dive reaches the floor before recovery has a non-zero clock,
+## leaving that solver no settlement to apply at phase zero. Clamp only actual
+## penetration: forward commitment and airborne height remain untouched, while
+## no hand, knee, or shoe is allowed through the court.
+func _keep_above_floor(floor_height: float) -> void:
+	# Nested arm/leg transforms are lazily propagated. A short convergence loop
+	# lets the next measurement observe the previous lift, just as the crouch
+	# solver iterates after composing its nested joints.
+	for _pass in 4:
+		_force_transform_tree(body_pivot)
+		var lowest := _lowest_body_point()
+		if lowest >= floor_height - 0.0005:
+			break
+		body_pivot.position.y += floor_height - lowest
+
+
+func _force_transform_tree(node: Node) -> void:
+	if node is Node3D:
+		(node as Node3D).force_update_transform()
+	for child in node.get_children():
+		_force_transform_tree(child)
+
+
 ## Where the hips sit relative to the actor.
 ##
 ## **Read from the leg roots, which are the hip joint.** This used to read the
@@ -2242,22 +2443,34 @@ func _lowest_body_point() -> float:
 ## as a neck goes and no further; the body has to do the rest.
 func look_toward(world_yaw: float, pitch_degrees: float = 0.0) -> void:
 	var relative := angle_difference(facing_yaw, world_yaw)
-	look_yaw = clampf(
+	_look_target_yaw = clampf(
 		relative,
 		-deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
 		deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
 	)
-	look_pitch = deg_to_rad(clampf(
+	_look_target_pitch = deg_to_rad(clampf(
 		pitch_degrees, -HEAD_PITCH_LIMIT_DEGREES, HEAD_PITCH_LIMIT_DEGREES
 	))
-	_apply_head_look()
+	_has_attention_target = true
 
 
 ## Forget the target and face straight ahead again.
 func clear_look() -> void:
-	look_yaw = 0.0
-	look_pitch = 0.0
-	_apply_head_look()
+	_look_target_yaw = 0.0
+	_look_target_pitch = 0.0
+	_has_attention_target = true
+
+
+func _advance_head_attention() -> void:
+	if not _has_attention_target:
+		return
+	var advanced := CoreVoliPerformanceScript.attention_step(
+		Vector2(look_yaw, look_pitch),
+		Vector2(_look_target_yaw, _look_target_pitch),
+		get_process_delta_time(),
+	)
+	look_yaw = advanced.x
+	look_pitch = advanced.y
 
 
 func _apply_head_look() -> void:
@@ -2679,8 +2892,9 @@ func _apply_torso_deformation(
 			compression = 1.0 - smoothstep(-0.45, 0.05, phase)
 			extension = smoothstep(-0.08, 0.55, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
 		RallyEventModel.EventType.ATTACK:
-			compression = smoothstep(-0.78, -0.48, phase) * (1.0 - smoothstep(-0.30, -0.04, phase))
-			extension = smoothstep(-0.30, 0.02, phase) * (1.0 - smoothstep(0.48, 0.92, phase))
+			## Applied after the joint solve, where the connected head and shoulder
+			## roots can travel with the torso instead of being reset underneath it.
+			pass
 		RallyEventModel.EventType.BLOCK:
 			compression = 1.0 - smoothstep(-0.58, -0.18, phase)
 			extension = smoothstep(-0.28, 0.08, phase) * (1.0 - smoothstep(0.55, 0.95, phase))
@@ -2721,36 +2935,156 @@ func _body_motion_response() -> float:
 func _apply_secondary_body_motion(
 	event_type: int, phase: float, contact_direction: Vector2,
 	action_context: Dictionary,
+) -> Dictionary:
+	var performance := CoreVoliPerformanceScript.resolve(
+		event_type, phase, body_type, dominant_hand, contact_direction,
+		action_context, block_arms, _body_motion_response(),
+	)
+	body_pivot.rotation.z += deg_to_rad(float(performance.body_roll_degrees))
+	body_pivot.position.x += float(performance.lateral_metres) * body_height_scale
+	# The head counterweight is deliberately small and added after the head's
+	# actual gaze. It changes the read of force without choosing what is watched.
+	head.rotation.x += deg_to_rad(float(performance.head_pitch_degrees))
+	head.rotation.z += deg_to_rad(float(performance.head_roll_degrees))
+	return performance
+
+
+func _restore_passive_anatomy() -> void:
+	for cosmetic in _cosmetics():
+		if not cosmetic.has_meta("performance_rest_rotation"):
+			continue
+		cosmetic.rotation = Vector3(cosmetic.get_meta("performance_rest_rotation"))
+		cosmetic.position = Vector3(cosmetic.get_meta("performance_rest_position"))
+
+
+func _apply_passive_anatomy(performance: Dictionary, weight: float = 1.0) -> void:
+	var w := clampf(weight, 0.0, 1.0)
+	for cosmetic in _cosmetics():
+		if not cosmetic.has_meta("performance_rest_rotation"):
+			continue
+		var angles := CoreVoliPerformanceScript.passive_response(
+			body_type, str(cosmetic.name), performance, dominant_hand
+		) * w
+		if angles.is_zero_approx():
+			continue
+		var rest_rotation := Vector3(cosmetic.get_meta("performance_rest_rotation"))
+		var rest_position := Vector3(cosmetic.get_meta("performance_rest_position"))
+		var root := Vector3(cosmetic.get_meta("performance_root_local", Vector3.ZERO))
+		var rest_basis := Basis.from_euler(rest_rotation)
+		var scaled_root := root * cosmetic.scale
+		var moved_rotation := rest_rotation + Vector3(
+			deg_to_rad(angles.x), deg_to_rad(angles.y), deg_to_rad(angles.z)
+		)
+		var moved_basis := Basis.from_euler(moved_rotation)
+		cosmetic.rotation = moved_rotation
+		# Preserve the attachment point while the free end follows through.
+		cosmetic.position = rest_position \
+			+ rest_basis * scaled_root - moved_basis * scaled_root
+
+
+func _apply_action_handoff() -> void:
+	if _landing_remaining > 0.0 or _floor_remaining > 0.0:
+		_handoff_remaining = 0.0
+		_last_pose_was_contact = false
+		return
+	if _last_pose_was_contact:
+		_last_pose_was_contact = false
+		if _last_contact_phase >= 0.35 and not _last_contact_joints.is_empty():
+			_handoff_joints = _last_contact_joints.duplicate(true)
+			_handoff_duration = CoreVoliPerformanceScript.handoff_seconds(
+				_last_contact_event
+			)
+			_handoff_remaining = _handoff_duration
+	if _handoff_remaining <= 0.0 or _handoff_joints.is_empty():
+		return
+	var progress := 1.0 - _handoff_remaining / maxf(_handoff_duration, 0.0001)
+	var weight := CoreVoliPerformanceScript.handoff_weight(progress)
+	_blend_joints_toward(_handoff_joints, weight)
+	_apply_passive_anatomy(_last_contact_performance, weight)
+	_handoff_remaining = maxf(
+		_handoff_remaining - get_process_delta_time(), 0.0
+	)
+
+
+## Quiet life under the action layer. The biomechanics resolver bounds every
+## amplitude; this weight removes it continuously as locomotion appears and
+## suppresses it completely for a contact actor.
+func _apply_idle_motion(is_contact_actor: bool) -> void:
+	var weight := (1.0 - gait_blend) * (0.0 if is_contact_actor else 1.0)
+	if weight <= 0.0001:
+		return
+	var idle := IdleBiomechanicsScript.resolve(
+		_presentation_time_seconds, player_id, ready_stance
+	)
+	body_pivot.position.y += float(idle.rise_metres) * weight * body_height_scale
+	body_pivot.position.x += float(idle.lateral_metres) * weight * body_height_scale
+	body_pivot.rotation.z += deg_to_rad(float(idle.torso_roll_degrees) * weight)
+	## Chest expansion is small and applied over the silhouette's authored scale.
+	body_pivot.scale.y *= lerpf(1.0, float(idle.torso_scale_y), weight)
+	var knee_add := float(idle.knee_degrees) * weight
+	for leg in [left_leg, right_leg]:
+		var knee := leg.get_node_or_null("Knee") as Node3D
+		if knee != null:
+			knee.rotation_degrees.x += knee_add
+	var arm_lag := float(idle.arm_lag_degrees) * weight
+	left_arm.rotation_degrees.x += arm_lag
+	right_arm.rotation_degrees.x -= arm_lag
+
+
+## Add the commitment and flight that precede a resolved floor recovery. The
+## recovery model still owns contact-to-floor-to-standing; this overlay supplies
+## the missing push toward the ball before phase zero.
+func _apply_dive_receive_overlay(
+	phase: float, contact_direction: Vector2
 ) -> void:
-	var response := _body_motion_response()
-	var handed := -1.0 if dominant_hand == "Left" else 1.0
-	var roll_degrees := 0.0
-	var lateral_shift := 0.0
-	match event_type:
-		RallyEventModel.EventType.ATTACK:
-			var load := smoothstep(-0.78, -0.42, phase) * (1.0 - smoothstep(-0.22, 0.02, phase))
-			var follow := smoothstep(-0.12, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
-			roll_degrees = handed * (-4.5 * load + 7.5 * follow)
-			lateral_shift = handed * (-0.018 * load + 0.030 * follow)
-		RallyEventModel.EventType.SERVE:
-			var coil := smoothstep(-0.72, -0.34, phase) * (1.0 - smoothstep(-0.12, 0.08, phase))
-			var release := smoothstep(-0.14, 0.16, phase) * (1.0 - smoothstep(0.62, 0.94, phase))
-			roll_degrees = handed * (-3.5 * coil + 6.0 * release)
-			lateral_shift = handed * 0.020 * (release - coil)
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
-			var commit := smoothstep(-0.30, 0.18, phase) * (1.0 - smoothstep(0.70, 1.0, phase))
-			roll_degrees = clampf(contact_direction.x, -1.0, 1.0) * 6.5 * commit
-			lateral_shift = clampf(contact_direction.x, -1.0, 1.0) * 0.026 * commit
-		RallyEventModel.EventType.SET:
-			var release := smoothstep(-0.18, 0.22, phase) * (1.0 - smoothstep(0.72, 1.0, phase))
-			var back := -1.0 if bool(action_context.get("back_set", false)) else 1.0
-			roll_degrees = back * handed * 2.8 * release
-		RallyEventModel.EventType.BLOCK:
-			var press := smoothstep(-0.25, 0.10, phase) * (1.0 - smoothstep(0.58, 0.92, phase))
-			if block_arms != &"two":
-				roll_degrees = (1.0 if contact_direction.x > 0.0 else -1.0) * 4.0 * press
-	body_pivot.rotation.z += deg_to_rad(roll_degrees * response)
-	body_pivot.position.x += lateral_shift * response * body_height_scale
+	var diving := DefenseActionBiomechanicsScript.is_diving(
+		contact_posture, contact_recovery
+	)
+	var dive := DefenseActionBiomechanicsScript.resolve(phase, diving)
+	if float(dive.dive_weight) <= 0.0001:
+		return
+	body_pivot.position.z -= float(dive.forward_metres) * body_height_scale
+	body_pivot.position.y -= float(dive.drop_metres) * body_height_scale
+	body_pivot.rotation.x += float(dive.torso_pitch_radians)
+	var trail_leg := right_leg if contact_direction.x <= 0.0 else left_leg
+	trail_leg.rotation_degrees.x += float(dive.trail_hip_degrees)
+
+
+## Blink and pupil drift are overlays on the built expression, never new faces.
+## At contact the eyes remain open; the choreography spec makes that a hard
+## presentation rule rather than a probabilistic coincidence.
+func _apply_face_micro_motion(is_contact_actor: bool, phase: float) -> void:
+	var suppress_blink := is_contact_actor and absf(phase) < 0.22
+	var blink := IdleBiomechanicsScript.blink_weight(
+		_presentation_time_seconds, player_id, suppress_blink
+	)
+	var pupil := IdleBiomechanicsScript.pupil_offset(
+		_presentation_time_seconds, player_id
+	)
+	var attention := Vector2.ZERO
+	if _has_attention_target:
+		attention = CoreVoliPerformanceScript.pupil_attention_offset(
+			Vector2(look_yaw, look_pitch),
+			Vector2(_look_target_yaw, _look_target_pitch),
+		)
+	var head_radius := float(Dictionary(silhouette.get("head", {})).get(
+		"radius", 0.13
+	))
+	for feature in _face_features():
+		var base_scale: Vector3 = feature.get_meta(
+			"micro_base_scale", Vector3.ONE
+		)
+		var base_position: Vector3 = feature.get_meta(
+			"micro_base_position", feature.position
+		)
+		feature.scale = base_scale
+		feature.position = base_position
+		if str(feature.name).begins_with("Eye") \
+				or str(feature.name).begins_with("Pupil"):
+			feature.scale.y = base_scale.y * lerpf(1.0, 0.08, blink)
+		if str(feature.name).begins_with("Pupil") and blink < 0.92:
+			feature.position.x += (pupil.x + attention.x) * head_radius
+			feature.position.y += (pupil.y + attention.y) * head_radius
 
 
 func set_pose(
@@ -2762,6 +3096,20 @@ func set_pose(
 	action_context: Dictionary = {},
 ) -> void:
 	_ensure_node_bindings()
+	_restore_passive_anatomy()
+	## Presentation channels that translate structural anchors are rewritten from
+	## the configured body on every frame. Without this reset a chest rotation or
+	## mass extension would be integrated repeatedly and the rig would drift.
+	if torso_rest_position != Vector3.ZERO:
+		torso.position = torso_rest_position
+	if head_rest_position != Vector3.ZERO:
+		head.position = head_rest_position
+	for wrist in [left_wrist, right_wrist]:
+		if wrist != null:
+			wrist.rotation = Vector3.ZERO
+	if is_inside_tree():
+		_presentation_time_seconds += get_process_delta_time()
+	_advance_head_attention()
 	_track_landing(event_type, elevation)
 	var lift := clampf(elevation, 0.0, 1.0) * 0.82
 	## Every joint of the walk-to-run comes from `GaitBiomechanics`, which knows
@@ -2864,6 +3212,7 @@ func set_pose(
 	var carried_elbow := maxf(READY_ELBOW_BEND, float(gait.elbow_degrees))
 	_set_elbow(left_arm, carried_elbow)
 	_set_elbow(right_arm, carried_elbow)
+	_apply_idle_motion(is_contact_actor)
 	## The landing sits on top of the gait and under the contact pose: a voli who
 	## has just come down is absorbing it whatever else they are doing, and a voli
 	## who is playing the ball right now is doing that instead.
@@ -2955,13 +3304,35 @@ func set_pose(
 			## The net runs along z = 0, so facing it is a matter of which side
 			## the blocker stands on, and nothing about the ball enters into it.
 			_turn_toward(0.0 if position.z > 0.0 else PI)
+		elif event_type == RallyEventModel.EventType.SET \
+				and bool(action_context.get("back_set", false)):
+			## The defining fact of a back set is that the ball leaves behind the
+			## setter. Turning the whole actor toward that flight converts it into a
+			## front set before the arch and hand carry can be read.
+			pass
 		elif phase >= _square_up_phase(event_type) or not is_contact_actor:
 			_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
 		_ground_the_feet(elevation, gait_knee)
+		_apply_action_handoff()
+		_apply_face_micro_motion(false, phase)
 		return
+	_handoff_remaining = 0.0
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
 	var guide_arm := right_arm if dominant_hand == "Left" else left_arm
+	var diving_floor_guard := event_type in [
+		RallyEventModel.EventType.RECEPTION,
+		RallyEventModel.EventType.DIG,
+		RallyEventModel.EventType.ATTACK_COVERAGE,
+	] and DefenseActionBiomechanicsScript.is_diving(
+		contact_posture, contact_recovery
+	)
+	var contact_court_floor := 0.0
+	if diving_floor_guard:
+		# Ground reference after the ordinary gait/stance has been posed, before
+		# any action-specific reach or fall can lower a limb through it.
+		_force_transform_tree(body_pivot)
+		contact_court_floor = _lowest_body_point()
 	match event_type:
 		RallyEventModel.EventType.SERVE:
 			## Every joint comes from `ServeBiomechanics`, for the same reason the
@@ -2970,11 +3341,18 @@ func set_pose(
 			## swung, and stood frozen with their arm overhead for the whole
 			## outgoing flight -- no follow-through, no weight transfer, no toss
 			## arm coming down, and no legs at all.
-			var toss := ServeBiomechanicsScript.resolve(
+			var toss := ServeActionBiomechanicsScript.resolve(
 				phase, -1.0 if dominant_hand == "Left" else 1.0,
 				float(action_context.get("action_power", 0.0)),
+				str(action_context.get("serve_style", "Standing")),
+				int(action_context.get(
+					"serve_routine_variant",
+					ServeActionBiomechanicsScript.routine_variant(player_id),
+				)),
 			)
 			body_pivot.rotation.x = float(toss.torso_pitch_radians)
+			body_pivot.position.y += float(toss.get("rise_metres", 0.0)) \
+				* body_height_scale
 			## The trunk winding against the facing, applied here rather than by
 			## turning the actor -- `_turn_toward` is where the voli is looking.
 			body_pivot.rotation.y += deg_to_rad(float(toss.torso_twist_degrees))
@@ -2990,7 +3368,8 @@ func set_pose(
 			## carries the elbow out away from the ribs on the way back and brings
 			## the hand across the body on the way down.
 			striking_arm.rotation_degrees = Vector3(
-				float(toss.striking_shoulder_degrees), 0.0,
+				float(toss.striking_shoulder_degrees),
+				float(toss.get("striking_internal_rotation_degrees", 0.0)),
 				float(toss.striking_abduction_degrees)
 			)
 			_set_elbow(striking_arm, float(toss.striking_elbow_degrees))
@@ -3024,6 +3403,10 @@ func set_pose(
 			## there when the ball is. Before the blend starts the gait owns the
 			## arms, which is what running looks like.
 			if phase >= PLATFORM_PHASE:
+				# Commitment is applied before posture/recovery grounding. Applied
+				# afterwards, its vertical offset pushed an already-settled body
+				# through the court and defeated `_settle_to_floor`.
+				_apply_dive_receive_overlay(phase, contact_direction)
 				_apply_dig_posture(
 					smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase),
 					smoothstep(PLATFORM_DRIVE_START, PLATFORM_DRIVE_END, phase),
@@ -3045,6 +3428,7 @@ func set_pose(
 					## written against a span that means this, and were being fed
 					## one that did not.
 					_recovery_clock(phase), contact_direction,
+					phase,
 				)
 
 		RallyEventModel.EventType.SET:
@@ -3064,6 +3448,7 @@ func set_pose(
 			## `under the hands` is the reason, not the posture, because the
 			## posture only says they stayed down -- it cannot say *why*, and the
 			## why is what decides whether the forearms or the fingers play it.
+			var before_set := _capture_joints()
 			var set_posture := SetBiomechanicsScript.POSTURE_STANDING
 			if str(action_context.get("set_posture", "")) == "jump":
 				set_posture = SetBiomechanicsScript.POSTURE_JUMP
@@ -3093,6 +3478,21 @@ func set_pose(
 			right_arm.rotation_degrees = Vector3(set_pitch, 0.0, -set_flare)
 			_set_elbow(left_arm, float(push.elbow_degrees))
 			_set_elbow(right_arm, float(push.elbow_degrees))
+			## Hands can gather while the final adjustment step is still active.
+			## The live gait supplies the captured joints; the shared arrival solve
+			## progressively hands them to the existing set biomechanics.
+			var set_arrival := ContactArrivalBiomechanicsScript.resolve(
+				phase, ground_speed_mps, stride_cycle
+			)
+			_blend_upper_body_toward(
+				before_set, 1.0 - float(set_arrival.upper_body_weight)
+			)
+			_blend_lower_body_toward(
+				before_set, 1.0 - float(set_arrival.lower_body_weight)
+			)
+			body_pivot.rotation.z += deg_to_rad(
+				float(set_arrival.momentum_roll_degrees)
+			)
 		RallyEventModel.EventType.ATTACK:
 			## **The approach, which used to be a jog.**
 			##
@@ -3140,7 +3540,11 @@ func set_pose(
 			## plus a shoulder shrug that arrives after the arms are already up.
 			## The legs kick forward, not back -- a blocker leaves the floor from
 			## a squat and the shins swing under and ahead of them on the way up.
-			var wall := BlockBiomechanicsScript.resolve(phase)
+			var wall := BlockBiomechanicsScript.resolve(
+				phase,
+				StringName(str(action_context.get("block_response", "wall"))),
+				-1.0 if contact_direction.x < 0.0 else 1.0,
+			)
 			body_pivot.rotation.x = float(wall.torso_pitch_radians)
 			left_leg.rotation_degrees.x = float(wall.lead_hip_degrees)
 			right_leg.rotation_degrees.x = float(wall.trail_hip_degrees)
@@ -3183,6 +3587,8 @@ func set_pose(
 				&"none":
 					left_reach = trailing
 					right_reach = trailing
+			left_reach += float(wall.get("left_shoulder_delta_degrees", 0.0))
+			right_reach += float(wall.get("right_shoulder_delta_degrees", 0.0))
 			left_arm.rotation_degrees = Vector3(left_reach, 0.0, -spread)
 			right_arm.rotation_degrees = Vector3(right_reach, 0.0, spread)
 			## Straight at the press, and deliberately so. A block that bends at
@@ -3192,17 +3598,33 @@ func set_pose(
 			## nearly the same place, and the elbow is the only thing telling
 			## them apart. It folds again either side of the press, which is the
 			## ready posture a blocker waits in.
-			_set_elbow(left_arm, float(wall.elbow_degrees))
-			_set_elbow(right_arm, float(wall.elbow_degrees))
+			_set_elbow(left_arm, float(wall.elbow_degrees) \
+				+ float(wall.get("left_elbow_delta_degrees", 0.0)))
+			_set_elbow(right_arm, float(wall.elbow_degrees) \
+				+ float(wall.get("right_elbow_delta_degrees", 0.0)))
+			body_pivot.rotation.z += deg_to_rad(float(
+				wall.get("response_roll_degrees", 0.0)
+			))
 	## Last, after the primary joint solution, so anticipation and follow-through
 	## shift the completed toy-body silhouette instead of fighting the action's
 	## biomechanics for ownership of individual limbs.
-	_apply_secondary_body_motion(event_type, phase, contact_direction, action_context)
+	var performance := _apply_secondary_body_motion(
+		event_type, phase, contact_direction, action_context
+	)
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)
+	if diving_floor_guard:
+		_keep_above_floor(contact_court_floor)
 	## After the grounding, because the pose this hands over is the finished one.
 	_track_floor_recovery(event_type, phase, is_contact_actor)
+	_apply_face_micro_motion(true, phase)
+	_apply_passive_anatomy(performance)
+	_last_contact_joints = _capture_joints()
+	_last_contact_event = event_type
+	_last_contact_phase = phase
+	_last_contact_performance = performance.duplicate(true)
+	_last_pose_was_contact = true
 
 
 ## Whether this rig is being lit or being *printed*.
@@ -3737,6 +4159,8 @@ func _ensure_node_bindings() -> void:
 	head = get_node("BodyPivot/Head")
 	left_arm = get_node("BodyPivot/LeftArm")
 	right_arm = get_node("BodyPivot/RightArm")
+	left_wrist = get_node_or_null("BodyPivot/LeftArm/Elbow/Wrist")
+	right_wrist = get_node_or_null("BodyPivot/RightArm/Elbow/Wrist")
 	left_leg = get_node("BodyPivot/LeftLeg")
 	right_leg = get_node("BodyPivot/RightLeg")
 	shadow = get_node("Shadow")
@@ -3806,6 +4230,17 @@ func _build_silhouette() -> void:
 		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
 		fore_mesh.mesh = BodyTypeModelsScript.build_mesh(fore_spec)
 		fore_mesh.position = Vector3(0.0, -fore_length * 0.5, 0.0)
+		## A small asymmetric palm at the existing forearm endpoint. Its origin is
+		## the old inferred hand position, so articulation adds orientation without
+		## silently adding reach.
+		var wrist := elbow.get_node_or_null("Wrist") as Node3D
+		if wrist != null:
+			wrist.position = Vector3(0.0, -fore_length, 0.0)
+			wrist.rotation = Vector3.ZERO
+			var palm := wrist.get_node_or_null("Palm") as MeshInstance3D
+			if palm != null:
+				var hand_width := float(arm_spec.get("bottom_radius", 0.08)) / 0.08
+				palm.scale = Vector3(0.78, 1.08, 0.46) * hand_width
 		## The shoulder and the elbow, as joints rather than as the gap between
 		## two pills. Rounding the limb ends stopped them reading as rods and left
 		## the other half of the problem standing: a bent elbow opens a wedge on
@@ -4055,6 +4490,7 @@ func _build_cosmetics() -> void:
 		## marking. Nothing keeps a reference to these generated meshes, so remove
 		## them in the same operation that replaces them.
 		existing.free()
+	_cosmetic_cache.clear()
 	for raw_part in silhouette.get("extras", []):
 		var part: Dictionary = raw_part
 		var parent := get_node_or_null(str(part.get("parent", "BodyPivot")))
@@ -4086,15 +4522,21 @@ func _build_cosmetics() -> void:
 		if part.has("ink"):
 			instance.set_meta("ink", str(part.ink))
 		parent.add_child(instance)
+		_cosmetic_cache.append(instance)
+		instance.set_meta("performance_rest_rotation", instance.rotation)
+		instance.set_meta("performance_rest_position", instance.position)
+		var passive_name := str(instance.name).to_lower()
+		var root := Vector3.ZERO
+		if "tail" in passive_name or "ear" in passive_name \
+				or "stem" in passive_name or "shoot" in passive_name \
+				or "crest" in passive_name or "calyx" in passive_name \
+				or "cap" in passive_name:
+			root = Vector3(0.0, instance.mesh.get_aabb().size.y * 0.5, 0.0)
+		instance.set_meta("performance_root_local", root)
 
 
 func _cosmetics() -> Array[MeshInstance3D]:
-	var found: Array[MeshInstance3D] = []
-	for node in find_children("*", "MeshInstance3D", true, false):
-		var mesh_node := node as MeshInstance3D
-		if mesh_node != null and mesh_node.has_meta("cosmetic"):
-			found.append(mesh_node)
-	return found
+	return _cosmetic_cache
 
 
 ## Two eyes and a seven-segment mouth, parented to the head so they travel with
@@ -4108,6 +4550,7 @@ func _build_face() -> void:
 	var face := head.get_node_or_null("Face")
 	if face != null:
 		face.free()
+	_face_feature_cache.clear()
 	face = Node3D.new()
 	face.name = "Face"
 	head.add_child(face)
@@ -4127,9 +4570,14 @@ func _build_face() -> void:
 		instance.position = part.get("position", Vector3.ZERO)
 		instance.rotation_degrees = part.get("rotation", Vector3.ZERO)
 		instance.set_meta("face", true)
+		## Transient blinks and saccades restore these authored transforms every
+		## frame. The underlying expression remains a stable data choice.
+		instance.set_meta("micro_base_scale", instance.scale)
+		instance.set_meta("micro_base_position", instance.position)
 		if part.has("ink"):
 			instance.set_meta("ink", str(part.ink))
 		face.add_child(instance)
+		_face_feature_cache.append(instance)
 
 
 ## Some body types already have something where the mouth goes.
@@ -4194,15 +4642,7 @@ func _mouth_override() -> Dictionary:
 
 
 func _face_features() -> Array[MeshInstance3D]:
-	var found: Array[MeshInstance3D] = []
-	var face := head.get_node_or_null("Face") if head != null else null
-	if face == null:
-		return found
-	for node in face.get_children():
-		var mesh_node := node as MeshInstance3D
-		if mesh_node != null:
-			found.append(mesh_node)
-	return found
+	return _face_feature_cache
 
 
 ## Swap the face. Rebuilds rather than reposing, because nine small boxes is
@@ -4280,6 +4720,88 @@ func cognition_head_anchor() -> Vector3:
 	return global_transform.affine_inverse() * crown
 
 
+## Carry attack deformation through the connected upper-body silhouette. The
+## torso changes volume, while the head and shoulder roots travel with that
+## volume; limb lengths and the actor's authoritative elevation stay untouched.
+func _apply_attack_connected_mass(swing: Dictionary) -> void:
+	var response := _body_motion_response()
+	var height_scale := lerpf(
+		1.0, float(swing.get("mass_height_scale", 1.0)), response
+	)
+	var width_scale := lerpf(
+		1.0, float(swing.get("mass_width_scale", 1.0)), response
+	)
+	var depth_scale := lerpf(
+		1.0, float(swing.get("mass_depth_scale", 1.0)), response
+	)
+	var anchor_scale := lerpf(
+		1.0, float(swing.get("anchor_height_scale", 1.0)), response
+	)
+	torso.scale = Vector3(
+		torso_rest_scale.x * width_scale,
+		torso_rest_scale.y * height_scale,
+		torso_rest_scale.z * depth_scale,
+	)
+	torso.position.y = hip_offset.y \
+		+ (torso_rest_position.y - hip_offset.y) * anchor_scale
+	head.position.y = hip_offset.y \
+		+ (head_rest_position.y - hip_offset.y) * anchor_scale
+	for arm in [left_arm, right_arm]:
+		arm.position.y = hip_offset.y \
+			+ (arm.position.y - hip_offset.y) * anchor_scale
+		arm.position.x *= width_scale
+
+
+## Let the upper silhouette keep using the legacy BodyPivot so face, ears,
+## garments and every body-type attachment remain one connected mass. The legs
+## counter-rotate around the hip centre to show the pelvis carrying less of the
+## chest wind-up. This is the missing pelvis/ribcage separation without a new
+## skeleton, reparenting existing anatomy, or moving the actor root.
+func _apply_attack_pelvis_delta(delta_rotation: Vector3) -> void:
+	var delta := Basis.from_euler(delta_rotation)
+	var anchor := Vector3(hip_offset.x, hip_offset.y, 0.0)
+	for part in [left_leg, right_leg]:
+		var posed: Transform3D = part.transform
+		posed.origin = anchor + delta * (posed.origin - anchor)
+		posed.basis = delta * posed.basis
+		part.transform = posed
+
+
+func _apply_attack_performance(
+	swing: Dictionary,
+	striking_arm: Node3D,
+	guide_arm: Node3D,
+	lead_leg: Node3D,
+	trail_leg: Node3D,
+	chest_delta: Vector3,
+) -> void:
+	_apply_attack_connected_mass(swing)
+	var striking_side := -1.0 if striking_arm == left_arm else 1.0
+	var guide_side := -striking_side
+	var strike_offset := Vector3(swing.get(
+		"striking_shoulder_offset", Vector3.ZERO
+	))
+	var guide_offset := Vector3(swing.get(
+		"guide_shoulder_offset", Vector3.ZERO
+	))
+	striking_arm.position += Vector3(
+		striking_side * strike_offset.x, strike_offset.y, strike_offset.z
+	)
+	guide_arm.position += Vector3(
+		guide_side * guide_offset.x, guide_offset.y, guide_offset.z
+	)
+	_set_ankle(lead_leg, float(swing.get("lead_ankle_degrees", 0.0)))
+	_set_ankle(trail_leg, float(swing.get("trail_ankle_degrees", 0.0)))
+	var wrist := left_wrist if striking_arm == left_arm else right_wrist
+	if wrist != null:
+		wrist.rotation_degrees = Vector3(
+			float(swing.get("wrist_flex_degrees", 0.0)),
+			float(swing.get("forearm_pronation_degrees", 0.0)),
+			float(swing.get("wrist_deviation_degrees", 0.0)),
+		)
+	_apply_attack_pelvis_delta(chest_delta)
+
+
 ## The swing itself, from the plant onward.
 ##
 ## Split out of the ATTACK branch when the approach arrived in front of it:
@@ -4302,19 +4824,37 @@ func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
 	## Kept in its own module rather than inline because it is the only
 	## pose in the game complex enough that it cannot be checked by
 	## reading it, and a pure function of phase is one the suite can test.
-	var swing := SpikeBiomechanics.resolve(
+	var swing := AttackActionBiomechanicsScript.resolve(
 		phase, -1.0 if dominant_hand == "Left" else 1.0,
 		float(action_context.get("action_power", 0.0)),
+		str(action_context.get("attack_type", "Power swing")),
+		StringName(str(action_context.get("attack_adjustment", "clean"))),
 	)
-	body_pivot.rotation.x = float(swing.torso_pitch_radians)
-	## Hip-shoulder separation. Applied here rather than by turning the
-	## actor, because `_turn_toward` is where the voli is *looking* and
-	## this is the trunk winding against it.
-	body_pivot.rotation.y += deg_to_rad(float(swing.torso_twist_degrees))
+	var total_pitch := float(swing.torso_pitch_radians)
+	var total_twist_degrees := float(swing.torso_twist_degrees)
+	var pelvis_pitch := total_pitch * float(swing.get(
+		"pelvis_pitch_share", 1.0
+	))
+	var pelvis_twist_degrees := total_twist_degrees * float(swing.get(
+		"pelvis_twist_share", 1.0
+	))
+	var adjustment_roll := float(swing.get("adjustment_roll_degrees", 0.0))
+	var chest_pitch := total_pitch \
+		+ float(swing.get("chest_pitch_extra_radians", 0.0))
+	var chest_twist_degrees := total_twist_degrees \
+		+ float(swing.get("chest_twist_extra_degrees", 0.0))
+	var chest_roll_degrees := adjustment_roll \
+		+ float(swing.get("chest_roll_degrees", 0.0))
+	body_pivot.rotation.x = chest_pitch
+	body_pivot.rotation.y += deg_to_rad(chest_twist_degrees)
+	body_pivot.rotation.z += deg_to_rad(chest_roll_degrees)
 	var lead_leg := left_leg if dominant_hand == "Left" else right_leg
 	var trail_leg := right_leg if dominant_hand == "Left" else left_leg
 	lead_leg.rotation_degrees.x = float(swing.lead_hip_degrees)
 	trail_leg.rotation_degrees.x = float(swing.trail_hip_degrees)
+	var landing_stagger := float(swing.get("landing_stagger_degrees", 0.0))
+	lead_leg.rotation_degrees.x += landing_stagger
+	trail_leg.rotation_degrees.x -= landing_stagger
 	for leg in [left_leg, right_leg]:
 		(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
 			swing.knee_degrees
@@ -4323,9 +4863,18 @@ func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
 	## as well as back and stands the forearm up *out* of it -- without it the
 	## whole swing happens in one plane and reads as a hinge.
 	striking_arm.rotation_degrees = Vector3(
-		float(swing.striking_shoulder_degrees), 0.0,
+		float(swing.striking_shoulder_degrees),
+		float(swing.get("striking_internal_rotation_degrees", 0.0)),
 		float(swing.striking_abduction_degrees)
 	)
 	_set_elbow(striking_arm, float(swing.striking_elbow_degrees))
 	guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
 	_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
+	_apply_attack_performance(
+		swing, striking_arm, guide_arm, lead_leg, trail_leg,
+		Vector3(
+			pelvis_pitch - chest_pitch,
+			deg_to_rad(pelvis_twist_degrees - chest_twist_degrees),
+			deg_to_rad(adjustment_roll * 0.42 - chest_roll_degrees),
+		),
+	)

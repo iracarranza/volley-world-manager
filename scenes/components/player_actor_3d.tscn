@@ -40,6 +40,12 @@ height = 0.4
 radial_segments = 12
 rings = 6
 
+[sub_resource type="SphereMesh" id="PalmMesh"]
+radius = 0.08
+height = 0.16
+radial_segments = 10
+rings = 5
+
 [sub_resource type="CylinderMesh" id="ArmMesh"]
 top_radius = 0.075
 bottom_radius = 0.09
@@ -101,6 +107,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.4, 0)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
 mesh = SubResource("ArmMesh")
 
+[node name="Wrist" type="Node3D" parent="BodyPivot/LeftArm/Elbow"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.48, 0)
+
+[node name="Palm" type="MeshInstance3D" parent="BodyPivot/LeftArm/Elbow/Wrist"]
+scale = Vector3(0.78, 1.08, 0.46)
+mesh = SubResource("PalmMesh")
+
+[node name="ContactAnchor" type="Marker3D" parent="BodyPivot/LeftArm/Elbow/Wrist"]
+
 [node name="RightArm" type="Node3D" parent="BodyPivot" unique_id=86061653]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 1.52, 0)
 
@@ -114,6 +129,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.4, 0)
 [node name="Mesh" type="MeshInstance3D" parent="BodyPivot/RightArm/Elbow" unique_id=338448703]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
 mesh = SubResource("ArmMesh")
+
+[node name="Wrist" type="Node3D" parent="BodyPivot/RightArm/Elbow"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.48, 0)
+
+[node name="Palm" type="MeshInstance3D" parent="BodyPivot/RightArm/Elbow/Wrist"]
+scale = Vector3(0.78, 1.08, 0.46)
+mesh = SubResource("PalmMesh")
+
+[node name="ContactAnchor" type="Marker3D" parent="BodyPivot/RightArm/Elbow/Wrist"]
 
 [node name="LeftLeg" type="Node3D" parent="BodyPivot" unique_id=798809948]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, 0.48, 0)

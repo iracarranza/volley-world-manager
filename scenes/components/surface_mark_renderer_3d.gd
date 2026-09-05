@@ -40,11 +40,16 @@ var _shader: Shader = null
 
 
 func _ready() -> void:
-	set_process(true)
+	## Mark identity changes only when the actor is rebuilt or repainted. The old
+	## per-frame sync made every voli inspect the same invariant rig hierarchy on
+	## every rendered frame (twelve tree walks in the match view).
+	set_process(false)
 	call_deferred("_sync")
 
 
-func _process(_delta: float) -> void:
+## Explicit invalidation point for actor rebuilds and the sticker mask pass.
+func refresh() -> void:
+	_signature = ""
 	_sync()
 
 

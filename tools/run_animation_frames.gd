@@ -2,7 +2,8 @@ extends Node
 
 ## Every animation as a strip of frames, so a motion can be judged as a motion.
 ##
-##     xvfb-run -a godot --path . res://tools/animation_frames.tscn
+##     xvfb-run -a godot --path . res://tools/animation_frames.tscn \
+##       -- --strip=attack_power --camera=three_quarter
 ##
 ## `run_voli_portfolio.gd` photographs *poses* -- one instant per subject -- and
 ## that is the right instrument for asking whether a body reads. It is the wrong
@@ -24,20 +25,33 @@ extends Node
 ## three-quarter answers "does it look like a person".
 
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
+const BALL := preload("res://scenes/components/ball_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BlockBiomechanics := preload("res://scripts/data/block_biomechanics.gd")
+const IdleBiomechanics := preload("res://scripts/data/idle_biomechanics.gd")
+
+const OUT := "res://artifacts/rally-action-animations"
 
 ## Frames per strip. Eight is enough to see an ease curve and few enough that
 ## each frame is still large enough to read at a glance.
 const FRAME_COUNT: int = 8
 const FRAME_SPACING: float = 1.55
+## Dense around the only instant whose geometry must agree with the ball. The
+## ordinary nine-frame strips remain the full action overview; detail strips
+## make load, acceleration, contact and early continuation individually legible.
+const ATTACK_CONTACT_PHASES: Array[float] = [
+	-0.40, -0.32, -0.24, -0.18, -0.12, -0.08, -0.04,
+	0.0, 0.04, 0.08, 0.14, 0.22, 0.34,
+]
 ## Where a recovery strip starts, in pose phase. Before the platform forms, so
 ## the row reads approach -> contact -> recovery rather than beginning mid-fall.
 const RECOVERY_STRIP_FROM_PHASE: float = -0.34
 
-## The two angles every motion is shot from.
+## Side exposes lateral travel; front exposes left/right support and limb depth;
+## three-quarter remains the general silhouette review.
 const CAMERAS := {
 	"side": [Vector3(0.0, 1.15, 9.4), Vector3(-4.0, 0.0, 0.0), 46.0],
+	"front": [Vector3(0.0, 1.15, -9.4), Vector3(-4.0, 180.0, 0.0), 46.0],
 	"three_quarter": [
 		Vector3(5.6, 3.05, 8.2), Vector3(-15.0, 34.0, 0.0), 44.0,
 	],
@@ -48,6 +62,43 @@ const CAMERAS := {
 ##   recovery -- the floor motion driven across `recovery` 0 to 1
 ##   pose     -- [event type, elevation, phase] driven across `phase` instead
 ##   signature-- a named rule-of-cool move at full charge
+##
+## Semantic vocabulary index (descriptive render metadata, never selection logic):
+##
+## - `recovery_fall_roll`: planted/off-axis emergency pass, sideways floor roll.
+## - `recovery_fall_slide`: moving/reaching emergency pass, forward floor slide.
+## - `recovery_blown_away`: hard contact impact, backward fall and recovery.
+## - `recovery_knee`: low controlled contact, supported kneeling recovery.
+## - `gait_ready_to_run`: settled readiness continuously opening into relocation.
+## - `gait_backpedal`: retreating adjustment while facing the play.
+## - `gait_shuffle`: lateral positional adjustment with uncrossed feet.
+## - `platform_aim`: clean settled reception contact across incoming directions.
+## - `approach_three_step`: normal attack preparation from run through plant.
+## - `serve_standing`: clean grounded overhead routine through step-in recovery.
+## - `serve_jump_topspin`: aggressive airborne serve, full wrap and landing.
+## - `serve_jump_float`: compact airborne float, arrested hand and landing.
+## - `serve_hybrid`: airborne preparation with a controlled late hand action.
+## - `serve_sky_ball`: grounded underhand lift and recovery.
+## - `receive_dive`: emergency airborne/reaching reception into floor recovery.
+## - `receive_moving`: bump while arriving and retaining the active step.
+## - `receive_strained`: extended/off-balance bump outside a settled platform.
+## - `set_front`: clean settled overhead set, gather through recovery.
+## - `set_back`: controlled back release with a late directional reveal.
+## - `set_moving`: overhead set while the final positional step is still active.
+## - `attack_power`: clean committed swing, contact, continuation, and landing.
+## - `attack_roll`: controlled soft attack after a power-shaped approach.
+## - `attack_dink`: compact intentional tip/feint with the hand forward.
+## - `attack_reaching`: extended strike after failed ideal body spacing.
+## - `attack_mistimed`: compromised/cramped strike with disrupted sequencing.
+## - `attack_missed`: committed swing after losing the ideal contact point.
+## - `block_impact`: wall absorbs a hard ball through hands and torso.
+## - `block_tool`: hand touch deflects/tooling the ball off the wall.
+## - `block_beaten`: late or incomplete wall responding after the ball passes.
+## - `idle_breath_sway`: settled non-contact breathing and weight drift.
+## - `standing_to_ready`: continuous transition into assigned readiness.
+## - `blink`: ordinary perceptive eye microexpression outside concentration.
+## - `signature_*`: stylized charged continuations of their named attack/block
+##   families; emphasis overlays, not alternate rally outcomes.
 const STRIPS: Array[Dictionary] = [
 	{
 		## `posture` has to be one of the four the pose actually knows -- the
@@ -128,6 +179,161 @@ const STRIPS: Array[Dictionary] = [
 		"approach_sweep": true,
 	},
 	{
+		"name": "serve_standing", "caption": "SERVE standing: compact toss, transfer, step-in",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Standing", "action_power": 0.72},
+	},
+	{
+		"name": "serve_jump_topspin", "caption": "SERVE jump topspin: approach, bow, high contact, wrap",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Jump Topspin", "action_power": 0.84},
+	},
+	{
+		"name": "serve_jump_float", "caption": "SERVE jump float: compact rise and arrested punch",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Jump Float", "action_power": 0.68},
+	},
+	{
+		"name": "serve_hybrid", "caption": "SERVE hybrid: float preparation, late rotational carry",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Hybrid", "action_power": 0.76},
+	},
+	{
+		"name": "serve_sky_ball", "caption": "SERVE sky ball: grounded underhand high finish",
+		"pose": [RallyEventModel.EventType.SERVE, 0.0, 0.0], "action_sweep": true,
+		"context": {"serve_style": "Sky Ball", "action_power": 0.62},
+	},
+	{
+		"name": "receive_dive", "caption": "RECEPTION dive: push, flight, platform, floor",
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, 0.0], "action_sweep": true,
+		"posture": "reaching", "recovery": "fall",
+	},
+	{
+		"name": "receive_moving", "caption": "RECEPTION moving: final stride, platform, carried recovery",
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, 0.0], "action_sweep": true,
+		"posture": "moving", "ground_speed_mps": 3.1, "stride_cycle": 0.24,
+	},
+	{
+		"name": "receive_strained", "caption": "RECEPTION strained: off-axis platform and unequal support",
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, 0.0], "action_sweep": true,
+		"posture": "off-axis", "ground_speed_mps": 2.4, "stride_cycle": 0.74,
+	},
+	{
+		"name": "set_front", "caption": "SET front: floor load and high outward finish",
+		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
+		"context": {"set_posture": "standing", "back_set": false},
+	},
+	{
+		"name": "set_back", "caption": "SET back: disguised gather, arch, carry over crown",
+		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
+		"context": {"set_posture": "standing", "back_set": true},
+	},
+	{
+		"name": "set_moving", "caption": "SET moving: hands gather over the active adjustment step",
+		"pose": [RallyEventModel.EventType.SET, 0.0, 0.0], "action_sweep": true,
+		"context": {"set_posture": "standing", "back_set": false},
+		"ground_speed_mps": 3.0, "stride_cycle": 0.24,
+	},
+	{
+		"name": "attack_power", "caption": "ATTACK power: bow, whip, cross-body finish",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.82},
+	},
+	{
+		"name": "attack_roll", "caption": "ATTACK roll: sold approach and late deceleration",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Roll shot", "action_power": 0.62},
+	},
+	{
+		"name": "attack_dink", "caption": "ATTACK dink: sold approach and compact touch",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Dink", "action_power": 0.38},
+	},
+	{
+		"name": "attack_reaching", "caption": "ATTACK reaching: extended hand with airborne counterbalance",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "reaching"},
+	},
+	{
+		"name": "attack_mistimed", "caption": "ATTACK mistimed: cramped contact and asymmetric recovery",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "mistimed"},
+	},
+	{
+		"name": "attack_missed", "caption": "ATTACK missed: attempted arc and arrested unspent rotation",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0], "action_sweep": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "missed"},
+	},
+	{
+		"name": "attack_power_contact_detail",
+		"caption": "ATTACK power detail: load, whip, ball contact, continuation",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.82},
+	},
+	{
+		"name": "attack_roll_contact_detail",
+		"caption": "ATTACK roll detail: shared sell, late hand choice, ball contact",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Roll shot", "action_power": 0.62},
+	},
+	{
+		"name": "attack_dink_contact_detail",
+		"caption": "ATTACK dink detail: shared sell, compact touch, ball contact",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Short tip", "action_power": 0.38},
+	},
+	{
+		"name": "attack_reaching_contact_detail",
+		"caption": "ATTACK reaching detail: extended meeting point and counterbalance",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "reaching"},
+	},
+	{
+		"name": "attack_mistimed_contact_detail",
+		"caption": "ATTACK mistimed detail: cramped release and asymmetric recovery",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES, "contact_ball": true,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "mistimed"},
+	},
+	{
+		"name": "attack_missed_contact_detail",
+		"caption": "ATTACK missed detail: no contact ball, arrested unspent rotation",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"detail_phases": ATTACK_CONTACT_PHASES,
+		"context": {"attack_type": "Power swing", "action_power": 0.72, "attack_adjustment": "missed"},
+	},
+	{
+		"name": "block_impact", "caption": "BLOCK impact: wall yields and absorbs the return",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
+		"context": {"block_response": "impact"},
+	},
+	{
+		"name": "block_tool", "caption": "BLOCK tool: contacted hand yields after phase zero",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
+		"context": {"block_response": "tool"},
+	},
+	{
+		"name": "block_beaten", "caption": "BLOCK beaten: incomplete wall withdraws into landing",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0], "action_sweep": true,
+		"context": {"block_response": "beaten"},
+	},
+	{
+		"name": "idle_breath_sway", "caption": "IDLE: breath, weight shift, arm lag",
+		"idle_sweep": true,
+	},
+	{
+		"name": "standing_to_ready", "caption": "STANCE: standing to ready and settle",
+		"ready_settle": true,
+	},
+	{
+		"name": "blink", "caption": "MICROEXPRESSION: close, hold, slower open",
+		"blink_sweep": true, "closeup": true, "frame_spacing": 0.56,
+	},
+	{
 		"name": "signature_crush",
 		"caption": "ATTACK signature: crush, full charge",
 		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
@@ -147,12 +353,30 @@ const STRIPS: Array[Dictionary] = [
 	},
 ]
 
-
 func _ready() -> void:
 	await get_tree().process_frame
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
+	var requested_strip := ""
+	var requested_camera := ""
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--strip="):
+			requested_strip = argument.trim_prefix("--strip=")
+		elif argument.begins_with("--camera="):
+			requested_camera = argument.trim_prefix("--camera=")
+	if requested_strip.is_empty() or not CAMERAS.has(requested_camera):
+		push_error(
+			"Animation frame rendering requires --strip=<name> and "
+			+ "--camera=side|front|three_quarter; CI isolates each artifact in its own "
+			+ "renderer process."
+		)
+		get_tree().quit(2)
+		return
 	for strip in STRIPS:
+		if not requested_strip.is_empty() and str(strip.name) != requested_strip:
+			continue
 		for camera_name in CAMERAS:
-			await _shoot(strip, str(camera_name))
+			if str(camera_name) == requested_camera:
+				await _shoot(strip, str(camera_name))
 	get_tree().quit()
 
 
@@ -182,10 +406,22 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 
 	var view: Array = CAMERAS[camera_name]
 	var camera := Camera3D.new()
-	camera.position = view[0]
-	camera.rotation_degrees = view[1]
-	camera.fov = float(view[2])
+	if bool(strip.get("closeup", false)):
+		var closeup_position := Vector3(0.0, 1.82, -5.2) if camera_name == "side" \
+			else Vector3(2.5, 2.05, -5.0)
+		camera.look_at_from_position(closeup_position, Vector3(0.0, 1.62, 0.0))
+		camera.fov = 34.0
+	else:
+		camera.position = view[0]
+		camera.rotation_degrees = view[1]
+		camera.fov = float(view[2])
 	stage.add_child(camera)
+	# Each strip builds and frees its own stage. After the first camera has been
+	# removed a later one is not guaranteed to become current automatically,
+	# which used to make most artifacts repeat the first strip. The review image
+	# must belong to the camera named in its filename.
+	camera.current = true
+	camera.make_current()
 
 	## **A floor.** A recovery is a body arriving at the ground, and judging one
 	## against empty space is judging half of it -- the first read of the fall was
@@ -199,19 +435,86 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 	floor_mesh.material_override = floor_material
 	stage.add_child(floor_mesh)
 
-	var start := FRAME_SPACING * float(FRAME_COUNT - 1) * 0.5
-	for index in range(FRAME_COUNT):
-		var progress := float(index) / float(FRAME_COUNT - 1)
+	# Odd action rows contain an exact middle frame, so phase zero/contact is an
+	# image rather than the gap between -0.143 and +0.143.
+	var detail_phases: Array = strip.get("detail_phases", [])
+	var frame_count := detail_phases.size() if not detail_phases.is_empty() \
+		else 9 if bool(strip.get("action_sweep", false)) else FRAME_COUNT
+	var spacing := float(strip.get("frame_spacing", FRAME_SPACING))
+	if not detail_phases.is_empty():
+		spacing = minf(spacing, 0.78)
+	elif bool(strip.get("action_sweep", false)):
+		# The exact contact frame makes action rows one subject wider than the
+		# older eight-frame strips. Keep the full recovery inside both review
+		# cameras instead of clipping the ninth figure at the right edge.
+		spacing = minf(spacing, 1.34)
+	var start := spacing * float(frame_count - 1) * 0.5
+	for index in range(frame_count):
+		var progress := float(index) / float(frame_count - 1)
 		var actor := ACTOR.instantiate()
 		stage.add_child(actor)
-		actor.configure(900 + index, true, "%d%%" % roundi(progress * 100.0),
-			"Right", {"height_cm": 191.0, "wingspan_cm": 197.0, "mass_kg": 84.0})
+		# Hold the athlete constant across the strip: only phase may change.
+		actor.configure(900, true, "%d%%" % roundi(progress * 100.0),
+			"Right", {
+				"height_cm": 191.0, "wingspan_cm": 197.0, "mass_kg": 84.0,
+				"body_type": "Cani", "expression": "neutral",
+				"appearance": {"palette_index": 0, "marking": "none"},
+			})
+		assert(actor.player_id == 900 and actor.body_type == "Cani")
 		actor.set_tactical_position(
-			Vector2.ZERO, Vector3(start - FRAME_SPACING * float(index), 0.0, 0.0)
+			Vector2.ZERO, Vector3(-start + spacing * float(index), 0.0, 0.0)
 		)
 		actor.has_facing = true
 		actor.facing_yaw = 0.0
-		if strip.has("recovery"):
+		if bool(strip.get("action_sweep", false)) or not detail_phases.is_empty():
+			actor.ground_speed_mps = float(strip.get("ground_speed_mps", 0.0))
+			actor.stride_cycle = float(strip.get("stride_cycle", 0.0))
+			actor.contact_posture = str(strip.get("posture", "planted"))
+			actor.contact_recovery = str(strip.get("recovery", "platform"))
+			var action_pose: Array = strip.pose
+			var action_phase := float(detail_phases[index]) \
+				if not detail_phases.is_empty() else lerpf(-1.0, 1.0, progress)
+			var action_elevation := float(action_pose[1])
+			if int(action_pose[0]) == RallyEventModel.EventType.ATTACK:
+				action_elevation *= SpikeBiomechanics.elevation_at(action_phase)
+			elif int(action_pose[0]) == RallyEventModel.EventType.BLOCK:
+				action_elevation *= BlockBiomechanics.elevation_at(action_phase)
+			actor.set_pose(
+				int(action_pose[0]), action_elevation, action_phase,
+				Vector2.RIGHT, true, Dictionary(strip.get("context", {})),
+			)
+			actor.identity_label.text = "%+.2f" % action_phase
+			if bool(strip.get("contact_ball", false)) \
+					and is_zero_approx(action_phase):
+				var ball := BALL.instantiate()
+				stage.add_child(ball)
+				ball.set_flight_style(Color("f4c542"), 0.0)
+				ball.set_flight_sample(actor.contact_anchor_world_position(
+					int(action_pose[0]), Dictionary(strip.get("context", {})),
+				), Vector3.ZERO)
+		elif bool(strip.get("idle_sweep", false)):
+			actor.ready_stance = "watching"
+			actor._presentation_time_seconds = progress * IdleBiomechanics.SWAY_SECONDS
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.identity_label.text = "%.1fs" % actor._presentation_time_seconds
+		elif bool(strip.get("ready_settle", false)):
+			actor._stance_remaining = 0.0
+			actor.ready_stance = "watching"
+			actor._stance_remaining = 0.0
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.ready_stance = "defending"
+			actor._stance_remaining = actor._stance_duration * (1.0 - progress)
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+		elif bool(strip.get("blink_sweep", false)):
+			var interval := IdleBiomechanics.blink_interval_seconds(actor.player_id)
+			var offset := IdleBiomechanics.phase_offset(actor.player_id) * interval
+			var duration := IdleBiomechanics.BLINK_CLOSE_SECONDS \
+				+ IdleBiomechanics.BLINK_HOLD_SECONDS \
+				+ IdleBiomechanics.BLINK_OPEN_SECONDS
+			actor._presentation_time_seconds = progress * duration - offset
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.identity_label.visible = false
+		elif strip.has("recovery"):
 			actor.contact_recovery = str(strip.recovery)
 			actor.contact_posture = str(strip.get("posture", "planted"))
 			## Recovery is the DEFENSE pose's own phase -- `set_pose` passes it
@@ -326,7 +629,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			if int(pose[0]) == RallyEventModel.EventType.BLOCK:
 				elevation *= BlockBiomechanics.elevation_at(progress)
 			elif int(pose[0]) == RallyEventModel.EventType.ATTACK:
-				elevation *= sin(clampf(progress, 0.0, 1.0) * PI)
+				elevation *= SpikeBiomechanics.elevation_at(progress)
 			actor.set_pose(
 				int(pose[0]), elevation, progress, Vector2.RIGHT, true, context
 			)
@@ -334,15 +637,19 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			actor.identity_label.text = "%+.2f" % lerpf(
 				RECOVERY_STRIP_FROM_PHASE, 1.0, progress
 			)
-		elif strip.has("gait_sweep") or bool(strip.get("approach_sweep", false)):
+		elif strip.has("gait_sweep") or bool(strip.get("approach_sweep", false)) \
+				or bool(strip.get("action_sweep", false)) \
+				or not detail_phases.is_empty():
 			pass
 		else:
 			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
-		actor.set_highlighted(index == FRAME_COUNT - 1)
+		actor.set_highlighted(index == frame_count - 1)
+		if bool(strip.get("blink_sweep", false)):
+			actor.identity_label.visible = false
 
 	for _frame in range(8):
 		await get_tree().process_frame
-	var path := "user://frames_%s_%s.png" % [str(strip.name), camera_name]
+	var path := "%s/frames_%s_%s.png" % [OUT, str(strip.name), camera_name]
 	root.get_texture().get_image().save_png(path)
 	print("saved %s  (%s)" % [
 		ProjectSettings.globalize_path(path), str(strip.caption)

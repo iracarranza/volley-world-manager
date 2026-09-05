@@ -25,6 +25,14 @@ extends RefCounted
 ## the game had identical forearms regardless of whether the ball came from the
 ## service line or off a blocker's hands two metres away.
 
+## Visual vocabulary semantics
+##
+## This supplies the contact-facing detail shared by clean, moving, strained,
+## reaching, and off-axis reception/dig poses. A comfortable platform keeps most
+## of the correction in the forearms; awkward geometry carries the residual into
+## trunk turn and stance. It describes the platform consistent with the recorded
+## flights and never revises the contact or its result.
+
 const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd")
 const CourtWidthMeters: float = 9.0
 const CourtLengthMeters: float = 18.0

@@ -35,10 +35,13 @@ artifacts/feature-axes/
 artifacts/headshot-previews/
 artifacts/identity-budget/
 artifacts/mark-previews/
+artifacts/rally-action-animations/
+artifacts/rally-action-videos/
 artifacts/simi-colourways/
 artifacts/squad-after/
 artifacts/squad-identity/
 artifacts/style-drafts/
+artifacts/world-geography/
 
 # Python bytecode from the tools/ scripts. One .pyc reached the tree before this
 # rule existed; it is a build product of a file already versioned beside it.

@@ -48,6 +48,15 @@ extends RefCounted
 ## standing before the walk/run cycle takes it over; upper-body carriage can
 ## still interpolate directly from the job-specific stance.
 
+## Visual vocabulary semantics
+##
+## - defending: settled, loaded reception/dig readiness with a wide base.
+## - blocking: tall net readiness, hands available to read and close a wall.
+## - watching: soft non-contact attention when this voli is not playing the ball.
+##
+## These are continuity endpoints for idle, locomotion, action preparation, and
+## recovery. They describe the visible job of the body, not tactical selection.
+
 ## The defender's crouch. Wide, low, loaded: the stance the whole court was
 ## wearing, and still the right one for anybody who may have to play this ball.
 ##

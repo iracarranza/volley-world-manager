@@ -33,25 +33,35 @@ const SAMPLES: int = 41
 
 ## What one unit of phase is worth in seconds.
 ##
-## Phase is signed and spans two flights: -1 to 0 during the set's flight, 0 to
-## +1 during the attack's. Measured over eight rallies on the real screen, the
-## set-to-attack flight averages 1.26 s and the attack's own averages 0.81 s, so
-## those are the clocks the two halves are drawn against. Hand speeds below are
-## in metres per second against these, not per unit of phase, because a number
-## per unit of phase cannot be compared to anything a body does.
-const WINDUP_SECONDS: float = 1.26
+## The current playback has two negative-phase clocks. The legacy approach owns
+## -1 through the plant; the resolved takeoff-to-contact interval owns the rest.
+## Keeping those clocks separate prevents a long approach from making the real
+## overhead swing appear artificially slow in this report.
+const APPROACH_SECONDS: float = 1.04
+const TAKEOFF_TO_CONTACT_SECONDS: float = 0.22
 const SWING_SECONDS: float = 0.81
 
 
 func _initialize() -> void:
 	var Events := load("res://scripts/models/rally_event.gd")
+	var attack_type := "Power swing"
+	var scan_dink := false
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--attack-type="):
+			attack_type = argument.trim_prefix("--attack-type=")
+		elif argument == "--scan-dink":
+			scan_dink = true
 	var actor: Node3D = load("res://scenes/components/player_actor_3d.tscn").instantiate()
 	get_root().add_child(actor)
 	await process_frame
 	actor.configure(1, true, "Probe", "Right", {"height_cm": 196.0})
 	await process_frame
+	if scan_dink:
+		await _scan_dink_contact(actor, Events)
+		quit()
+		return
 
-	print("phase is signed: -1 wind-up, 0 contact, +1 landing")
+	print("%s; phase is signed: -1 wind-up, 0 contact, +1 landing" % attack_type)
 	print("%7s %-14s %7s %7s %7s %9s %8s" % [
 		"phase", "name", "up m", "ahead m", "out m", "hand m/s", "guide m",
 	])
@@ -64,15 +74,16 @@ func _initialize() -> void:
 	var previous_guide := Vector3.ZERO
 	for step in range(SAMPLES):
 		var phase := lerpf(-1.0, 1.0, float(step) / float(SAMPLES - 1))
-		actor.set_pose(Events.EventType.ATTACK, 1.0, phase, Vector2(0.0, -1.0), true)
+		actor.set_pose(
+			Events.EventType.ATTACK, 1.0, phase, Vector2(0.0, -1.0), true,
+			{"attack_type": attack_type, "action_power": 0.82},
+		)
 		await process_frame
 		var hand := _hand(actor, "RightArm")
 		var guide := _hand(actor, "LeftArm")
 		var speed := 0.0
 		if step > 0:
-			var seconds := (phase - previous_phase) * (
-				WINDUP_SECONDS if phase <= 0.0 else SWING_SECONDS
-			)
+			var seconds := _phase_seconds(previous_phase, phase)
 			speed = hand.distance_to(previous_hand) / maxf(seconds, 0.0001)
 			guide_travel += guide.distance_to(previous_guide)
 			if speed > fastest:
@@ -94,6 +105,42 @@ func _initialize() -> void:
 	print("fastest hand: %.1f m/s at phase %.3f" % [fastest, fastest_phase])
 	print("guide hand travelled %.2f m over the whole action" % guide_travel)
 	quit()
+
+
+func _scan_dink_contact(actor: Node3D, Events: Script) -> void:
+	print("dink contact scan: hand metres relative to striking shoulder")
+	for shoulder in [-195.0, -205.0, -215.0, -225.0, -235.0]:
+		for elbow in [42.0, 52.0, 62.0]:
+			actor.set_pose(
+				Events.EventType.ATTACK, 1.0, 0.0, Vector2(0.0, -1.0), true,
+				{"attack_type": "Dink", "action_power": 0.38},
+			)
+			var arm := actor.get_node("BodyPivot/RightArm") as Node3D
+			arm.rotation_degrees = Vector3(shoulder, 10.0, 14.0)
+			actor._set_elbow(arm, elbow)
+			await process_frame
+			var hand := _hand(actor, "RightArm")
+			print("shoulder %6.1f elbow %4.1f -> up %.2f ahead %.2f out %.2f" % [
+				shoulder, elbow, hand.y, hand.z, hand.x,
+			])
+
+
+func _phase_seconds(from_phase: float, to_phase: float) -> float:
+	var seconds := 0.0
+	var cursor := from_phase
+	if cursor < SpikeBiomechanics.PLANT_END:
+		var approach_end := minf(to_phase, SpikeBiomechanics.PLANT_END)
+		seconds += (approach_end - cursor) \
+			/ (SpikeBiomechanics.PLANT_END + 1.0) * APPROACH_SECONDS
+		cursor = approach_end
+	if cursor < 0.0 and to_phase > cursor:
+		var takeoff_end := minf(to_phase, 0.0)
+		seconds += (takeoff_end - cursor) \
+			/ -SpikeBiomechanics.PLANT_END * TAKEOFF_TO_CONTACT_SECONDS
+		cursor = takeoff_end
+	if to_phase > cursor:
+		seconds += (to_phase - cursor) * SWING_SECONDS
+	return maxf(seconds, 0.0001)
 
 
 ## The end of the striking forearm, in the body's own frame.

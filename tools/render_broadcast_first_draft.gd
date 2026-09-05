@@ -5,6 +5,7 @@ extends Node
 ## invents a contact, trajectory, actor, or outcome.
 
 const SCREEN := preload("res://scenes/screens/match_screen.tscn")
+const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 
 var screen: MatchScreen
 var overlay: BroadcastOverlay
@@ -15,6 +16,11 @@ func _ready() -> void:
 	get_window().size = Vector2i(1280, 720)
 	screen = SCREEN.instantiate() as MatchScreen
 	add_child(screen)
+	await get_tree().process_frame
+	## MatchScreen is normally styled by Application. This renderer instantiates
+	## it directly, so apply the same player-facing pass before taking evidence;
+	## otherwise the control strip silently loses its indicator containers.
+	UIStyleSystem.apply(screen, false)
 	await get_tree().process_frame
 	overlay = screen.broadcast_overlay
 	screen.configure_broadcast({

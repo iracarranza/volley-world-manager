@@ -39,6 +39,15 @@ extends RefCounted
 ##
 ## Pure and deterministic, for the same reason as the other pose modules.
 
+## Visual vocabulary semantics
+##
+## The base family is a clean block attempt: read, load, jump, press, hold,
+## withdraw, land, and recover. A two-arm wall reads as sealed/controlled; one
+## arm is a late reach while closing; no committed arm is a beaten or incomplete
+## wall. Post-contact response variants distinguish a hard impact absorbed by
+## the hands, a touch/tooling deflection, and a beaten block after the ball has
+## passed. They describe the visible response, not the contest outcome rules.
+
 ## Where each stage begins on the signed timeline.
 ##
 ## The read takes most of the wind-up because that is what a blocker actually
@@ -121,7 +130,17 @@ static func window(phase: float, from_phase: float, to_phase: float) -> float:
 
 
 ## Every joint the block pose needs, for one instant of the jump.
-static func resolve(phase: float) -> Dictionary:
+const RESPONSE_WALL := &"wall"
+const RESPONSE_IMPACT := &"impact"
+const RESPONSE_TOOL := &"tool"
+const RESPONSE_BEATEN := &"beaten"
+
+
+static func resolve(
+	phase: float,
+	response: StringName = RESPONSE_WALL,
+	contact_side: float = 1.0,
+) -> Dictionary:
 	var p := clampf(phase, -1.0, 1.0)
 
 	## Proximal first, as in the spike: the legs are already driving while the
@@ -164,7 +183,7 @@ static func resolve(phase: float) -> Dictionary:
 	trail_hip = lerpf(trail_hip, HIP_TRAIL_FLIGHT_DEGREES, tuck)
 	trail_hip = lerpf(trail_hip, -2.0, withdraw)
 
-	return {
+	var joints := {
 		"phase_name": phase_name(p),
 		"shoulder_degrees": shoulder,
 		"elbow_degrees": elbow,
@@ -175,6 +194,47 @@ static func resolve(phase: float) -> Dictionary:
 		"trail_hip_degrees": trail_hip,
 		"shoulder_lift_meters": SHOULDER_LIFT_METERS * shrug * (1.0 - withdraw),
 	}
+	_apply_response(joints, p, response, contact_side)
+	return joints
+
+
+## Response begins at the authoritative contact. The pre-contact wall is
+## byte-for-byte the ordinary solve, so presentation cannot predict or cause a
+## tool, impact, or beaten block.
+static func _apply_response(
+	joints: Dictionary, phase: float, response: StringName, contact_side: float
+) -> void:
+	joints["block_response"] = response
+	joints["left_shoulder_delta_degrees"] = 0.0
+	joints["right_shoulder_delta_degrees"] = 0.0
+	joints["left_elbow_delta_degrees"] = 0.0
+	joints["right_elbow_delta_degrees"] = 0.0
+	joints["response_roll_degrees"] = 0.0
+	if response == RESPONSE_WALL or phase < 0.0:
+		return
+	var impact := smoothstep(0.0, 0.16, phase) \
+		* (1.0 - smoothstep(0.46, 0.82, phase))
+	if response == RESPONSE_IMPACT:
+		joints["shoulder_degrees"] = float(joints.shoulder_degrees) - 8.0 * impact
+		joints["elbow_degrees"] = float(joints.elbow_degrees) + 12.0 * impact
+		joints["torso_pitch_radians"] = float(joints.torso_pitch_radians) \
+			+ 0.10 * impact
+		joints["knee_degrees"] = float(joints.knee_degrees) - 10.0 * impact
+	elif response == RESPONSE_TOOL:
+		var right_contact := contact_side >= 0.0
+		if right_contact:
+			joints["right_shoulder_delta_degrees"] = -15.0 * impact
+			joints["right_elbow_delta_degrees"] = 20.0 * impact
+		else:
+			joints["left_shoulder_delta_degrees"] = -15.0 * impact
+			joints["left_elbow_delta_degrees"] = 20.0 * impact
+		joints["response_roll_degrees"] = (7.5 if right_contact else -7.5) * impact
+	elif response == RESPONSE_BEATEN:
+		var chase := smoothstep(0.0, 0.26, phase) \
+			* (1.0 - smoothstep(0.38, 0.70, phase))
+		joints["shoulder_degrees"] = float(joints.shoulder_degrees) - 18.0 * chase
+		joints["elbow_degrees"] = float(joints.elbow_degrees) + 18.0 * chase
+		joints["response_roll_degrees"] = contact_side * 5.5 * chase
 
 
 ## How far off the floor the blocker is at this instant, 0 to 1.

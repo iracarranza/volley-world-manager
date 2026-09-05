@@ -16,6 +16,7 @@ const VENUE_BUILDER := preload("res://tools/run_visual_court_gallery_v2.gd")
 @onready var players_container: Node3D = $Players
 
 var player_actors: Dictionary = {}
+var _player_setup_signatures: Dictionary = {}
 var live_positions: Dictionary = {}
 var home_player_ids: Dictionary = {}
 var camera_preset: int = 0
@@ -26,6 +27,7 @@ var venue_id: String = ""
 var venue_open_air: bool = false
 var venue_tight: bool = false
 var _venue_builder: Node
+var _venue_details: Dictionary = {}
 var _base_environment: Environment
 var _base_key_transform: Transform3D
 var _base_fill_transform: Transform3D
@@ -85,20 +87,31 @@ func setup_players(
 	player_handedness: Dictionary = {},
 	player_physical_profiles: Dictionary = {},
 ) -> void:
-	for child in players_container.get_children():
-		child.free()
-	player_actors.clear()
+	var requested: Dictionary = {}
+	for raw_player_id in initial_home_positions:
+		requested[int(raw_player_id)] = true
+	for raw_player_id in initial_opponent_positions:
+		requested[int(raw_player_id)] = true
+	for raw_player_id in player_actors.keys():
+		var player_id := int(raw_player_id)
+		if requested.has(player_id):
+			continue
+		var stale := player_actors[player_id] as PlayerActor3D
+		if stale != null:
+			stale.free()
+		player_actors.erase(player_id)
+		_player_setup_signatures.erase(player_id)
 	live_positions.clear()
 	home_player_ids.clear()
 	for raw_player_id in initial_home_positions:
-		_spawn_player(
+		_place_or_spawn_player(
 			int(raw_player_id), Vector2(initial_home_positions[raw_player_id]),
 			true, str(player_names.get(int(raw_player_id), "HOME %s" % raw_player_id)),
 			str(player_handedness.get(int(raw_player_id), "Right")),
 			Dictionary(player_physical_profiles.get(int(raw_player_id), {})),
 		)
 	for raw_player_id in initial_opponent_positions:
-		_spawn_player(
+		_place_or_spawn_player(
 			int(raw_player_id), Vector2(initial_opponent_positions[raw_player_id]),
 			false, str(player_names.get(int(raw_player_id), "AWAY %s" % raw_player_id)),
 			str(player_handedness.get(int(raw_player_id), "Right")),
@@ -136,11 +149,50 @@ func _spawn_player(
 		player_id, home_team, display_name, dominant_hand, physical_profile
 	)
 	actor.apply_ui_palette(light_mode_enabled)
+	actor.set_realtime_shadows_enabled(false)
 	player_actors[player_id] = actor
+	_player_setup_signatures[player_id] = _setup_signature(
+		home_team, display_name, dominant_hand, physical_profile
+	)
 	live_positions[player_id] = position
 	if home_team:
 		home_player_ids[player_id] = true
 	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
+	return actor
+
+
+func _setup_signature(
+	home_team: bool, display_name: String, dominant_hand: String,
+	physical_profile: Dictionary,
+) -> String:
+	return "%s|%s|%s|%s" % [
+		str(home_team), display_name, dominant_hand, var_to_str(physical_profile),
+	]
+
+
+func _place_or_spawn_player(
+	player_id: int, position: Vector2, home_team: bool, display_name: String,
+	dominant_hand: String, physical_profile: Dictionary,
+) -> PlayerActor3D:
+	var signature := _setup_signature(
+		home_team, display_name, dominant_hand, physical_profile
+	)
+	var actor := player_actors.get(player_id) as PlayerActor3D
+	if actor == null or str(_player_setup_signatures.get(player_id, "")) != signature:
+		if actor != null:
+			actor.free()
+		player_actors.erase(player_id)
+		actor = _spawn_player(
+			player_id, position, home_team, display_name, dominant_hand,
+			physical_profile,
+		)
+	else:
+		live_positions[player_id] = position
+		if home_team:
+			home_player_ids[player_id] = true
+		actor.reset_for_rally(
+			position, tactical_to_world(position.x, position.y)
+		)
 	return actor
 
 
@@ -170,12 +222,20 @@ func _apply_base_palette() -> void:
 ## Select the actual room for the fixture without touching gameplay or camera
 ## choice. Unknown regions fall back to the canonical Landavol venue.
 func configure_venue(region_name: String) -> Dictionary:
-	venue_region = region_name.strip_edges().replace("’", "'")
+	var requested_region := region_name.strip_edges().replace("’", "'")
+	## Score/broadcast context is refreshed every rally. Reapplying the same
+	## context must not destroy and rebuild the complete venue geometry.
+	if requested_region == venue_region \
+			and not requested_region.is_empty() \
+			and get_node_or_null("VenueExtras") != null:
+		return _venue_details.duplicate(true)
+	venue_region = requested_region
 	_reset_venue_base()
 	if venue_region.is_empty():
 		venue_id = ""
 		venue_open_air = false
 		venue_tight = false
+		_venue_details.clear()
 		return {}
 	return _build_venue()
 
@@ -187,6 +247,7 @@ func _build_venue() -> Dictionary:
 		_venue_builder.name = "VenueRuntimeBuilder"
 		add_child(_venue_builder)
 	var details := Dictionary(_venue_builder.call("apply_runtime", self, venue_region))
+	_venue_details = details.duplicate(true)
 	venue_id = str(details.get("id", "landavol"))
 	venue_region = str(details.get("region", "Landavol"))
 	venue_open_air = bool(details.get("open_air", false))

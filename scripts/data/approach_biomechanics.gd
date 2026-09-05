@@ -41,6 +41,14 @@ extends RefCounted
 ## for the same reason: pose work that cannot be checked without eyes on a screen
 ## does not get checked.
 
+## Visual vocabulary semantics
+##
+## Canonical attack preparation: directional step, long penultimate, closing
+## plant, then takeoff. It represents a committed normal approach whose carried
+## run is converted into vertical launch. Power, roll, dink, and compromised
+## attack variants all begin from this same continuous footwork; their volleyball
+## meaning diverges at the late striking action rather than through a new run-up.
+
 ## Where each step owns the approach window, as a share of it. The directional
 ## step is short and the last two are where the time goes -- a real approach is
 ## mostly its penultimate and its close, and rendering them at even thirds is the

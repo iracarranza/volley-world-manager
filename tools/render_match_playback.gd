@@ -21,6 +21,7 @@ extends Node
 
 const MATCH_SCREEN := preload("res://scenes/screens/match_screen.tscn")
 const MANAGER := preload("res://scripts/managers/game_manager.gd")
+const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 
 const OUT_DIR := "res://artifacts/m8-visual/playback"
 ## Real seconds between frames. The rally is played at its own pace and sampled,
@@ -65,6 +66,8 @@ func _ready() -> void:
 		_saved = 0
 		_screen = MATCH_SCREEN.instantiate() as Control
 		add_child(_screen)
+		await get_tree().process_frame
+		UIStyleSystem.apply(_screen, false)
 		await get_tree().process_frame
 		_screen.load_and_play_rally(chosen.result as RallyResult, 1.0)
 		await _film()

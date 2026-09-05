@@ -288,6 +288,7 @@ layout_mode = 2
 
 [node name="NewCareerButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=946641406]
 unique_name_in_owner = true
+theme_type_variation = &"NavAction"
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
@@ -299,6 +300,7 @@ alignment = 0
 
 [node name="LoadMenuButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1990464271]
 unique_name_in_owner = true
+theme_type_variation = &"NavAction"
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
@@ -310,6 +312,7 @@ alignment = 0
 
 [node name="OptionsButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1483439356]
 unique_name_in_owner = true
+theme_type_variation = &"NavAction"
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
@@ -321,6 +324,7 @@ alignment = 0
 
 [node name="ExitButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=152827268]
 unique_name_in_owner = true
+theme_type_variation = &"NavAction"
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16

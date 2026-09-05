@@ -24,6 +24,14 @@ extends RefCounted
 ## It also turns five faces into nine for no extra authoring, and every new eye
 ## state would add three more.
 
+## Visual vocabulary semantics
+##
+## These are perceptive or emotional surface states layered over action poses,
+## not volleyball-quality labels. Neutral/concerned/focused-looking combinations
+## may accompany preparation, contact, or recovery without implying a clean,
+## strained, successful, or failed action. Blink and rally gaze remain separate
+## continuous attention motion.
+
 const NEUTRAL: String = "neutral"
 
 ## How open the eyes are, and how they tilt.

@@ -57,6 +57,9 @@ const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.g
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
+const LOCKED_REGION_TAGLINES_SCRIPT := preload(
+	"res://scripts/data/region_taglines_locked.gd"
+)
 const REGIONAL_KITS_SCRIPT := preload("res://scripts/data/regional_kits.gd")
 const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
 const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
@@ -129,6 +132,9 @@ const ATTEMPT_JUDGMENT_SCRIPT := preload(
 )
 const RALLY_SIMULATOR_SCRIPT := preload(
 	"res://scripts/simulation/rally_simulator.gd"
+)
+const SCRIPTED_RALLY_DRIVER_SCRIPT := preload(
+	"res://scripts/simulation/scripted_rally_driver.gd"
 )
 const PLAYER_OBSERVATION_SCRIPT := preload(
 	"res://scripts/models/player_observation.gd"
@@ -228,6 +234,11 @@ func _initialize() -> void:
 		_test_career_opponent_reception_authority()
 		_finish_test_run()
 		return
+	if "--scripted-rally-only" in OS.get_cmdline_user_args():
+		_test_scripted_rally_intent_boundary()
+		_finish_test_run()
+		return
+	_test_scripted_rally_intent_boundary()
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
@@ -311,6 +322,7 @@ func _initialize() -> void:
 	_test_block_contact_is_an_intersection()
 	_test_block_event_publishes_the_contact_it_proved()
 	_test_the_set_publishes_the_heights_it_was_solved_between()
+	_test_playback_contact_seams_and_cover_fans()
 	_test_a_miss_pose_means_the_ball_was_not_touched()
 	_test_a_beaten_block_reaches_without_the_ball_arriving()
 	_test_a_missed_contact_has_no_follow_through()
@@ -20720,78 +20732,39 @@ func _test_region_language() -> void:
 			% [ordered, plain],
 	)
 
-	## 8. **A tagline names its own people with the demonym, not with a second
-	##    word invented beside it.**
+	## 8. **Approved region-selection copy is the runtime copy.**
 	##
-	##    Seven of the eight majors carried one: Landavoli, Spëddich, Hitōue,
-	##    Larçgan, Taktikiãn, Ispakyanos, A'ace'ni. The `DEFINITIONS` header has
-	##    said "these do not currently match `DEMONYMS` below" since the taglines
-	##    were written, which is a comment doing a check's job and losing.
-	##
-	##    Larçgan is why it was worth more than tidiness. It hung a cedilla on
-	##    Blôc du Larg -- Bompaçao's mark, in the one region whose relationship to
-	##    Bompaçao is this map's single deliberate opposition -- so the sentence
-	##    introducing Larg to a player quietly said it was Bompaçao's kin. The
-	##    stray-mark gate could not see it because it reads names, and this was
-	##    prose.
-	var unnamed: Array[String] = []
-	var borrowed: Array[String] = []
-	for region_name in REGIONS_SCRIPT.names():
-		var tagline := str(
+	##    The save-differentiation pass deliberately superseded the earlier
+	##    mechanical prose gates. Keeping those gates here after the copy was
+	##    locked made the repository hold two incompatible authorities: the
+	##    approved table could exist while every runtime reader still displayed
+	##    the older inline sentence. The canonical definition boundary must now
+	##    reconcile every explicit lock exactly.
+	var stale_taglines: Array[String] = []
+	for region_name in LOCKED_REGION_TAGLINES_SCRIPT.TAGLINES:
+		var displayed := str(
 			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("tagline", "")
 		)
-		var own: String = REGIONS_SCRIPT.demonym(str(region_name))
-		## Only the majors are required to name their people at all -- a minor's
-		## tagline describes a hall rather than a nation, deliberately, because
-		## that is the size difference the two tiers are for.
-		if not region_name in REGIONS_SCRIPT.MINOR_REGIONS \
-				and not tagline.contains(own):
-			unnamed.append("%s never says %s" % [region_name, own])
-		for other in REGIONS_SCRIPT.names():
-			var word: String = REGIONS_SCRIPT.demonym(str(other))
-			if other != region_name and tagline.contains(word):
-				borrowed.append("%s says %s" % [region_name, word])
+		var approved := str(LOCKED_REGION_TAGLINES_SCRIPT.TAGLINES[region_name])
+		if displayed != approved:
+			stale_taglines.append(str(region_name))
 	_check(
-		unnamed.is_empty() and borrowed.is_empty(),
-		"a tagline names its own people and nobody else's (missing: %s; borrowed: %s)"
-			% [unnamed, borrowed],
+		stale_taglines.is_empty(),
+		"every approved regional tagline is the runtime tagline (stale: %s)"
+			% [stale_taglines],
 	)
 
-	## 9. **A tagline states a practice; it does not rate it.**
+	## 9. **A candidate is not silently promoted to locked copy.**
 	##
-	##    Five of the eight majors carried an adjective the frame had no standing
-	##    to use -- *nightmarish* power, *devastating* serves, a *crushing* bomba,
-	##    the *world's premier* volis, and structure *perfected* into *complete
-	##    control*. `DIEGETIC_MANAGEMENT.md` §11 is the rule they broke, and the
-	##    surface makes it worse than a style note: `main.gd` renders the
-	##    opponent's tagline on the match screen, so the frame was telling a
-	##    manager how to feel about a side before the first serve, and the region
-	##    picker is the first screen of a new save.
-	##
-	##    A word list is a blunt instrument and deliberately so. The failure this
-	##    catches is not subtle prose -- it is reaching for an intensifier because
-	##    the sentence has not said anything yet, which is the state every one of
-	##    those five was written in. What replaced them is checkable instead:
-	##    where a tagline now claims an extreme, the region holds that extreme in
-	##    `REGIONAL_PRINCIPLES` or `REGIONAL_CURVES`.
-	var rated: Array[String] = []
-	## Not banned: *hard*, *early*, *safe*, *long* -- those describe the action,
-	## not its worth. Every word here rates the region for the reader instead.
-	var verdicts: Array[String] = [
-		"nightmarish", "devastating", "crushing", "relentless", "premier",
-		"unstoppable", "ferocious", "brutal", "legendary", "feared",
-		"perfecting", "perfected", "complete control", "the world's best",
-	]
-	for region_name in REGIONS_SCRIPT.names():
-		var line: String = str(
-			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("tagline", "")
-		).to_lower()
-		for word in verdicts:
-			if line.contains(word):
-				rated.append("%s: %s" % [region_name, word])
+	##    Kutré Lyn's latest paragraph is still labelled a direction in the
+	##    authority document. It remains visible as an explicit candidate for the
+	##    next copy decision, but it must not enter runtime merely because the
+	##    other thirteen approved lines were reconciled.
 	_check(
-		rated.is_empty(),
-		"a tagline says what a region does, not how good it is at it (%s)" % [rated],
+		not LOCKED_REGION_TAGLINES_SCRIPT.TAGLINES.has("Kutré Lyn")
+			and str(REGIONS_SCRIPT.definition("Kutré Lyn").get("tagline", ""))
+				!= LOCKED_REGION_TAGLINES_SCRIPT.KUTRE_LYN_CANDIDATE,
+		"Kutré Lyn's candidate remains distinct from approved runtime copy",
 	)
 
 
@@ -24242,6 +24215,98 @@ func _test_the_set_publishes_the_heights_it_was_solved_between() -> void:
 	)
 
 
+## The drawn ball and the body agree at every shared contact seam.
+##
+## Two regressions shared one mistaken proxy: `success`. A failed set may still
+## launch the attack, and therefore still needs its limb fitted to the ball; a
+## successful reception may shorten a serve's natural floor flight, and both
+## halves must use the same spin-adjusted gravity and elapsed prefix. The cover
+## assertion holds the other exact-seed defect from the same report: a ring is a
+## fan, not four players at one duplicated deep coordinate.
+func _test_playback_contact_seams_and_cover_fans() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var seam_rows := 0
+	var failed_contacts := 0
+	var failed_contacts_with_anchor := 0
+	var cover_rows := 0
+	var duplicated_cover_rows := 0
+	var screen: Object = MATCH_SCREEN_SCRIPT.new()
+	for seed_value in range(170700, 170760):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		screen.player_physical_profiles = result.player_physical_profiles.duplicate(true)
+		for index in range(result.events.size()):
+			var event := result.events[index] as RallyEvent
+			if event == null:
+				continue
+			var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if not bool(event.success) and not outgoing.is_empty():
+				failed_contacts += 1
+				if screen._action_context(event, int(event.actor_id)).has(
+						"contact_anchor_height_meters"):
+					failed_contacts_with_anchor += 1
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SERVE:
+				var receiver := screen._next_contact_event(
+					result.events, index + 1
+				) as RallyEvent
+				if receiver != null \
+						and receiver.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+						and not outgoing.is_empty():
+					var arriving := BallPresentation.display_trajectory(
+						event, receiver, outgoing, result.player_physical_profiles
+					)
+					var leaving_source: Dictionary = receiver.metadata.get(
+						"outgoing_trajectory", {}
+					)
+					if not leaving_source.is_empty():
+						var after_receiver := screen._next_contact_event(
+							result.events, result.events.find(receiver) + 1
+						) as RallyEvent
+						var leaving := BallPresentation.display_trajectory(
+							receiver, after_receiver, leaving_source,
+							result.player_physical_profiles,
+						)
+						seam_rows += 1
+						if not is_equal_approx(
+							float(arriving.end_height_meters),
+							float(leaving.start_height_meters),
+						):
+							seam_rows = -1000000
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.ATTACK:
+				continue
+			var own_key := "home_phase_targets" \
+				if str(event.metadata.get("side", "")) == "home" \
+				else "opponent_phase_targets"
+			var cover: Dictionary = event.metadata.get(own_key, {})
+			if cover.size() < 3:
+				continue
+			cover_rows += 1
+			var occupied := {}
+			for raw_position in cover.values():
+				var position := Vector2(raw_position)
+				var key := "%0.5f/%0.5f" % [position.x, position.y]
+				if occupied.has(key):
+					duplicated_cover_rows += 1
+					break
+				occupied[key] = true
+	_check(
+		seam_rows > 0,
+		"serve reception prefixes and outgoing passes share one contact height",
+	)
+	_check(
+		failed_contacts > 0 and failed_contacts_with_anchor == failed_contacts,
+		"a failed contact that launched a ball still receives limb-anchor alignment",
+	)
+	_check(
+		cover_rows > 0 and duplicated_cover_rows == 0,
+		"attack coverers occupy distinct positions in the canonical cover fan",
+	)
+	screen.free()
+	manager.free()
+
+
 ## A pose says the ball was touched only when it was.
 ##
 ## FD-007. `_contact_posture` reached for the miss pose on `not event.success`,
@@ -24464,3 +24529,286 @@ func _test_a_missed_contact_has_no_follow_through() -> void:
 		families.size() >= 2,
 		"more than one contact family reaches without arriving",
 	)
+
+
+func _scripted_fixture(manager: Object) -> Dictionary:
+	var state: RallyState = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(), manager.current_defensive_plan(),
+		manager.opponent_team, null, false, 16,
+	)
+	var positions := {}
+	for raw_id in state.home_players:
+		positions[int(raw_id)] = state.home_players[raw_id].position
+	for raw_id in state.opponent_players:
+		positions[int(raw_id)] = state.opponent_players[raw_id].position
+	positions[6] = Vector2(0.45, 0.84)
+	positions[102] = Vector2(0.50, 0.44)
+	positions[103] = Vector2(0.82, 0.16)
+	positions[104] = Vector2(0.36, 0.44)
+	return {
+		"serving_side": "opponent",
+		"initial_positions": positions,
+		"actions": [
+			{
+				"actor": 105, "action": "serve", "intent_time": 0.0,
+				"target": Vector2(0.45, 0.92), "serve_type": "Standing",
+				"aggression": 1.0,
+			},
+			{
+				"actor": 6, "action": "receive", "intent_time": 0.0,
+				"target": manager.current_lineup().active_setter_id(),
+				"attempted_action": "platform pass",
+			},
+			{
+				"actor": manager.current_lineup().active_setter_id(),
+				"action": "set", "intent_time": 0.20,
+				"target": manager.current_lineup().player_at_slot(4),
+				"set_family": "outside", "tempo": 2,
+			},
+			{
+				"actor": manager.current_lineup().player_at_slot(4),
+				"action": "attack", "intent_time": 0.50,
+				"target": Vector2(0.28, 0.22), "attack_action": "Power swing",
+				"course": "line", "aggression": 0.72,
+			},
+		],
+	}
+
+
+func _scripted_fingerprint(result: Resource) -> String:
+	var rows: Array[String] = []
+	if result == null:
+		return "null"
+	for event in result.events:
+		rows.append(str(event.to_dict()))
+	rows.append(str(result.analysis.get("scripted_intents", [])))
+	return "\n".join(rows)
+
+
+## Authored marks are intentions; the production body/ball intersection is the
+## only route to the physical record.
+func _test_scripted_rally_intent_boundary() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var fixture := _scripted_fixture(manager)
+	var loaded_file := SCRIPTED_RALLY_DRIVER_SCRIPT.load_script_file(
+		"res://tools/authored_rallies/probe_rally.json"
+	)
+	var file_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var file_result: Resource = file_driver.resolve_script(
+		Dictionary(loaded_file.get("script", {})), manager.players,
+		manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(),
+	) if bool(loaded_file.get("ok", false)) else null
+	_check(
+		file_result != null and file_result.events.size() == 6 \
+			and SCRIPTED_RALLY_DRIVER_SCRIPT.seam_census(file_result.events).is_empty(),
+		"a hand-authored rally loaded from the persistence format resolves all six playback families with a strict seam",
+	)
+	var file_ledger: Array = file_result.analysis.get("scripted_intents", []) \
+		if file_result != null else []
+	_check(
+		file_ledger.size() == 6 \
+			and str(Dictionary(file_ledger[4]).status) == "missed" \
+			and "lateral gap" in str(Dictionary(file_ledger[4]).reason) \
+			and "0.823 m" in str(Dictionary(file_ledger[4]).reason),
+		"an early block miss reports the production-derived position quantity that failed",
+	)
+	var late_block := Dictionary(loaded_file.script).duplicate(true)
+	late_block.actions[4].intent_time = 2.55
+	var late_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var late_result: Resource = late_driver.resolve_script(
+		late_block, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(),
+	)
+	var late_reason := str(Dictionary(
+		Array(late_result.analysis.scripted_intents)[4]
+	).reason)
+	_check(
+		"committed at 2.550 after" in late_reason \
+			and "crossed the net at 2.507" in late_reason \
+			and "not a wider block timing window" in late_reason \
+			and not "lateral gap" in late_reason,
+		"a post-crossing block commitment reports timing and the resolver's absent wider window",
+	)
+	var moved_block := Dictionary(loaded_file.script).duplicate(true)
+	moved_block.initial_positions[102] = Vector2(0.10, 0.44)
+	var moved_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var moved_result: Resource = moved_driver.resolve_script(
+		moved_block, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(),
+	)
+	var moved_reason := str(Dictionary(
+		Array(moved_result.analysis.scripted_intents)[4]
+	).reason)
+	_check(
+		"lateral gap" in moved_reason and "1.518 m" in moved_reason \
+			and moved_reason != str(Dictionary(file_ledger[4]).reason),
+		"repositioning the blocker changes the measured position failure rather than repeating timing prose",
+	)
+	var roundtrip_path := OS.get_temp_dir().path_join("vwm_scripted_rally_roundtrip.json")
+	var roundtrip_error := SCRIPTED_RALLY_DRIVER_SCRIPT.save_script_file(
+		roundtrip_path, Dictionary(loaded_file.get("script", {}))
+	)
+	var roundtrip := SCRIPTED_RALLY_DRIVER_SCRIPT.load_script_file(roundtrip_path) \
+		if roundtrip_error.is_empty() else {}
+	_check(
+		roundtrip_error.is_empty() and bool(roundtrip.get("ok", false)) \
+			and SCRIPTED_RALLY_DRIVER_SCRIPT.validate(Dictionary(roundtrip.script)).is_empty(),
+		"scripted rally persistence writes the same hand-authorable JSON format it loads",
+	)
+	var unreachable := fixture.duplicate(true)
+	unreachable["movement"] = [{
+		"actor": 2, "start_time": 0.0, "end_time": 0.001,
+		"target": Vector2(0.0, 0.0),
+	}]
+	var movement_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var movement_result = movement_driver.resolve_script(
+		unreachable, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		movement_result == null and "actor 2" in movement_driver.last_refusal \
+			and "0.000-0.001" in movement_driver.last_refusal \
+			and "production requires" in movement_driver.last_refusal,
+		"an unreachable authored waypoint is refused with actor, interval, and production travel time",
+	)
+	var old_time := fixture.duplicate(true)
+	old_time.actions[0]["time"] = old_time.actions[0].intent_time
+	old_time.actions[0].erase("intent_time")
+	_check(
+		"unknown key 'time'" in SCRIPTED_RALLY_DRIVER_SCRIPT.validate(old_time),
+		"scripted actions reject the retired contact-time field",
+	)
+	var authored_height := fixture.duplicate(true)
+	authored_height.actions[1]["contact_height_m"] = 1.0
+	_check(
+		"contact_height_m" in SCRIPTED_RALLY_DRIVER_SCRIPT.validate(authored_height),
+		"scripted actions cannot author physical contact height",
+	)
+	var first_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var first: Resource = first_driver.resolve_script(
+		fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	var repeated_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var repeated: Resource = repeated_driver.resolve_script(
+		fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		first != null and first.events.size() == 4 and first_driver.last_refusal.is_empty(),
+		"serve, receive, set, and attack reach production resolvers",
+	)
+	_check(
+		_scripted_fingerprint(first) == _scripted_fingerprint(repeated),
+		"a fixed scripted-rally seed repeats the exact resolved record",
+	)
+	var alternate_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var alternate: Resource = alternate_driver.resolve_script(
+		fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 118,
+	)
+	_check(
+		_scripted_fingerprint(first) != _scripted_fingerprint(alternate),
+		"reseeding preserves intentions while production execution varies",
+	)
+	var physical_fields := first != null
+	if first != null:
+		for event in first.events:
+			physical_fields = physical_fields \
+				and event.metadata.has("intent_time") \
+				and event.metadata.has("resolved_contact_time") \
+				and event.metadata.has("contact_height_meters")
+	_check(physical_fields, "every realised scripted contact states intent time, contact time, and height")
+	_check(
+		first != null and SCRIPTED_RALLY_DRIVER_SCRIPT.seam_census(first.events).is_empty(),
+		"scripted contact events preserve the authoritative one-ball seam",
+	)
+	var missed := fixture.duplicate(true)
+	missed.actions.resize(2)
+	missed.actions[1].intent_time = 9.0
+	var miss_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var miss_result: Resource = miss_driver.resolve_script(
+		missed, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	var miss_ledger: Array = miss_result.analysis.get("scripted_intents", [])
+	_check(
+		miss_result.events.size() == 1 and miss_ledger.size() == 2 \
+			and str(Dictionary(miss_ledger[1]).status) == "missed",
+		"a late intention misses without manufacturing a contact",
+	)
+	var wrong_server := fixture.duplicate(true)
+	wrong_server.actions[0].actor = 6
+	var side_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var side_result = side_driver.resolve_script(
+		wrong_server, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		side_result == null and side_driver.last_refusal == "serve actor is not on serving_side",
+		"the serve actor must belong to the declared serving side",
+	)
+	var block_fixture := fixture.duplicate(true)
+	block_fixture.actions.append({
+		"actor": 102, "action": "block", "intent_time": 2.20,
+		"target": Vector2(0.50, 0.50), "block_intent": "Seal",
+	})
+	block_fixture.actions.append({
+		"actor": 104, "action": "block", "intent_time": 2.20,
+		"target": Vector2(0.36, 0.50), "block_intent": "Seal",
+	})
+	var block_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var blocked: Resource = block_driver.resolve_script(
+		block_fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 118,
+	)
+	var touched_blocks := 0
+	for event in blocked.events:
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+				and bool(event.metadata.get("physical_contact", false)):
+			touched_blocks += 1
+			_check(
+				is_equal_approx(
+					float(event.metadata.contact_height_meters),
+					float(Dictionary(event.metadata.incoming_trajectory).end_height_meters)),
+				"a scripted block publishes the ball's resolved intersection height",
+			)
+	_check(touched_blocks == 1, "block intentions can miss or touch without guaranteeing either outcome")
+	var dig_fixture := fixture.duplicate(true)
+	dig_fixture.actions.append({
+		"actor": 102, "action": "block", "intent_time": 2.20,
+		"target": Vector2(0.50, 0.50), "block_intent": "Seal",
+	})
+	dig_fixture.actions.append({
+		"actor": 103, "action": "dig", "intent_time": 2.20,
+		"target": 101, "attempted_action": "platform dig",
+	})
+	var dig_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var dug: Resource = dig_driver.resolve_script(
+		dig_fixture, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	_check(
+		dug.events.size() == 6 \
+			and int(dug.events[-1].event_type) == RALLY_EVENT_SCRIPT.EventType.DIG \
+			and bool(dug.events[-1].metadata.get("physical_contact", false)),
+		"a dig intention reaches the shared production platform resolver only when reachable",
+	)
+	var illegal_cover := dig_fixture.duplicate(true)
+	illegal_cover.actions[-1] = {
+		"actor": 2, "action": "cover", "intent_time": 2.20,
+		"target": 1, "attempted_action": "block coverage",
+	}
+	var cover_driver = SCRIPTED_RALLY_DRIVER_SCRIPT.new()
+	var uncovered: Resource = cover_driver.resolve_script(
+		illegal_cover, manager.players, manager.current_lineup(), manager.opponent_team,
+		manager.current_defensive_plan(), 16,
+	)
+	var cover_ledger: Array = uncovered.analysis.get("scripted_intents", [])
+	_check(
+		uncovered.events.size() == 5 and str(Dictionary(cover_ledger[-1]).status) == "failed",
+		"coverage intent is not manufactured without a resolved own-side block rebound",
+	)
+	manager.free()

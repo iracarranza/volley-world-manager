@@ -12,17 +12,25 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-02 at `528ca7f`, after the
-simulation/playback authority repairs 1-4: **2 of 2,223 checks fail**. A *third*
-failure is a regression; these two are not.
+Current branch baseline, verified 2026-09-02 on the merge of
+`claude/system-fit-serve-receive-von64k` into this branch: **2 of 2,242 checks
+fail**. A *third* failure is a regression; these two are not.
 
-**Two checks written, two gained, and the predecessor was measured on this
-tree** -- so the delta is attributable and says no sampling population moved.
-2,221 at `4b60055` is directly comparable: same tree, same seeds, four repairs
-in between. The balance probe agrees independently, byte-identical over 700
-rallies after every one of the four.
+**Six checks written, six gained, and both sides of the merge were measured** --
+so the delta is attributable and says no sampling population moved. This branch
+stood at **3 of 2,236 at `a7f1a97`**, and the third failure was *"the world
+population and its transfer-market slice both survive a save/load cycle"*, which
+the merge fixes: it arrives with the `origin/main` work the incoming branch had
+already merged and this one had not.
 
-Before it, 2,221 at `4b60055`.
+**The merge moved no rally outcome, and that is measured rather than assumed.**
+`run_rally_balance_probe.gd` over 700 rallies is byte-identical between
+`a7f1a97` and the merge -- all nineteen figures, both serving sides. The
+incoming branch's twenty-four commits are a movement *contract* pass; every one
+of them was held to the same byte-identity on its own tree, and this run says
+the property survives transplanting.
+
+Before it on the incoming side, 2,223 at `528ca7f` and 2,221 at `4b60055`.
 
 **The delta from that merge is not computable, and the reason is worth one
 line.** Two attempts to measure the merged tree's own predecessor were spoiled --

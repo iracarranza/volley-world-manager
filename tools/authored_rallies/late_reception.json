@@ -1,0 +1,27 @@
+{
+  "format": "volley-world-manager/scripted-rally/v1",
+  "serving_side": "opponent",
+  "seed": 16,
+  "note": "A valid intention that misses because the receiver commits after the serve has landed.",
+  "initial_positions": {
+    "1": [0.82, 0.683333],
+    "2": [0.81, 0.8],
+    "3": [0.46, 0.6],
+    "4": [0.14, 0.68],
+    "5": [0.19, 0.8],
+    "6": [0.45, 0.84],
+    "101": [0.82, 0.16],
+    "102": [0.5, 0.44],
+    "103": [0.82, 0.16],
+    "104": [0.18, 0.43],
+    "105": [0.18, 0.16],
+    "106": [0.5, 0.13]
+  },
+  "movement": [
+    {"actor": 2, "start_time": 0.0, "end_time": 1.0, "target": [0.8, 0.78], "note": "A reachable request; it may overlap contact intentions."}
+  ],
+  "actions": [
+    {"actor": 105, "action": "serve", "intent_time": 0.0, "target": [0.45, 0.92], "serve_type": "Standing", "aggression": 1.0},
+    {"actor": 6, "action": "receive", "intent_time": 9.0, "target": 1, "attempted_action": "platform pass"}
+  ]
+}

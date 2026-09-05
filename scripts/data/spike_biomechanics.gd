@@ -37,15 +37,23 @@ const ApproachBiomechanics := preload("res://scripts/data/approach_biomechanics.
 ## 0 to 1 independently: the swing played out completely during the approach and
 ## then snapped back to fully cocked at the instant of contact and played again.
 
+## Visual vocabulary semantics
+##
+## This is the clean, fully committed overhead attack base: plant and takeoff,
+## high-elbow preparation, proximal-to-distal contact, follow-through, landing,
+## and recovery. It assumes comfortable ideal striking geometry. Soft-shot and
+## compromised/reaching families preserve this continuous chain and modify its
+## late intention or body response rather than replacing the approach or launch.
+
 ## Where each phase of the spike begins, on the signed timeline above.
 ##
 ## Chosen against the real proportions of the action rather than spaced evenly.
-## The plant and the takeoff take most of the wind-up; the cock is brief; the
-## acceleration into contact is very brief, which is exactly why a spike looks
-## fast even though the whole action is not.
+## The plant and takeoff take most of the wind-up. The shoulder drive begins
+## while the high elbow is still forming, then the elbow releases later. This
+## overlap is quick without reducing the visible swing to a two-frame punch.
 const PLANT_END: float = -0.62
 const TAKEOFF_END: float = -0.40
-const COCK_END: float = -0.14
+const COCK_END: float = -0.22
 const FOLLOW_END: float = 0.45
 
 ## How wide a slice around zero `phase_name` is willing to call the contact.
@@ -54,21 +62,15 @@ const CONTACT_BAND: float = 0.04
 
 ## When the shoulder starts driving at the ball, and when the elbow follows.
 ##
-## Both later than the cock ends, which is the "storing tension" half of the
-## action: the arm holds its load while the trunk unwinds under it and only then
-## goes. Pulled in from `COCK_END` and -0.115 because the burst was spread thinly
-## over most of the cock -- the hand crept up to the ball instead of being thrown
-## at it -- and a shorter window at the same travel is a faster hand by exactly
-## the ratio of the two.
-##
-## They cannot be pulled in much further. The continuity gate in
-## `_test_spike_biomechanics_sequence` allows nine degrees between adjacent
-## samples 0.005 of phase apart, and an accelerating window ends at twice its
-## average rate: the shoulder's 82 degrees over 0.105 is 7.8 of them and the
-## elbow's 71 over 0.09 is 7.9. Anything tighter draws a limb teleporting, which
-## is the thing this file was written to stop.
-const STRIKE_START: float = -0.105
-const ELBOW_RELEASE_START: float = -0.09
+## The shoulder starts before the named cock has finished and the elbow follows.
+## The former -0.105/-0.09 windows compressed each into roughly two frames on
+## the resolved takeoff clock. These wider windows publish a readable chain, and
+## the Hermite contact velocity keeps that chain moving through phase zero.
+const STRIKE_START: float = -0.32
+const ELBOW_RELEASE_START: float = -0.20
+const SHOULDER_CONTACT_VELOCITY: float = -260.0
+const ELBOW_CONTACT_VELOCITY: float = 260.0
+const ABDUCTION_CONTACT_VELOCITY: float = -42.0
 
 ## How high the guide arm reaches at the cock.
 ##
@@ -88,7 +90,7 @@ const GUIDE_REACH_DEGREES: float = 132.0
 ## Well after `FOLLOW_END`, because the follow-through does not stop when the
 ## legs land. Set here rather than reusing `FOLLOW_END` so the two can be tuned
 ## apart -- they are different events happening to different limbs.
-const ARM_RECOVER_START: float = 0.72
+const ARM_RECOVER_START: float = FOLLOW_END
 
 ## Where the approach leaves both arms, which is where this model has to pick
 ## them up.
@@ -262,6 +264,46 @@ static func decelerate(phase: float, from_phase: float, to_phase: float) -> floa
 	return 1.0 - (1.0 - t) * (1.0 - t)
 
 
+## Cubic joint travel with velocities stated per unit of signed pose phase.
+## Contact is the shared boundary of two Hermite segments, so using the same
+## velocity on both sides makes phase zero part of the swing rather than an
+## accelerated endpoint followed by a separately eased follow-through.
+static func travel(
+	phase: float,
+	from_phase: float,
+	to_phase: float,
+	from_value: float,
+	to_value: float,
+	from_velocity: float,
+	to_velocity: float,
+) -> float:
+	if phase <= from_phase:
+		return from_value
+	if phase >= to_phase:
+		return to_value
+	var span := maxf(to_phase - from_phase, 0.0001)
+	var t := clampf((phase - from_phase) / span, 0.0, 1.0)
+	var t2 := t * t
+	var t3 := t2 * t
+	return (2.0 * t3 - 3.0 * t2 + 1.0) * from_value \
+		+ (t3 - 2.0 * t2 + t) * from_velocity * span \
+		+ (-2.0 * t3 + 3.0 * t2) * to_value \
+		+ (t3 - t2) * to_velocity * span
+
+
+## Canonical jump envelope. The existing three-step approach owns everything
+## before `PLANT_END`, so elevation is exactly zero until the bilateral plant.
+## The loaded legs then launch the actor into contact and the positive half
+## returns them to the floor without an independent gallery sine wave.
+static func elevation_at(phase: float) -> float:
+	var p := clampf(phase, -1.0, 1.0)
+	if p < PLANT_END:
+		return 0.0
+	if p <= 0.0:
+		return smoothstep(PLANT_END, 0.0, p)
+	return 1.0 - smoothstep(0.0, 0.72, p)
+
+
 ## Every joint the attack pose needs, for one instant of the swing.
 ##
 ## `handedness_sign` is +1 for a right-handed hitter and -1 for a left-handed
@@ -300,14 +342,9 @@ static func resolve(
 	## It was narrower still until the continuity check pointed out that a
 	## segment moving 7 degrees per sample is indistinguishable from one
 	## teleporting, at the sampling rate playback actually runs at.
-	## The shoulder finishes its drive **before** the ball, not on it.
-	##
-	## Ending at zero meant the arm was still travelling at the instant of contact
-	## and the extension completed afterwards, so the frames either side of the
-	## strike were drawn mid-swing with a bent elbow. A hitter is at full extension
-	## when the hand meets the ball; the last three hundredths are the arm arriving
-	## and waiting, not still arriving.
-	var strike := accelerate(p, STRIKE_START, 0.0)
+	## Phase zero is an instant inside the swing, not a clamped endpoint. The
+	## contact pose is extended, but its velocity continues into follow-through.
+	var strike := window(p, STRIKE_START, 0.0)
 	## **The elbow holds its fold while the shoulder travels, then extends.**
 	##
 	## It opened over (-0.11, 0.02) against a shoulder driving over (-0.14, 0.00) --
@@ -318,14 +355,10 @@ static func resolve(
 	## The frame-by-frame strip is what made it obvious; a single frame cannot show
 	## an ordering.
 	##
-	## Now it stays folded until the shoulder is most of the way forward and then
-	## snaps open -- and it finishes **before** contact. Measured on the old window
-	## the elbow was still at -16 degrees at phase zero and only reached full
-	## extension a tenth later, so the two frames nearest the ball were the two that
-	## looked least like a spike. The lag over the shoulder is what makes it a whip
-	## and it survives: the shoulder's travel centres on -0.085 and the elbow's on
-	## -0.068, so the elbow is still the last joint to go.
-	var elbow_release := accelerate(p, ELBOW_RELEASE_START, 0.0)
+	## It stays folded after the shoulder begins, then opens into contact. Both
+	## segments retain non-zero contact velocity, so neither appears to stop at
+	## the ball before starting a second animation.
+	var elbow_release := window(p, ELBOW_RELEASE_START, 0.0)
 	var follow := decelerate(p, 0.0, FOLLOW_END)
 	var land := window(p, FOLLOW_END, 1.0)
 	## The arm finishes after the feet do.
@@ -351,34 +384,80 @@ static func resolve(
 	var shoulder := BACKSWING_DEGREES
 	shoulder = lerpf(shoulder, SHOULDER_LIFT_DEGREES, lift)
 	shoulder = lerpf(shoulder, SHOULDER_COCK_DEGREES, tuck)
-	shoulder = lerpf(shoulder, SHOULDER_CONTACT_DEGREES, strike)
-	shoulder = lerpf(shoulder, SHOULDER_FOLLOW_DEGREES, follow)
+	if p >= STRIKE_START and p <= 0.0:
+		shoulder = travel(
+			p, STRIKE_START, 0.0,
+			SHOULDER_COCK_DEGREES, SHOULDER_CONTACT_DEGREES,
+			0.0, SHOULDER_CONTACT_VELOCITY,
+		)
+	elif p > 0.0:
+		shoulder = travel(
+			p, 0.0, FOLLOW_END,
+			SHOULDER_CONTACT_DEGREES, SHOULDER_FOLLOW_DEGREES,
+			SHOULDER_CONTACT_VELOCITY, 0.0,
+		)
 	## **Forward, not back.** This returned to -16, and the arm was at -252: a
 	## 236-degree reversal, which is the swing running backwards. Measured, the
 	## hand covered it at up to 17 m/s -- three times its speed through the ball,
 	## so the fastest thing in a spike was the arm un-spiking afterwards.
 	##
-	## -376 is the same hanging arm (it differs by a full turn) reached by
-	## *continuing*: down across the body, through the bottom of the arc, and back
-	## up to the side. 124 degrees in the direction the arm was already
-	## travelling, which is what an arm does after it hits something.
-	shoulder = lerpf(shoulder, -376.0, arm_recover)
+	## -340 approaches the same hanging arm by *continuing*: down across the body
+	## and toward the bottom of the arc. Starting that return at `FOLLOW_END`
+	## spreads it across the landing rather than producing a faster second swing.
+	shoulder = lerpf(shoulder, -340.0, arm_recover)
 
 	## And the elbow lags it. Folding early and opening late is the entire
 	## difference between a whip and a windmill, so these windows deliberately
 	## start after the shoulder's and end after it too.
 	var elbow := lerpf(BACKSWING_ELBOW_DEGREES, ELBOW_COCK_DEGREES, maxf(lift, tuck))
-	elbow = lerpf(elbow, ELBOW_CONTACT_DEGREES, elbow_release)
-	elbow = lerpf(elbow, ELBOW_FOLLOW_DEGREES, follow)
+	if p >= ELBOW_RELEASE_START and p <= 0.0:
+		elbow = travel(
+			p, ELBOW_RELEASE_START, 0.0,
+			ELBOW_COCK_DEGREES, ELBOW_CONTACT_DEGREES,
+			0.0, ELBOW_CONTACT_VELOCITY,
+		)
+	elif p > 0.0:
+		elbow = travel(
+			p, 0.0, FOLLOW_END,
+			ELBOW_CONTACT_DEGREES, ELBOW_FOLLOW_DEGREES,
+			ELBOW_CONTACT_VELOCITY, 0.0,
+		)
 	elbow = lerpf(elbow, 22.0, arm_recover)
 
 	## Outward through the load, unwinding into the ball. Its own window rather
 	## than the shoulder's, because the arm comes back into plane a beat *before*
 	## the elbow extends -- the abduction is what the shoulder rotates out of.
 	var abduct := lerpf(6.0, SHOULDER_ABDUCT_COCK_DEGREES, maxf(lift, tuck))
-	abduct = lerpf(abduct, SHOULDER_ABDUCT_CONTACT_DEGREES, window(p, COCK_END, -0.04))
-	abduct = lerpf(abduct, 4.0, follow)
+	if p >= COCK_END and p <= 0.0:
+		abduct = travel(
+			p, COCK_END, 0.0,
+			SHOULDER_ABDUCT_COCK_DEGREES, SHOULDER_ABDUCT_CONTACT_DEGREES,
+			0.0, ABDUCTION_CONTACT_VELOCITY,
+		)
+	elif p > 0.0:
+		abduct = travel(
+			p, 0.0, FOLLOW_END,
+			SHOULDER_ABDUCT_CONTACT_DEGREES, 4.0,
+			ABDUCTION_CONTACT_VELOCITY, 0.0,
+		)
 	abduct = lerpf(abduct, 0.0, arm_recover)
+
+	## Rotation of the elbow plane around the upper arm. The upper-arm meshes are
+	## radially symmetric, but the bent forearm is not: this axis carries the hand
+	## around the shoulder instead of letting pitch plus extension punch it along
+	## one horizontal line.
+	var internal_rotation := lerpf(0.0, -18.0 * hand, maxf(lift, tuck))
+	if p >= STRIKE_START and p <= 0.0:
+		internal_rotation = travel(
+			p, STRIKE_START, 0.0, -18.0 * hand, 12.0 * hand,
+			0.0, 92.0 * hand,
+		)
+	elif p > 0.0:
+		internal_rotation = travel(
+			p, 0.0, FOLLOW_END, 12.0 * hand, 30.0 * hand,
+			92.0 * hand, 0.0,
+		)
+	internal_rotation = lerpf(internal_rotation, 0.0, arm_recover)
 
 	## The guide arm is not decoration. It **points at the ball** through the cock
 	## and is pulled down hard as the striking arm comes forward -- that pull is
@@ -455,6 +534,7 @@ static func resolve(
 		"striking_shoulder_degrees": shoulder,
 		"striking_elbow_degrees": elbow,
 		"striking_abduction_degrees": abduct * hand,
+		"striking_internal_rotation_degrees": internal_rotation,
 		"guide_shoulder_degrees": guide,
 		"guide_elbow_degrees": guide_elbow,
 		"torso_pitch_radians": torso,

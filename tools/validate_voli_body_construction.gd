@@ -25,6 +25,18 @@ func _extra(spec: Dictionary, name: String) -> Dictionary:
 	return {}
 
 
+## Face parts by name rather than by index. `parts()` returned eyes then mouth
+## when this file was written; pupils were later interleaved after each eye, so
+## every positional face assertion below silently retargeted -- see the NOTE at
+## the call site.
+func _part(parts: Array, name: String) -> Dictionary:
+	for raw_part in parts:
+		var part: Dictionary = raw_part
+		if str(part.get("name", "")) == name:
+			return part
+	return {}
+
+
 func _run() -> void:
 	var produce_signatures: Dictionary = {}
 	for produce in Bodies.PRODUCE:
@@ -86,10 +98,27 @@ func _run() -> void:
 		_check(str(wing.get("shape", "")) == "fan", "%s is not a folding wing fan" % wing_name)
 		_check(str(wing.get("ink", "")) == "body", "%s uses the noisy cosmetic outline" % wing_name)
 	var face_parts := Faces.parts("neutral", 0.18, 0.17)
-	_check(str(face_parts[0].get("ink", "")) == "none", "eyes still receive independent outline hulls")
-	_check(str(face_parts[1].get("ink", "")) == "none", "eyes still receive independent outline hulls")
-	_check(str(face_parts[2].get("shape", "")) == "stroke", "mouth is still assembled from legacy boxes")
-	_check(str(face_parts[2].get("ink", "")) == "none", "mouth stroke receives a second outline")
+	## NOTE keyed by name -- pupils were interleaved into a positional read and
+	## silently moved the mouth assertion onto the right eye
+	for eye_name in ["EyeL", "EyeR"]:
+		_check(
+			str(_part(face_parts, eye_name).get("ink", "")) == "none",
+			"%s still receives an independent outline hull" % eye_name,
+		)
+	for pupil_name in ["PupilL", "PupilR"]:
+		_check(
+			str(_part(face_parts, pupil_name).get("ink", "")) == "none",
+			"%s still receives an independent outline hull" % pupil_name,
+		)
+	_check(
+		str(_part(face_parts, "Mouth").get("shape", "")) == "stroke",
+		"mouth is still assembled from legacy boxes",
+	)
+	## NOTE arrived indexing [2] as the mouth, which is EyeR -- keyed by name
+	_check(
+		str(_part(face_parts, "Mouth").get("ink", "")) == "none",
+		"mouth stroke receives a second outline",
+	)
 
 	var actor := ActorScene.instantiate() as PlayerActor3D
 	root.add_child(actor)
