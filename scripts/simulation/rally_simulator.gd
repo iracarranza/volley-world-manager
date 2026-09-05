@@ -127,13 +127,6 @@ const SetPathReadModelRef := preload(
 ## NOTE How many attack exchanges a rally may contain -- RALLY_SIMULATOR_NOTES.md
 const MAX_EXCHANGES: int = 4
 
-## `OPPONENT_SERVE`, `OPPONENT_BLOCK` and `OPPONENT_DEFENSE` were flat
-## ratings standing in for the whole opponent side, from when that side was a
-## simplified parallel implementation rather than a real roster. Nothing has
-## read them since the opponent started being resolved through the same
-## systems as the home team; three unexplained magic floats were all that
-## remained of it.
-
 ## NOTE Fallbacks for a setter with no derived release profile -- RALLY_SIMULATOR_NOTES.md
 const BLOCK_SHOULDER_OFFSET: float = 0.095
 const BLOCK_NET_DEPTH: float = 0.032
@@ -478,17 +471,11 @@ const MISSED_SET_DROP_DEPTH_METERS: float = 0.85
 const MISSED_SET_DROP_LATERAL_METERS: float = 0.24
 const MISSED_SET_DROP_VERTICAL_MPS: float = -2.4
 
-## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
-## so the result can be compared with an attack quality that is also a fraction
-## of an ideal, which is the whole point of a contest between them.
 ## What a defender's eyes are worth against a hitter's arm.
 ##
 ## A contest, not a bonus: `court_vision - arm_speed` is signed, so an elite
-## reader against a slow arm sees the shot early and a poor reader against a fast
-## one is genuinely behind it. Sized against the read terms it joins -- the
-## responsibility fit and the scouting bonus both work in hundredths -- so a full
-## 100-vs-1 mismatch is worth about as much as being in exactly the right zone,
-## and an ordinary pairing is worth nothing.
+## reader against a slow arm sees the shot early. Sized in hundredths, like the
+## read terms it joins.
 const DIG_VISION_READ_WEIGHT: float = 0.10
 
 ## NOTE What the wall in front of a defender tells them -- RALLY_SIMULATOR_NOTES.md
@@ -785,11 +772,8 @@ var rally_seed: int = 0
 ## Whether this rally's setter can actually deliver a first-tempo ball, taken
 ## from their own shadow read rather than guessed from the pass.
 ##
-## `ShadowSetterResponseSystem._set_options` has decided this all along -- gated
-## on arrival balance, confidence and `tempo_control` -- and published it into
-## evidence, the rollout audit and the progression calibration. Three consumers,
-## none of them the rally. The setter decided whether to run a quick and the
-## rally never asked.
+## NOTE `ShadowSetterResponseSystem._set_options` has always decided this, gated
+## on arrival balance, confidence and `tempo_control`
 var setter_can_run_quick: bool = false
 ## Which swing of this rally is being placed, so a hitter who swings twice does
 ## not ask for the identical coordinate both times.
@@ -1202,17 +1186,13 @@ func resolve(
 			if struck_serve != null \
 					and struck_serve.event_type == RallyEventModel.EventType.SERVE:
 				struck_serve.metadata["outgoing_trajectory"] = serve_realised
-	## **A serve is the hardest ball in the game to read**, which is the whole
-	## point of a float: eighteen metres of flight from a contact the passer
-	## cannot see the hand on, and nothing in front of it to funnel the answer.
+	## NOTE a serve carries the largest read error in the game -- eighteen metres
+	## from a contact the passer cannot see the hand on
 	var arrival: Dictionary = _read_adjusted_arrival(
 		Dictionary(reception_claim.get("arrival", {})),
 		_read_error_meters(
-			## The spin the launch search *settled on*, not the whole of what this
-			## server can put on a ball. They are different numbers -- the sweep
-			## trades brush against range and usually keeps less than all of it --
-			## and novelty, which is what makes a ball hard to track, is computed
-			## from the rotation the ball actually carries.
+			## NOTE the spin the launch search settled on, not the server's whole
+			## range -- novelty reads the rotation the ball actually carries
 			receiver, serve_trajectory, serve_spin,
 			float(serve_trajectory.get("start_time", rally_clock)),
 		),
@@ -2533,12 +2513,9 @@ func resolve(
 	identity_effects["attack_selection"]["hit_type"] = hit_type
 	## What this hitter meant to do, kept before the run-up can talk them out of it.
 	##
-	## Every swing in the game passes through two independent downgrades -- the
-	## set-quality gate that picks the shot, and `backs_off` below, which rewrites
-	## it again from the approach. Only the second one's *output* was ever
-	## published, so a side that almost never spikes looked identical whether its
-	## sets were bad or its run-ups were, and three separate investigations went
-	## looking for the cause in the first gate.
+	## NOTE two independent downgrades -- the set-quality gate and `backs_off`
+	## below. Publishing only the second made bad sets and bad run-ups look
+	## identical from the outside.
 	var attack_tactical := _attack_tactical_decision(
 		hitter, lineup, hit_type,
 		opponent_block_formation.get("primary") != null, false,
@@ -2920,8 +2897,6 @@ func resolve(
 	shadow_summary["block_rollout"] = block_rollout_evidence
 	shadow_reception_trace.summary = shadow_summary
 
-	# Resolve the block from the opponent's actual front-row geometry. A
-	# roster-wide best blocker must not cover every pin regardless of distance.
 	## The opponent's wall, with the opponent's intent. Their plan is built from
 	## the same defaults a home coach starts on, so a Balanced intent here is the
 	## same Balanced intent the player would have.
@@ -3631,10 +3606,8 @@ func resolve(
 	## defender is playing the deflection, which is slower -- the same distinction
 	## `opponent_defense_time` above already makes for the clock, made here for
 	## the weight.
-	## Published beside the pressure it is contested against, because a term
-	## that decides a dig and cannot be read off the event is a term nobody can
-	## attribute a dig to -- which is how three separate values on this branch
-	## came to be spent invisibly.
+	## NOTE published beside the pressure it is contested against -- a term that
+	## decides a dig and is not on the event cannot be attributed
 	opponent_dig_terms["read_error_meters"] = float(
 		Dictionary(opponent_defense.get("arrival", {})).get("read_error_meters", 0.0)
 	)
@@ -4494,13 +4467,9 @@ func _resolve_opponent_transition(
 	)
 	## Capability, on every ball rather than only the first one.
 	##
-	## This was gated on `first_ball`, which meant an opponent set out of
-	## defence paid no capability penalty at all -- the mirror of the defect
-	## just fixed on the home transition set. Fixing one and leaving the other
-	## would have made the two transition sets differ by side, which is the
-	## exact shape this engine has produced eleven times now. A setter taking a
-	## dug ball is doing the same thing they do off a pass: reaching for a
-	## contact at some height, off some approach, for some tempo.
+	## NOTE was gated on `first_ball`, so an opponent set out of defence paid no
+	## capability penalty -- which would have made the two transition sets differ
+	## by side
 	if physical_choice.has("contact_height_meters"):
 		pass_contact_height_meters = float(physical_choice.contact_height_meters)
 	var opponent_capability := SetterCapabilityModel.evaluate(
@@ -4519,15 +4488,10 @@ func _resolve_opponent_transition(
 	)
 	## And the verdict is acted on, not just billed for.
 	##
-	## `SetterCapabilityModel.evaluate` answers two things: what this set
-	## costs the setter, and what tempo they can actually run. The home side
-	## reads both -- it pays the penalty *and* abandons the play through
-	## `_downgraded_assignment`. This side read the bill and threw away the
-	## verdict: `resolved_tempo` and `tempo_downgraded` appear nowhere on the
-	## opponent path, so an opponent setter was told they could not run the
-	## tempo they called, charged for attempting it, and then ran it anyway.
-	## The whole point of the model is that capability is not permission, and
-	## it was only enforced against one team.
+	## `SetterCapabilityModel.evaluate` answers two things: what this set costs
+	## the setter, and what tempo they can actually run. Both are read here, and
+	## the play is abandoned through `_downgraded_assignment`.
+	## NOTE the opponent path once read the bill and dropped the verdict
 	if bool(opponent_capability.get("tempo_downgraded", false)):
 		opponent_tempo_call = int(
 			opponent_capability.get("resolved_tempo", opponent_tempo_call)
@@ -5344,10 +5308,9 @@ func _resolve_opponent_transition(
 		opponent_attack * opponent_path_quality_multiplier, 0.0, 1.0
 	)
 	## The same geometric swing the home first ball resolves in shadow, on the
-	## other side of the net. Recording both sides is the point: the symmetry
-	## gate measures a six-point home tilt today, and one shared resolver is the
-	## most plausible way that goes away -- which can only be checked if both
-	## sides are measured through it.
+	## other side of the net.
+	## NOTE the symmetry gate measures a six-point home tilt; both sides have to
+	## be measured through one resolver for that to be checkable
 	var opponent_record := _geometric_swing_record(
 		_geometric_swing(
 			opponent_hitter, opponent_contact,
@@ -5653,12 +5616,9 @@ func _resolve_opponent_transition(
 			opponent_set_event.metadata.get("outgoing_trajectory", {})
 		)
 	opponent_live_positions[opponent_hitter.id] = opponent_body_contact
-	## The opponent could not miss a swing. Not "rarely" -- there was no branch
-	## for it anywhere on this path, so every transition ball the opponent hit
-	## either beat the block or was dug, and a home hitter who errs at the
-	## sport's rate was being compared against an opponent who never errs at
-	## all. That is the asymmetry the symmetry gate was written to find, and it
-	## closes here because both sides now miss through the same ballistics.
+	## NOTE the opponent had no error branch at all on this path, so a home
+	## hitter erring at the sport's rate was measured against one who never
+	## errs. Both sides now miss through the same ballistics.
 	if opponent_attack_missed:
 		return _finish(result, "opponent_attack_error", true, opponent_hitter.id, {
 			"hitter": opponent_hitter.display_name,
@@ -6260,10 +6220,8 @@ func _resolve_opponent_transition(
 		),
 		support_count,
 	)
-	## Published beside the pressure it is contested against, because a term
-	## that decides a dig and cannot be read off the event is a term nobody can
-	## attribute a dig to -- which is how three separate values on this branch
-	## came to be spent invisibly.
+	## NOTE published beside the pressure it is contested against -- a term that
+	## decides a dig and is not on the event cannot be attributed
 	home_dig_terms["read_error_meters"] = float(
 		Dictionary(defense_arrival).get("read_error_meters", 0.0)
 	)
@@ -6759,10 +6717,9 @@ func _resolve_home_continuation(
 			defender.display_name, roundi(set_quality * 100.0),
 		], {"side": "home", "set_path": "home_transition",
 			## The home off-ball four out of defence, on the same principle as the
-			## first-ball path. Without this the transition set was the one home
-			## flight nobody moved through -- the opponent's continuation had it
-			## and ours did not, which is the asymmetry this file keeps having to
-			## close one path at a time.
+			## first-ball path.
+			## NOTE without it the transition set was the one home flight nobody
+			## moved through, while the opponent continuation had it
 			"home_phase_targets": _transition_phase_map(
 				players, lineup, defender.id, setter.id,
 				hitter.id if hitter != null else -1,
@@ -7829,16 +7786,9 @@ func _resolve_home_continuation(
 			coverage_incoming,
 		)
 	## A transition dig is the same act as any other; the defender is simply
-	## already in the rally rather than reading a first-ball swing. It was not
-	## treated as one: this path took the roster's best digger regardless of
-	## where the ball went, and handed `_defense_execution` a flat zero arrival
-	## margin -- a defender who is always exactly on time for a ball they never
-	## had to move to, chosen by a search that could not lose.
-	## A deflected ball takes longer to arrive, and the defender behind it gets
-	## that time. Both other dig sites already add it -- the home dig off an
-	## opponent swing and the opponent dig off the home first ball -- and this one
-	## did not, so the same block touch bought the home defence 0.24 s and bought
-	## this defence nothing. Three sites, one rule.
+	## already in the rally rather than reading a first-ball swing.
+	## NOTE a deflected ball takes longer to arrive and the defender gets that
+	## time -- 0.24 s, the same as the other two dig sites
 	var cont_defense_time := maxf(float(
 		cont_block_trajectory.get("duration", 0.0)
 	), BLOCK_DEFLECTION_MIN_SECONDS) \
@@ -7889,10 +7839,8 @@ func _resolve_home_continuation(
 		),
 		int(cont_defense.get("support_count", 0)),
 	)
-	## Published beside the pressure it is contested against, because a term
-	## that decides a dig and cannot be read off the event is a term nobody can
-	## attribute a dig to -- which is how three separate values on this branch
-	## came to be spent invisibly.
+	## NOTE published beside the pressure it is contested against -- a term that
+	## decides a dig and is not on the event cannot be attributed
 	cont_dig_terms["read_error_meters"] = float(
 		Dictionary(cont_defense.get("arrival", {})).get("read_error_meters", 0.0)
 	)
@@ -8265,16 +8213,11 @@ func _form_opponent_block(
 
 ## NOTE Settles a formed block against the swing that was actually hit at it -- RALLY_SIMULATOR_NOTES.md
 static func _block_intent_margins(intent: String) -> Dictionary:
-	## Sized against the same distribution the bands are. The previous shifts moved
-	## the touch rung by 0.015 between the two intents -- a fortieth of the spread --
-	## and asked a sample of fifty blocks to resolve it. That is not a dial, it is
-	## noise with a name, and it is why the two intents came out tied at twenty
-	## partials each once the opponent started swinging.
-	##
-	## These move real shares: a seal's stuff rung sits about six points of the
-	## distribution lower than a funnel's, and a funnel's own rung sits sixteen
-	## points below a seal's, so the tactical choice shows up in tens of events
-	## rather than in ones.
+	## Sized against the same distribution the bands are. The previous shifts
+	## moved the touch rung by 0.015 between intents -- a fortieth of the spread,
+	## asked to resolve against a sample of fifty blocks.
+	## NOTE these move real shares: six and sixteen points of the distribution,
+	## so the tactical choice shows up in tens of events rather than ones
 	match intent:
 		"Seal":
 			return {"stuff": -0.06, "touch": -0.02, "funnel": 0.09}
@@ -8957,12 +8900,9 @@ func _reached_point(
 	if _movement_time(mover, start, target, mode) <= available_time:
 		## **The body has to agree with the verdict.**
 		##
-		## Promoting the read model made a defender's *arrival* worse without
-		## making their *journey* shorter, so the simulator could score a dig
-		## unreachable while playback still walked the defender onto the ball --
-		## which is the exact defect `every defender beaten to the ball stops
-		## short of it` was written to catch, and it caught it. A defender who
-		## went to the wrong place is drawn at the wrong place.
+		## NOTE promoting the read model worsened arrival without shortening the
+		## journey, so a dig could score unreachable while playback still walked
+		## the defender onto the ball
 		if shortfall_meters <= 0.0:
 			return _body_behind_contact(
 				mover, target, contact_height_meters, incoming_direction
@@ -11223,11 +11163,9 @@ func _incoming_ball_direction(
 	return travel.normalized() if travel.length_squared() > 0.000001 else Vector2.ZERO
 
 
-## Ground speed of the drawn arc, in metres per second, or zero when there is no
-## arc to read. Separate from the force so the census can report the raw figure --
-## the first version of the band was set from real volleyball speeds and left
-## `blown_away` unreachable, because this engine's balls travel at about half of
-## them and no amount of tuning a threshold fixes a wrong axis.
+## Ground speed of the drawn arc, in m/s, or zero when there is no arc.
+## NOTE separate from the force so the census can report it raw; the band it
+## feeds is `RECOVERY_SLOW_BALL_MPS`
 func _incoming_ball_speed(trajectory: Dictionary) -> float:
 	var duration := float(trajectory.get("duration", 0.0))
 	if duration <= 0.01:
@@ -11341,22 +11279,14 @@ func _contact_recovery_state(
 ) -> String:
 	## How far short of its own posture's norm this contact fell.
 	##
-	## One number, and the posture is already inside it. That is what lets a
-	## single set of ordered bands cut a table whose entries span an order of
-	## magnitude -- and what stops a reaching contact, which normally scores
-	## 0.105 against a norm of 0.08, from being read as a disaster because 0.105
-	## is a small number.
+	## NOTE the posture is already inside it, which is what lets one set of
+	## ordered bands cut `POSTURE_EXPECTED_CONTROL` -- entries span an order of
+	## magnitude
 	var expected := float(POSTURE_EXPECTED_CONTROL.get(posture, 0.54))
 	var shortfall := 1.0 - control / maxf(expected, 0.001)
 
-	## Poise moves the bands; it does not decide.
-	##
-	## Footing and balance used to be `or`-ed in as verdicts of their own, so a
-	## voli below either threshold was drawn going down on *every* contact
-	## regardless of how well they played it. Here they shift where the bands sit
-	## by at most `RECOVERY_POISE_SWING` either way: a defender with poor poise
-	## goes down on a contact a steady one survives, and neither of them goes
-	## down on a good one.
+	## Poise moves the bands by at most `RECOVERY_POISE_SWING` either way; it
+	## does not decide.
 	var poise := (_recovery_footing(receiver) + _recovery_balance(receiver)) * 0.5
 	var shift := (0.5 - poise) * 2.0 * RECOVERY_POISE_SWING
 
@@ -13218,12 +13148,9 @@ func _add_event(
 	detail: String,
 	metadata: Dictionary = {},
 ) -> void:
-	## **Every jump in the game passes through here too.** Charging at the sites
-	## that jump would mean finding all of them -- the attack, the block, the
-	## assisting block, the jump set, the jump serve, on both sides, in first-ball
-	## and transition variants -- and missing one silently. One place that sees
-	## every contact is one place that can price them, and the effort each contact
-	## used is already on the event's own metadata.
+	## NOTE jumps are charged here because every contact passes through
+	## `_add_event` carrying its own effort in metadata -- charging at the jump
+	## sites would mean finding all of them and missing one silently
 	_charge_jump(actor_id, event_type, metadata)
 	## NOTE FD-003: where the twelve are, on every leg, from the one place that sees every contact -- RALLY_SIMULATOR_NOTES.md
 	if event_type != RallyEventModel.EventType.SERVE:
@@ -13872,11 +13799,6 @@ func _fallback_hitter(
 	return null
 
 
-## `_best_blocker()` used to pick a blocker by `block_timing + jump_reach`.
-## It has had no callers since blocking moved to `ShadowBlockSystem` and the
-## coordinated form-then-contest path, which reads the whole front row rather
-## than crowning one player. Removed rather than kept as a second, cruder
-## answer to a question the block system now owns.
 
 ## What the clipboard told this blocker to do with their hands, or "".
 ##
@@ -14648,9 +14570,9 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"launch_mode": str(swing.get("launch_mode", "")),
 		"wall_size": int(swing.get("wall_size", 0)),
 		## And what each of them reached, which is the difference between a wall
-		## and two people standing near one. Forwarded here rather than left in
-		## the record because this projection is all promotion sees -- the third
-		## time a key has been dropped at exactly this line.
+		## and two people standing near one.
+		## NOTE forwarded rather than left in the record -- this projection is
+		## all promotion sees
 		"wall_reach_heights": swing.get("wall_reach_heights", []),
 		"block_jump_timing": swing.get("block_jump_timing", {}),
 		"vertical_angle_degrees": float(delivered.get("vertical_angle_degrees", 0.0)),
@@ -14776,12 +14698,9 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		)),
 		## How many blockers were in the wall this swing met.
 		##
-		## `block_wall` drops any blocker whose close fraction is below
-		## `WALL_JOIN_CLOSE`, so this is the only figure that says whether "no
-		## wall" means nobody was assigned or nobody arrived -- and those want
-		## opposite fixes. It was in the record and this curator did not forward
-		## it, which is the same dropped-key shape that hid `block_miss_reason`
-		## for as long.
+		## NOTE `block_wall` drops any blocker below `WALL_JOIN_CLOSE`, so this is
+		## the only figure distinguishing "nobody assigned" from "nobody
+		## arrived" -- and those want opposite fixes
 		"wall_size": int(record.get("wall_size", 0)),
 		"wall_reach_heights": record.get("wall_reach_heights", []),
 		"block_jump_timing": record.get("block_jump_timing", {}),
@@ -15470,8 +15389,6 @@ func _fallback_assignment(
 	for index in range(lanes.size()):
 		var lane := str(lanes[index]["lane"])
 		var option_tempo := int(lanes[index]["tempo"])
-		## Their own lane is what they rehearse; being moved off it is a thing
-		## only a hitter with a repertoire can be asked to do.
 		## Their own lane at their own tempo is what they rehearse. Being moved
 		## across the court, or asked to run their lane fast, are both things only
 		## a hitter with a repertoire can be asked to do.
@@ -16020,10 +15937,9 @@ func _transition_phase_map(
 				else (&"preparing_attack" if mode == "transition" else &"defending"),
 			here, intent, reached, mode, window_seconds,
 		)
-		## The resolver has to believe what playback draws. Leaving these out of
-		## `live_positions` would put the drawn court and the simulated court in
-		## different places from the second contact onward, which is the defect
-		## every staging comment in this file exists because of.
+		## NOTE the resolver has to believe what playback draws -- leaving these
+		## out of `live_positions` separates the drawn and simulated courts from
+		## the second contact onward
 		live_positions[player.id] = reached
 	return targets
 
@@ -17098,12 +17014,6 @@ func _receiver(players: Array[VolleyballPlayer], lineup: RotationLineup) -> Voll
 		if candidate != null and (best == null or candidate.reception > best.reception):
 			best = candidate
 	return best
-
-
-## `_best_positioned_defender()` used to score defenders on proximity plus
-## anticipation and lateral speed. `CoverageCalculator.choose_claimant()`
-## replaced it with zone-aware arrival evaluation and left this behind
-## uncalled; two defender selectors is one too many.
 
 
 func _player_by_id(players: Array[VolleyballPlayer], player_id: int) -> VolleyballPlayer:
