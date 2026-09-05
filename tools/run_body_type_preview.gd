@@ -21,58 +21,14 @@ const SUBJECTS: Array = [
 	["Vegi", "Stalk"], ["Vegi", "Pepper"],
 ]
 
-## Every pose the rig can strike, not the three that happened to get captured.
-##
-## Serve, set and attack were never photographed at all, which meant three of the
-## six things a voli does on court had no reference image and any judgement about
-## them was being made from memory. The elbow lands hardest in exactly those
-## three -- a cocked swing, a folded set -- so the gap and the feature met.
-##
-## The dig row exists because the four postures are the point of the knee.
-## `_reception_pass_result` decides which one a contact was, so seeing them side
-## by side is how you check the deep one actually reads as forced low rather
-## than as a slightly shorter player.
-##
-## Attack and serve are shot mid-swing rather than at contact: the arm is
-## straight at contact whatever the elbow does, so a contact-time frame is the
-## one frame that cannot show whether the joint works.
+## This is a body-type catalog, so every subject uses the same neutral stance.
 const POSES: Array = [
 	["stand", -1, 0.0],
-	["serve", 0, 0.45],
-	["set", 3, 0.5],
-	["attack", 4, 0.35],
-	["block", 5, 0.55],
-	["dig", 1, 0.0],
 ]
 
-## Where to stand to see the pose.
-##
-## A platform points *forward*, so from dead in front it is end-on and a dig
-## photographs as two arms hanging at the sides -- which is what the first run of
-## this row looked like, and it is a framing failure rather than a pose failure.
-## The dig gets the elevated view a match is actually watched from, which is also
-## the only angle where the four postures are distinguishable from each other.
-## Raised and widened to clear a jumping attacker's hands. The row is framed for
-## the *tallest thing in any pose*, not for a standing figure -- an attack lifts
-## the actor 0.82 m and then puts an arm above that, and a framing fitted to a
-## stand crops exactly the part the pose exists to show.
-const DEFAULT_CAMERA := {
-	"position": Vector3(0.0, 1.48, -10.8),
-	"rotation": Vector3(0.0, 180.0, 0.0),
-	"fov": 38.0,
-}
-const CAMERAS := {
-	"dig": {
-		"position": Vector3(0.0, 3.5, -10.5),
-		"rotation": Vector3(-19.0, 180.0, 0.0),
-		"fov": 40.0,
-	},
-}
-
-## Cycled across the row on the dig pose so every stance is on screen at once.
-const DIG_POSTURES: Array[String] = [
-	"planted", "moving", "reaching", "off-axis",
-]
+const COLUMNS := 5
+const CELL_WIDTH := 256.0
+const CELL_HEIGHT := 330.0
 
 var _subjects: Array = []
 
@@ -117,33 +73,26 @@ func _shoot(pose: Array) -> void:
 	var environment := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("101722")
+	env.background_color = Color.WHITE
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("53637d")
-	env.ambient_light_energy = 0.9
+	env.ambient_light_color = Color("dce4ec")
+	env.ambient_light_energy = 1.15
 	environment.environment = env
 	stage.add_child(environment)
 
 	var camera := Camera3D.new()
-	## Pulled back and widened when the sixth Vegi shape arrived -- the framing
-	## was fitted to seven subjects and silently cropped the eighth rather than
-	## failing, which is the kind of thing a preview tool must not do.
-	var view: Dictionary = CAMERAS.get(str(pose[0]), DEFAULT_CAMERA)
-	camera.position = view.get("position", DEFAULT_CAMERA.position)
-	camera.rotation_degrees = view.get("rotation", DEFAULT_CAMERA.rotation)
-	camera.fov = float(view.get("fov", DEFAULT_CAMERA.fov))
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.position = Vector3(0.0, 3.05, -10.0)
+	camera.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	camera.size = 6.5
 	stage.add_child(camera)
 
-	var spacing := 1.05
-	var start := -spacing * float(_subjects.size() - 1) * 0.5
+	_add_catalog_overlay(stage)
+	var column_spacing := 2.31
+	var row_spacing := 3.0
 	for index in range(_subjects.size()):
 		var subject: Dictionary = _subjects[index]
-		## The body type, never the produce. A Vegi is a Vegi -- the produce is
-		## how the variety is generated, not a name the player is known by, and
-		## printing it here was the one place in the game that turned a body into
-		## a species. Six rows all reading "Vegi" is the point: they are one type
-		## that grows in different shapes.
-		var label := str(subject.type)
+		var label := _subject_label(subject)
 		var actor: Node3D = ACTOR.instantiate()
 		stage.add_child(actor)
 		actor.configure(
@@ -153,24 +102,21 @@ func _shoot(pose: Array) -> void:
 				"body_type": str(subject.type),
 			},
 		)
-		## Negated with the camera, so a turned-around view still reads left to
-		## right in the order the subjects are declared.
+		var column := index % COLUMNS
+		var row := index / COLUMNS
 		actor.set_tactical_position(
-			Vector2.ZERO, Vector3(-start - spacing * float(index), 0.0, 0.0)
+			Vector2.ZERO,
+			Vector3(
+				-column_spacing * float(column - 2),
+				0.8 + row_spacing * float(1 - row),
+				0.0,
+			),
 		)
-		## `configure` writes a height and a handedness into the label, which is
-		## the right caption on court and pure overlap in a row of eight. Say only
-		## the thing the row is varying.
-		actor.identity_label.text = label
-		if str(pose[0]) == "dig":
-			actor.contact_posture = DIG_POSTURES[index % DIG_POSTURES.size()]
-			actor.identity_label.text = "%s · %s" % [
-				str(subject.type), actor.contact_posture,
-			]
+		actor.identity_label.visible = false
 		actor.set_pose(
 			int(pose[1]), float(pose[2]), 0.5, Vector2.ZERO, int(pose[1]) >= 0
 		)
-		actor.set_highlighted(true)
+		actor.set_highlighted(false)
 
 	for _frame in range(8):
 		await get_tree().process_frame
@@ -181,3 +127,43 @@ func _shoot(pose: Array) -> void:
 	print("saved %s" % ProjectSettings.globalize_path(path))
 	stage.queue_free()
 	await get_tree().process_frame
+
+
+func _subject_label(subject: Dictionary) -> String:
+	if str(subject.produce).is_empty():
+		return str(subject.type)
+	return "%s · %s" % [str(subject.type), str(subject.produce)]
+
+
+func _add_catalog_overlay(stage: Node) -> void:
+	var layer := CanvasLayer.new()
+	stage.add_child(layer)
+	var sheet := Control.new()
+	sheet.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(sheet)
+	for index in range(_subjects.size()):
+		var column := index % COLUMNS
+		var row := index / COLUMNS
+		var panel := Panel.new()
+		panel.position = Vector2(float(column) * CELL_WIDTH + 5.0, float(row) * CELL_HEIGHT + 24.0)
+		panel.size = Vector2(CELL_WIDTH - 10.0, CELL_HEIGHT - 10.0)
+		var border := StyleBoxFlat.new()
+		border.bg_color = Color(1.0, 1.0, 1.0, 0.0)
+		border.border_color = Color("26384a")
+		border.set_border_width_all(2)
+		border.corner_radius_top_left = 10
+		border.corner_radius_top_right = 10
+		border.corner_radius_bottom_left = 10
+		border.corner_radius_bottom_right = 10
+		panel.add_theme_stylebox_override("panel", border)
+		sheet.add_child(panel)
+
+		var caption := Label.new()
+		caption.text = _subject_label(_subjects[index])
+		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		caption.position = Vector2(8.0, panel.size.y - 45.0)
+		caption.size = Vector2(panel.size.x - 16.0, 36.0)
+		caption.add_theme_color_override("font_color", Color("172534"))
+		caption.add_theme_font_size_override("font_size", 20)
+		panel.add_child(caption)
