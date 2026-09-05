@@ -18,6 +18,34 @@ This book explains the project that actually exists. It also explains the persis
 6. Follow source links and inspect the named class or function before changing code.
 7. Run the checks in [VALIDATION.md](VALIDATION.md) after making changes.
 
+### Reading paths
+
+You do not have to read all of it, and which parts you need depends on what you
+are doing:
+
+| If you are… | Read |
+|---|---|
+| Entirely new to the project | Parts 1 → 2 → 3, then stop and do [P6-C1](part_06_exercises/01_guided_exercises.md) exercises 1–2 |
+| Changing rally behaviour | Part 3, then Part 4 |
+| Changing a career, roster or training feature | Part 3, then Part 5 |
+| Changing anything a viewer sees | Part 3, then Part 7 |
+| Continuing the migration | [FRESH_AGENT_HANDOFF.md](FRESH_AGENT_HANDOFF.md), then P4-C5 |
+| Looking up one fact | [INDEX.md](INDEX.md) or [GLOSSARY.md](GLOSSARY.md) |
+
+**Part 3 appears in every row.** It is short, and everything else assumes it.
+
+### If you change the book
+
+Run the validator, which checks that every source file and symbol the book
+names still exists:
+
+```bash
+godot --headless --path . --script res://docs/textbook/tools/validate_textbook.gd
+```
+
+It will not tell you whether an explanation is *correct* — only whether the
+things it points at are real. Both kinds of error have happened here.
+
 ## How a chapter is organised
 
 Every numbered chapter follows the same shape, so you can navigate one you have
