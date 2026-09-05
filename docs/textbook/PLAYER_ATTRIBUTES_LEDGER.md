@@ -117,6 +117,7 @@ These are **persistent, long-term properties** tied to a `VolleyballPlayer` reso
 | `tactical_discipline` | int | 1–100 | Adherence to game plan |
 | `improvisation` | int | 1–100 | Ability to adapt outside the plan |
 | `adaptability` | int | 1–100 | Speed of adjustment to opponent or role change |
+| `unpredictability` | int | 1–100 | How hard this hitter's placement is to read; widens the shot cone in `HitterPlacementModel` |
 | `leadership` | int | 1–100 | Stable ability to steady and lift teammates |
 
 ### Development & Progress
