@@ -3,9 +3,8 @@ extends Node
 ## Line the body types up and photograph them.
 ##
 ## A silhouette is a claim about what reads at a glance, and that claim can only
-## be checked by looking. Renders the three modelled types plus every Vegi
-## produce at a matched height, so what differs between them is shape rather
-## than scale.
+## be checked by looking. Renders all six modelled types plus every canonical
+## Vegi shape at a matched height, so what differs is shape rather than scale.
 ##
 ## Run:
 ##   xvfb-run -a godot --path . res://tools/body_type_preview.tscn
@@ -17,9 +16,9 @@ const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 ## that grows a pumpkin is a property of the hash, not something worth
 ## hand-maintaining here.
 const SUBJECTS: Array = [
-	["Feli", ""], ["Avi", ""],
-	["Vegi", "Tomato"], ["Vegi", "Aubergine"], ["Vegi", "Pumpkin"],
-	["Vegi", "Pear"], ["Vegi", "Turnip"], ["Vegi", "Stalk"],
+	["Feli", ""], ["Avi", ""], ["Cani", ""], ["Ursi", ""], ["Simi", ""],
+	["Vegi", "Tomato"], ["Vegi", "Aubergine"], ["Vegi", "Pear"],
+	["Vegi", "Stalk"], ["Vegi", "Pepper"],
 ]
 
 ## Every pose the rig can strike, not the three that happened to get captured.
@@ -58,13 +57,13 @@ const POSES: Array = [
 ## the actor 0.82 m and then puts an arm above that, and a framing fitted to a
 ## stand crops exactly the part the pose exists to show.
 const DEFAULT_CAMERA := {
-	"position": Vector3(0.0, 1.42, -8.4),
+	"position": Vector3(0.0, 1.48, -10.8),
 	"rotation": Vector3(0.0, 180.0, 0.0),
 	"fov": 38.0,
 }
 const CAMERAS := {
 	"dig": {
-		"position": Vector3(0.0, 3.6, -7.0),
+		"position": Vector3(0.0, 3.5, -10.5),
 		"rotation": Vector3(-19.0, 180.0, 0.0),
 		"fov": 40.0,
 	},
@@ -135,7 +134,7 @@ func _shoot(pose: Array) -> void:
 	camera.fov = float(view.get("fov", DEFAULT_CAMERA.fov))
 	stage.add_child(camera)
 
-	var spacing := 1.12
+	var spacing := 1.05
 	var start := -spacing * float(_subjects.size() - 1) * 0.5
 	for index in range(_subjects.size()):
 		var subject: Dictionary = _subjects[index]
@@ -175,7 +174,9 @@ func _shoot(pose: Array) -> void:
 
 	for _frame in range(8):
 		await get_tree().process_frame
-	var path := "user://body_types_%s.png" % str(pose[0])
+	var output_dir := "res://artifacts/voli-body-types"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(output_dir))
+	var path := "%s/voli_body_types_%s.png" % [output_dir, str(pose[0])]
 	root.get_texture().get_image().save_png(path)
 	print("saved %s" % ProjectSettings.globalize_path(path))
 	stage.queue_free()
