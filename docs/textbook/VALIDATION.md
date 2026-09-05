@@ -2,21 +2,20 @@
 
 Run commands from the repository root.
 
-The project currently targets Godot 4.7.1. On another computer, replace the
-executable in the examples with that installation's Godot 4 command. Establish
-the baseline before editing; a historical check count in `STATUS.md` is not a
-substitute for running it locally.
+The project targets **Godot 4.7.2**, which is what every workflow in
+`.github/workflows/` installs and what `project.godot` declares via
+`config/features=PackedStringArray("4.7", ...)`. Install it with
+`brew install --cask godot`, which puts `godot` on the PATH.
+
+Establish the baseline **before** editing. A historical check count in
+`STATUS.md` or `CLAUDE.md` is not a substitute for running it locally — those
+figures are only worth the commit they were measured on, and at least one of
+them has been stale for a week at a time.
 
 ## Documentation source check
 
 ```bash
 godot --headless --path . --script res://docs/textbook/tools/validate_textbook.gd
-```
-
-On this computer Godot may instead be located at:
-
-```bash
-/Users/iracarranza/Downloads/Godot.app/Contents/MacOS/Godot --headless --path . --script res://docs/textbook/tools/validate_textbook.gd
 ```
 
 This checks that documented source files and named symbols still exist. It cannot prove that explanations are conceptually correct.

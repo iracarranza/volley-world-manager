@@ -37,7 +37,7 @@
   ],
   "sources": [
     {"path": "project.godot", "symbols": ["run/main_scene", "[autoload]"]},
-    {"path": "scenes/application.gd", "symbols": ["func _show_title", "func _show_dashboard", "func _show_match"]},
+    {"path": "scenes/application.gd", "symbols": ["func _show_title", "func _show_journal", "func _show_match"]},
     {"path": "scenes/main/main.gd", "symbols": ["func _resolve_rally", "func _play_rally", "func _append_playback_history", "func _setup_visualization_controls", "func _apply_visualization_layers"]},
     {"path": "scripts/managers/game_manager.gd", "symbols": ["func resolve_active_rally"]},
     {"path": "scripts/managers/career_manager.gd", "symbols": ["func create_career", "func advance_week", "func save_career", "func load_career"]},
@@ -92,7 +92,7 @@
     {"path": "scenes/components/tactical_court.gd", "symbols": ["func set_shadow_reception_trace", "func _draw_shadow_reception_trace", "VISUAL_ALL", "func set_visualization_layers", "unit_movement_waypoints", "func _build_movement_paths", "func _sample_movement_path", "func _set_playback_progress", "SHADOW_LAYER_CONTINUOUS", "func _draw_continuous_reachability"]},
     {"path": "scenes/main/main.gd", "symbols": ["func _show_shadow_reception_debug", "ShadowReceptionLabel"]},
     {"path": "scripts/systems/training_system.gd", "symbols": ["class_name VolleyballTrainingSystem", "static func apply_week"]},
-    {"path": "scripts/systems/player_generator.gd", "symbols": ["class_name VolleyballPlayerGenerator", "static func generate_roster", "static func generate_market"]},
+    {"path": "scripts/systems/player_generator.gd", "symbols": ["class_name VolleyballPlayerGenerator", "static func generate_roster", "static func generate_prospect"]},
     {"path": "tests/test_runner.gd", "symbols": ["RALLY_STATE_BUILDER_SCRIPT", "RALLY_MOVEMENT_SCRIPT", "func _test_ball_read_foundations", "func _test_shadow_reception_trace", "func _test_seeded_floor_defense_geometry"]},
     {"path": "scripts/simulation/movement_timing_ratio_calibration.gd", "symbols": ["class_name MovementTimingRatioCalibration", "static func run", "PERCEPTIBLE_LOW"]},
     {"path": "scripts/simulation/locomotion_model.gd", "symbols": ["class_name LocomotionModel", "static func stride_meters", "static func cadence_hz", "static func maximum_speed", "MODE_STRIDE_SCALE"]},

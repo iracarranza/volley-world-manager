@@ -7,7 +7,7 @@ This ledger connects important statements to stable source locations.
 | A context-free developer has one authoritative continuation contract | VERIFIED DOCUMENTATION | `docs/textbook/FRESH_AGENT_HANDOFF.md` | `What is authoritative today`, `The one current next objective`, `Gate 44 acceptance contract` |
 | Application starts from the application scene | VERIFIED | `project.godot` | `run/main_scene` |
 | Game and career state are globally available | VERIFIED | `project.godot` | `[autoload]` |
-| UI navigation begins in one application controller | VERIFIED | `scenes/application.gd` | `_ready`, `_show_title`, `_show_dashboard`, `_show_match` |
+| UI navigation begins in one application controller | VERIFIED | `scenes/application.gd` | `_ready`, `_show_title`, `_show_journal`, `_show_match` |
 | Live rallies enter the current simulator through GameManager | VERIFIED | `scripts/managers/game_manager.gd` | `resolve_active_rally` |
 | Current simulator returns an event-based result | VERIFIED | `scripts/simulation/rally_simulator.gd` | `resolve`, `_add_event`, `_finish` |
 | Event playback data has actor, positions, quality, text, and metadata | VERIFIED | `scripts/models/rally_event.gd` | `RallyEvent` exported properties |
@@ -40,7 +40,7 @@ This ledger connects important statements to stable source locations.
 | Reach failures are decomposed into time, distance, movement capacity, contact reach, and directional-velocity error before tuning | VERIFIED SHADOW TOOL | `scripts/simulation/rally_movement_system.gd`; `scripts/simulation/rally_calibration_report.gd`; `docs/calibration/GATE_23_REACH_DECOMPOSITION.md` | `center_distance_deficit_meters`, `reach_counterfactuals` |
 | CareerManager owns career save and weekly flow | VERIFIED | `scripts/managers/career_manager.gd` | `create_career`, `advance_week`, `save_career`, `load_career` |
 | Weekly training changes players | VERIFIED | `scripts/systems/training_system.gd` | `apply_week` |
-| Player generation is region- and seed-aware | VERIFIED | `scripts/systems/player_generator.gd` | `generate_roster`, `generate_market` |
+| Player generation is region- and seed-aware | VERIFIED | `scripts/systems/player_generator.gd` | `generate_roster`, `generate_prospect` |
 | 2D match playback is present | VERIFIED | `scenes/main/main.gd` | `_play_rally` |
 | Completed rally history and analysis remain inside scrollable dashboard regions | VERIFIED | `scenes/main/main.tscn`; `scenes/main/main.gd` | `DashboardPlaybackHistoryLabel`, `DashboardExplanationLabel`, `_append_playback_history` |
 | Planner serve-receive centers affect resolved reception geometry | VERIFIED | `scripts/simulation/rally_simulator.gd`; `tests/test_runner.gd` | `planner_zone_center`, `_test_seeded_rally_resolution` |

@@ -12,7 +12,7 @@ This is stateful coordination. The manager calls systems and changes Resources, 
 
 ## Player generation
 
-`VolleyballPlayerGenerator.generate_roster()` and `generate_market()` construct players using region and seed inputs. Seeded generation allows reproducible careers and test fixtures.
+`VolleyballPlayerGenerator.generate_roster()` and `generate_prospect()` construct players using region and seed inputs. Seeded generation allows reproducible careers and test fixtures.
 
 ## Weekly training
 
