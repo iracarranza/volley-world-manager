@@ -163,3 +163,93 @@ clamping before/after, exit velocity identity, determinism (sample-for-sample
 across two builds), renderer-agnosticism, and the duration identity above.
 
 → P2.
+
+---
+
+## P2 — RECEIVE SLICE · **G1 PASSED**
+
+### P2.1 What was found in playback, before changing it
+
+`tactical_court._integrate_phase_path` did **four** separate things wrong, not
+one:
+
+1. re-integrated the leg from a second freshly built `RallyPlayerState`;
+2. integrated over a **fixed 5.0 s window** (`MOVEMENT_SAMPLE_WINDOW_SECONDS`),
+   not the leg's own duration;
+3. **normalised sample times to `[0,1]`**, discarding absolute time entirely;
+4. **forced the last point onto `target`** — *"The event's endpoint is
+   authoritative; end exactly on it."*
+
+Plus the facing pre-align, which its own comment justifies as stopping the
+re-solve from missing an endpoint the first solve had already committed to.
+
+### P2.2 Resolver side
+
+`_committed_path()` added immediately above `_reached_point()`, which carries
+the comment *"Every committed journey in the game passes through here"* — so it
+is the choke point P3 will reuse.
+
+It builds the trail from the same actor state, via
+`ShadowMovementSystem.integrate`, and returns `null` when there is nothing to
+draw. Both reception sites publish `movement_path` on the event.
+
+### P2.3 The G1 disagreement, and the contract fix
+
+First measurement, integrating toward the **ball**:
+
+| Metric | Value |
+|---|---|
+| receptions carrying a path | 7 / 7 |
+| start vs committed | 0.00000 |
+| **landing vs committed** | **0.026 – 0.065 court units (up to ~0.5 m)** |
+
+Cause: `_reached_point` does not put the body on the ball. It calls
+`_body_behind_contact`, which stands the body back by
+`contact_offset_meters` — a voli plays the ball *in front of* themselves.
+Integrating to the ball drew the body half a metre past where the resolver had
+committed it.
+
+**Fixed in the contract, not in playback** (G1): the path now targets
+`receiver_reach` / `opponent_receiver_reach` — where the body actually ended.
+
+| Metric, after | Value |
+|---|---|
+| paths, 200 seeds | 143 |
+| **worst landing vs committed** | **0.000000** |
+| **worst start vs committed** | **0.000000** |
+
+### P2.4 Truncated legs, tested directly
+
+The vertical-slice fixture never truncates — 143 of 143 receptions reached, 0
+emergency. So the bisection branch of `_reached_point` is **not exercised by any
+seed**, and agreement there had to be measured on its own.
+
+36 synthetic truncated cases (4 targets × 3 depths × 3 window fractions),
+comparing `_reached_point`'s bisection against the integrated landing:
+
+| Metric | Value |
+|---|---|
+| worst bisection vs integrated landing | **0.000181 court units** (~2–3 mm) |
+
+### P2.5 Scope boundary, stated rather than skipped
+
+The spec's actor bullet — *consume authoritative `v`/facing; legacy
+delta-derived speed only as fallback for unmigrated paths* — is **not yet
+satisfied, and deliberately so.**
+
+`tactical_court` (2D, primary playback) and `match_court_3d` → `PlayerActor3D`
+(the presentation-only 3D replay) are **separate consumers**. Only the 2D path
+was migrated here. `player_actor_3d.gd:1005` still derives speed from drawn
+deltas, which is precisely the documented fallback state for an unmigrated
+consumer. It becomes wrong only once the 3D replay is migrated, which is P3/P6
+work.
+
+### P2.6 Gate
+
+- same movement establishes and depicts arrival — **yes**, 0.000000 both ends
+- no duplicate solve on the migrated path — **yes**, `_authoritative_phase_path`
+  returns before `_integrate_phase_path` is reached
+- no endpoint snap — **yes**, the path's landing *is* the endpoint
+- determinism — contract test asserts sample-for-sample equality
+
+**G1 PASSES.** → P3.

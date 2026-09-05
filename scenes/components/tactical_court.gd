@@ -663,9 +663,61 @@ func _build_movement_paths() -> void:
 		)
 		var target: Vector2 = unit_movement_targets[player_id]
 		var waypoint: Variant = unit_movement_waypoints.get(player_id, null)
-		var path := _integrate_phase_path(profile, player_id, start, target, waypoint)
+		var path := _phase_path(profile, player_id, start, target, waypoint)
 		if not path.is_empty():
 			movement_paths[player_id] = path
+
+
+## One leg, from whoever solved it.
+##
+## When the resolver published an authoritative `RallyMovementPath` for this
+## contact, that path *is* the movement -- the same solve that decided the
+## contact was reachable. Playback interpolates it and re-solves nothing.
+##
+## Everything not yet migrated falls through to `_integrate_phase_path`, which
+## reconstructs a second solve from a start, a target and a duration. That
+## fallback is the thing being removed pass by pass; see
+## `docs/specs/AUTHORITATIVE_RALLY_MOVEMENT.md`.
+func _phase_path(
+	profile: VolleyballPlayer,
+	player_id: int,
+	start: Vector2,
+	target: Vector2,
+	waypoint: Variant,
+) -> Dictionary:
+	var authoritative := _authoritative_phase_path(player_id)
+	if not authoritative.is_empty():
+		return authoritative
+	return _integrate_phase_path(profile, player_id, start, target, waypoint)
+
+
+## The published path for this player's current contact, as playback's
+## progress-indexed shape.
+##
+## Times are normalised against the path's own duration rather than against a
+## separately reported one: by the P1 contract those are the same number, so
+## this is a change of index and not a rescale. The endpoint is the path's own
+## landing, so there is nothing to snap onto.
+func _authoritative_phase_path(player_id: int) -> Dictionary:
+	if pending_contact_event == null or player_id != movement_player_id:
+		return {}
+	var published: Variant = pending_contact_event.metadata.get("movement_path", null)
+	if published == null:
+		return {}
+	var path := published as RallyMovementPath
+	if path == null or not path.is_valid():
+		return {}
+	var span := path.duration()
+	if span <= 0.0001:
+		return {}
+	var points: Array[Vector2] = []
+	var times: Array[float] = []
+	for index in path.positions.size():
+		points.append(path.positions[index])
+		times.append(clampf(
+			(path.sample_times[index] - path.start_time) / span, 0.0, 1.0
+		))
+	return {"points": points, "times": times, "authoritative": true}
 
 
 func _integrate_phase_path(

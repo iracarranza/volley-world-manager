@@ -4,6 +4,10 @@ extends RefCounted
 const SetterDecisionMath := preload("res://scripts/simulation/setter_decision_math.gd")
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const RallyMovementPathModel := preload("res://scripts/models/rally_movement_path.gd")
+const ShadowMovementModel := preload(
+	"res://scripts/simulation/shadow_movement_system.gd"
+)
 const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
@@ -1456,6 +1460,18 @@ func resolve(
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
+			## The leg, solved once. Playback interpolates this instead of
+			## re-integrating a second one and snapping its endpoint onto
+			## `movement_target` -- AUTHORITATIVE_MOVEMENT_EXECUTION.md P2.
+			##
+			## Targets `receiver_reach`, not the ball. `_reached_point` truncates
+			## for the window *and* stands the body behind the contact by
+			## `contact_offset_meters`, so integrating to the ball landed the
+			## drawn body up to half a metre past where the resolver committed it.
+			"movement_path": _committed_path(
+				receiver, receiver_start, receiver_reach, reception_window,
+				"lateral", rally_clock,
+			),
 			## **The budget `movement_target` was truncated against.**
 			##
 			## `movement_duration` is the time this journey would take to reach
@@ -4166,6 +4182,11 @@ func _resolve_home_serve(
 			"movement_start": receiver_start,
 			"movement_target": opponent_receiver_reach,
 			"movement_duration": receiver_move_time,
+			## Same leg, same contract, other side of the net.
+			"movement_path": _committed_path(
+				receiver, receiver_start, opponent_receiver_reach,
+				reception_window, "lateral", rally_clock,
+			),
 			## The budget `movement_target` was truncated against -- see the
 			## reception's own note. `movement_duration` keeps its meaning; this
 			## is the deadline playback needs so a truncated leg is drawn over
@@ -8851,6 +8872,46 @@ func _reachable_attack_contact(
 
 
 ## NOTE How far along their run a player actually got, when the ball beat them there -- RALLY_SIMULATOR_NOTES.md
+## The same committed journey `_reached_point` prices, kept as a path.
+##
+## `_reached_point` bisects on closed-form time to find how far along the lane a
+## body gets, and returns only that point. The drawn body then had to be
+## reconstructed downstream from the point and a duration -- twice, by two more
+## models, one of which pre-aligned facing so its answer would land where this
+## one had already committed.
+##
+## This produces the trail for the same leg, from the same actor state, using
+## the integrator the closed form provably agrees with: 768 samples, worst
+## disagreement 0.18 mm, reach agreement exactly 1.0. See
+## `MovementIntegrationCalibration` and AUTHORITATIVE_MOVEMENT_EXECUTION.md P0.4.
+##
+## Returns null when there is nothing to draw, which callers treat as "no
+## authoritative path for this leg" and fall back to the legacy reconstruction.
+func _committed_path(
+	mover: VolleyballPlayer,
+	start: Vector2,
+	target: Vector2,
+	available_time: float,
+	mode: String,
+	leg_start_time: float,
+	entry_velocity: Vector2 = Vector2.ZERO,
+	entry_facing: Vector2 = Vector2.ZERO,
+	waypoint: Variant = null,
+) -> RallyMovementPathModel:
+	if mover == null or available_time <= 0.0:
+		return null
+	if RallyKinematics.court_distance_meters(start, target) <= 0.001:
+		return null
+	var actor := RallyPlayerState.create(mover, &"home", -1, start)
+	actor.velocity = entry_velocity
+	actor.facing = entry_facing
+	var integration: Dictionary = ShadowMovementModel.integrate(
+		actor, target, available_time, _movement_mode_for_kind(mode),
+		ShadowMovementModel.DEFAULT_STEP_SECONDS, waypoint,
+	)
+	return RallyMovementPathModel.from_integration(integration, leg_start_time)
+
+
 func _reached_point(
 	mover: VolleyballPlayer,
 	start: Vector2,
