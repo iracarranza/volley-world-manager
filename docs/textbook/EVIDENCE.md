@@ -81,3 +81,15 @@ This ledger connects important statements to stable source locations.
 | The continuous traversal reaches rally analysis as a bounded, ordered trail and is drawn on the 2D court as a toggleable shadow overlay layer | VERIFIED DEBUG TOOL | `scripts/simulation/shadow_reception_system.gd`; `scenes/components/tactical_court.gd`; `docs/calibration/GATE_51_OBSERVABLE_CONTINUOUS_MOVEMENT.md` | `continuous_trail`, `CONTINUOUS_TRAIL_MAX_POINTS`, `SHADOW_LAYER_CONTINUOUS`, `_draw_continuous_reachability` |
 | 3D work is paused | PROJECT DECISION | User direction | Not a source-code fact |
 | Serve, set, and attack flight duration and apex height are derived from real court distance and a launch angle via standard projectile motion, not picked from a duration table | VERIFIED | `scripts/simulation/rally_kinematics.gd`; `scripts/simulation/rally_simulator.gd`; `docs/design/BALL_LAUNCH_KINEMATICS.md` | `RallyKinematics.solve_launch_arc`, `_set_launch_angle_degrees`, `_serve_launch_angle_degrees`, `_attack_launch_angle_degrees` |
+| A voli's body is built from data, not a saved model | VERIFIED | `scripts/data/body_type_models.gd` | `silhouette`, `build_mesh` |
+| An unrecognised mesh shape silently yields a capsule | VERIFIED | `scripts/data/body_type_models.gd` | `build_mesh` default branch |
+| Produce is derived from the player id, never stored | VERIFIED | `scripts/data/body_type_models.gd` | `produce_for`, `const PRODUCE` |
+| Body type is gameplay data; produce is presentation only | VERIFIED | `scripts/domain/body_type_gameplay.gd` | `BODY_TYPES`, `BODY_TYPE_METRICS`, `BODY_TYPE_ATTRIBUTES` |
+| Kit colour is presentation data kept off the simulation table | VERIFIED | `scripts/data/regional_kits.gd` | `KITS`, `kit_for` |
+| Kits are distinguished by construction, not hue | VERIFIED | `scripts/data/regional_kits.gd` | `BUILD`, `AWAY_KIT` |
+| Every regional kit must clear 1.6 contrast against the court floor | VERIFIED | `tests/test_runner.gd` | kit/floor contrast check |
+| Expressions are derived from an eye/mouth grid, not authored | VERIFIED | `scripts/data/face_expressions.gd` | `GRID`, `components`, `parts` |
+| Camera presets share one envelope set by the tightest venue | VERIFIED | `scenes/components/match_court_3d.gd` | `CAMERA_PRESETS` |
+| No structural venue geometry may stand inside the free zone | VERIFIED | `tools/run_venue_probe.gd` | `FREE_ZONE_SIDE`, `FREE_ZONE_END` |
+| Body construction is checked by a standalone validator | VERIFIED | `tools/validate_voli_body_construction.gd` | whole file |
+| Rally population rates are measured by one shared probe | VERIFIED | `tools/run_rally_balance_probe.gd` | whole file |

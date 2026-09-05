@@ -1,102 +1,649 @@
 {
   "book_files": [
-    "docs/textbook/README.md",
-    "docs/textbook/FRESH_AGENT_HANDOFF.md",
-    "docs/textbook/INDEX.md",
-    "docs/textbook/STATUS.md",
-    "docs/textbook/VERIFICATION_RULES.md",
+    "docs/design/BALL_LAUNCH_KINEMATICS.md",
+    "docs/textbook/CHAT_SESSION_SUMMARY_2026_07_30.md",
+    "docs/textbook/EVENT_CALCULATION_TAXONOMY.md",
     "docs/textbook/EVIDENCE.md",
+    "docs/textbook/FRESH_AGENT_HANDOFF.md",
     "docs/textbook/GLOSSARY.md",
+    "docs/textbook/GRANULAR_ATTRIBUTE_BREAKDOWN.md",
+    "docs/textbook/INDEX.md",
+    "docs/textbook/PLAYER_ATTRIBUTES_LEDGER.md",
+    "docs/textbook/RALLY_EVENT_QUALITY_CALCULATION_MAP.md",
+    "docs/textbook/README.md",
+    "docs/textbook/STATUS.md",
     "docs/textbook/VALIDATION.md",
-    "docs/textbook/part_01_project/README.md",
+    "docs/textbook/VERIFICATION_RULES.md",
     "docs/textbook/part_01_project/01_what_you_are_building.md",
     "docs/textbook/part_01_project/02_godot_project_and_runtime.md",
     "docs/textbook/part_01_project/03_repository_map.md",
     "docs/textbook/part_01_project/04_following_a_user_action.md",
-    "docs/textbook/part_02_gdscript/README.md",
+    "docs/textbook/part_01_project/README.md",
     "docs/textbook/part_02_gdscript/01_gdscript_basics.md",
     "docs/textbook/part_02_gdscript/02_resources_nodes_and_signals.md",
     "docs/textbook/part_02_gdscript/03_collections_types_and_null.md",
-    "docs/textbook/part_03_workflow/README.md",
+    "docs/textbook/part_02_gdscript/README.md",
     "docs/textbook/part_03_workflow/01_safe_change_workflow.md",
     "docs/textbook/part_03_workflow/02_debugging_testing_and_git.md",
-    "docs/textbook/part_04_match_engine/README.md",
+    "docs/textbook/part_03_workflow/README.md",
     "docs/textbook/part_04_match_engine/01_current_rally_pipeline.md",
     "docs/textbook/part_04_match_engine/02_persistent_rally_state.md",
     "docs/textbook/part_04_match_engine/03_ball_time_movement_and_actions.md",
     "docs/textbook/part_04_match_engine/04_tactics_information_and_progression.md",
     "docs/textbook/part_04_match_engine/05_migration_and_visible_proof.md",
     "docs/textbook/part_04_match_engine/06_adjusting_and_extending_live_systems.md",
-    "docs/textbook/part_05_management/README.md",
+    "docs/textbook/part_04_match_engine/README.md",
     "docs/textbook/part_05_management/01_career_roster_and_training.md",
     "docs/textbook/part_05_management/02_development_to_match_options.md",
-    "docs/textbook/part_06_exercises/README.md",
+    "docs/textbook/part_05_management/README.md",
     "docs/textbook/part_06_exercises/01_guided_exercises.md",
     "docs/textbook/part_06_exercises/02_beginner_project_ladder.md",
-    "docs/design/BALL_LAUNCH_KINEMATICS.md"
+    "docs/textbook/part_06_exercises/README.md",
+    "docs/textbook/part_07_art_and_assets/01_the_voli_body.md",
+    "docs/textbook/part_07_art_and_assets/02_kits_colour_and_marks.md",
+    "docs/textbook/part_07_art_and_assets/03_the_court_and_venue.md",
+    "docs/textbook/part_07_art_and_assets/04_faces_and_expressions.md",
+    "docs/textbook/part_07_art_and_assets/05_rendering_probes_and_validation.md",
+    "docs/textbook/part_07_art_and_assets/README.md"
   ],
   "sources": [
-    {"path": "project.godot", "symbols": ["run/main_scene", "[autoload]"]},
-    {"path": "scenes/application.gd", "symbols": ["func _show_title", "func _show_journal", "func _show_match"]},
-    {"path": "scenes/main/main.gd", "symbols": ["func _resolve_rally", "func _play_rally", "func _append_playback_history", "func _setup_visualization_controls", "func _apply_visualization_layers"]},
-    {"path": "scripts/managers/game_manager.gd", "symbols": ["func resolve_active_rally"]},
-    {"path": "scripts/managers/career_manager.gd", "symbols": ["func create_career", "func advance_week", "func save_career", "func load_career"]},
-    {"path": "scripts/simulation/rally_simulator.gd", "symbols": ["class_name RallySimulator", "func resolve", "func _add_event", "func _finish", "planner_zone_center", "func _home_floor_phase_positions", "func _approach_start_position", "func _set_launch_angle_degrees", "func _serve_launch_angle_degrees", "func _attack_launch_angle_degrees"]},
-    {"path": "scripts/simulation/coverage_calculator.gd", "symbols": ["class_name CoverageCalculator", "static func choose_claimant"]},
-    {"path": "scripts/models/rally_event.gd", "symbols": ["class_name RallyEvent", "actor_id", "metadata", "func to_dict"]},
-    {"path": "scripts/models/rally_result.gd", "symbols": ["class_name RallyResult", "events", "terminal_outcome"]},
-    {"path": "scripts/models/rally_state.gd", "symbols": ["class_name RallyState", "func advance_to", "func register_contact", "func snapshot"]},
-    {"path": "scripts/models/rally_player_state.gd", "symbols": ["class_name RallyPlayerState", "func set_intent", "func apply_position", "func snapshot"]},
-    {"path": "scripts/models/rally_ball_state.gd", "symbols": ["class_name RallyBallState", "func launch", "func update_at", "func snapshot"]},
-    {"path": "scripts/models/rally_moment.gd", "symbols": ["class_name RallyMoment", "static func create"]},
-    {"path": "scripts/models/action_opportunity.gd", "symbols": ["class_name ActionOpportunity"]},
-    {"path": "scripts/models/action_opportunity_window.gd", "symbols": ["class_name ActionOpportunityWindow", "func record_sample", "func close", "func to_dict"]},
-    {"path": "scripts/models/rally_decision.gd", "symbols": ["class_name RallyDecision", "func to_dict"]},
-    {"path": "scripts/models/ball_trajectory.gd", "symbols": ["class_name BallTrajectory"]},
-    {"path": "scripts/models/ball_contact_signature.gd", "symbols": ["class_name BallContactSignature", "func baseline_novelty", "func is_float_contact", "func to_dict"]},
-    {"path": "scripts/models/ball_flight.gd", "symbols": ["class_name BallFlight", "static func create", "static func from_trajectory", "func to_dict"]},
-    {"path": "scripts/models/ball_flight_estimate.gd", "symbols": ["class_name BallFlightEstimate", "func destination_error_meters"]},
-    {"path": "scripts/models/rally_trace.gd", "symbols": ["class_name RallyTrace", "func add_entry", "func to_dict"]},
-    {"path": "scripts/simulation/rally_state_builder.gd", "symbols": ["class_name RallyStateBuilder", "static func build"]},
-    {"path": "scripts/simulation/rally_scheduler.gd", "symbols": ["class_name RallyScheduler", "func schedule", "func next"]},
-    {"path": "scripts/simulation/rally_movement_system.gd", "symbols": ["class_name RallyMovementSystem", "static func evaluate_opportunity", "static func project_toward", "static func traversal_seconds", "static func movement_profile", "static func generate_reception_opportunities"]},
-    {"path": "scripts/simulation/approach_mechanics_system.gd", "symbols": ["class_name ApproachMechanicsSystem", "static func prepare_for_attack", "static func evaluate_takeoff", "static func available_attack_families"]},
-    {"path": "scripts/simulation/shadow_block_system.gd", "symbols": ["class_name ShadowBlockSystem", "static func evaluate", "static func _evaluate_blocker", "static func _choose_commitment", "static func _coordinate_blocker", "static func _observe_teammate_cues", "static func _coordinate_commitment", "static func _resolve_roles", "static func _block_engagement_fit"]},
-    {"path": "scripts/simulation/block_rollout_audit.gd", "symbols": ["class_name BlockRolloutAudit", "static func evaluate", "static func candidate", "static func fingerprint"]},
-    {"path": "scripts/simulation/live_block_integrator.gd", "symbols": ["class_name LiveBlockIntegrator", "static func apply", "static func validate", "static func _outcome"]},
-    {"path": "scripts/simulation/shadow_movement_system.gd", "symbols": ["class_name ShadowMovementSystem", "static func integrate", "static func reference_projection", "ALIGNED_TURN_DELAY", "DEFAULT_STEP_SECONDS"]},
-    {"path": "scripts/simulation/movement_integration_calibration.gd", "symbols": ["class_name MovementIntegrationCalibration", "static func run", "AGREEMENT_TOLERANCE_METERS"]},
-    {"path": "scripts/simulation/block_progression_calibration.gd", "symbols": ["class_name BlockerProgressionCalibration", "TIERS", "SCENARIOS", "static func run"]},
-    {"path": "scripts/simulation/rally_opportunity_system.gd", "symbols": ["class_name RallyOpportunitySystem", "static func evaluate_reception_timeline", "RallyMoment.Kind.MOVEMENT_UPDATE"]},
-    {"path": "scripts/simulation/rally_decision_system.gd", "symbols": ["class_name RallyDecisionSystem", "static func select_shadow_reception"]},
-    {"path": "scripts/simulation/rally_contact_system.gd", "symbols": ["class_name RallyContactSystem", "static func resolve_shadow_reception"]},
-    {"path": "scripts/simulation/shadow_setter_response_system.gd", "symbols": ["class_name ShadowSetterResponseSystem", "static func evaluate"]},
-    {"path": "scripts/simulation/rally_playback_adapter.gd", "symbols": ["class_name RallyPlaybackAdapter", "static func build_shadow_reception_events"]},
-    {"path": "scripts/simulation/rally_shadow_comparison.gd", "symbols": ["class_name RallyShadowComparison", "static func compare_serve_to_set"]},
-    {"path": "scripts/simulation/rally_feature_flags.gd", "symbols": ["class_name RallyFeatureFlags", "ENABLE_CONTINUOUS_RECEPTION_EVENTS", "ENABLE_CONTINUOUS_SETTER_EVENTS", "ENABLE_CONTINUOUS_ATTACK_EVENTS", "ENABLE_CONTINUOUS_BLOCK_EVENTS", "ALLOW_DEVELOPMENT_RECEPTION_OVERRIDE", "ALLOW_DEVELOPMENT_SETTER_OVERRIDE", "ALLOW_DEVELOPMENT_ATTACK_OVERRIDE", "ALLOW_DEVELOPMENT_BLOCK_OVERRIDE"]},
-    {"path": "scripts/simulation/rally_rollout_policy.gd", "symbols": ["class_name RallyRolloutPolicy", "static func select_reception_source", "static func select_setter_source", "static func select_attack_source", "static func select_block_source"]},
-    {"path": "scripts/simulation/setter_failure_classifier.gd", "symbols": ["class_name SetterFailureClassifier", "static func classify"]},
-    {"path": "scripts/simulation/reception_rollout_audit.gd", "symbols": ["class_name ReceptionRolloutAudit", "static func evaluate", "static func fingerprint"]},
-    {"path": "scripts/simulation/live_reception_integrator.gd", "symbols": ["class_name LiveReceptionIntegrator", "static func apply"]},
-    {"path": "scripts/simulation/reception_rollout_calibration.gd", "symbols": ["class_name ReceptionRolloutCalibration", "static func run"]},
-    {"path": "scripts/simulation/ball_read_system.gd", "symbols": ["class_name BallReadSystem", "static func estimate", "static func estimate_sequence"]},
-    {"path": "scripts/simulation/shadow_reception_system.gd", "symbols": ["class_name ShadowReceptionSystem", "static func evaluate", "CONTINUOUS_TRAIL_MAX_POINTS"]},
-    {"path": "scripts/simulation/rally_kinematics.gd", "symbols": ["class_name RallyKinematics", "static func court_distance_meters", "static func flight_duration", "static func timing_diagnostics", "static func solve_launch_arc", "DEFAULT_GRAVITY_MPS2", "MIN_LAUNCH_ANGLE_DEGREES", "MAX_LAUNCH_ANGLE_DEGREES"]},
-    {"path": "scripts/simulation/rally_calibration_report.gd", "symbols": ["class_name RallyCalibrationReport", "func add_shadow_trace", "func build_summary"]},
-    {"path": "scripts/simulation/serve_style_calibration.gd", "symbols": ["class_name ServeStyleCalibration", "SERVE_STYLES", "static func run"]},
-    {"path": "scripts/simulation/reception_progression_calibration.gd", "symbols": ["class_name ReceptionProgressionCalibration", "READER_TIERS", "FORMATIONS", "static func run"]},
-    {"path": "scripts/simulation/reception_decision_progression_calibration.gd", "symbols": ["class_name ReceptionDecisionProgressionCalibration", "PLAYER_TIERS", "static func run"]},
-    {"path": "scripts/simulation/setter_handoff_calibration.gd", "symbols": ["class_name SetterHandoffCalibration", "FIXTURES", "static func run"]},
-    {"path": "scripts/simulation/setter_progression_calibration.gd", "symbols": ["class_name SetterProgressionCalibration", "SETTER_TIERS", "static func run"]},
-    {"path": "tools/run_rally_calibration.gd", "symbols": ["func _initialize"]},
-    {"path": "scenes/components/tactical_court.gd", "symbols": ["func set_shadow_reception_trace", "func _draw_shadow_reception_trace", "VISUAL_ALL", "func set_visualization_layers", "unit_movement_waypoints", "func _build_movement_paths", "func _sample_movement_path", "func _set_playback_progress", "SHADOW_LAYER_CONTINUOUS", "func _draw_continuous_reachability"]},
-    {"path": "scenes/main/main.gd", "symbols": ["func _show_shadow_reception_debug", "ShadowReceptionLabel"]},
-    {"path": "scripts/systems/training_system.gd", "symbols": ["class_name VolleyballTrainingSystem", "static func apply_week"]},
-    {"path": "scripts/systems/player_generator.gd", "symbols": ["class_name VolleyballPlayerGenerator", "static func generate_roster", "static func generate_prospect"]},
-    {"path": "tests/test_runner.gd", "symbols": ["RALLY_STATE_BUILDER_SCRIPT", "RALLY_MOVEMENT_SCRIPT", "func _test_ball_read_foundations", "func _test_shadow_reception_trace", "func _test_seeded_floor_defense_geometry"]},
-    {"path": "scripts/simulation/movement_timing_ratio_calibration.gd", "symbols": ["class_name MovementTimingRatioCalibration", "static func run", "PERCEPTIBLE_LOW"]},
-    {"path": "scripts/simulation/locomotion_model.gd", "symbols": ["class_name LocomotionModel", "static func stride_meters", "static func cadence_hz", "static func maximum_speed", "MODE_STRIDE_SCALE"]},
-    {"path": "scripts/simulation/locomotion_granularity_calibration.gd", "symbols": ["class_name LocomotionGranularityCalibration", "static func run", "PLAUSIBLE_STRIDE"]},
-    {"path": "scripts/simulation/continuous_reachability_calibration.gd", "symbols": ["class_name ContinuousReachabilityCalibration", "static func run", "READ_PROGRESS"]}
+    {
+      "path": "project.godot",
+      "symbols": [
+        "run/main_scene",
+        "[autoload]"
+      ]
+    },
+    {
+      "path": "scenes/application.gd",
+      "symbols": [
+        "func _show_title",
+        "func _show_journal",
+        "func _show_match"
+      ]
+    },
+    {
+      "path": "scenes/main/main.gd",
+      "symbols": [
+        "func _resolve_rally",
+        "func _play_rally",
+        "func _append_playback_history",
+        "func _setup_visualization_controls",
+        "func _apply_visualization_layers"
+      ]
+    },
+    {
+      "path": "scripts/managers/game_manager.gd",
+      "symbols": [
+        "func resolve_active_rally"
+      ]
+    },
+    {
+      "path": "scripts/managers/career_manager.gd",
+      "symbols": [
+        "func create_career",
+        "func advance_week",
+        "func save_career",
+        "func load_career"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_simulator.gd",
+      "symbols": [
+        "class_name RallySimulator",
+        "func resolve",
+        "func _add_event",
+        "func _finish",
+        "planner_zone_center",
+        "func _home_floor_phase_positions",
+        "func _approach_start_position",
+        "func _set_launch_angle_degrees",
+        "func _serve_launch_angle_degrees",
+        "func _attack_launch_angle_degrees"
+      ]
+    },
+    {
+      "path": "scripts/simulation/coverage_calculator.gd",
+      "symbols": [
+        "class_name CoverageCalculator",
+        "static func choose_claimant"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_event.gd",
+      "symbols": [
+        "class_name RallyEvent",
+        "actor_id",
+        "metadata",
+        "func to_dict"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_result.gd",
+      "symbols": [
+        "class_name RallyResult",
+        "events",
+        "terminal_outcome"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_state.gd",
+      "symbols": [
+        "class_name RallyState",
+        "func advance_to",
+        "func register_contact",
+        "func snapshot"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_player_state.gd",
+      "symbols": [
+        "class_name RallyPlayerState",
+        "func set_intent",
+        "func apply_position",
+        "func snapshot"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_ball_state.gd",
+      "symbols": [
+        "class_name RallyBallState",
+        "func launch",
+        "func update_at",
+        "func snapshot"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_moment.gd",
+      "symbols": [
+        "class_name RallyMoment",
+        "static func create"
+      ]
+    },
+    {
+      "path": "scripts/models/action_opportunity.gd",
+      "symbols": [
+        "class_name ActionOpportunity"
+      ]
+    },
+    {
+      "path": "scripts/models/action_opportunity_window.gd",
+      "symbols": [
+        "class_name ActionOpportunityWindow",
+        "func record_sample",
+        "func close",
+        "func to_dict"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_decision.gd",
+      "symbols": [
+        "class_name RallyDecision",
+        "func to_dict"
+      ]
+    },
+    {
+      "path": "scripts/models/ball_trajectory.gd",
+      "symbols": [
+        "class_name BallTrajectory"
+      ]
+    },
+    {
+      "path": "scripts/models/ball_contact_signature.gd",
+      "symbols": [
+        "class_name BallContactSignature",
+        "func baseline_novelty",
+        "func is_float_contact",
+        "func to_dict"
+      ]
+    },
+    {
+      "path": "scripts/models/ball_flight.gd",
+      "symbols": [
+        "class_name BallFlight",
+        "static func create",
+        "static func from_trajectory",
+        "func to_dict"
+      ]
+    },
+    {
+      "path": "scripts/models/ball_flight_estimate.gd",
+      "symbols": [
+        "class_name BallFlightEstimate",
+        "func destination_error_meters"
+      ]
+    },
+    {
+      "path": "scripts/models/rally_trace.gd",
+      "symbols": [
+        "class_name RallyTrace",
+        "func add_entry",
+        "func to_dict"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_state_builder.gd",
+      "symbols": [
+        "class_name RallyStateBuilder",
+        "static func build"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_scheduler.gd",
+      "symbols": [
+        "class_name RallyScheduler",
+        "func schedule",
+        "func next"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_movement_system.gd",
+      "symbols": [
+        "class_name RallyMovementSystem",
+        "static func evaluate_opportunity",
+        "static func project_toward",
+        "static func traversal_seconds",
+        "static func movement_profile",
+        "static func generate_reception_opportunities"
+      ]
+    },
+    {
+      "path": "scripts/simulation/approach_mechanics_system.gd",
+      "symbols": [
+        "class_name ApproachMechanicsSystem",
+        "static func prepare_for_attack",
+        "static func evaluate_takeoff",
+        "static func available_attack_families"
+      ]
+    },
+    {
+      "path": "scripts/simulation/shadow_block_system.gd",
+      "symbols": [
+        "class_name ShadowBlockSystem",
+        "static func evaluate",
+        "static func _evaluate_blocker",
+        "static func _choose_commitment",
+        "static func _coordinate_blocker",
+        "static func _observe_teammate_cues",
+        "static func _coordinate_commitment",
+        "static func _resolve_roles",
+        "static func _block_engagement_fit"
+      ]
+    },
+    {
+      "path": "scripts/simulation/block_rollout_audit.gd",
+      "symbols": [
+        "class_name BlockRolloutAudit",
+        "static func evaluate",
+        "static func candidate",
+        "static func fingerprint"
+      ]
+    },
+    {
+      "path": "scripts/simulation/live_block_integrator.gd",
+      "symbols": [
+        "class_name LiveBlockIntegrator",
+        "static func apply",
+        "static func validate",
+        "static func _outcome"
+      ]
+    },
+    {
+      "path": "scripts/simulation/shadow_movement_system.gd",
+      "symbols": [
+        "class_name ShadowMovementSystem",
+        "static func integrate",
+        "static func reference_projection",
+        "ALIGNED_TURN_DELAY",
+        "DEFAULT_STEP_SECONDS"
+      ]
+    },
+    {
+      "path": "scripts/simulation/movement_integration_calibration.gd",
+      "symbols": [
+        "class_name MovementIntegrationCalibration",
+        "static func run",
+        "AGREEMENT_TOLERANCE_METERS"
+      ]
+    },
+    {
+      "path": "scripts/simulation/block_progression_calibration.gd",
+      "symbols": [
+        "class_name BlockerProgressionCalibration",
+        "TIERS",
+        "SCENARIOS",
+        "static func run"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_opportunity_system.gd",
+      "symbols": [
+        "class_name RallyOpportunitySystem",
+        "static func evaluate_reception_timeline",
+        "RallyMoment.Kind.MOVEMENT_UPDATE"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_decision_system.gd",
+      "symbols": [
+        "class_name RallyDecisionSystem",
+        "static func select_shadow_reception"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_contact_system.gd",
+      "symbols": [
+        "class_name RallyContactSystem",
+        "static func resolve_shadow_reception"
+      ]
+    },
+    {
+      "path": "scripts/simulation/shadow_setter_response_system.gd",
+      "symbols": [
+        "class_name ShadowSetterResponseSystem",
+        "static func evaluate"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_playback_adapter.gd",
+      "symbols": [
+        "class_name RallyPlaybackAdapter",
+        "static func build_shadow_reception_events"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_shadow_comparison.gd",
+      "symbols": [
+        "class_name RallyShadowComparison",
+        "static func compare_serve_to_set"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_feature_flags.gd",
+      "symbols": [
+        "class_name RallyFeatureFlags",
+        "ENABLE_CONTINUOUS_RECEPTION_EVENTS",
+        "ENABLE_CONTINUOUS_SETTER_EVENTS",
+        "ENABLE_CONTINUOUS_ATTACK_EVENTS",
+        "ENABLE_CONTINUOUS_BLOCK_EVENTS",
+        "ALLOW_DEVELOPMENT_RECEPTION_OVERRIDE",
+        "ALLOW_DEVELOPMENT_SETTER_OVERRIDE",
+        "ALLOW_DEVELOPMENT_ATTACK_OVERRIDE",
+        "ALLOW_DEVELOPMENT_BLOCK_OVERRIDE"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_rollout_policy.gd",
+      "symbols": [
+        "class_name RallyRolloutPolicy",
+        "static func select_reception_source",
+        "static func select_setter_source",
+        "static func select_attack_source",
+        "static func select_block_source"
+      ]
+    },
+    {
+      "path": "scripts/simulation/setter_failure_classifier.gd",
+      "symbols": [
+        "class_name SetterFailureClassifier",
+        "static func classify"
+      ]
+    },
+    {
+      "path": "scripts/simulation/reception_rollout_audit.gd",
+      "symbols": [
+        "class_name ReceptionRolloutAudit",
+        "static func evaluate",
+        "static func fingerprint"
+      ]
+    },
+    {
+      "path": "scripts/simulation/live_reception_integrator.gd",
+      "symbols": [
+        "class_name LiveReceptionIntegrator",
+        "static func apply"
+      ]
+    },
+    {
+      "path": "scripts/simulation/reception_rollout_calibration.gd",
+      "symbols": [
+        "class_name ReceptionRolloutCalibration",
+        "static func run"
+      ]
+    },
+    {
+      "path": "scripts/simulation/ball_read_system.gd",
+      "symbols": [
+        "class_name BallReadSystem",
+        "static func estimate",
+        "static func estimate_sequence"
+      ]
+    },
+    {
+      "path": "scripts/simulation/shadow_reception_system.gd",
+      "symbols": [
+        "class_name ShadowReceptionSystem",
+        "static func evaluate",
+        "CONTINUOUS_TRAIL_MAX_POINTS"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_kinematics.gd",
+      "symbols": [
+        "class_name RallyKinematics",
+        "static func court_distance_meters",
+        "static func flight_duration",
+        "static func timing_diagnostics",
+        "static func solve_launch_arc",
+        "DEFAULT_GRAVITY_MPS2",
+        "MIN_LAUNCH_ANGLE_DEGREES",
+        "MAX_LAUNCH_ANGLE_DEGREES"
+      ]
+    },
+    {
+      "path": "scripts/simulation/rally_calibration_report.gd",
+      "symbols": [
+        "class_name RallyCalibrationReport",
+        "func add_shadow_trace",
+        "func build_summary"
+      ]
+    },
+    {
+      "path": "scripts/simulation/serve_style_calibration.gd",
+      "symbols": [
+        "class_name ServeStyleCalibration",
+        "SERVE_STYLES",
+        "static func run"
+      ]
+    },
+    {
+      "path": "scripts/simulation/reception_progression_calibration.gd",
+      "symbols": [
+        "class_name ReceptionProgressionCalibration",
+        "READER_TIERS",
+        "FORMATIONS",
+        "static func run"
+      ]
+    },
+    {
+      "path": "scripts/simulation/reception_decision_progression_calibration.gd",
+      "symbols": [
+        "class_name ReceptionDecisionProgressionCalibration",
+        "PLAYER_TIERS",
+        "static func run"
+      ]
+    },
+    {
+      "path": "scripts/simulation/setter_handoff_calibration.gd",
+      "symbols": [
+        "class_name SetterHandoffCalibration",
+        "FIXTURES",
+        "static func run"
+      ]
+    },
+    {
+      "path": "scripts/simulation/setter_progression_calibration.gd",
+      "symbols": [
+        "class_name SetterProgressionCalibration",
+        "SETTER_TIERS",
+        "static func run"
+      ]
+    },
+    {
+      "path": "tools/run_rally_calibration.gd",
+      "symbols": [
+        "func _initialize"
+      ]
+    },
+    {
+      "path": "scenes/components/tactical_court.gd",
+      "symbols": [
+        "func set_shadow_reception_trace",
+        "func _draw_shadow_reception_trace",
+        "VISUAL_ALL",
+        "func set_visualization_layers",
+        "unit_movement_waypoints",
+        "func _build_movement_paths",
+        "func _sample_movement_path",
+        "func _set_playback_progress",
+        "SHADOW_LAYER_CONTINUOUS",
+        "func _draw_continuous_reachability"
+      ]
+    },
+    {
+      "path": "scenes/main/main.gd",
+      "symbols": [
+        "func _show_shadow_reception_debug",
+        "ShadowReceptionLabel"
+      ]
+    },
+    {
+      "path": "scripts/systems/training_system.gd",
+      "symbols": [
+        "class_name VolleyballTrainingSystem",
+        "static func apply_week"
+      ]
+    },
+    {
+      "path": "scripts/systems/player_generator.gd",
+      "symbols": [
+        "class_name VolleyballPlayerGenerator",
+        "static func generate_roster",
+        "static func generate_prospect"
+      ]
+    },
+    {
+      "path": "tests/test_runner.gd",
+      "symbols": [
+        "RALLY_STATE_BUILDER_SCRIPT",
+        "RALLY_MOVEMENT_SCRIPT",
+        "func _test_ball_read_foundations",
+        "func _test_shadow_reception_trace",
+        "func _test_seeded_floor_defense_geometry"
+      ]
+    },
+    {
+      "path": "scripts/simulation/movement_timing_ratio_calibration.gd",
+      "symbols": [
+        "class_name MovementTimingRatioCalibration",
+        "static func run",
+        "PERCEPTIBLE_LOW"
+      ]
+    },
+    {
+      "path": "scripts/simulation/locomotion_model.gd",
+      "symbols": [
+        "class_name LocomotionModel",
+        "static func stride_meters",
+        "static func cadence_hz",
+        "static func maximum_speed",
+        "MODE_STRIDE_SCALE"
+      ]
+    },
+    {
+      "path": "scripts/simulation/locomotion_granularity_calibration.gd",
+      "symbols": [
+        "class_name LocomotionGranularityCalibration",
+        "static func run",
+        "PLAUSIBLE_STRIDE"
+      ]
+    },
+    {
+      "path": "scripts/simulation/continuous_reachability_calibration.gd",
+      "symbols": [
+        "class_name ContinuousReachabilityCalibration",
+        "static func run",
+        "READ_PROGRESS"
+      ]
+    },
+    {
+      "path": "scripts/data/body_type_models.gd",
+      "symbols": [
+        "static func silhouette",
+        "static func build_mesh",
+        "static func produce_for",
+        "static func build_sheath",
+        "const PRODUCE",
+        "const MODELLED"
+      ]
+    },
+    {
+      "path": "scripts/domain/body_type_gameplay.gd",
+      "symbols": [
+        "const BODY_TYPES",
+        "const BODY_TYPE_METRICS",
+        "const BODY_TYPE_ATTRIBUTES"
+      ]
+    },
+    {
+      "path": "scripts/data/regional_kits.gd",
+      "symbols": [
+        "const KITS",
+        "const AWAY_KIT",
+        "const BUILD",
+        "static func kit_for"
+      ]
+    },
+    {
+      "path": "scripts/data/face_expressions.gd",
+      "symbols": [
+        "const GRID",
+        "const EYES",
+        "const MOUTHS",
+        "static func parts",
+        "static func components"
+      ]
+    },
+    {
+      "path": "scenes/components/match_court_3d.gd",
+      "symbols": [
+        "class_name MatchCourt3D",
+        "const CAMERA_PRESETS"
+      ]
+    },
+    {
+      "path": "tools/run_venue_probe.gd",
+      "symbols": [
+        "const FREE_ZONE_SIDE",
+        "const FREE_ZONE_END",
+        "const VENUE_REGION"
+      ]
+    },
+    {
+      "path": "tools/validate_voli_body_construction.gd",
+      "symbols": []
+    },
+    {
+      "path": "tools/run_voli_portfolio.gd",
+      "symbols": []
+    },
+    {
+      "path": "tools/probe_garment_clearance.gd",
+      "symbols": []
+    },
+    {
+      "path": "tools/run_rally_balance_probe.gd",
+      "symbols": []
+    }
   ]
 }
