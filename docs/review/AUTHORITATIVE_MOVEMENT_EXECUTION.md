@@ -106,3 +106,60 @@ integrator it already provably agrees with, from the actor state `_travel`
 already builds. No decision moves.
 
 → P1.
+
+---
+
+## P1 — CONTRACT
+
+### P1.1 The type
+
+`scripts/models/rally_movement_path.gd` — `RallyMovementPath extends Resource`.
+
+| Field | Why |
+|---|---|
+| `start_time` | Rally-clock, so samples are absolute and a consumer never needs to know which leg it is looking at |
+| `sample_times` / `positions` / `velocities` / `facings` | The four required semantics, one entry each |
+| `exit_velocity` | The whole momentum question in one field |
+| `reached_target` | Distinguishes arrival from running out of window |
+
+`sample(rally_time)` interpolates and **clamps at both ends** — a consumer
+asking outside the window is drawing a frame while another leg runs, not
+erroring. Facings blend as vectors and renormalise rather than slerping,
+because a leg from rest has a zero facing with no angle to slerp from.
+
+### P1.2 What had to be added upstream
+
+`ShadowMovementSystem.integrate()` already emitted `trail`, `sample_times` and
+`speeds_mps`. It set `stepper.facing` every step and **recorded none of it**.
+Added `facings` and `velocities` per sample — 6 lines. Nothing else was needed;
+the contract is built entirely from existing capability, as the spec requires.
+
+### P1.3 Measured, at `3f734ba` + this pass
+
+Single lateral leg, seeded fixture 771000:
+
+| Property | Result |
+|---|---|
+| priced seconds (`traversal_result`) | 2.51343 |
+| path duration | 2.51343 |
+| **delta** | **0.00000** |
+| samples | 76 |
+| rally-clock aligned at first sample | yes |
+| start position vs actor position | 0.000000 m |
+| mid-leg facing magnitude | 1.0000 |
+| `reached_target` | true |
+| `exit_velocity` | `(0,0)` — correct: arrival zeroes velocity, per `shadow_movement_system.gd:31` |
+
+> The load-bearing property is the delta. **The movement that decides
+> reachability is numerically the movement that is drawn.** That is what makes
+> the downstream re-solves removable rather than merely redundant.
+
+### P1.4 Contract tests
+
+`tests/test_runner.gd::_test_authoritative_movement_path_contract`, registered
+beside `_test_stride_and_cadence_locomotion`. Eleven assertions covering:
+per-sample completeness, monotonic times, rally-clock alignment, exact start,
+clamping before/after, exit velocity identity, determinism (sample-for-sample
+across two builds), renderer-agnosticism, and the duration identity above.
+
+→ P2.

@@ -79,6 +79,7 @@ const BODY_TYPE_MODELS_SCRIPT := preload("res://scripts/data/body_type_models.gd
 const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_state_builder.gd")
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
+const RALLY_MOVEMENT_PATH_SCRIPT := preload("res://scripts/models/rally_movement_path.gd")
 const LOCOMOTION_MODEL_SCRIPT := preload("res://scripts/simulation/locomotion_model.gd")
 const GATE_D_SCRIPT := preload(
 	"res://scripts/simulation/attack_geometry_calibration.gd"
@@ -291,6 +292,7 @@ func _initialize() -> void:
 	_test_set_release_interval_consumption()
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_stride_and_cadence_locomotion()
+	_test_authoritative_movement_path_contract()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_commentary_routing_contract()
@@ -24811,4 +24813,95 @@ func _test_scripted_rally_intent_boundary() -> void:
 		uncovered.events.size() == 5 and str(Dictionary(cover_ledger[-1]).status) == "failed",
 		"coverage intent is not manufactured without a resolved own-side block rebound",
 	)
+	manager.free()
+
+
+## The authoritative movement contract: one solve, reusable by every consumer.
+##
+## Each assertion below is a property `RallyMovementPath` has to hold for the
+## downstream re-solves to be removable. The load-bearing one is the last:
+## the duration a consumer reads off the path must be the duration the resolver
+## priced, because that is the same movement deciding reachability and being
+## drawn.
+func _test_authoritative_movement_path_contract() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var state: RallyState = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(),
+		manager.current_defensive_plan(), manager.opponent_team,
+		manager.called_play(), false, 771000,
+	)
+	if state == null or state.home_players.is_empty():
+		_check(false, "movement path fixture builds a rally state")
+		manager.free()
+		return
+	var actor: RallyPlayerState = null
+	for value in state.home_players.values():
+		actor = value as RallyPlayerState
+		if actor != null and actor.player != null:
+			break
+	if actor == null:
+		_check(false, "movement path fixture finds an actor")
+		manager.free()
+		return
+
+	var target := Vector2(0.72, 0.31)
+	var mode := RallyPlayerState.MovementMode.LATERAL
+	var priced := RALLY_MOVEMENT_SCRIPT.traversal_result(actor, target, mode)
+	var seconds := float(priced["seconds"])
+	var integration: Dictionary = SHADOW_MOVEMENT_SCRIPT.integrate(
+		actor, target, seconds, mode
+	)
+	var clock := 3.25
+	var path: RallyMovementPath = RALLY_MOVEMENT_PATH_SCRIPT.from_integration(
+		integration, clock
+	)
+	if path == null or not path.is_valid():
+		_check(false, "movement path builds from an integration")
+		manager.free()
+		return
+
+	_check(path.positions.size() == path.sample_times.size()
+		and path.positions.size() == path.velocities.size()
+		and path.positions.size() == path.facings.size(),
+		"movement path carries position, velocity and facing per sample")
+
+	var monotonic := true
+	for index in range(1, path.sample_times.size()):
+		if path.sample_times[index] < path.sample_times[index - 1]:
+			monotonic = false
+	_check(monotonic, "movement path sample times never go backwards")
+	_check(is_equal_approx(path.sample_times[0], clock),
+		"movement path is rally-clock aligned at its first sample")
+
+	_check(path.start_position().distance_to(actor.position) <= 0.0005,
+		"movement path starts exactly where the actor stood")
+	_check(path.sample(clock - 1.0).position.distance_to(path.start_position())
+			<= 0.0005,
+		"sampling before the leg clamps to its start")
+	_check(path.sample(path.end_time() + 1.0).position.distance_to(
+			path.landing_position()) <= 0.0005,
+		"sampling after the leg clamps to its landing")
+
+	_check(path.exit_velocity.distance_to(
+			path.velocities[path.velocities.size() - 1]) <= 0.0005,
+		"movement path exit velocity is its final sampled velocity")
+
+	## Determinism: the same inputs give the same path, sample for sample.
+	var repeat: RallyMovementPath = RALLY_MOVEMENT_PATH_SCRIPT.from_integration(
+		SHADOW_MOVEMENT_SCRIPT.integrate(actor, target, seconds, mode), clock
+	)
+	var identical := repeat != null and repeat.positions.size() == path.positions.size()
+	if identical:
+		for index in path.positions.size():
+			if path.positions[index].distance_to(repeat.positions[index]) > 0.0:
+				identical = false
+	_check(identical, "movement path is deterministic for identical inputs")
+
+	## The contract that makes the downstream solves removable.
+	_check(absf(path.duration() - seconds) <= 0.02,
+		"the movement that decides reachability is the movement that is drawn")
+
+	## Renderer-agnostic: a Resource, reachable with no scene tree at all.
+	_check(path is Resource, "movement path is renderer-agnostic")
 	manager.free()

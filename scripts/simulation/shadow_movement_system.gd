@@ -103,6 +103,11 @@ static func integrate(
 	var trail: Array[Vector2] = [stepper.position]
 	var sample_times: Array[float] = [0.0]
 	var speeds: Array[float] = [stepper.velocity.length()]
+	## Recorded per sample so a consumer can draw the body without re-deriving
+	## the heading from successive positions -- which is the reconstruction the
+	## authoritative path exists to remove.
+	var facings: Array[Vector2] = [stepper.facing]
+	var velocities: Array[Vector2] = [stepper.velocity]
 	var waypoint_reached := waypoint == null
 	var elapsed := 0.0
 	var steps := 0
@@ -134,6 +139,8 @@ static func integrate(
 		trail.append(stepper.position)
 		sample_times.append(turn_delay + elapsed)
 		speeds.append(stepper.velocity.length())
+		facings.append(stepper.facing)
+		velocities.append(stepper.velocity)
 		if arrived and waypoint_reached and stepper.position.distance_to(target) <= 0.001:
 			break
 
@@ -143,6 +150,8 @@ static func integrate(
 		"trail": trail,
 		"sample_times": sample_times,
 		"speeds_mps": speeds,
+		"facings": facings,
+		"velocities": velocities,
 		"landing_position": stepper.position,
 		"final_speed_mps": stepper.velocity.length(),
 		"reached_target": stepper.position.distance_to(target) <= 0.002,
