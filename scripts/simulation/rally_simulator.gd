@@ -888,8 +888,6 @@ func resolve(
 		lineup, defensive_plan, not home_serving, true,
 		players if not home_serving else [], receive_formation_intents,
 	)
-	## Everyone starts the rally genuinely at rest -- this is the one moment the
-	## old assumption was true.
 	live_velocities = {}
 	opponent_live_velocities = {}
 	player_facing = {}
@@ -3745,9 +3743,8 @@ func resolve(
 			## the span it was truncated in rather than over the longer journey
 			## it never made.
 			"movement_available_seconds": opponent_defense_time,
-			## The dig happens when the swing reaches the floor, which the
-			## swing's own trajectory already states. Deriving it from
-			## `rally_clock` instead misses the set flight that separates them.
+			## NOTE from the swing's own trajectory, not `rally_clock`, which
+			## misses the set flight that separates them
 			"event_time": opponent_dig_time,
 			"attack_direction": attack_choice.direction,
 			"contact_recovery": opponent_dig_recovery,
@@ -5295,9 +5292,8 @@ func _resolve_opponent_transition(
 			opponent_attack - opponent_swing_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
-	## The same charge as the home swing's, so the clamp costs both sides the
-	## same thing. Leaving it on one side is how the two halves of the net came
-	## to be two different games in the first place.
+	## NOTE the same charge as the home swing's, so the clamp costs both sides
+	## the same thing
 	if opponent_contact_displacement > 0.0:
 		opponent_attack = clampf(
 			opponent_attack
@@ -6377,8 +6373,6 @@ func _resolve_opponent_transition(
 			## the span it was truncated in rather than over the longer journey
 			## it never made.
 			"movement_available_seconds": attack_time,
-			## The dig happens when the swing reaches the floor, which the
-			## swing's own trajectory already states.
 			"contact_recovery": home_dig_recovery,
 			"contact_control": last_dig_control,
 			"incoming_force": last_dig_force,
@@ -7847,10 +7841,8 @@ func _resolve_home_continuation(
 	cont_dig_terms["contested_against"] = _attack_pressure(
 		attack_quality, continuation_attack_trajectory
 	)
-	## A read is only worth having if something was recorded to read. The
-	## first-ball dig logs its exposure here; this one never did, so the
-	## familiarity term above would have stayed at its neutral value for the
-	## whole match no matter how often the same hitter took the same lane.
+	## NOTE without this the familiarity term above stays neutral all match, no
+	## matter how often the same hitter takes the same lane
 	Familiarity.record_exposure(opponent_defender, cont_read_tags)
 	var defense_quality := float(cont_dig_terms.quality)
 	var cont_dig := _dig_outcome(
@@ -11120,10 +11112,9 @@ const RECOVERY_DIG_PENALTY: float = 0.55
 ## NOTE What a jump costs in condition, and what a metre of court costs -- RALLY_SIMULATOR_NOTES.md
 const JUMP_EFFORT_COST: float = 0.0048
 const TRAVEL_COST_PER_METER: float = 0.00011
-## And what a *sprint* costs over a walk, per metre. An approach or a scramble is
-## an acceleration, not a stroll, and the design asks explicitly for that
-## separation: "explosive actions like sprinting or diving should also consume
-## stamina, and moving around in general should sap stamina gradually".
+## And what a sprint costs over a walk, per metre.
+## NOTE the separation is a design requirement; the multiplier itself is
+## unmeasured -- FAILURE_MODES.md section 0
 const SPRINT_COST_MULTIPLIER: float = 3.4
 
 ## What one trip to the floor costs in condition. Small per event and deliberately
@@ -11297,9 +11288,9 @@ func _contact_recovery_state(
 			and incoming_force >= force_needed \
 			and posture != "reaching":
 		## A defender already stretched for a ball is not standing in front of
-		## it, so there is nothing to be driven off. Stated as a gate rather than
-		## left to the arithmetic: it held only by accident once the force
-		## threshold moved, and an accident is not a model.
+		## it, so there is nothing to be driven off.
+		## NOTE a gate rather than arithmetic -- it held only by accident once
+		## the force threshold moved
 		return "blown_away"
 	if shortfall >= RECOVERY_FALL_SHORTFALL - shift:
 		return "fall"
@@ -14579,10 +14570,7 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"block_kind": str(
 			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
 		),
-		## Why the wall was beaten, when it was. This record is the only thing
-		## promotion sees -- a key the resolver states but the curator drops is a
-		## key nothing downstream can read, however faithfully the layers below
-		## carry it.
+		## Why the wall was beaten, when it was.
 		"block_miss_reason": str(swing.get("block_miss_reason", "")),
 		"block_depth_below_reach_meters": swing.get(
 			"block_depth_below_reach_meters", null
