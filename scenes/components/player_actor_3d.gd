@@ -444,29 +444,10 @@ var _turn_step_phase: float = 0.0
 ## displacement direction is mostly rounding noise; applying the threshold to
 ## each frame made the answer change with refresh rate.
 const TRAVEL_HEADING_FLOOR_METERS: float = 0.01
-## How far off their facing a voli will travel before they give up and turn to
-## run. Inside it they are shuffling or backpedalling with their eyes where they
-## were; outside it the speed bounds below decide.
-##
-## **Sixty degrees, not ninety, and the difference is that the bounds below only
-## exist at all at sixty.** A right angle put *perpendicular* travel exactly on
-## the boundary, and the test is `<=`, so a voli moving straight sideways counted
-## as inside the cone and turned onto their travel at any speed whatsoever. The
-## lateral bound directly beneath this describes a middle shuffling the width of
-## the net -- which is the perpendicular case -- so the number written to make a
-## middle look like a middle could never fire for a middle. It governed only
-## backward-diagonal travel, weighted by how sideways that diagonal was.
-##
-## The gate in `tests/test_runner.gd` found this the first time it was asked, by
-## asserting the thing the constants claimed and getting back the opposite.
-##
-## Sixty is where a running gait stops being a run: past it the feet are crossing
-## or shuffling whatever the facing says, so it is the honest place to hand the
-## decision to speed. Measured over 4,727 off-ball legs, median travel is 1.5-2.4
-## m/s in every angular band -- comfortably under both bounds -- so the change
-## lands as "most volis now keep their eyes on the ball" rather than as a new
-## speed regime. The bounds themselves are deliberately untouched in the same
-## pass: one constant moved, one thing measured.
+## How far off their facing a voli will travel before they turn to run. Inside
+## it they shuffle or backpedal with their eyes where they were.
+## NOTE sixty, not ninety -- at ninety the lateral bound could never fire, and
+## the perpendicular case is the one it was written for -- MOVING_ORIENTATION.md
 const OPEN_UP_CONE_RADIANS: float = PI / 3.0
 ## And the speed past which nobody shuffles, whatever the angle. `GaitBiomechanics`
 ## puts a run at 4.4 m/s; this sits below it, because the last stride before a
@@ -485,12 +466,10 @@ const TRAVEL_HEADING_SMOOTHING: float = 0.28
 
 const REFERENCE_HEIGHT_CM: float = 188.0
 const REFERENCE_WINGSPAN_CM: float = 191.0
-## Each silhouette states its own shoe-to-scalp height, and every one of them is
-## normalised to the 1.88 m reference player before individual height is
-## applied. This used to be a single 0.93 constant describing the one rig that
-## existed; with an Avi standing 2.16 m tall in mesh space and a Pumpkin 1.76 m,
-## a shared constant would have made the tall type genuinely oversized against
-## the regulation net rather than merely tall.
+## Every silhouette is normalised to the 1.88 m reference before individual
+## height applies.
+## NOTE was one shared 0.93 constant, which made a 2.16 m Avi oversized against
+## the net rather than merely tall
 const REFERENCE_RIG_HEIGHT_M: float = 2.02
 
 
@@ -514,19 +493,11 @@ func configure(
 	is_home_team = home_team
 	dominant_hand = "Left" if p_dominant_hand == "Left" else "Right"
 	body_type = str(physical_profile.get("body_type", "Vegi"))
-	## **A chosen body, where there was only a derived one.**
-	##
-	## Produce, colourway and coat were hashes of `player_id`, which is right for
-	## the volis the world generates and wrong for the one the player makes.
-	## Carried on the physical profile rather than as five more arguments,
-	## because that dictionary is already the channel for "what this body is" and
-	## every caller that names nothing keeps the hash it had.
+	## NOTE overrides the id-derived produce, colourway and coat; a caller that
+	## names nothing keeps the hash
 	appearance = Dictionary(physical_profile.get("appearance", {}))
-	## Rides the same dictionary as `appearance`, which is also not physical.
-	## What this parameter has always really carried is "everything the view
-	## needs to draw this voli that the id cannot tell it", and a club's strip is
-	## exactly that. The alternative was a sixth positional argument on a call
-	## made from twenty places, nineteen of which have no region to pass.
+	## NOTE the profile carries what the view needs and the id cannot supply,
+	## which is why a club strip rides here rather than as a sixth argument
 	club_region = str(physical_profile.get("club_region", ""))
 	## **Which garment class this voli wears.** A kit was the only clothing that
 	## existed, so a manager -- who is attached to a club without being one of its
@@ -1076,31 +1047,16 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		var smoothing := 0.45 if instant_speed > ground_speed_mps else 0.18
 		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
 		## Face where you are going -- but only when you are going somewhere.
-		##
-		## The threshold used to be the same 0.1 mm that advances the stride, and
-		## at that scale the displacement between two frames is mostly rounding.
-		## Its *direction* is then almost pure noise, so a player standing still
-		## was handed a new random heading every frame and spun on the spot. It
-		## read as endearing, apparently, which is the most dangerous kind of
-		## bug: a player rotating while running is not a style, it is the facing
-		## system being driven by numerical dust.
-		##
-		## Accumulation keeps that centimetre above the noise floor without making
-		## slow movement at a high refresh rate directionless.
+		## NOTE accumulated, so the centimetre floor stays above the noise without
+		## making slow movement at a high refresh rate directionless
 		var heading_distance := Vector2(
 			_heading_travel_accumulator.x, _heading_travel_accumulator.z
 		).length()
 		if heading_distance > TRAVEL_HEADING_FLOOR_METERS:
-			## Before any of this existed, facing came only from a contact
-			## direction and only the contact actor was posed -- so every other
-			## player translated without ever turning, and a setter walking back
-			## to their release seat slid there backwards.
-			##
-			## Rate-limited by the same turn speed a contact facing uses, so a
-			## player rounding a corner leans into it rather than snapping. The
-			## contact actor's own facing is applied afterwards in `set_pose` and
-			## still wins, which is correct: someone playing the ball faces the
-			## ball, not their footwork.
+			## Rate-limited by the contact turn speed, so a player rounding a
+			## corner leans rather than snaps.
+			## NOTE `set_pose` applies the contact actor's facing afterwards and
+			## still wins -- playing the ball beats footwork
 			var travel_yaw := atan2(
 				-_heading_travel_accumulator.x,
 				-_heading_travel_accumulator.z,
@@ -1113,28 +1069,8 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 				angle_difference(facing_yaw, travel_yaw),
 				TRAVEL_HEADING_SMOOTHING,
 			)
-			## **Opening up is a decision, and it was being made for everybody.**
-			##
-			## Turning to face wherever you moved is right for a setter jogging
-			## back to their seat and wrong for almost everything else a defender
-			## does. A player watching the ball who has to cover two metres of
-			## deep court does not turn their back on it -- they open their hips
-			## and backpedal, or they shuffle along the line. Facing followed
-			## travel unconditionally, so the game had no such thing as moving
-			## without turning, and every journey was a forward run.
-			##
-			## The bound is speed rather than distance because it is speed that
-			## forces the issue: you can shuffle, and you cannot shuffle quickly.
-			## Past a run a player has to open up and go, which is exactly what a
-			## defender chasing a ball into the corner actually does.
-			## **A blocker never turns their back on the net.** The speed bound
-			## was a single number, and at 3.6 m/s it made a middle closing to the
-			## pin spin and sprint -- which is not what blockers do at any level.
-			## They shuffle, fast, because the ball is on the other side of the net
-			## and they have to be able to see it and to jump square when they
-			## arrive. Travelling sideways therefore buys a much higher bound than
-			## travelling backwards does, and above `RUN_SPEED_MPS` even that gives
-			## way: a defender chasing a ball into the corner does open up and run.
+			## NOTE moving without turning is the default; `should_open_up` owns
+			## the rule and the constants above own its measurements
 			if should_open_up(
 				facing_yaw, travel_yaw, ground_speed_mps, travel_heading_offset
 			):
@@ -1157,41 +1093,23 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 	self.position = world_position
 
 
-## Turns the actor toward a heading at `FACING_TURN_RATE`, or adopts it outright
-## if this is the first heading it has ever had.
 ## Whether a voli travelling this way has to turn and run, or can hold their
 ## facing and move anyway.
 ##
-## **Static because it is a rule, not a state.** It was five lines inside
-## `set_tactical_position`, which meant the only way to check it was to build a
-## court, run a rally and look -- and facing has no headless coverage at all, so
-## two wrong versions of this behaviour shipped and both passed the suite. Pulled
-## out here it is one pure function of four numbers and the gate can ask it
-## directly.
+## Static and pure, so the suite can call it without building a court.
 ##
-## The rule itself is unchanged. Inside the cone the travel *is* the facing, so
-## turning onto it is free. Otherwise it takes speed to force the issue: you can
-## shuffle and you cannot shuffle quickly, and travelling sideways buys a much
-## higher bound than travelling backwards because a blocker moving along the net
-## never turns their back on it.
+## Inside the cone the travel *is* the facing, so turning onto it is free.
+## Otherwise speed forces the issue: you can shuffle and you cannot shuffle
+## quickly, and sideways buys a higher bound than backwards because a blocker
+## along the net never turns their back on it.
 static func should_open_up(
 	facing_yaw: float,
 	travel_yaw: float,
 	speed_mps: float,
 	heading_offset: float,
-	## **Whether this leg is an approach.**
-	##
-	## An approach is a run at the net and a person faces where they are running.
-	## Without this the hitter kept facing the ball while travelling sideways
-	## into their own approach, `GaitBiomechanics.resolve` decomposed that
-	## heading as lateral, and the run came out as a shuffle -- reported as the
-	## right attacker sliding sideways instead of running forward.
-	##
-	## Exempt from the cone and the speed bound rather than given a wider one.
-	## Those two exist to stop a defender being spun away from a ball they are
-	## watching, which is a real concern for a defender and not a concern at all
-	## for a hitter who has already committed to a run. Lateral movement stays
-	## available everywhere else; it is simply never what an approach is.
+	## An approach is a run at the net, and a person faces where they run.
+	## NOTE exempt from the cone and the speed bound rather than given wider
+	## ones -- those exist to protect a defender watching the ball
 	is_approach: bool = false,
 ) -> bool:
 	if is_approach:
@@ -1995,9 +1913,8 @@ static func recovery_motion(
 	## chose which surfaces took the load, and there was no way back to the feet,
 	## which is why the last three frames of every strip were a body lying still.
 	##
-	## The bands overlap on purpose. A roll is continuous, and a stage that waits
-	## for the previous one to finish is a sequence of poses rather than a
-	## movement.
+	## NOTE the bands overlap on purpose -- a stage that waits for the previous
+	## one to finish is a sequence of poses rather than a movement
 	var platform_hold := 1.0 - smoothstep(0.05, 0.21, recovery)
 	var lateral_line := smoothstep(0.09, 0.44, recovery)
 	var core_release := smoothstep(0.15, 0.36, recovery)
@@ -2096,8 +2013,6 @@ static func recovery_motion(
 ## hips, folds a leg, rolls the body -- and never rewrites what the platform was
 ## doing.
 ##
-## Each state is drawn as a *body*, not as a tint or a marker. A special move
-## that needs an icon to be understood has not been drawn.
 ## `recovery` and `posture` default to the ivars, which is what every in-window
 ## caller wants. The overlay that runs *after* the window passes them explicitly:
 ## by then this voli is no longer the contact actor and the ivars belong to
@@ -2606,20 +2521,16 @@ func _square_up_phase(event_type: int) -> float:
 
 
 ## How high off the floor counts as airborne, in normalised elevation.
-##
-## Above the noise that a settling interpolation puts on a grounded player, and
-## well below the elevation any real jump reaches.
+## NOTE both bounds were picked by eye; no probe has measured the settling
+## noise floor or the lowest real jump -- FAILURE_MODES.md section 0
 const AIRBORNE_ELEVATION: float = 0.14
 const GROUNDED_ELEVATION: float = 0.03
 
 
 ## Notice a touchdown and start the landing clock.
 ##
-## Deliberately *observed* rather than announced. The actor is handed elevation
-## and event type every frame already, so the alternative -- a caller that has to
-## remember to report a landing, and a `set_pose` signature carrying the previous
-## action -- would put the burden on three call sites to describe something this
-## one can simply see happen.
+## NOTE observed rather than announced -- elevation and event type already
+## arrive every frame, so no caller has to remember to report a landing
 func _track_landing(event_type: int, elevation: float) -> void:
 	if elevation >= AIRBORNE_ELEVATION:
 		_was_airborne = true
@@ -3206,9 +3117,8 @@ func set_pose(
 	## is reset each frame; the look is not, because it is a decision about what
 	## the voli is watching rather than a property of the action they are in.
 	_apply_head_look()
-	## Elbows go back to the ready bend for the same reason -- and the ready bend
-	## is not zero, because a nobody stands with their arms locked straight. The
-	## gait carries them from nearly straight at a walk to a runner's right angle.
+	## NOTE the gait's elbow wins when it is larger; the ready bend is a floor,
+	## not zero, because nobody stands with their arms locked straight
 	var carried_elbow := maxf(READY_ELBOW_BEND, float(gait.elbow_degrees))
 	_set_elbow(left_arm, carried_elbow)
 	_set_elbow(right_arm, carried_elbow)
@@ -3629,15 +3539,11 @@ func set_pose(
 
 ## Whether this rig is being lit or being *printed*.
 ##
-## The tactic sheet bakes volis into stickers and the light and shade came off the
-## mesh, which sounded like an argument for real form and read as mud: a hundred
-## pixels of posterised directional lighting is a smudge, not a body. Unshaded, the
-## render *is* the material colours -- flat regions the eye can name -- and the
-## silhouette does the shaping instead, which is what the die-cut border was
-## always for.
+## Unshaded at sticker size, because a hundred pixels of posterised directional
+## lighting is a smudge and the silhouette does the shaping instead.
 ##
-## A flag rather than a second rig, because it is the same voli with the same kit
-## and the same body type; only the lighting is a lie.
+## A flag rather than a second rig: same voli, same kit, same body type, and only
+## the lighting is a lie.
 @export var flat_shading: bool = false
 
 
@@ -4118,11 +4024,8 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	## capsule, and wrong the moment it became two. The mesh then reached right
 	## past the elbow, which sat at the upper bone's proper end, so every bent
 	## pose came out as a T: a forearm crossing an upper arm at its middle.
-	##
-	## Correct-then-clobbered, and the third time in this file: something builds
-	## the right thing and a later line that predates it puts the old thing back.
-	## The tell is always the same -- a length is measured from a whole where the
-	## code below it works in parts.
+	## NOTE the tell: a length measured from a whole where the code below it
+	## works in parts.
 	var upper_length := arm_bone_lengths.x
 	var fore_length := arm_bone_lengths.y
 	for arm in [left_arm, right_arm]:
@@ -4191,17 +4094,11 @@ func _build_silhouette() -> void:
 
 	## The arm is two bones now, for the same reason the leg is.
 	##
-	## A single capsule from shoulder to hand cannot bend, so every action was
-	## drawn with a straight stick and the difference between a *locked* platform
-	## and a *folded* set had nowhere to live. Elbow bend is diagnostic of what a
-	## voli is doing: a dig has the elbows locked straight because that is what
-	## makes a platform flat, a set has them folded out at the temples, a swing
-	## has them cocked behind the head. Those are not stylings, they are how you
-	## tell the three apart from the stands.
+	## Two bones, because elbow bend is how a dig, a set and a swing are told
+	## apart from the stands.
 	##
-	## Upper arm slightly shorter than the forearm-and-hand it carries, which is
-	## roughly true and keeps the elbow reading as an elbow rather than as a
-	## midpoint.
+	## Upper arm slightly shorter than the forearm-and-hand it carries, so the
+	## elbow reads as an elbow rather than a midpoint.
 	var arm_spec: Dictionary = silhouette.get("arm", {})
 	## **Not a cylinder.** This line is why every voli was a produce with four rods
 	## in it: whatever a body type authored, the rig overwrote it with a shape that
@@ -4342,9 +4239,6 @@ func _paint_joint(bone: Node, color: Color) -> void:
 ## ears or a beak is the thing that says which type this is, occupies a few dozen
 ## pixels doing it, and is the one place where more line buys legibility instead
 ## of weight.
-## `static var` so the two candidates -- drop the die cut, or thicken the line so
-## it survives the quantiser -- can be rendered against each other rather than
-## argued about.
 ## NOTE the body weight lives in body_type_models.gd because the garments have to
 ## NOTE clear it -- GARMENT_INK_CLEARANCE.md. This is the same number, read.
 static var ink_metres: float:
@@ -4804,9 +4698,8 @@ func _apply_attack_performance(
 
 ## The swing itself, from the plant onward.
 ##
-## Split out of the ATTACK branch when the approach arrived in front of it:
-## the branch now chooses between two models, and a reader should be able to
-## see that choice without scrolling past forty lines of shoulder angles.
+## Covers the phase range from `SpikeBiomechanics.PLANT_END` onward; the
+## approach model owns everything before it.
 func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
 	## Recomputed rather than passed: they are one-line reads off `dominant_hand`,
 	## and threading two node references through a signature to save two lines

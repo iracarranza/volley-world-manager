@@ -248,3 +248,46 @@ godot --headless --path . --script res://tools/run_defensive_form_probe.gd
 ```
 
 Both are deterministic and reproduce exactly.
+
+---
+
+## 7. The open-up cone: why sixty and not ninety
+
+Moved here from `player_actor_3d.gd`, where it had grown to a 23-line block
+above a one-line constant. The constant now carries a NOTE and points here.
+
+### The defect
+
+`OPEN_UP_CONE_RADIANS` was a right angle. The membership test is `<=`, so
+**perpendicular travel sat exactly on the boundary** and counted as inside the
+cone — meaning a voli moving straight sideways turned onto their travel at any
+speed whatsoever.
+
+That is precisely the case `LATERAL_OPEN_UP_SPEED_MPS` exists to govern. Its
+own comment describes "a blocker shuffling the width of the net", which *is* the
+perpendicular case. So the number written to make a middle look like a middle
+**could never fire for a middle**. It governed only backward-diagonal travel,
+weighted by how sideways that diagonal was.
+
+### Why sixty
+
+Sixty degrees is where a running gait stops being a run: past it the feet are
+crossing or shuffling whatever the facing says, so it is the honest place to
+hand the decision to speed rather than to angle.
+
+### What it cost, measured
+
+Over **4,727 off-ball legs**, median travel is **1.5–2.4 m/s in every angular
+band** — comfortably under both speed bounds. So the change lands as "most volis
+now keep their eyes on the ball" rather than as a new speed regime.
+
+The bounds themselves were deliberately left untouched in the same pass: **one
+constant moved, one thing measured.**
+
+### How it was found
+
+The gate in `tests/test_runner.gd` found it the first time it was asked, by
+asserting the thing the constants claimed and getting back the opposite. A
+constant whose stated purpose and actual reachable range disagree is
+`FAILURE_MODES.md` §0, and an assertion that states the intent in words is what
+catches it.
