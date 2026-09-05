@@ -29,6 +29,14 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | How do I see continuous movement on the court and tune against it? | [Gate 51](../calibration/GATE_51_OBSERVABLE_CONTINUOUS_MOVEMENT.md) |
 | Why does a serve/set/attack take the time it does? | [Force-Derived Ball Flight Timing](../design/BALL_LAUNCH_KINEMATICS.md) |
 | What is historical practice rather than current roadmap work? | [P6-C2](part_06_exercises/02_beginner_project_ladder.md) |
+| How is a voli's body built, and how do I change one? | [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| How do I add a kit for a region? | [P7-C2](part_07_art_and_assets/02_kits_colour_and_marks.md) |
+| Why is my kit failing the contrast check? | [P7-C2](part_07_art_and_assets/02_kits_colour_and_marks.md) |
+| How do I add a venue, and where may geometry stand? | [P7-C3](part_07_art_and_assets/03_the_court_and_venue.md) |
+| How big is the court, and which axis is which? | [P7-C3](part_07_art_and_assets/03_the_court_and_venue.md) |
+| How do faces and expressions work? | [P7-C4](part_07_art_and_assets/04_faces_and_expressions.md) |
+| How do I render, probe, or prove a visual change? | [P7-C5](part_07_art_and_assets/05_rendering_probes_and_validation.md) |
+| Where do rendered PNGs go? | [P7-C5](part_07_art_and_assets/05_rendering_probes_and_validation.md) |
 
 ## Symbols
 
@@ -77,6 +85,17 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `RallyDecisionSystem` | Comparison of open receiver choices and grading against ball truth; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `CoverageCalculator` | Arrival and claimant calculations; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `TacticalCourt.set_visualization_layers` | Shared court-overlay visibility mask; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
+| `BodyTypeModels.silhouette` | Builds one voli's complete body spec from type, id and choices; [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| `BodyTypeModels.build_mesh` | Dispatches a spec `Dictionary` to a mesh primitive; an unknown `shape` silently yields a capsule; [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| `BodyTypeModels.produce_for` | Deterministic produce from player id; never consumes generation RNG; [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| `BodyTypeGameplay.BODY_TYPES` | The six morphologies the simulation can read; [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| `PlayerActor3D.configure` | Entry point that dresses and builds one voli from a `physical_profile`; [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| `RegionalKits.kit_for` | The home strip for a region; presentation data, deliberately off `regions.gd`; [P7-C2](part_07_art_and_assets/02_kits_colour_and_marks.md) |
+| `RegionalKits.BUILD` | Shirt construction per region — what survives grayscale; [P7-C2](part_07_art_and_assets/02_kits_colour_and_marks.md) |
+| `MatchCourt3D.CAMERA_PRESETS` | Broadcast, end line and high tactical, all inside the tightest venue's envelope; [P7-C3](part_07_art_and_assets/03_the_court_and_venue.md) |
+| `FREE_ZONE_SIDE` / `FREE_ZONE_END` | Where a building may start: 9.5 m and 17.0 m from centre; [P7-C3](part_07_art_and_assets/03_the_court_and_venue.md) |
+| `FaceExpressions.GRID` | Eye state x mouth shape -> expression name; the single source of which faces exist; [P7-C4](part_07_art_and_assets/04_faces_and_expressions.md) |
+| `CogniticonMotion` | Pure-function mark motion in real seconds; no node, no state, no frame delta; [P7-C4](part_07_art_and_assets/04_faces_and_expressions.md) |
 | `CareerManager` | Stateful career lifecycle; [P5-C1](part_05_management/01_career_roster_and_training.md) |
 | `VolleyballTrainingSystem` | Weekly player changes; [P5-C1](part_05_management/01_career_roster_and_training.md) |
 
@@ -92,4 +111,8 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | Long rally text moves or enlarges the dashboard | Keep history and analysis in non-fitting scrollable `RichTextLabel` nodes; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | Planner marker moves but the rally does not change | Trace the model value into a seeded event decision; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | New persistent code does not change a live rally | It is not wired into `RallySimulator.resolve`; [STATUS.md](STATUS.md) |
+| A new body part appears as a rod or capsule | The `shape` key is misspelled; unknown shapes fall through to the default; [P7-C1](part_07_art_and_assets/01_the_voli_body.md) |
+| A kit fails "separates from the court floor" | Contrast against the floor is below 1.6; darken the kit, do not lower the gate; [P7-C2](part_07_art_and_assets/02_kits_colour_and_marks.md) |
+| A render produced no new image | On macOS, drop `xvfb-run`; then check the PNG's timestamp; [P7-C5](part_07_art_and_assets/05_rendering_probes_and_validation.md) |
+| Roughly 200 script errors after adding a class | Stale class cache; run `--import`; [P7-C5](part_07_art_and_assets/05_rendering_probes_and_validation.md) |
 | Test output changes with the same seed | Look for unseeded randomness or mutable state outside the resolver; [P3-C2](part_03_workflow/02_debugging_testing_and_git.md) |

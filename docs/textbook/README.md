@@ -37,6 +37,7 @@ See [VERIFICATION_RULES.md](VERIFICATION_RULES.md) for the rules behind these la
 - [Part 4 — The Match and Rally Engine](part_04_match_engine/README.md)
 - [Part 5 — Career and Player Development](part_05_management/README.md)
 - [Part 6 — Guided Exercises](part_06_exercises/README.md)
+- [Part 7 — Art, 3D Assets and the Drawn World](part_07_art_and_assets/README.md)
 
 ## Important current boundary
 

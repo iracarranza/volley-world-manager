@@ -10,17 +10,17 @@ The central path is:
 
 ```text
 user activates rally control
-    ↓
+	↓
 Main._resolve_rally()
-    ↓
+	↓
 GameManager.resolve_active_rally(seed)
-    ↓
+	↓
 RallySimulator.resolve(...)
-    ↓
+	↓
 RallyResult containing RallyEvent resources
-    ↓
+	↓
 Main._play_rally(result, ...)
-    ↓
+	↓
 2D tactical court playback and result recording
 ```
 
