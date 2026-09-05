@@ -423,3 +423,79 @@ Partially compensated: `contact_posture` is resolver-carried
 timing for every contact and needs its own before/after render comparison, which
 is P7 tooling. Recorded as the second genuine gap this work has surfaced, after
 the `_reached_point` defect in P3.3.
+
+---
+
+## P5 — STATE/RECOVERY · **already implemented; two of my own claims corrected**
+
+### P5.1 The derived recovery function exists, in production
+
+`rally_simulator.gd:11445` `_note_recovery(player, state, at_time)` — **6
+production call sites** — is precisely the function P5 asks for:
+
+```
+action/contact + body state (+ existing athlete vars) → recovery
+```
+
+- keyed by recovery **state**: `platform 0.0 / knee 0.55 / fall 0.95 / blown_away 1.35`;
+- scaled by **existing athlete vars**: `explosiveness * 0.6 + work_rate * 0.4`,
+  bounded `lerpf(1.28, 0.74, quickness)` — *"a springy defender is back up
+  sooner… without letting anyone shrug off a blow-away"*;
+- writes `player_recovery[id] = {state, ready_at, delay}`, which **constrains the
+  next action**.
+
+No invented attribute model, and nothing to replace. P5's `iff` is satisfied by
+code that predates this work.
+
+### P5.2 Correction to `SPORTS_SIM_ARCHITECTURE.md` R5
+
+That artifact listed *"Per-contact costs are literals, not functions of
+body/contact"* as a production root cause, citing
+`live_reception_integrator.gd:59`, `live_block_integrator.gd:160`,
+`live_attack_integrator.gd:32`.
+
+**Wrong scope.** Those three files are the **development-only promoted contact
+paths**, gated off in production. Production recovery goes through
+`_note_recovery`, which is derived and athlete-scaled. R5 is corrected to apply
+to the development integrators only.
+
+### P5.3 Correction to the same artifact's envelope claim — upheld, with a caveat
+
+`contact_envelope_system.evaluate()` — the function carrying `balance_factor`
+and `posture_factor` by `BodyState` — is reached **only** from shadow systems
+(`shadow_reception_system.gd`, `shadow_block_system.gd`). `rally_simulator.gd`
+never calls it. So "modelled, flag-gated off" was right.
+
+Caveat worth recording: *other* functions in that file **are** production —
+`setter_capability_system.gd:217` uses `nominal_jump_displacement_meters`. The
+file is live; the body-state gating inside `evaluate()` is not.
+
+### P5.4 Why the envelope's own recovery cannot replace the literals
+
+`contact_envelope_system.gd:185`:
+
+```gdscript
+"recovery_time_seconds": lerpf(0.36, 0.18, action_balance) if jump_possible else 0.0,
+```
+
+Its `[0.18 … 0.36]` range brackets the development integrators' literals almost
+exactly, which is suggestive. But it returns **`0.0` when `not jump_possible`**
+— it models *landing from a jump*, not recovery in general. Promoting it wholesale
+would give every grounded contact zero recovery, and a grounded emergency dig
+genuinely costs 0.34 s.
+
+**So the spec's `iff` fails for that particular function**, and the literals are
+left alone. Recorded because "the ranges line up" is exactly the kind of partial
+match that gets mistaken for a derivation.
+
+### P5.5 Body state across actions
+
+Already preserved and used: `RallyPlayerState.body_state` carries
+`BALANCED/MOVING/REACHING/DIVING/AIRBORNE/RECOVERING`; block and attack
+integrators branch on `AIRBORNE` directly; the reception integrator branches on
+`action == "emergency_keep_alive"`, which at that point is the same condition as
+`body_state == DIVING`. `contact_posture` is resolver-derived and reaches the
+actor, so a compromised contact changes the drawn pose.
+
+**No change made in P5.** The pass is verification, and two claims in my own
+prior artifact are corrected by it.

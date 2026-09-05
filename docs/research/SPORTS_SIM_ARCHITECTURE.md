@@ -199,11 +199,24 @@ main.gd::_resolve_rally
 | 7 | Body state gates action | Compromised body ≠ balanced | Modelled, flag-gated off | `contact_envelope_system.gd` | **PARTIAL** | Unused in production | SIM: promote |
 | 8 | Off-ball continuous | Role × teammates [S5b] | Phase staging + `live_positions` | `rally_simulator.gd` staging comments | **PARTIAL** | Re-bases per phase | AI: continuous re-base |
 | 9 | Block has no foreknowledge | Cues only | Correctly identified as next slice; not built | `MIGRATION` / handoff | **ABSENT** | Blocks unreadable as decisions | AI |
-| 10 | Recovery is derived | From contact + body state | Bare literals | three `live_*_integrator.gd` | **PARTIAL** | Every voli recovers identically | TIMING |
+| 10 | Recovery is derived | From contact + body state | **Production already derives it**: `_note_recovery` keys on recovery state and scales by `explosiveness`/`work_rate`. Literals remain only in the development-only integrators | `rally_simulator.gd:11445`, 6 call sites | **MATCH** (production) | — | keep; literals are dev-path only |
 | 11 | Anim reaches a point at a time | Warp to spatiotemporal target [S8] | Anim re-derives its own speed | `player_actor_3d.gd:1005` | **CONTRADICTS** | Gait fights position stream | KINEMATICS: drive gait from supplied velocity |
 | 12 | Contact is synchronised | Ball↔body coupled [S3] | Contact from event metadata; ball drawn from trajectory | `outgoing_trajectory` | **PARTIAL** | Continuity contract carries it | keep, enforce |
 
 ---
+
+## 5b. Corrections to this artifact
+
+Found while executing `docs/specs/AUTHORITATIVE_RALLY_MOVEMENT.md`. See
+`docs/review/AUTHORITATIVE_MOVEMENT_EXECUTION.md` P5.
+
+| Claim as published | Corrected |
+|---|---|
+| R5 / row 10: per-contact recovery costs are bare literals | **Production derives recovery.** `_note_recovery` (`rally_simulator.gd:11445`, 6 sites) keys on recovery state and scales by `explosiveness * 0.6 + work_rate * 0.4`. The literals cited are in `live_*_integrator.gd`, which are the **development-only** promoted paths |
+| Row 7: body-state gating "modelled, flag-gated off" | **Upheld**, with a caveat: `contact_envelope_system.evaluate()` is shadow-only, but *other* functions in that file are production (`setter_capability_system.gd:217`) |
+
+Neither correction changes the artifact's bottom line — the three-times
+derivation of motion — which P0 confirmed directly.
 
 ## 6. Root causes
 
@@ -213,7 +226,7 @@ main.gd::_resolve_rally
 | **R2** | **No production scheduler**; phases resolve in order | SIM | 1, 4, 8, 9 |
 | **R3** | Motion **re-derived three times** from outputs | SIM/KINEMATICS | 2, 11 — the endpoint fudge |
 | **R4** | Continuous substrate built but **flag-gated off** | SIM | 7, 10 |
-| **R5** | Per-contact costs are **literals**, not functions of body/contact | TIMING | 10 |
+| **R5** | Per-contact costs are **literals** in the *development-only* integrators | TIMING | 10 |
 
 > R1 and R3 are one problem seen twice. Fix R1 and R3 dissolves: if the resolver
 > emits a sampled path, playback has nothing left to re-integrate.
