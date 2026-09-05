@@ -43,6 +43,14 @@ that *cannot* say is how much of the distance from 2,174 is the 84 commits the
 merge brought in. Quoting a difference against 2,174 would be comparing two
 different trees, which is the mistake the rest of this section is about.
 
+**Zero delta across the prose-audit pass, measured both ends.** 2 of 2,251 at
+`d2ca0c4` before it and 2 of 2,251 at `3c2cb2d` after, same two failures, same
+22 walls. About 200 comment lines were removed from `rally_simulator.gd` and
+`player_actor_3d.gd` and no code was touched, so an unmoved count *and* an
+unmoved sampling population is the only correct outcome -- this is the one case
+where the total is worth reading, because it was measured on both ends of a
+change that must not move it. See `docs/review/PROSE_AUDIT_STATUS.md`.
+
 **The two are older than this branch and fail on `origin/main` unchanged.** Named
 so nobody re-derives them:
 
