@@ -343,3 +343,18 @@ Recorded as the first genuine sim defect this work has surfaced.
 **Not fudged either.** The path reports where the body can actually get. A
 0.15 m honest shortfall on 2 of 10 coverage legs is preferable to a snap that
 made every leg look exact.
+
+### P3.4 Suite · **G2 PASSED**
+
+| Run | Result |
+|---|---|
+| Baseline `3c2cb2d` | 2 of 2,251 |
+| P1 `402ca56` | 2 of 2,261 |
+| P2 `ab4e37a` | 2 of 2,261 |
+| **P3 `2c95dd6`** | **2 of 2,261** |
+
+Same two known failures throughout. Three consecutive passes at an identical
+count: migrating six legs to the authoritative path moved no outcome and no
+sampling population.
+
+**G2 PASSES.** → P4.
