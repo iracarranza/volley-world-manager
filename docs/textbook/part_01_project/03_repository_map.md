@@ -47,7 +47,7 @@ scripts/
   tactics/     (2)         play validation and tactical demand
   world/       (1)         world generation entry
 tools/         (296 .gd,   probes, validators and render harnesses
-                59 .tscn)  — not shipped, but not throwaway either
+				59 .tscn)  — not shipped, but not throwaway either
 tests/                     headless automated checks
 artifacts/                 committed rendered outputs and proofs
 assets/                    fonts, VFX sources

@@ -2,7 +2,7 @@
 
 Status: **VERIFIED**
 Keywords: probe, harness, headless, user data directory, xvfb, gl_compatibility, gate, contact sheet, regression
-Primary sources: `tools/` (58 scene harnesses); `tools/validate_voli_body_construction.gd`; `tools/probe_garment_clearance.gd`; `tools/run_voli_portfolio.gd`; `tests/test_runner.gd`
+Primary sources: `tools/` (296 scripts, 59 scene harnesses); `tools/validate_voli_body_construction.gd`; `tools/probe_garment_clearance.gd`; `tools/run_voli_portfolio.gd`; `tests/test_runner.gd`
 
 ## Prerequisites
 
