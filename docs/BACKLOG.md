@@ -7445,9 +7445,9 @@ branches -- `player_generator.gd` and `staff_generator.gd` both key on
 
 ```text
 TAKE OVER A CLUB   Inherit a squad you did not pick
-                   10 volis - a going concern
+				   10 volis - a going concern
 FOUND YOUR OWN     From nothing, against clubs that have everything
-                   12 volis - younger, less standing, less money
+				   12 volis - younger, less standing, less money
 ```
 
 `new_career_screen_v2.gd` overwrote both with text naming only where the club is.
@@ -7472,3 +7472,40 @@ responsibility delegates anything, whether defined roles constrain selection --
 is `CHARACTER_CREATION.md`'s *Explicitly unresolved* item 5, and inventing it
 alongside the plumbing is how an unresolved item gets quietly resolved by
 whoever happened to be wiring that day.
+
+## The prose audit's other half: 24 code-structure findings, unscheduled
+
+The comment half of `prose_audit_findings.json` is closed — 103 of 128, and
+every `meta-commentary`, `tells-not-shows` and `overlong-narrative` finding
+among them. See `docs/review/PROSE_AUDIT_STATUS.md` for what that pass did and
+what it measured.
+
+**What is left is not comment work and should not be scheduled as though it
+were.** Twenty-four findings, all in two files:
+
+| Kind | Count | What it means |
+|---|---:|---|
+| `monkey-code` | 13 | A pattern copied without the reason it existed |
+| `vibe-code` | 11 | Duplication, or a helper that should exist and does not |
+
+Eleven are in `player_actor_3d.gd` and thirteen in `rally_simulator.gd`,
+which are also the two densest files in the repository.
+
+**Why it was left.** Every one of these changes code rather than comments, so
+each touches a behaviour surface. The comment pass could be verified by a parse
+and a validator; this one needs a predecessor measurement and a balance-probe
+reading before and after, exactly as `CLAUDE.md` requires. Doing it inside a
+comment pass would have produced a diff where a genuine behaviour change was
+indistinguishable from a paragraph being deleted.
+
+**The shape of the work, from the findings themselves.** Three examples, so the
+next reader can size it:
+
+- `_ink_material(name, color)` does not exist and is written out twice.
+- `set_pose`'s event branches were lifted out one at a time; ATTACK is done and
+  the rest are not, so the function is half a dispatcher and half a body.
+- Recovery pose targets are inline literals beside a `recovery_motion` module
+  that is already pure and static and is where they belong.
+
+None of these is urgent. All of them are the kind of thing that gets harder
+every time the surrounding file grows.
