@@ -835,3 +835,46 @@ Both numbers above use the production call.
 The middle row is the next real gap: the eight migrated contact sites are the
 receptions, the coverages and the defences. A setter's chase, a hitter's approach
 and a blocker's close are still solved twice.
+
+---
+
+## P12 — the held position, and the leg it implies
+
+`_add_event` stamps `*_phase_positions` on every event: where the ten bodies not
+making this contact stand, as a fact, with no journey attached. Playback walked
+the drawn body to that fact by re-integrating the walk locally — 40 of 632 legs
+after P11.
+
+It now publishes `*_phase_hold_paths` beside it: for each body that moved since
+the previous contact and whose leg no other site solved, the leg itself, built
+from `_positions_at_last_contact` to the current live position. One site, because
+`_add_event` is the one place that sees every contact.
+
+Both consumers read it at the *lowest* priority — `tactical_court` after the
+phase intents, `match_screen` before `_apply_explicit_targets` — so any stated
+journey still wins and this only fills silence.
+
+Adding it needed one new field, `_bodies_by_id`, populated once per rally from
+both rosters, because `_add_event` is handed no roster.
+
+| | P11 | P12 |
+|---|---|---|
+| authoritative | 488 | **512** |
+| legacy re-integration | 78 | **54** |
+| hold | 66 | 66 |
+| continuity mismatches | 21 (worst 0.366) | 21 (worst 0.366) |
+
+Balance probe byte-identical: this publishes and reads, and changes no decision.
+
+### P12.1 What the last 54 are
+
+| source | n | note |
+|---|---|---|
+| `phase_positions` at POINT | 24 | the settle after the rally is over |
+| `movement_player` at SET / ATTACK / BLOCK | 23 | **the three contacts that publish no `movement_path`** |
+| `phase_positions` at SET / ATTACK | 7 | |
+
+The 23 are the last real gap. Eleven resolver sites add those three event types
+and none of them carries a solved leg for its own actor: a setter's chase, a
+hitter's approach and a blocker's close are still the only journeys in the game
+solved twice.

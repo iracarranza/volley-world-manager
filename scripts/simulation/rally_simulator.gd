@@ -709,6 +709,9 @@ var opponent_live_positions: Dictionary = {}
 ## uniformly and derives nothing: the leg for contact N is the interval between
 ## contact N-1 and contact N, so the position at N-1 is the start by definition.
 var _positions_at_last_contact: Dictionary = {}
+## Every voli in this rally by id, both sides, so `_add_event` can solve the leg
+## a body just made without being handed a roster at each of its call sites.
+var _bodies_by_id: Dictionary = {}
 ## The receiving side's own labels for its receive shape, captured where the
 ## shape is built.
 ##
@@ -888,6 +891,16 @@ func resolve(
 	exertion_cost = {}
 	receive_formation_intents = {}
 	_positions_at_last_contact = {}
+	_bodies_by_id = {}
+	for raw_body in players:
+		var home_body := raw_body as VolleyballPlayer
+		if home_body != null:
+			_bodies_by_id[home_body.id] = home_body
+	if opponent_team != null:
+		for raw_body in opponent_team.on_court_players():
+			var away_body := raw_body as VolleyballPlayer
+			if away_body != null:
+				_bodies_by_id[away_body.id] = away_body
 	live_positions = _initial_home_positions(
 		lineup, defensive_plan, not home_serving, true,
 		players if not home_serving else [], receive_formation_intents,
@@ -13293,6 +13306,28 @@ func _phase_hold_map(positions: Dictionary, actor_id: int) -> Dictionary:
 	return held
 
 
+## The leg between the previous contact and this one, for every body that made
+## one. A body that did not move gets no entry rather than a zero-length path.
+func _phase_hold_paths(positions: Dictionary, actor_id: int) -> Dictionary:
+	var paths := {}
+	for raw_id in positions:
+		var player_id := int(raw_id)
+		if player_id == actor_id or not _positions_at_last_contact.has(player_id):
+			continue
+		var here := Vector2(positions[raw_id])
+		var was := Vector2(_positions_at_last_contact[player_id])
+		var body := _bodies_by_id.get(player_id, null) as VolleyballPlayer
+		if body == null:
+			continue
+		var leg_seconds := _movement_time(body, was, here, "transition")
+		var path := _committed_path(
+			body, was, here, leg_seconds, "transition", rally_clock
+		)
+		if path != null:
+			paths[player_id] = path
+	return paths
+
+
 func _add_event(
 	result: Resource,
 	event_type: int,
@@ -13316,6 +13351,20 @@ func _add_event(
 			live_positions, actor_id
 		)
 		metadata["opponent_phase_positions"] = _phase_hold_map(
+			opponent_live_positions, actor_id
+		)
+		## **And the journey each of those positions implies.**
+		##
+		## The hold map is a fact -- "this body is here now" -- with no leg
+		## attached, and playback walked the drawn body to it by re-integrating
+		## the whole thing locally. Measured: 40 of 632 production playback legs.
+		## Where the body moved since the last contact and no other site has
+		## published that leg, this solves it once, here, from the one place that
+		## sees every contact. AUTHORITATIVE_MOVEMENT_EXECUTION.md P12.
+		metadata["home_phase_hold_paths"] = _phase_hold_paths(
+			live_positions, actor_id
+		)
+		metadata["opponent_phase_hold_paths"] = _phase_hold_paths(
 			opponent_live_positions, actor_id
 		)
 	var event: Resource = RallyEventModel.new()

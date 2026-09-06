@@ -1714,6 +1714,19 @@ func _build_movement_plan(
 	## to publish it, not for playback to make it up.
 	_apply_base_positions(plan, event, next_contact)
 	_apply_cheat_steps(plan, action_target, next_contact)
+	## The held-position map first, so an explicit journey below overwrites it.
+	## Its own paths are the leg each held position implies -- see
+	## `RallySimulator._phase_hold_paths`.
+	_apply_held_positions(
+		plan,
+		next_contact.metadata.get("home_phase_positions", {}),
+		next_contact.metadata.get("home_phase_hold_paths", {}),
+	)
+	_apply_held_positions(
+		plan,
+		next_contact.metadata.get("opponent_phase_positions", {}),
+		next_contact.metadata.get("opponent_phase_hold_paths", {}),
+	)
 	_apply_explicit_targets(
 		plan,
 		next_contact.metadata.get("home_phase_targets", {}),
@@ -2611,6 +2624,19 @@ static func _metres(from_position: Vector2, to_position: Vector2) -> float:
 		delta.x * CourtConstants.COURT_WIDTH_METERS,
 		delta.y * CourtConstants.COURT_LENGTH_METERS,
 	).length()
+
+
+## Where the resolver says these bodies stand now, with the leg that took them
+## there when one was solved.
+func _apply_held_positions(
+	plan: Dictionary, held: Dictionary, paths: Dictionary
+) -> void:
+	for raw_player_id in held:
+		var player_id := int(raw_player_id)
+		_set_plan_target(
+			plan, player_id, Vector2(held[raw_player_id]), false,
+			paths.get(player_id, null),
+		)
 
 
 func _apply_explicit_targets(

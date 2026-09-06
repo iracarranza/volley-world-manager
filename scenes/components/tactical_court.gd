@@ -788,6 +788,14 @@ func _published_offball_path(player_id: int) -> Variant:
 		var raw: Variant = intents.get(player_id, null)
 		if raw is Dictionary and raw.get("path", null) != null:
 			return raw["path"]
+	## Last: the leg implied by the held-position map. A stated journey always
+	## beats it, which is why this is read after the intents.
+	for side in [&"home", &"opponent"]:
+		var held: Variant = pending_contact_event.metadata.get(
+			"%s_phase_hold_paths" % side, {}
+		)
+		if held is Dictionary and held.get(player_id, null) != null:
+			return held[player_id]
 	return null
 
 
