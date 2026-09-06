@@ -309,6 +309,36 @@ about whether a body may be off court.
 
 ---
 
+# Validation
+
+| control | result |
+|---|---|
+| playback corrections | 0 of 8,733, three runs, byte-identical |
+| `audit_embodied_locomotion.gd` | re-run, byte-identical |
+| `audit_six_player_space.gd` | re-run, byte-identical |
+| `audit_target_sources.gd` | re-run, byte-identical |
+| balance probe, 700 rallies | reproduces `a41f285` exactly |
+| production behaviour changed | **none** — this pass added instruments and one test, and altered no production file |
+
+**Resolve cost was not measured.** The contract records 62.8 ms/rally at
+`8bb09ca`, and the only window in which to re-measure it was one where the full
+suite was running; a timing figure taken next to a saturated CPU would be worse
+than no figure. It is recorded as unmeasured rather than estimated.
+
+## Regression guard added
+
+`tests/test_runner.gd::_test_reachability_agrees_across_the_court` sweeps
+distances 1–6 m, entry speeds 0–6 m/s and entry angles 0/90/180° on legal
+targets and asserts the closed form and the integrator land within 1 cm.
+
+The existing `_test_authoritative_movement_path_contract` already asserts this at
+*one* target and one mode. It was broadened rather than duplicated because the
+audit's finding is precisely that geometry decides the answer: on-court targets
+agree to 0.000 m, and the divergence that exists is about targets off the court.
+The new test is deliberately silent about those.
+
+---
+
 # Instrument errors found and corrected
 
 Recorded because the audit's own instrument was wrong twice and both times it

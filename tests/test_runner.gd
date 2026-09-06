@@ -293,6 +293,7 @@ func _initialize() -> void:
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_stride_and_cadence_locomotion()
 	_test_authoritative_movement_path_contract()
+	_test_reachability_agrees_across_the_court()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_commentary_routing_contract()
@@ -24850,6 +24851,71 @@ func _test_scripted_rally_intent_boundary() -> void:
 ## the duration a consumer reads off the path must be the duration the resolver
 ## priced, because that is the same movement deciding reachability and being
 ## drawn.
+## The two reachability answers must agree wherever a body can legally stand.
+##
+## `_test_authoritative_movement_path_contract` above checks this at one target
+## and one mode. The embodied-movement audit found that geometry is exactly what
+## decides it: on legal targets the closed form and the integrator agree to
+## 0.000 m across sixty rows, and the one divergence found was a target placed
+## *off* the court, where the integrator clamps and the closed form does not.
+##
+## So this sweeps the court rather than sampling a point of it. It is the
+## regression guard for the D1 unification when that lands, and it is deliberately
+## silent about off-court targets, which are a separate open question.
+## docs/review/SIX_PLAYER_EMBODIED_MOVEMENT_AUDIT.md A8.
+func _test_reachability_agrees_across_the_court() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var profile: VolleyballPlayer = null
+	for candidate in manager.players:
+		if candidate != null:
+			profile = candidate
+			break
+	if profile == null:
+		_check(false, "reachability sweep finds a player")
+		manager.free()
+		return
+	var mode := RallyPlayerState.MovementMode.TRANSITION
+	var worst := 0.0
+	var rows := 0
+	for distance in [1.0, 2.5, 4.0, 6.0]:
+		for speed in [0.0, 2.0, 4.0, 6.0]:
+			for degrees in [0.0, 90.0, 180.0]:
+				var radians := deg_to_rad(float(degrees))
+				## Metres per axis, because the court is 9 wide and 18 long in
+				## the same normalised unit and one conversion cannot serve both.
+				var target := Vector2(0.5, 0.5) + Vector2(
+					0.0, float(distance) / RallyKinematics.COURT_LENGTH_METERS
+				)
+				var velocity := Vector2(cos(radians), sin(radians)) * float(speed)
+				var priced := RallyPlayerState.create(
+					profile, &"home", -1, Vector2(0.5, 0.5)
+				)
+				priced.velocity = velocity
+				var seconds := float(RALLY_MOVEMENT_SCRIPT.traversal_result(
+					priced, target, mode
+				)["seconds"])
+				var walker := RallyPlayerState.create(
+					profile, &"home", -1, Vector2(0.5, 0.5)
+				)
+				walker.velocity = velocity
+				var integration: Dictionary = SHADOW_MOVEMENT_SCRIPT.integrate(
+					walker, target, seconds, mode
+				)
+				var trail: Array = integration.get("trail", [])
+				if trail.is_empty():
+					continue
+				rows += 1
+				worst = maxf(worst, RallyKinematics.court_distance_meters(
+					Vector2(trail[trail.size() - 1]), target
+				))
+	_check(rows >= 40, "reachability sweep exercised the court")
+	_check(worst <= 0.01,
+		"closed form and integrator land together on legal targets (worst %.4f m)"
+			% worst)
+	manager.free()
+
+
 func _test_authoritative_movement_path_contract() -> void:
 	var manager: Object = GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
