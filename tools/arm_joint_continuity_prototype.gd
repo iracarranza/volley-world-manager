@@ -1,13 +1,11 @@
 extends Node3D
 ## Isolated visual prototype for reducing visible Voli arm articulation seams.
 ## No production PlayerActor3D or animation semantics are changed.
-## Run the companion scene and compare four constructions across bend angles.
 
 const BENDS := [5.0, 45.0, 90.0, 120.0]
 const VARIANTS := ["A  CURRENT", "B  OVERLAP", "C  SHAPED OVERLAP", "D  SLEEVE"]
 const ARM_LENGTH := 0.44
 const ARM_RADIUS := 0.085
-
 var body_material: StandardMaterial3D
 var joint_material: StandardMaterial3D
 
@@ -17,47 +15,48 @@ func _ready() -> void:
 	body_material.roughness = 0.82
 	joint_material = body_material.duplicate()
 	joint_material.albedo_color = Color(0.60, 0.36, 0.27)
-
 	for row in BENDS.size():
 		for column in VARIANTS.size():
 			var root := Node3D.new()
 			root.position = Vector3((column - 1.5) * 1.35, (1.5 - row) * 1.25, 0.0)
 			add_child(root)
 			_build_arm(root, column, deg_to_rad(BENDS[row]))
-
 			if row == 0:
 				_add_label(root, VARIANTS[column], Vector3(0, 0.58, 0), 30)
-		if row < BENDS.size():
-			var label_root := Node3D.new()
-			label_root.position = Vector3(-2.72, (1.5 - row) * 1.25, 0.0)
-			add_child(label_root)
-			_add_label(label_root, "%d deg" % int(BENDS[row]), Vector3.ZERO, 27)
+		var label_root := Node3D.new()
+		label_root.position = Vector3(-2.72, (1.5 - row) * 1.25, 0.0)
+		add_child(label_root)
+		_add_label(label_root, "%d deg" % int(BENDS[row]), Vector3.ZERO, 27)
+	_capture.call_deferred()
+
+func _capture() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var image := get_viewport().get_texture().get_image()
+	var path := "user://arm_joint_continuity.png"
+	var error := image.save_png(path)
+	print("ARM_JOINT_RENDER|%s|%s" % [path, error_string(error)])
+	get_tree().quit(0 if error == OK else 1)
 
 func _build_arm(root: Node3D, variant: int, bend: float) -> void:
 	var shoulder := Vector3(0, ARM_LENGTH, 0)
 	var elbow := Vector3.ZERO
 	var forearm_direction := Vector3(sin(bend), -cos(bend), 0).normalized()
 	var wrist := elbow + forearm_direction * ARM_LENGTH
-
 	match variant:
 		0:
 			_add_segment(root, shoulder, elbow, ARM_RADIUS, ARM_RADIUS * 0.90)
 			_add_segment(root, elbow, wrist, ARM_RADIUS * 0.90, ARM_RADIUS * 0.78)
 			_add_sphere(root, elbow, ARM_RADIUS * 1.18, joint_material)
 		1:
-			# Cheap seam removal: both opaque segments penetrate the elbow pivot.
 			var overlap := 0.075
 			_add_segment(root, shoulder, elbow + (elbow - shoulder).normalized() * overlap, ARM_RADIUS, ARM_RADIUS * 0.94)
 			_add_segment(root, elbow - forearm_direction * overlap, wrist, ARM_RADIUS * 0.94, ARM_RADIUS * 0.78)
 		2:
-			# Same overlap, with broader ends around the articulation to create a
-			# continuous silhouette without introducing a visible joint object.
 			var overlap := 0.085
 			_add_segment(root, shoulder, elbow + (elbow - shoulder).normalized() * overlap, ARM_RADIUS, ARM_RADIUS * 1.18)
 			_add_segment(root, elbow - forearm_direction * overlap, wrist, ARM_RADIUS * 1.15, ARM_RADIUS * 0.76)
 		3:
-			# Preserve the pivot but skin over it with a rounded connector aligned
-			# along the bisector of upper/forearm directions.
 			var overlap := 0.065
 			_add_segment(root, shoulder, elbow + (elbow - shoulder).normalized() * overlap, ARM_RADIUS, ARM_RADIUS * 0.98)
 			_add_segment(root, elbow - forearm_direction * overlap, wrist, ARM_RADIUS * 0.98, ARM_RADIUS * 0.77)
@@ -66,7 +65,6 @@ func _build_arm(root: Node3D, variant: int, bend: float) -> void:
 			if bisector.length_squared() < 0.001:
 				bisector = forearm_direction
 			_add_capsule(root, elbow, bisector, ARM_RADIUS * 1.07, 0.24)
-
 	_add_sphere(root, wrist, ARM_RADIUS * 0.82, body_material)
 
 func _add_segment(root: Node3D, a: Vector3, b: Vector3, radius_a: float, radius_b: float) -> void:
