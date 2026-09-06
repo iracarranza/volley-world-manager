@@ -12,8 +12,25 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `23903f5`: **2 of 2,262 checks
+Current branch baseline, verified 2026-09-06 at `899458f`: **2 of 2,265 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Rally outcomes moved on this pass, deliberately, and here is the drift.** Six
+defenders now stand where the simulation said they walked -- three phase maps
+published journeys the resolver declined to believe, one of them on purpose to
+hold a balance number. Over 700 rallies: contacts 4.563 to 4.630, **kill rate
+0.520 to 0.535** against a 0.45-0.50 gate it was *already* outside, dig 0.534 to
+0.522, stuff 0.102 to 0.101, ace and serve error unchanged. Every gated band
+holds except that one. Do not re-tune it blind: the sampling population under it
+genuinely moved and it wants a defensive-model pass.
+
+**Playback corrections are zero.** 425 of 8,181 drawn legs before, 0 of 8,733
+after, worst spatial disagreement 0.322 court units to 0.000. Each was a
+resolver statement contradicting another and each was fixed at the resolver;
+nothing in playback was changed to hide one. Instrument:
+`tools/audit_playback_corrections.gd`. A non-zero count is now a bug report
+about the simulation. See `docs/review/AUTHORITATIVE_MOVEMENT_EXECUTION.md` P15
+and the normative contract in `docs/specs/AUTHORITATIVE_RALLY_MOVEMENT.md` §C.
 
 **Three checks written, twenty gained across six commits, and every predecessor
 was measured** -- 2,242 to 2,261 to 2,262, with the intermediate 2,259 recorded
