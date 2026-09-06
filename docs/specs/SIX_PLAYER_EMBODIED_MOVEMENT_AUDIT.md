@@ -369,6 +369,32 @@ Do not implement unification during the audit unless trivial, behaviorally obvio
 
 ---
 
+## A8 amendment, from the audit
+
+**Measured correction.** This section assumed the closed-form/integrated split
+shows up as disagreement about *reachability* — reached versus not-reached,
+landing and time. Measured on controlled legal geometry (60 rows: distances
+1–8 m, entry speeds 0–6 m/s, entry angles 0/90/180°) the two models agree to
+**0.000 m**. Distance, entry speed and entry angle are therefore falsified as the
+cause of the 46-leg production disagreement recorded in
+`AUTHORITATIVE_RALLY_MOVEMENT.md` D1.
+
+Two real divergences were found instead, and neither is about arrival:
+
+1. **Exit state.** Whenever the body reaches its target, the closed form reports
+   an exit speed of 4.2–5.2 m/s and the integrated path reports 0.000. They agree
+   exactly when the body does *not* arrive. `live_velocities` stores the closed
+   form while the drawn body follows the integrator.
+2. **Off-court legality.** The integrator clamps a body to the court; the closed
+   form times a journey to a target beyond it.
+
+A follow-up pass should stress waypointed two-leg traversals and mode
+differences, which remain the untested candidates for the production 46.
+
+See `docs/review/SIX_PLAYER_EMBODIED_MOVEMENT_AUDIT.md` A8 and A8b.
+
+---
+
 # A9 — Synthesis and minimum follow-up plan
 
 Produce a final matrix:

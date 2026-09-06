@@ -523,6 +523,24 @@ announced itself by producing a physically impossible number.
 
 # A9 — Findings
 
+## Final matrix
+
+| factor | current status | causal in production? | physically causal? | contexts tested | interactions / confounders | defect? | severity | recommended action |
+|---|---|---|---|---|---|---|---|---|
+| position | supplied everywhere | yes | yes | all 6 modes, 6 profiles, 120–600 rallies | — | no | — | preserve |
+| carried velocity | stored, mostly unconsumed | partly — approach timing and candidate search only | **no** for committed legs | 5 speeds × 5 angles × 6 modes; 1,044 production leg pairs | × facing (none), × truncation (integrator honours it) | **yes** | high | wire into `_committed_path` / `_reached_point` after the exit state is reconciled |
+| exit velocity | two models disagree | yes — stored value feeds candidate search and `_commit_facing` | **wrong when the body arrives** | 3 distances × 3 entry speeds | reached vs not reached | **yes** | high | reconcile first; it is the number a momentum repair would propagate |
+| facing | modelled, plumbed, overwritten with zero | no | no | 5 angles × 3 distances × 6 modes × 6 profiles | × velocity: additive, no interaction | **yes** | medium (0.14–0.17 s) | supply it, or delete `facing_fit` as dead weight |
+| body/action state | not an input | no | no | 6 states × 3 directions | × direction: inert | no — a documentation error | low | correct the assumption; do not build a consequence |
+| recovery | upstream window gate | yes, as a delay | indirectly | call-site trace | no in-model interaction to test | no | — | preserve |
+| acceleration | full input | yes | yes | 3 values + 6 profiles | dominant term | no | — | preserve |
+| fatigue | full input | yes | yes | 3 values | — | no | — | preserve |
+| mass | full input | yes | yes, weakly | 3 values + 6 profiles | — | no | — | preserve; note 0.030 s across 58–118 kg |
+| perceived ball state | reaches reachability | yes | **yes** at 4 of 18 `_reached_point` sites | call-site trace | — | no | — | preserve |
+| target source priority | 4 publishers, fixed order | yes | yes | 3,802 body-events | 51% contested; 10% of those disagree, worst 4.14 m | no, but load-bearing | medium | document; any new consumer must apply the same order |
+| teammate occupancy | **absent** | no | no | — | nothing to vary | **yes, by absence** | high | see B |
+| court bounds | integrator clamps, closed form does not | yes | yes | 60 controlled rows + 600 rallies | — | **yes** | medium | make the two agree about off-court legality |
+
 ## A. Physical locomotion defects
 
 | # | finding | evidence | severity |
