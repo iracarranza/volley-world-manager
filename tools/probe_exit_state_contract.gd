@@ -116,11 +116,18 @@ func _row(
 	var closed_speed := Vector2(closed["exit_velocity"]).length()
 	var final_speed := float(integration["final_speed_mps"])
 	var path_speed := path.exit_velocity.length() if path != null else NAN
-	print("%s|%.1f|%.1f|%s|%.3f|%.3f|%.3f|%.3f" % [
+	## When these two differ the body arrived before the leg ended and stood for
+	## the remainder, which is the one case the contract says exits at rest.
+	var moving_time := float(integration["moving_time_seconds"])
+	var last_move := float(integration["sample_times"][
+		integration["sample_times"].size() - 1
+	]) - float(integration["turn_delay_seconds"])
+	print("%s|%.1f|%.1f|%s|%.3f|%.3f|%.3f|%.3f|idle %.3f s" % [
 		label, distance_meters, entry_speed,
 		"yes" if bool(integration["reached_target"]) else "no",
 		closed_speed, final_speed, path_speed,
 		absf(closed_speed - final_speed),
+		maxf(moving_time - last_move, 0.0),
 	])
 
 

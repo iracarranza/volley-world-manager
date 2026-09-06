@@ -139,3 +139,109 @@ that has no relation to the traversal time, and its own comment already guards
 against "an actor who has coasted onto their target". `_committed_path` caps
 duration at the traversal time so it cannot produce an idle tail, but it is not
 the only caller.
+
+## C0.5 The repair, and the two further defects it uncovered
+
+Four changes. The first was the one the audit predicted; the other three were
+found by measuring after each step, and each was hiding behind the one before it.
+
+**1. Arrival keeps its speed.** `ShadowMovementSystem.integrate` now passes
+`carry_through: true`, so the zeroing branch no longer fires, and the hand-rolled
+waypoint fix-up at `:131` is deleted as redundant. That fix-up wrote
+`direction * carried_speed` — the speed at the *start* of the arriving step — so
+removing it also removes a small under-report.
+
+**2. The arrival speed is solved over the distance, not the window.**
+`project_toward`'s carry-through branch computes `sqrt(v0² + 2ad)` rather than
+reusing `ending_speed`, which is the speed at the end of the whole slice. A body
+that arrives partway through a step never reaches that speed. This removes a
+discretisation bias rather than a modelling error.
+
+**3. The turn-delay guard tested the wrong variable.** `_leg_seconds` read:
+
+```gdscript
+var opening_speed := entry_speed if entry_speed > 0.0 \
+    else maxf(actor.velocity.dot(direction), 0.0)
+...
+if entry_speed <= 0.0:
+    seconds += float(profile.direction_change_delay)
+```
+
+The comment says "a player already carrying speed into this leg has already
+turned", and the guard tests the *parameter* instead of the resulting
+`opening_speed`. `traversal_result` always passes `0.0` and lets the fallback
+supply the speed from `actor.velocity`, so **every moving body took the
+standing-start branch and was charged a turn it had already made.**
+
+`ShadowMovementSystem` charges on the opening speed (`:86`) and therefore did
+not. The two models disagreed about the leg's *duration*, the body arrived that
+much early, and the arrival was then read as idling. This is why fix 1 alone
+repaired only the rows entering at rest — the moving rows were failing for a
+different reason underneath.
+
+**4. The closed form credited acceleration to the turn.** `exit_speed` was
+`opening_speed + acceleration * seconds` where `seconds` includes the
+direction-change delay, so a body standing still to turn was accelerating
+throughout it. Replaced with `sqrt(v0² + 2ad)`, which has no time term and is the
+same arithmetic `project_toward` now uses. Worth a constant 0.942 m/s on the
+short legs from rest.
+
+**5. The idle threshold had to be the integrator's own step.** The first version
+used `moving_time - elapsed > 0.0001`, and a leg that arrives on its final slice
+leaves a rounding residue — measured at 0.16 ms on a 0.267 s leg — which that
+threshold read as a body standing still. It zeroed the arrival speed on exactly
+the legs the contract is about. The floor is now one integration step, because
+below one step the integrator could not represent the standing anyway. A
+threshold tied to the instrument's resolution rather than picked.
+
+## C0.6 Measured after the repair
+
+`tools/probe_exit_state_contract.gd`, same 29 rows:
+
+| case | before | after |
+|---|---|---|
+| **reached** (15 rows) | **15 disagree, 4.289–5.227 m/s** | **0 disagree, 0.000** |
+| waypoint (4 rows) | 2 disagree, 5.227 | 0 disagree, 0.000 |
+| off-court (2 rows) | 0 disagree | 0 disagree |
+| truncated (8 rows) | 3 disagree, 1.428–3.798 | 3 disagree, unchanged |
+
+**The truncated rows are deliberately left.** `traversal_result` is never told
+about a cap — truncation happens afterwards, in `_committed_path`'s
+`minf(_movement_time(...), available_time)` — so its answer is the untruncated
+journey's *by definition*, and no parameter was added to make it express one.
+Adding an `available_seconds` nothing passes would reproduce exactly the disease
+this section is about: `carry_through` sat unused for the entire life of the
+feature it was written for.
+
+The contract for a truncated leg is therefore: **the path is authoritative and
+`_travel`'s whole-journey exit velocity must not be used.** That is checkable, and
+production satisfies it today — all three `live_velocities` write sites
+(`:2349`, `:5197`, `:7096`) use `_travel`'s `seconds` uncapped, so none of them
+is a truncated leg. Recorded as a live constraint on future callers rather than
+as a latent bug.
+
+## C0.7 Validation
+
+| control | result |
+|---|---|
+| exit-state probe | 26 of 29 rows agree to 0.000; the 3 are truncated, by contract |
+| **P15 playback corrections** | **0 of 8,636 drawn legs, worst 0.0000 court units** |
+| 700-rally balance | contacts 4.630→**4.633**, kill 0.535→**0.537**, dig 0.522→**0.520**, stuff 0.101, ace 0.099, serve error 0.194 unchanged |
+| regression added | `_test_leg_exit_velocity_is_one_number` |
+
+**Rally outcomes moved, and that is correct rather than tolerated.** Fix 3
+changes how long a moving body takes to travel, so contacts resolve at different
+times. The drift is 0.3% on contacts and 0.2 points on kill; every gated band
+that was inside stays inside. Kill (0.537 against 0.45–0.50) and ace (0.099
+against 0.05–0.09) remain outside, and both were already outside at the audit's
+A0 baseline — 0.535 and 0.099. This pass did not put them there and has not been
+used to move them.
+
+**The drawn-leg count moved 8,733 → 8,636** for the same reason: rallies resolve
+differently, so the sampled population is not the same one. The correction count
+being zero across a population that changed size is the meaningful half.
+
+The regression test fails on the predecessor by construction: it sweeps the same
+five distances and three entry speeds as the probe's `reached` block, where the
+predecessor disagreed on 15 of 15 rows by 4.289–5.227 m/s against a 0.01 m/s
+gate.

@@ -120,18 +120,15 @@ static func integrate(
 		## floor is then handed back so the step moves for exactly `slice`.
 		stepper.facing = direction
 		var slice := minf(step, moving_time - elapsed)
-		var carried_speed := stepper.velocity.length()
+		## NOTE arrival keeps its speed; standing is charged below -- EMBODIED_MOVEMENT_CONTINUITY.md C0.4
 		var projection: Dictionary = MovementModel.project_toward(
-			stepper, leg_target, slice + aligned_turn_delay, mode
+			stepper, leg_target, slice + aligned_turn_delay, mode, true
 		)
 		var advanced := projection.get("actor") as RallyPlayerState
 		if advanced == null:
 			break
 		var arrived := bool(projection.get("reached_target", false))
 		if arrived and not waypoint_reached:
-			## Passed through, not stopped at: keep the travel velocity so the
-			## next heading sheds only the component that does not carry over.
-			advanced.velocity = direction * carried_speed
 			waypoint_reached = true
 		stepper = advanced
 		elapsed += slice
@@ -143,6 +140,29 @@ static func integrate(
 		velocities.append(stepper.velocity)
 		if arrived and waypoint_reached and stepper.position.distance_to(target) <= 0.001:
 			break
+
+	## The body arrived with time still on the leg, so it stands there for the
+	## remainder. A leg that ends the instant the body arrives never comes through
+	## here and keeps its arrival speed, which is the whole of the C0 contract:
+	## the final sample tells the truth about the final instant, and nothing else
+	## does. `_committed_path` caps duration at the traversal time so it cannot
+	## produce an idle tail; `rally_opportunity_system.gd` samples arbitrary
+	## perception gaps and can.
+	##
+	## The leftover must exceed one integration step, not an epsilon. A leg that
+	## arrives on its final slice leaves a rounding residue -- 0.16 ms on a
+	## measured 0.267 s leg -- and an epsilon threshold reads that as a body
+	## standing still, which zeroed the arrival speed on exactly the legs the
+	## contract is about. Below one step the integrator could not represent the
+	## standing anyway, so the step is the honest floor.
+	if moving_time - elapsed > step and trail.size() >= 2 \
+			and stepper.position.distance_to(target) <= 0.002:
+		stepper.apply_position(stepper.position, Vector2.ZERO)
+		trail.append(stepper.position)
+		sample_times.append(turn_delay + moving_time)
+		speeds.append(0.0)
+		facings.append(stepper.facing)
+		velocities.append(Vector2.ZERO)
 
 	return {
 		"available": true,

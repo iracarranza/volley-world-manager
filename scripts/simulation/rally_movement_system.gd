@@ -322,8 +322,20 @@ static func project_toward(
 	)
 	var reached_target := traveled >= distance - 0.001
 	var arrival_velocity := direction * ending_speed
-	if reached_target and not carry_through:
-		arrival_velocity = Vector2.ZERO
+	if reached_target:
+		if carry_through:
+			## `ending_speed` is the speed at the end of the whole window, and a
+			## body that arrives partway through it never reaches that. Solve the
+			## speed over the distance actually covered instead: v^2 = v0^2 + 2ad.
+			arrival_velocity = direction * minf(
+				sqrt(
+					forward_speed * forward_speed
+						+ 2.0 * acceleration * distance
+				),
+				maximum_speed,
+			)
+		else:
+			arrival_velocity = Vector2.ZERO
 	## The mode is set *before* the position, because it describes the leg being
 	## applied. `apply_position` now asks it whether this movement establishes an
 	## orientation, and setting it afterwards handed that question the mode of
@@ -497,12 +509,22 @@ static func _leg_seconds(
 	)
 	## Turning is only charged when the traversal actually starts from rest;
 	## a player already carrying speed into this leg has already turned.
-	if entry_speed <= 0.0:
+	##
+	## NOTE tests the opening speed, not the parameter -- EMBODIED_MOVEMENT_CONTINUITY.md C0.5
+	if opening_speed <= 0.0:
 		seconds += float(profile.direction_change_delay)
 	return {
 		"seconds": seconds,
+		## Solved over the distance rather than the duration, because the duration
+		## may include a turn the body was standing still for and `v0 + a*t` then
+		## credits acceleration to it. v^2 = v0^2 + 2ad has no such term and is the
+		## same arithmetic `project_toward` arrives at.
+		## NOTE turning is not acceleration time -- EMBODIED_MOVEMENT_CONTINUITY.md C0.5
 		"exit_speed": minf(
-			opening_speed + acceleration * seconds, maximum_speed
+			sqrt(
+				opening_speed * opening_speed + 2.0 * acceleration * distance
+			),
+			maximum_speed,
 		),
 	}
 

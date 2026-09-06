@@ -294,6 +294,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_authoritative_movement_path_contract()
 	_test_reachability_agrees_across_the_court()
+	_test_leg_exit_velocity_is_one_number()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_commentary_routing_contract()
@@ -24913,6 +24914,83 @@ func _test_reachability_agrees_across_the_court() -> void:
 	_check(worst <= 0.01,
 		"closed form and integrator land together on legal targets (worst %.4f m)"
 			% worst)
+	manager.free()
+
+
+## The C0 contract: a leg's terminal velocity is the velocity at its final
+## sample, and the closed form must say the same thing. Before the repair every
+## arrival zeroed -- `project_toward`'s `carry_through` had no caller in the repo
+## -- so this sweep failed on all 15 reached rows by 4.3-5.2 m/s.
+##
+## Given the traversal's own duration a body arrives as the leg ends and is still
+## moving; the standing that follows belongs to the next leg. Truncated legs are
+## deliberately not swept here: `traversal_result` is never told about a cap, so
+## its answer is the untruncated journey's by definition and the path's is
+## authoritative. See `docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C0.
+func _test_leg_exit_velocity_is_one_number() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var profile: VolleyballPlayer = null
+	for candidate in manager.players:
+		if candidate != null:
+			profile = candidate
+			break
+	if profile == null:
+		_check(false, "exit velocity sweep finds a player")
+		manager.free()
+		return
+	var mode := RallyPlayerState.MovementMode.TRANSITION
+	var worst := 0.0
+	var worst_row := ""
+	var rows := 0
+	var arrived := 0
+	for distance in [1.0, 1.5, 3.0, 5.0, 8.0]:
+		for speed in [0.0, 3.0, 6.0]:
+			var target := Vector2(0.5, 0.5) + Vector2(
+				0.0, float(distance) / RallyKinematics.COURT_LENGTH_METERS
+			)
+			var actor := RallyPlayerState.create(
+				profile, &"home", -1, Vector2(0.5, 0.5)
+			)
+			## Aimed at the target, so this measures arrival and not reversal.
+			actor.velocity = Vector2(0.0, 1.0) * float(speed)
+			var closed: Dictionary = RALLY_MOVEMENT_SCRIPT.traversal_result(
+				actor, target, mode
+			)
+			var seconds := float(closed["seconds"])
+			var integration: Dictionary = SHADOW_MOVEMENT_SCRIPT.integrate(
+				actor, target, seconds, mode
+			)
+			if not bool(integration.get("available", false)):
+				continue
+			rows += 1
+			if bool(integration.get("reached_target", false)):
+				arrived += 1
+			var closed_speed := Vector2(closed["exit_velocity"]).length()
+			var gap := absf(closed_speed - float(integration["final_speed_mps"]))
+			if gap > worst:
+				worst = gap
+				worst_row = "%.1f m at %.1f m/s: closed %.3f, drawn %.3f" % [
+					distance, speed, closed_speed,
+					float(integration["final_speed_mps"]),
+				]
+			## The published record must not disagree with the samples it is
+			## built from either -- that is the third of the three answers.
+			var path: RallyMovementPath = RALLY_MOVEMENT_PATH_SCRIPT \
+				.from_integration(integration, 0.0)
+			if path != null:
+				worst = maxf(worst, absf(
+					path.exit_velocity.length()
+						- float(integration["final_speed_mps"])
+				))
+	_check(rows >= 15, "exit velocity sweep exercised every row")
+	_check(arrived >= 15, "every full-duration leg arrives (%d of %d)" % [
+		arrived, rows,
+	])
+	_check(worst <= 0.01,
+		"one exit velocity per leg, worst %.3f m/s%s" % [
+			worst, "" if worst_row.is_empty() else " -- " + worst_row,
+		])
 	manager.free()
 
 
