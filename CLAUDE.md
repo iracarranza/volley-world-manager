@@ -12,8 +12,34 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `721af16`: **2 of 2,272 checks
+Current branch baseline, verified 2026-09-06 at `bc0f178`: **2 of 2,271 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Three checks written and the count *fell* by one, and that is the third
+distinct meaning this number has carried in three passes.** 2,272 at `721af16`
+plus the three C2 wrote would be 2,275; it is 2,271, so four sampling gates drew
+fewer because rallies resolve differently. C0 was +3 from writing 3 (pure
+authorship, population moving invisibly underneath), C1 was +2 from writing none
+(pure population), C2 is −1 from writing three. Same instrument, three passes,
+three unrelated readings. **Read the FAIL line and the probes.**
+
+**A third failure appeared during C2 and was a real regression, so this is what
+it looked like.** `estimate_movement` turned out to be a *third* copy of the
+traversal model -- it prices the window a contact is allotted, `_leg_seconds`
+prices the leg the body walks -- and C2 gave the new arrest cost to only one of
+them, so windows were sized from a body that turns for free. Its own comment had
+warned that restating the model there is how it drifted apart the first time.
+All three consumers now call `RallyMovementSystem.arrest_terms`. If you add a
+term to locomotion, that is the count of places that need it.
+
+**Reversal now costs what it should.** 6 m/s directly away from a target used to
+reach it in exactly the time a standing body did; it now costs +1.67 s, and the
+ordering is toward < stationary < perpendicular < strongly away at every speed.
+The timing-ratio gate came out *better* than before the change -- mean 1.0753 to
+0.9923, perceptible rate 0.0471 to 0.0109. See
+`docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C2.
+
+Before it, 2,272 at `721af16`.
 
 **No checks written and the count moved by two, which means the opposite of the
 entry below it.** 2,270 was measured at `6cd7f54` on this tree and C1 authored no

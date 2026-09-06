@@ -747,6 +747,35 @@ kill 0.519 → 0.524, dig 0.528 → 0.522, stuff 0.104 → 0.108, block touch 0.
 ace 0.099 and serve error 0.194 unchanged. P15 clean at **0 of 8,368**. Kill
 remains outside its band and below the 0.535 the audit recorded at A0.
 
+## C2.6 Validation
+
+| control | result |
+|---|---|
+| **full suite** | **2 of 2,271**, the two known failures, the third gone |
+| timing-ratio gate | all five families inside their bands |
+| **P15 playback corrections** | **0 of 8,368, worst 0.0000** |
+| C0 exit-state contract | 26 of 29 rows at 0.000, unchanged |
+| 700-rally balance | every gated band holds; kill and ace outside where they already were |
+
+**Three checks written and the count fell by one, which is the third distinct
+reading this pass has produced from the same number.** 2,272 was measured at
+`721af16`. C2 authored three checks
+(`_test_reversal_costs_more_than_standing_still`), so a sampling-neutral pass
+would have shown 2,275; it shows 2,271, meaning **four sampling gates drew fewer
+checks** because rallies now resolve differently.
+
+Read the three together, because they are the whole argument for not trusting
+this number on its own:
+
+| pass | written | delta | what it means |
+|---|---:|---:|---|
+| C0 | 3 | +3 | entirely authorship — yet the population *did* move, invisibly |
+| C1 | 0 | +2 | entirely population |
+| C2 | 3 | **−1** | population moved *against* authorship, by four checks |
+
+Same instrument, three passes, three unrelated meanings. Only the FAIL line and
+the probes carry information about correctness.
+
 ---
 
 # C3 — Supply meaningful facing
