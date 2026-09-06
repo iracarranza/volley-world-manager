@@ -9151,6 +9151,8 @@ func _reached_point(
 	## has always had.
 	## NOTE the three boundaries that legitimately reset -- EMBODIED_MOVEMENT_CONTINUITY.md C1.1
 	entry_velocity: Vector2 = Vector2.ZERO,
+	## NOTE the window has to know which way the body is set too -- EMBODIED_MOVEMENT_CONTINUITY.md C3
+	entry_facing: Vector2 = Vector2.ZERO,
 ) -> Vector2:
 	## **Every committed journey in the game passes through here**, which is what
 	## makes this the honest place to charge for one. Charged on the distance *asked for*
@@ -9167,7 +9169,7 @@ func _reached_point(
 	if mover == null or available_time <= 0.0:
 		return start
 	if _movement_time(
-		mover, start, target, mode, null, entry_velocity
+		mover, start, target, mode, null, entry_velocity, entry_facing
 	) <= available_time:
 		## **The body has to agree with the verdict.**
 		##
@@ -9190,7 +9192,8 @@ func _reached_point(
 	for _iteration in range(REACHABLE_CONTACT_BISECTIONS):
 		var middle := (low + high) * 0.5
 		if _movement_time(
-			mover, start, start.lerp(target, middle), mode, null, entry_velocity
+			mover, start, start.lerp(target, middle), mode, null,
+			entry_velocity, entry_facing,
 		) <= available_time:
 			low = middle
 		else:
@@ -9855,9 +9858,16 @@ func _movement_time(
 	## the common case, and `prepare_for_attack` has been returning the real
 	## figure as `prepared_velocity_mps` all along with nothing reading it.
 	entry_velocity: Vector2 = Vector2.ZERO,
+	## The orientation this body is actually set in. It has to reach the *window*
+	## as well as the leg: `estimate_movement`, `_leg_seconds` and
+	## `project_toward` all read `actor.facing`, and C2.5 is what happens when a
+	## locomotion term reaches some of those three and not the others.
+	## NOTE all three traversal formulas read facing -- EMBODIED_MOVEMENT_CONTINUITY.md C3
+	entry_facing: Vector2 = Vector2.ZERO,
 ) -> float:
 	return float(_travel(
-		player, start, target, movement_kind, waypoint, entry_velocity
+		player, start, target, movement_kind, waypoint, entry_velocity,
+		entry_facing,
 	)["seconds"])
 
 
@@ -16907,16 +16917,23 @@ func _travel_intent(
 	## inherit momentum rather than each site being migrated separately.
 	## NOTE defaults to a standing start; C1.1 names the boundaries that keep one
 	entry_velocity: Vector2 = Vector2.ZERO,
+	## Which way this body was set when it finished its last leg. Absent, the
+	## model reads `facing_fit` as 1.0 -- perfectly aligned, the cheapest turn
+	## there is -- so leaving it out is a discount rather than a neutral.
+	## NOTE an absent facing is a discount -- EMBODIED_MOVEMENT_CONTINUITY.md C3.0
+	entry_facing: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
 	var traversal := 0.0
 	if mover != null:
 		traversal = minf(
-			_movement_time(mover, from, reached, mode, null, entry_velocity),
+			_movement_time(
+				mover, from, reached, mode, null, entry_velocity, entry_facing
+			),
 			maxf(window_seconds, 0.0),
 		)
 	var leg := _committed_path(
 		mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock,
-		entry_velocity,
+		entry_velocity, entry_facing,
 	)
 	return {
 		"intent": intent,
@@ -16950,6 +16967,10 @@ func _travel_intent(
 		## on a truncated leg and the two agree everywhere else.
 		## NOTE the C0 contract, in the one field that carries it -- EMBODIED_MOVEMENT_CONTINUITY.md C0.4
 		"exit_velocity": leg.exit_velocity if leg != null else Vector2.ZERO,
+		## The orientation the body ends the leg in, from the path's own last
+		## facing sample rather than re-derived from the endpoints.
+		"exit_facing": leg.facings[leg.facings.size() - 1] \
+			if leg != null and leg.facings.size() > 0 else Vector2.ZERO,
 	}
 
 
