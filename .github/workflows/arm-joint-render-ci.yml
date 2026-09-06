@@ -1,0 +1,49 @@
+name: Arm Joint Continuity Render
+
+on:
+  push:
+    branches:
+      - claude/system-fit-serve-receive-von64k
+    paths:
+      - 'tools/arm_joint_continuity_prototype.gd'
+      - 'tools/arm_joint_continuity_prototype.tscn'
+      - '.github/workflows/arm-joint-render-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LfsS -o /tmp/godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo install -m 0755 /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 /usr/local/bin/godot
+      - name: Import project
+        run: godot --headless --path . --editor --quit
+      - name: Install virtual display
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+      - name: Render arm comparison
+        run: xvfb-run -a godot --path . --rendering-method gl_compatibility res://tools/arm_joint_continuity_prototype.tscn
+      - name: Collect render
+        shell: bash
+        run: |
+          mkdir -p artifacts/arm-joint
+          find "$HOME/.local/share/godot" -type f -name 'arm_joint_continuity.png' -print -exec cp {} artifacts/arm-joint/ \;
+          test -f artifacts/arm-joint/arm_joint_continuity.png
+      - name: Upload render
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm-joint-continuity-render
+          path: artifacts/arm-joint/arm_joint_continuity.png
+          if-no-files-found: error
+          retention-days: 14
