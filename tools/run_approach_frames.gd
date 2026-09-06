@@ -5,10 +5,15 @@ extends SceneTree
 ## The claim being tested is narrow, and worth stating exactly: **playback draws the
 ## run-up as continuous motion at the player's own rate rather than snapping.**
 ## `TacticalCourt._set_playback_progress()` samples `_build_movement_paths()`, which
-## integrates the engine's movement model through `ShadowMovementSystem.integrate()`
-## and then reads it back with `_sample_movement_path()`. This tool calls the same
-## two functions on a real rally's real attack, so the numbers below are the numbers
-## the court draws -- not a re-derivation of them.
+## now reads back the `RallyMovementPath` the *resolver* published and interpolates
+## it with `_sample_movement_path()`. This tool calls the same two functions on a
+## real rally's real attack, so the numbers below are the numbers the court draws --
+## not a re-derivation of them.
+##
+## It used to say the court integrated the model itself, through
+## `ShadowMovementSystem.integrate()`. It did, and that second solve has since been
+## deleted -- see `docs/review/AUTHORITATIVE_MOVEMENT_EXECUTION.md` P13.2. The claim
+## the tool tests is unchanged; only who answers it has.
 ##
 ## Two contrasts are printed alongside, because "gradual" only means something
 ## against the alternatives:

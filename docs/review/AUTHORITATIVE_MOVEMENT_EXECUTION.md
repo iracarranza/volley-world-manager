@@ -927,3 +927,64 @@ always there and is now counted instead of smoothed.
 units of correction are the reachability defect of P9.5 surfacing at the
 drawing, and closing it means changing where the resolver commits bodies, which
 changes rally outcomes and is deliberately outside this pass.
+
+---
+
+## P14 — stress, renders, and the state at the end of the pass
+
+### P14.1 Six seed bands, 150 rallies, 9,473 drawn legs
+
+`begin_rally_playback` per rally, production initial snapshot, seed bands 1000,
+4000, 9000, 15000, 22000 and 31000:
+
+| | legs | share |
+|---|---|---|
+| authoritative | 7,756 | 81.9% |
+| recorded correction | 651 | 6.9% |
+| hold | 1,066 | 11.3% |
+
+**Zero contract violations** across all of it: no malformed path, no path whose
+progress index fails to run 0 → 1, none non-monotonic in time. Thirty-two
+emergency second contacts were exercised.
+
+Truncation is represented rather than absent: of 277 published contact paths,
+**25 report `reached_target == false`**, and 13 land short of the target the
+event publishes, worst 0.0753 court units. (The 0.457 in P9.5 is a different
+population — off-ball intents against the phase-target map — and both stand.)
+
+### P14.2 Renders
+
+`tools/render_authoritative_movement.gd` draws a whole rally's traced player
+movement by driving a real `TacticalCourt` leg by leg and reading back
+`_sample_movement_path`, so the picture is the production answer rather than a
+re-derivation. Solved legs are drawn solid, corrections dashed in red. Three
+rallies in `artifacts/authoritative-movement/`, the longest three in the window.
+
+What the pictures show that the counts do not: corrections are **few and short**
+and cluster on one side of one rally rather than being spread evenly, which is
+consistent with them being the residue of a specific reachability defect rather
+than general drift.
+
+### P14.3 Where this leaves the spec's DONE list
+
+| criterion | state |
+|---|---|
+| no migrated playback re-solve | **met** — playback owns no movement model |
+| no competing actor movement truth | **met** — five removed: resolver duplicate, 2D re-integration, 2D lerp table, 3D straight-line sample, actor delta-derived speed |
+| momentum verified | met at P0/P1; `exit_velocity` carried on the contract |
+| receive moves + preps pre-contact | met |
+| state/recovery continuity where supported | met where the resolver supports it |
+| no endpoint cheats | **met** — the forced final sample and the pre-aligned facing went with `_integrate_phase_path` |
+| deterministic suite passes | 2 of 2,262, both pre-existing |
+| no unjustified scheduler/AAA expansion | met — nothing was added |
+
+**Two defects are surfaced, measured and deliberately unfixed**, per the goal's
+own instruction to keep them separate:
+
+1. **Reachability (P9.5).** The resolver commits bodies to endpoints their own
+   solved paths land short of — 15 off-ball legs of 1,303 (worst 0.457 court
+   units) and 13 contact legs of 277 (worst 0.075). It is the cause of the 6.9%
+   correction rate. Fixing it moves block and approach positions and therefore
+   rally outcomes.
+2. **Perceived versus true prep timing.** Preparation is still timed on the
+   ball's true flight; no consumer reads `perceived_arrival`.

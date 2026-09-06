@@ -148,6 +148,32 @@ contact → recovery.** This is the target, not a description of VWM.
 
 ## 4. Current VWM pipeline (traced: serve→reception)
 
+> **Superseded as of `1d59d8c` (2026-09-06).** This section describes the state
+> this research found. The three derivations it documents — and a fourth and
+> fifth it did not — have since been removed; see
+> `docs/review/AUTHORITATIVE_MOVEMENT_EXECUTION.md`. The trace is kept because
+> the *findings* are what dated, not the tracing, and §4a below states what
+> replaced it.
+>
+> ### 4a. What the pipeline is now
+>
+> ```
+> RallySimulator._committed_path(...)   one solve, one RallyMovementPath
+>   published on:  every contact leg, every off-ball leg (_travel_intent),
+>                  the staged walk, the actor's own leg (_add_event),
+>                  and the leg each held position implies (_phase_hold_paths)
+>   → tactical_court._authoritative_phase_path()   interpolates, never re-solves
+>   → match_screen plan["path"] → match_court_3d._plan_sample()
+>   → player_actor_3d.set_tactical_position(..., motion)   solved speed and facing
+> ```
+>
+> Measured over 150 rallies and 9,473 drawn legs: **81.9% authoritative, 6.9%
+> recorded corrections, 11.3% holds, zero contract violations.** The two
+> re-solving layers in the trace below (`_integrate_phase_path`, the actor's
+> delta-derived speed) are gone, as are the 2D lerp table
+> (`_support_target_for_side`) and the 3D straight-line `_plan_sample`, neither
+> of which this research identified.
+
 ```
 main.gd::_resolve_rally
   → GameManager.resolve_active_rally(seed)          game_manager.gd:499
