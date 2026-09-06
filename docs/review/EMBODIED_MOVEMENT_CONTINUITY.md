@@ -835,3 +835,53 @@ One detail that keeps it honest: `RallyPlayerState.apply_position` already sets
 are coupled while moving and only diverge at rest. That is the distinction the
 spec asks to preserve — travel heading versus body facing — and it is already
 modelled, so C3 must not flatten it.
+
+## C3.3 Wired, and measured
+
+Two steps, the first required to change nothing:
+
+1. **Plumbing.** `_movement_time`, `_reached_point` and `_travel_intent` take an
+   `entry_facing` and forward it; `_travel_intent` publishes `exit_facing` from
+   the path's own last facing sample. Balance byte-identical to C2.5 on all
+   nineteen figures.
+2. **Carry.** `live_facings` / `opponent_live_facings` beside the velocity
+   stores, threaded through all five phase-map sites, recorded by
+   `_record_exit_facing` under the same rule as velocity — a leg with no
+   published path states nothing about orientation either.
+
+**It reaches the window as well as the leg, deliberately.** All three traversal
+formulas read `actor.facing`: `estimate_movement` prices the window,
+`_leg_seconds` prices the leg, `project_toward` steps it. C2.5 is what happens
+when a locomotion term reaches some of those and not the others, so `entry_facing`
+was plumbed into `_movement_time` at the same time as `_committed_path`.
+
+| measure | before | after |
+|---|---:|---:|
+| **legs beginning with an entry facing** | **0 of 5,800** | **527 of 5,775** |
+| P15 corrections | 0 of 8,368 | **0 of 8,368** |
+| timing-ratio gate | all bands | all bands, byte-identical |
+| balance | — | contacts 4.630→4.631, dig 0.522→0.521, home dig 0.568→0.565; nothing else moved |
+
+**`facing_fit` is causal and therefore stays.** The spec's requirement 5 offers
+removal as the alternative if the model proves invalid; it does not, so it is
+made causal instead.
+
+**The effect is far smaller than the audit's 0.14–0.17 s per leg, and the reason
+is C2.** The turn delay is now charged only to a body with nothing to arrest and
+nothing to carry. A body that carries momentum pays `arrest_terms` instead, and
+its facing is already aligned with its travel by `apply_position`. So facing bites
+only on genuinely stationary bodies, which is the physically right population and
+a much smaller one than the audit measured against the old free-reversal model.
+
+**The timing-ratio probe cannot see this change, and that is the probe's
+limitation rather than evidence of nothing happening.**
+`MovementTimingRatioCalibration` sets `actor.facing = opening.normalized()` before
+measuring — it deliberately aligns the body — so a facing change is invisible to
+it by construction. Its byte-identical result is consistent with the repair and
+says nothing about it either way. The balance probe is what moved.
+
+**527 of 5,775 is the ceiling this mechanism can reach, not a shortfall.** Facing
+can only be supplied where a prior leg published one, and it is supplied on
+exactly the boundaries where momentum is — a leg that publishes a path yields
+both, a leg that publishes none yields neither. The remaining 5,248 are the same
+publication-coverage gap C1.7 measured from the other direction.

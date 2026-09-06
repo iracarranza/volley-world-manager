@@ -733,6 +733,9 @@ var receive_formation_intents: Dictionary = {}
 ## and by the resolver never. These two dictionaries are the missing half.
 var live_velocities: Dictionary = {}
 var opponent_live_velocities: Dictionary = {}
+## NOTE Which way each body was set when it finished its last published leg -- EMBODIED_MOVEMENT_CONTINUITY.md C3
+var live_facings: Dictionary = {}
+var opponent_live_facings: Dictionary = {}
 ## NOTE Which way a body was set when it finished its last committed leg -- RALLY_SIMULATOR_NOTES.md
 var player_facing: Dictionary = {}
 ## Who is still getting up, on either side of the net. Keyed by player id, and
@@ -907,6 +910,8 @@ func resolve(
 	)
 	live_velocities = {}
 	opponent_live_velocities = {}
+	live_facings = {}
+	opponent_live_facings = {}
 	player_facing = {}
 	opponent_live_positions = _initial_opponent_positions(
 		opponent_team, home_serving, true, receive_formation_intents
@@ -2482,7 +2487,7 @@ func resolve(
 		opponent_team.on_court_players(), opponent_live_positions,
 		Dictionary(opponent_block_formation.get("setter_pull_positions", {})),
 		second_contact_window, opponent_setter_read_intents,
-		opponent_live_velocities,
+		opponent_live_velocities, opponent_live_facings,
 	)
 	if set_event != null and set_decision_event != null:
 		var home_pass_targets: Dictionary = set_event.metadata.get(
@@ -2512,12 +2517,13 @@ func resolve(
 		set_event.metadata["home_phase_intents"] = _hold_phase_intents(
 			_lineup_players(players, lineup), live_positions, home_pass_targets,
 			home_release_sources, release_interval, live_velocities,
+			live_facings,
 		)
 		set_event.metadata["opponent_phase_targets"] = {}
 		set_event.metadata["opponent_phase_intents"] = _hold_phase_intents(
 			opponent_team.on_court_players(), opponent_live_positions,
 			opponent_setter_read_targets, opponent_setter_read_intents,
-			release_interval, opponent_live_velocities,
+			release_interval, opponent_live_velocities, opponent_live_facings,
 		)
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
@@ -16274,16 +16280,17 @@ func _transition_phase_map(
 				mode = "lateral"
 		## NOTE what this body walked out of its last leg with -- EMBODIED_MOVEMENT_CONTINUITY.md C1
 		var carried: Vector2 = live_velocities.get(player.id, Vector2.ZERO)
+		var set_as: Vector2 = live_facings.get(player.id, Vector2.ZERO)
 		var reached := _reached_point(
 			player, here, intent, window_seconds, mode,
-			0.0, 0.0, Vector2.ZERO, true, carried,
+			0.0, 0.0, Vector2.ZERO, true, carried, set_as,
 		)
 		targets[player.id] = reached
 		var journey := _travel_intent(
 			player,
 			&"receiving" if player.id == chase_id \
 				else (&"preparing_attack" if mode == "transition" else &"defending"),
-			here, intent, reached, mode, window_seconds, carried,
+			here, intent, reached, mode, window_seconds, carried, set_as,
 		)
 		out_intents[player.id] = journey
 		## NOTE the resolver has to believe what playback draws -- leaving these
@@ -16291,6 +16298,7 @@ func _transition_phase_map(
 		## the second contact onward
 		live_positions[player.id] = reached
 		_record_exit_velocity(live_velocities, player.id, journey)
+		_record_exit_facing(live_facings, player.id, journey)
 	return targets
 
 
@@ -16347,10 +16355,11 @@ func _opponent_transition_phase_map(
 		var carried: Vector2 = opponent_live_velocities.get(
 			player.id, Vector2.ZERO
 		)
+		var set_as: Vector2 = opponent_live_facings.get(player.id, Vector2.ZERO)
 		var reached := _reached_point(
 			player, here, intent, window_seconds,
 			"transition" if player.id == chase_id else "lateral",
-			0.0, 0.0, Vector2.ZERO, true, carried,
+			0.0, 0.0, Vector2.ZERO, true, carried, set_as,
 		)
 		targets[player.id] = reached
 		var journey := _travel_intent(
@@ -16358,11 +16367,12 @@ func _opponent_transition_phase_map(
 			&"receiving" if player.id == chase_id else &"defending",
 			here, intent, reached,
 			"transition" if player.id == chase_id else "lateral",
-			window_seconds, carried,
+			window_seconds, carried, set_as,
 		)
 		out_intents[player.id] = journey
 		opponent_live_positions[player.id] = reached
 		_record_exit_velocity(opponent_live_velocities, player.id, journey)
+		_record_exit_facing(opponent_live_facings, player.id, journey)
 	return targets
 
 
@@ -16491,9 +16501,12 @@ func _cover_phase_map(
 		var carried: Vector2 = (
 			opponent_live_velocities if opponent_side else live_velocities
 		).get(player.id, Vector2.ZERO)
+		var set_as: Vector2 = (
+			opponent_live_facings if opponent_side else live_facings
+		).get(player.id, Vector2.ZERO)
 		var reached := _reached_point(
 			player, here, intent, window_seconds, mode,
-			0.0, 0.0, Vector2.ZERO, true, carried,
+			0.0, 0.0, Vector2.ZERO, true, carried, set_as,
 		)
 		targets[player.id] = reached
 		var cue_intent := &"covering"
@@ -16504,7 +16517,7 @@ func _cover_phase_map(
 				cue_intent = &"setting"
 		var cover_journey := _travel_intent(
 			player, cue_intent, here, intent, reached, mode, window_seconds,
-			carried,
+			carried, set_as,
 		)
 		## The leg's own landing, as everywhere else -- see `_travel_intent`.
 		var cover_landed: Vector2 = cover_journey.get("reached_position", reached)
@@ -16515,9 +16528,13 @@ func _cover_phase_map(
 			_record_exit_velocity(
 				opponent_live_velocities, player.id, cover_journey
 			)
+			_record_exit_facing(
+				opponent_live_facings, player.id, cover_journey
+			)
 		else:
 			live_positions[player.id] = cover_landed
 			_record_exit_velocity(live_velocities, player.id, cover_journey)
+			_record_exit_facing(live_facings, player.id, cover_journey)
 	return targets
 
 
@@ -16530,6 +16547,7 @@ func _setter_read_phase(
 	out_intents: Dictionary,
 	## The side's velocity store, paired with `live` -- see `_hold_phase_intents`.
 	live_velocity: Dictionary = {},
+	live_facing: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
 	for entry in players:
@@ -16540,23 +16558,25 @@ func _setter_read_phase(
 			player.id, Vector2.ZERO
 		))
 		var carried: Vector2 = live_velocity.get(player.id, Vector2.ZERO)
+		var set_as: Vector2 = live_facing.get(player.id, Vector2.ZERO)
 		if pull_positions.has(player.id):
 			var intended := Vector2(pull_positions[player.id])
 			var reached := _reached_point(
 				player, here, intended, window_seconds, "lateral",
-				0.0, 0.0, Vector2.ZERO, false, carried,
+				0.0, 0.0, Vector2.ZERO, false, carried, set_as,
 			)
 			targets[player.id] = reached
 			var journey := _travel_intent(
 				player, &"blocking", here, intended, reached,
-				"lateral", window_seconds, carried,
+				"lateral", window_seconds, carried, set_as,
 			)
 			out_intents[player.id] = journey
 			_record_exit_velocity(live_velocity, player.id, journey)
+			_record_exit_facing(live_facing, player.id, journey)
 		else:
 			out_intents[player.id] = _travel_intent(
 				player, &"watching", here, here, here,
-				"lateral", window_seconds, carried,
+				"lateral", window_seconds, carried, set_as,
 			)
 			## A body told to watch is not told to stop -- it holds whatever it
 			## was carrying into the read, and the zero-length leg publishes no
@@ -16578,6 +16598,8 @@ func _hold_phase_intents(
 	## carrying speed and leaves it carrying speed.
 	## NOTE the largest unwired publisher, 3,035 of 4,593 drops -- EMBODIED_MOVEMENT_CONTINUITY.md C1.5
 	live_velocity: Dictionary = {},
+	## The side's facing store, paired with the same `live`.
+	live_facing: Dictionary = {},
 ) -> Dictionary:
 	var intents := {}
 	for entry in players:
@@ -16597,12 +16619,14 @@ func _hold_phase_intents(
 		var here: Vector2 = live.get(player.id, target)
 		var source: Dictionary = source_intents.get(player.id, {})
 		var carried: Vector2 = live_velocity.get(player.id, Vector2.ZERO)
+		var set_as: Vector2 = live_facing.get(player.id, Vector2.ZERO)
 		var journey := _travel_intent(
 			player, StringName(source.get("intent", &"watching")),
-			here, target, target, "lateral", window_seconds, carried,
+			here, target, target, "lateral", window_seconds, carried, set_as,
 		)
 		intents[player.id] = journey
 		_record_exit_velocity(live_velocity, player.id, journey)
+		_record_exit_facing(live_facing, player.id, journey)
 	return intents
 
 
@@ -16901,6 +16925,19 @@ func _record_exit_velocity(
 	if journey.get("path", null) == null:
 		return
 	store[player_id] = journey.get("exit_velocity", Vector2.ZERO)
+
+
+## The same rule for orientation: a leg with no published path says nothing about
+## which way the body ended up, so it must not overwrite what is known.
+func _record_exit_facing(
+	store: Dictionary, player_id: int, journey: Dictionary
+) -> void:
+	if journey.get("path", null) == null:
+		return
+	var facing := Vector2(journey.get("exit_facing", Vector2.ZERO))
+	if facing.length_squared() <= 0.0001:
+		return
+	store[player_id] = facing
 
 
 func _travel_intent(

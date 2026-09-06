@@ -75,6 +75,7 @@ func _initialize() -> void:
 		"adjacent_pairs": 0, "adjacent_big": 0, "worst_adjacent": 0.0,
 		"worst_adjacent_note": "",
 		"cold_starts": 0, "hot_ends": 0,
+		"facing_supplied": 0, "facing_absent": 0,
 	}
 
 	for seed_value in range(FIRST_SEED, FIRST_SEED + rallies):
@@ -176,6 +177,19 @@ func _initialize() -> void:
 					gap_sources[pair_key] = int(
 						gap_sources.get(pair_key, 0)
 					) + 1
+				## C3: does the next leg begin with an orientation at all? An absent
+				## facing reads as `facing_fit` 1.0 -- perfectly aligned, the
+				## cheapest turn -- so a zero here is a discount, not a neutral.
+				## NOTE the supply rate, not the model -- EMBODIED_MOVEMENT_CONTINUITY.md C3.3
+				if second.facings.size() > 0:
+					if Vector2(second.facings[0]).length_squared() > 0.0001:
+						continuity["facing_supplied"] = int(
+							continuity.facing_supplied
+						) + 1
+					else:
+						continuity["facing_absent"] = int(
+							continuity.facing_absent
+						) + 1
 				var ended_moving := first.exit_velocity.length() > 0.4
 				var started_cold := second.velocities.size() > 0 \
 					and Vector2(second.velocities[0]).length() <= 0.01
@@ -386,6 +400,10 @@ func _initialize() -> void:
 		int(continuity.cold_starts), int(continuity.pairs),
 	])
 	print("previous_leg_ended_moving|%d" % int(continuity.hot_ends))
+	print("next_leg_has_an_entry_facing|%d of %d" % [
+		int(continuity.facing_supplied),
+		int(continuity.facing_supplied) + int(continuity.facing_absent),
+	])
 	print("--- gaps over 10 cm, by which publishers the two legs came from")
 	var gap_keys: Array = gap_sources.keys()
 	gap_keys.sort_custom(func(a, b): return int(gap_sources[a]) > int(gap_sources[b]))
