@@ -675,3 +675,70 @@ counter-intuitive: charging reversal slows *everyone*, including hitters carryin
 speed into an approach, so attacks arrive marginally worse-timed (attack quality
 0.474 → 0.470) and more balls come up (dig 0.510 → 0.528). Fewer kills is the
 consequence of a worse attack, not of a better defence.
+
+**One judgement call, flagged as one.** The turn delay is no longer charged on
+top of an arrest, on the reasoning that a body which had to shed momentum has
+already been billed for the redirection and charging both prices one direction
+change twice. That is an argument, not a measurement. The alternative — both
+charged — would make every off-axis entry more expensive again, and nothing in
+the repo settles which is right.
+
+---
+
+# C3 — Supply meaningful facing
+
+## C3.0 What the model does with facing today
+
+`_movement_profile` derives one number from it:
+
+```gdscript
+var facing_fit := 1.0
+if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
+    facing_fit = clampf((actor.facing.normalized().dot(direction) + 1.0) * 0.5, 0.0, 1.0)
+```
+
+and `facing_fit` then sets `direction_change_delay` through
+`LocomotionModel.direction_change_seconds`, between a 0.20 s worst case and a
+0.02 s best.
+
+**The default is 1.0, which means perfectly aligned — the cheapest possible
+turn.** So an absent facing is not neutral; it is a discount. Every committed
+site passes `Vector2.ZERO`, so every body in the game has been turning at its
+floor cost.
+
+The audit measured the size: 0.14–0.17 s per leg.
+
+## C3.1 C2 narrowed where this matters, and sharpened it
+
+Before C2, the turn delay was charged whenever `opening_speed <= 0.0` — which
+after C0's fix meant any body without forward momentum, including one moving
+sideways or backwards. C2 replaced that: a body with momentum to shed pays
+`arrest_terms`, and the turn delay is charged only to a body with **nothing to
+arrest and nothing to carry** — one genuinely at rest.
+
+That is the physically right place for it, and it means C3's population is
+exactly the standing bodies. For them the question is real and unanswered: a
+defender standing in base facing the net, told to move to their left, should pay
+more than one already facing that way.
+
+## C3.2 The authoritative facing already exists
+
+Three things make this the same shape as C1 rather than a new model:
+
+- `RallyMovementPath.facings` records a facing per sample, so a leg's exit facing
+  is `facings[last]` — already published, already authoritative.
+- `_committed_path` and `_travel` both take `entry_facing` and set
+  `actor.facing` from it. The plumbing is there; nothing supplies it.
+- `player_facing` exists as a store and is written by `_commit_facing` at
+  **two** sites, both hitter paths, from `exit_velocity.normalized()`.
+
+So C3 is: publish `exit_facing` from `_travel_intent` beside `exit_velocity`,
+carry it in a `live_facings` store alongside `live_velocities`, and pass it as
+`entry_facing`. `_record_exit_velocity`'s rule applies unchanged — a leg with no
+published path states nothing about facing either.
+
+One detail that keeps it honest: `RallyPlayerState.apply_position` already sets
+`facing = velocity.normalized()` for a moving body, so facing and travel heading
+are coupled while moving and only diverge at rest. That is the distinction the
+spec asks to preserve — travel heading versus body facing — and it is already
+modelled, so C3 must not flatten it.
