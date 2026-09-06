@@ -878,3 +878,52 @@ The 23 are the last real gap. Eleven resolver sites add those three event types
 and none of them carries a solved leg for its own actor: a setter's chase, a
 hitter's approach and a blocker's close are still the only journeys in the game
 solved twice.
+
+---
+
+## P13 — the last two solves, and what is honestly left
+
+### P13.1 The contact actor's own leg, from the one place that sees every contact
+
+Eight contact sites published `movement_path`; eleven — every SET, ATTACK and
+BLOCK — published nothing, so the setter's chase, the hitter's approach and the
+blocker's close were the last journeys solved twice.
+
+Rather than eleven bespoke edits, `_add_event` publishes the actor's leg when
+the site did not: `_positions_at_last_contact[actor]` to
+`body_contact_position`, over the journey's own duration. Same two facts every
+other leg is built from, and skipped entirely where a site stated its own — so
+the eight sites that know more about their leg than `_add_event` does keep it.
+
+Legacy re-integration 54 → **31**, authoritative 512 → **535**.
+
+### P13.2 `_integrate_phase_path` is deleted
+
+The 31 that remained were measured before deciding what to do with them:
+
+> **0 the model moved. 31 the model did not move**, drawn up to 0.531 court
+> units from where the model says they stand.
+
+So none of them is a journey. Re-integrating them was inventing a walk to cover
+a disagreement — precisely the "downstream fudge to hide upstream disagreement"
+the spec forbids, and it carried the two remaining endpoint cheats with it: the
+forced last sample and the pre-aligned facing.
+
+Deleted, 61 lines, along with `MOVEMENT_SAMPLE_WINDOW_SECONDS`. What is drawn
+now is a straight two-point correction, appended to
+`playback_continuity_mismatches` with `correction: true`. **The mismatch count
+rose from 21 to 52 — exactly 21 + 31.** That is the point: the disagreement was
+always there and is now counted instead of smoothed.
+
+### P13.3 Final production state
+
+| | legs | share |
+|---|---|---|
+| authoritative published path | 535 | 85.5% |
+| recorded correction, no re-solve | 31 | 5.0% |
+| hold | 66 | 10.6% |
+
+**No production consumer re-simulates movement.** The remaining 0.531 court
+units of correction are the reachability defect of P9.5 surfacing at the
+drawing, and closing it means changing where the resolver commits bodies, which
+changes rally outcomes and is deliberately outside this pass.

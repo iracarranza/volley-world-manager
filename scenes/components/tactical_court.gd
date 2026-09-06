@@ -99,11 +99,6 @@ const COGNITION_BADGE_LIFT: float = 26.0
 const VISUAL_ALL: int = VISUAL_BALL_PATH | VISUAL_PLAYER_PATHS \
 	| VISUAL_TACTICAL_GUIDES | VISUAL_COVERAGE_ZONES \
 	| VISUAL_CONTACT_OVERLAYS | VISUAL_COGNITION
-## Generous window for integrating a traversal. The result is renormalised to
-## the phase, so this only has to be long enough for a player to finish; it
-## never sets how fast the drawing runs.
-const MOVEMENT_SAMPLE_WINDOW_SECONDS: float = 5.0
-
 var lineup: RotationLineup
 var players_by_id: Dictionary = {}
 var opponent_team: Resource
@@ -681,21 +676,46 @@ func _build_movement_paths() -> void:
 ## contact, that path *is* the movement -- the same solve that decided the
 ## contact was reachable. Playback interpolates it and re-solves nothing.
 ##
-## Everything not yet migrated falls through to `_integrate_phase_path`, which
-## reconstructs a second solve from a start, a target and a duration. That
-## fallback is the thing being removed pass by pass; see
-## `docs/specs/AUTHORITATIVE_RALLY_MOVEMENT.md`.
+## What is left over is not a journey and is no longer drawn as one.
+##
+## `_integrate_phase_path` used to re-solve anything unmigrated -- a second
+## movement model, with an endpoint forced onto the target and facing
+## pre-aligned so it would land there. It has been deleted. Measured over 10
+## rallies, every leg that still reaches this line is a body the simulation did
+## **not move**, drawn up to 0.531 court units away from where the simulation
+## says it stands. That is a continuity residual, not motion, and re-integrating
+## it was inventing a walk to cover a disagreement.
+##
+## It is now closed as a correction and recorded as one. The cause is the
+## reachability defect in `AUTHORITATIVE_MOVEMENT_EXECUTION.md` P9.5: the
+## resolver commits bodies to endpoints their own solved paths land short of.
 func _phase_path(
-	profile: VolleyballPlayer,
+	_profile: VolleyballPlayer,
 	player_id: int,
 	start: Vector2,
 	target: Vector2,
-	waypoint: Variant,
+	_waypoint: Variant,
 ) -> Dictionary:
 	var authoritative := _authoritative_phase_path(player_id, start, target)
 	if not authoritative.is_empty():
 		return authoritative
-	return _integrate_phase_path(profile, player_id, start, target, waypoint)
+	if start.distance_to(target) <= 0.0005:
+		return {}
+	playback_continuity_mismatches.append({
+		"player_id": player_id,
+		"event_type": int(pending_contact_event.event_type) \
+			if pending_contact_event != null else -1,
+		"visible_start": start,
+		"reported_start": target,
+		"distance": start.distance_to(target),
+		"correction": true,
+	})
+	return {
+		"points": [start, target] as Array[Vector2],
+		"times": [0.0, 1.0] as Array[float],
+		"authoritative": false,
+		"correction": true,
+	}
 
 
 ## The published path for this player's current contact, as playback's
@@ -797,67 +817,6 @@ func _published_offball_path(player_id: int) -> Variant:
 		if held is Dictionary and held.get(player_id, null) != null:
 			return held[player_id]
 	return null
-
-
-func _integrate_phase_path(
-	profile: VolleyballPlayer,
-	player_id: int,
-	start: Vector2,
-	target: Vector2,
-	waypoint: Variant,
-) -> Dictionary:
-	if start.distance_to(target) <= 0.0005 and waypoint == null:
-		return {}
-	## ApproachMechanicsSystem.prepare_for_attack() reports approach_start_position
-	## as wherever the hitter's staging run actually left them -- deliberately the
-	## same point this leg's own start, not an aspirational mark the player never
-	## reached. Fed through as a distinct leg, the stepper's first direction is
-	## zero-length and it aborts before moving at all, silently falling back to a
-	## raw lerp for the whole approach. A waypoint already coincident with start
-	## is not a corner; treat it as absent so the model steps toward the real
-	## target from the first sample.
-	var effective_waypoint: Variant = waypoint
-	if waypoint != null and start.distance_to(Vector2(waypoint)) <= 0.0005:
-		effective_waypoint = null
-	var side: StringName = &"opponent" if _is_opponent_player(player_id) else &"home"
-	var actor := RallyPlayerState.create(profile, side, -1, start)
-	var first_leg: Vector2 = Vector2(effective_waypoint) if effective_waypoint != null else target
-	var opening := RallyKinematics.court_delta_meters(start, first_leg)
-	if opening.length() > 0.0001:
-		## Facing the route keeps the model's turn charge at its floor. The
-		## resolver already spent movement time deciding this traversal was
-		## possible; re-charging a full turn here would make the player miss the
-		## endpoint the event says they reached.
-		actor.facing = opening.normalized()
-	var mode := RallyPlayerState.MovementMode.APPROACH if effective_waypoint != null \
-		else RallyPlayerState.MovementMode.TRANSITION
-	var integration: Dictionary = ShadowMovementSystem.integrate(
-		actor, target, MOVEMENT_SAMPLE_WINDOW_SECONDS, mode,
-		ShadowMovementSystem.DEFAULT_STEP_SECONDS, effective_waypoint,
-	)
-	if not bool(integration.get("available", false)):
-		return {}
-	var points: Array = integration.get("trail", [])
-	var times: Array = integration.get("sample_times", [])
-	if points.size() < 2 or times.size() != points.size():
-		return {}
-	var arrival := points.size() - 1
-	for index in range(points.size()):
-		if Vector2(points[index]).distance_to(target) <= 0.002:
-			arrival = index
-			break
-	var span := float(times[arrival])
-	if span <= 0.0001 or arrival < 1:
-		return {}
-	var trimmed: Array[Vector2] = []
-	var normalized: Array[float] = []
-	for index in range(arrival + 1):
-		trimmed.append(Vector2(points[index]))
-		normalized.append(clampf(float(times[index]) / span, 0.0, 1.0))
-	## The event's endpoint is authoritative; end exactly on it.
-	trimmed[trimmed.size() - 1] = target
-	normalized[normalized.size() - 1] = 1.0
-	return {"points": trimmed, "times": normalized}
 
 
 func _sample_movement_path(path: Dictionary, progress: float) -> Vector2:

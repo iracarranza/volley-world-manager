@@ -13367,6 +13367,32 @@ func _add_event(
 		metadata["opponent_phase_hold_paths"] = _phase_hold_paths(
 			opponent_live_positions, actor_id
 		)
+	## **And the actor's own leg, for the contacts that never published one.**
+	##
+	## Eight contact sites publish `movement_path` and eleven -- every SET,
+	## ATTACK and BLOCK -- publish nothing, so the setter's chase, the hitter's
+	## approach and the blocker's close were the last journeys in the game solved
+	## twice: once here and once by playback. Twenty-three of 632 legs. Built
+	## from the same two facts every other leg is built from, and skipped
+	## entirely when the site already stated its own.
+	## AUTHORITATIVE_MOVEMENT_EXECUTION.md P13.
+	if not metadata.has("movement_path") and _positions_at_last_contact.has(actor_id):
+		var actor_body := _bodies_by_id.get(actor_id, null) as VolleyballPlayer
+		if actor_body != null:
+			var actor_from := Vector2(_positions_at_last_contact[actor_id])
+			var actor_to := Vector2(metadata.get(
+				"body_contact_position",
+				live_positions.get(
+					actor_id, opponent_live_positions.get(actor_id, end)
+				),
+			))
+			var actor_path := _committed_path(
+				actor_body, actor_from, actor_to,
+				_movement_time(actor_body, actor_from, actor_to, "transition"),
+				"transition", rally_clock,
+			)
+			if actor_path != null:
+				metadata["movement_path"] = actor_path
 	var event: Resource = RallyEventModel.new()
 	event.sequence = result.events.size()
 	event.event_type = event_type
