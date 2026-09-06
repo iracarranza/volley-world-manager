@@ -1,4 +1,165 @@
-# VWM Authoritative Movement — Compact Execution Spec
+# VWM Authoritative Movement — Contract and Execution Record
+
+Status: **CLOSED at `fe992be`, 2026-09-06.** Everything below the horizontal
+rule is the execution plan as written, kept verbatim with a measured outcome
+stamped on each pass. What the codebase now holds to is §C, which is normative:
+a change that violates it is a regression whether or not a test catches it.
+
+Two named defects are **open and deliberately out of scope**, recorded in §D
+with their sizes. Neither prevents the contract; one is visible through it.
+
+---
+
+## C. THE CONTRACT (normative)
+
+### C1. There is one movement solve
+
+`RallySimulator._committed_path()` is the only function in production that turns
+a start, a target and a time budget into a **drawn** journey. Everything on a
+screen traces back to it.
+
+One other production call site integrates, and it is not an exception:
+`rally_opportunity_system.gd:159`, inside the reception reachability trace that
+`ShadowReceptionSystem` builds on every home reception. It answers *could this
+body have got there*, and the only thing the resolver reads back out of it is
+`movement_ready_seconds` — a scalar, via `_read_ready_delay`. It publishes no
+path and nothing draws it. A reachability integration is a different question
+from a rendered leg; if it ever starts producing one, it comes under C4.
+
+`movement_integration_calibration.gd` is a calibration tool and not production.
+
+A consumer may **interpolate** a published path. A consumer may **not**
+integrate, re-time, re-target, re-face, or reconstruct one. There is no
+"fallback solve": a leg either has a published path or is not a leg.
+
+### C2. What a path is
+
+`RallyMovementPath` (`scripts/models/rally_movement_path.gd`) carries, per
+sample: absolute rally-clock `time`, `position`, `velocity`, `facing`; plus
+`exit_velocity` and `reached_target` for the leg. Sample times are absolute, so
+a consumer never needs to know which leg it is looking at.
+
+`sample(rally_time)` clamps at both ends. Asking outside the window is not an
+error — it is a consumer drawing a frame while some other leg runs.
+
+### C3. A path targets the committed body position, never the ball
+
+`_reached_point()` decides where the body ends up; `_body_behind_contact()`
+offsets it off the ball. The path must be built to **that** point. Building it
+to the ball was the G1 disagreement and cost 0.026–0.065 court units before it
+was fixed at the contract rather than in playback.
+
+### C4. Every drawn leg has a publisher, and there are five
+
+| leg | published by |
+|---|---|
+| a contact the site knows the most about | the eight explicit `movement_path` sites |
+| any other contact's own actor | `_add_event`, from `_positions_at_last_contact` → `body_contact_position` |
+| any off-ball staging, rebase or wall close | `_travel_intent`, one function, twenty call sites |
+| the staged walk before an upcoming contact | `staged_next_path`, three sites |
+| the leg a held position implies | `_phase_hold_paths`, in `_add_event` |
+
+The order is fixed and consumers must honour it: a site's own stated leg beats
+`_add_event`'s reconstruction, an explicit phase intent beats a hold path.
+
+### C5. A body the simulation did not move is not walked
+
+If no path exists and the drawn body disagrees with the model, that is a
+**correction**, not motion. It is drawn as a straight two-point close and
+appended to `playback_continuity_mismatches` with `correction: true`. Inventing
+a plausible-looking journey to cover the gap is the specific thing this spec
+forbids, and it is what `_integrate_phase_path` did for years.
+
+### C6. Consumers
+
+```
+_committed_path
+  → event metadata
+  → tactical_court._authoritative_phase_path()   2D, interpolates
+  → match_screen plan["path"]
+  → match_court_3d._plan_sample()                3D, samples the same path
+  → player_actor_3d.set_tactical_position(..., motion)
+       solved speed unsmoothed; solved facing via court_delta_meters
+```
+
+Both courts read the same path. Where they differ, the 2D court is wrong by
+definition — it is the one with a history of inventing.
+
+### C7. What must not come back
+
+- a second integrator anywhere downstream of the resolver
+- a target invented by a view (`_support_target_for_side`, deleted)
+- a forced final sample or a pre-aligned facing (deleted with `_integrate_phase_path`)
+- speed derived from successive drawn positions where a solved velocity exists
+- a straight lerp standing in for a journey (`_plan_sample`, fixed at P8)
+
+### C8. Standing measurements
+
+Re-measure these before believing the contract still holds. Instruments:
+`tools/render_authoritative_movement.gd`, and a headless `TacticalCourt` driven
+leg by leg with the production `begin_rally_playback` snapshot.
+
+| property | value | taken at |
+|---|---|---|
+| drawn legs authoritative | 81.9% (7,756 of 9,473) | `23903f5`, 150 rallies, six seed bands |
+| recorded corrections | 6.9% (651) | same |
+| holds | 11.3% (1,066) | same |
+| path contract violations | **0** | same |
+| balance probe, 700 rallies | byte-identical across all six code commits | `5d8782a`…`23903f5` |
+| suite | 2 of 2,262, both pre-existing | `fe992be` |
+| resolve cost | 62.8 ms/rally (from 60.2) | `8bb09ca` |
+
+---
+
+## D. OPEN, OUT OF SCOPE, MEASURED
+
+Both were surfaced by this work and both need changes that move rally outcomes,
+which the goal ruled out of this pass.
+
+### D1. Reachability — the cause of the 6.9%
+
+The resolver commits bodies to endpoints their own solved paths land short of.
+`_reached_point()` tests one point and commits the body to
+`_body_behind_contact()` of it, whose reachability is never tested;
+`_wall_close_intent()` passes an untruncated target and the blocker is then
+placed there regardless of whether they could close.
+
+| population | n | worst shortfall |
+|---|---|---|
+| off-ball intents vs the phase-target map | 15 of 1,303 | 0.457 court units |
+| published contact paths vs their event target | 13 of 277 | 0.075 court units |
+
+Fixing it changes block and approach positions and therefore outcomes.
+`AUTHORITATIVE_MOVEMENT_EXECUTION.md` P9.5.
+
+### D2. Perceived versus true prep timing — **P4 is not done**
+
+Preparation is timed on the ball's true flight. There is **no reference** to
+`perceived_arrival`, `BallFlightEstimate` or `read_error` in `match_screen.gd`,
+`match_court_3d.gd` or `player_actor_3d.gd`, verified at `fe992be`. A voli
+therefore begins its platform on knowledge of where the ball will actually be.
+
+P4 as written asks for the human split — read, then foot movement, then prep on
+a *predicted* contact. The movement half of it is in place (the receiver moves
+and arrives on a solved path before the contact); the perception half is not,
+and it is a behaviour defect rather than a movement-contract one.
+
+---
+
+## FINAL
+
+```
+commits       7: 5d8782a e369d11 d9e87c5 8bb09ca 1d59d8c 23903f5 fe992be
+passes        P8-P14; five competing movement truths removed, not the three found by research
+tests         2 of 2,262 (both pre-existing); 3 checks written, 20 gained, every predecessor measured
+renders       artifacts/authoritative-movement/ x3, traced through a real TacticalCourt
+delta         playback legs 264 authoritative / 296 re-solving -> 535 / 31, and the 31 are now counted (mismatches 21 -> 52)
+blockers      none for the contract; D1 reachability and D2 perceived prep are open by instruction
+```
+
+---
+
+# Original execution plan, with outcomes
 
 ## GOAL
 
@@ -27,6 +188,9 @@ Interpolation OK; downstream movement re-simulation ≠ OK.
 
 ## P0 — VERIFY
 
+**Outcome: passed.** G0 cleared — the resolver could own a path without a semantic rewrite. Stepped integration reproduces the analytical projection to 0.18 mm worst over 768 samples. Dead-stop bug classified LIVE and fixed: 14,991 of 14,991 traversals began from rest.
+
+
 Trace 1 live `serve→receive` leg:
 
 `resolver → movement model → event → tactical_court → 3D actor`
@@ -51,6 +215,9 @@ Else P1.
 
 ## P1 — CONTRACT
 
+**Outcome: `RallyMovementPath`**, `scripts/models/rally_movement_path.gd`. Semantics as §C2. Contract test `_test_authoritative_movement_path_contract`, 11 assertions.
+
+
 Define minimum authoritative movement type from existing sim capability.
 
 Required semantics:
@@ -65,6 +232,9 @@ Movement used to decide reachability MUST be same movement rendered.
 Add contract tests.
 
 ## P2 — RECEIVE SLICE
+
+**Outcome: passed.** G1 disagreement measured at 0.026–0.065 court units and fixed *at the contract* by retargeting the path to `receiver_reach` — see §C3. Residual 0.000000.
+
 
 Migrate production reception only.
 
@@ -99,6 +269,9 @@ Pass → P3.
 
 ## P3 — PROPAGATE
 
+**Outcome: complete, and wider than written.** Contact legs, off-ball legs, staged walks, held-position legs and every remaining contact actor all publish. G2 cleared. The obsolete list is emptied: `_integrate_phase_path`, `_support_target_for_side`, the endpoint force, the facing pre-align and the 3D straight-line `_plan_sample` are deleted. `RallyScheduler` untouched — still zero production callers.
+
+
 Apply same contract to all production movement legs found by code search, incl:
 `set chase / transition+approach / block / defence / continuation+rebase`
 
@@ -120,6 +293,9 @@ G2: authoritative movement stable across phases → P4.
 
 ## P4 — RECEIVE PREP
 
+**Outcome: NOT DONE, and deliberately so — see §D2.** The movement half holds; the perception half is untouched and is a behaviour defect the goal ruled out of this pass.
+
+
 Implement human reception's separate timing:
 
 `ball read → foot movement`
@@ -135,6 +311,9 @@ Reuse existing actions/biomechanics.
 Test/render normal + compromised receive.
 
 ## P5 — STATE/RECOVERY
+
+**Outcome: already true, and one earlier claim of mine was wrong.** `contact_envelope_system` is production-live through `rally_movement_system` and `setter_capability_system`. Production *does* derive recovery — `_note_recovery`, scaled by `explosiveness*0.6 + work_rate*0.4` and `lerpf(1.28, 0.74, quickness)`. The bare literals quoted by the research doc are in development-only integrators, not production. No invented attribute model was needed because none was missing.
+
 
 Promote existing `contact_envelope_system` where safe.
 
@@ -154,6 +333,9 @@ Verify:
 
 ## P6 — REMAINING CONTINUITY
 
+**Outcome: YES — the current architecture expresses all of it.** Every listed behaviour is now a published path, and the one thing that looked like an architectural limit (playback serving paths only to the contact actor) was a dictionary lookup, not a scheduler. No scheduler requirement identified.
+
+
 Only now reassess:
 `off-ball transition / rebase / approach prep / block close / recovery / continuation`
 
@@ -165,6 +347,9 @@ NO → identify exact impossible behavior + minimum scheduler requirement.
 `RallyScheduler` migration requires demonstrated need, not architectural preference.
 
 ## P7 — VALIDATE/CLEAN
+
+**Outcome: complete.** Before→after in §C8. Movement solves per leg 2–3 → 1. Reconstruction sites: five → zero. Outcome drift: none — the balance probe is byte-identical across every commit. Renders in `artifacts/authoritative-movement/`. `SPORTS_SIM_ARCHITECTURE.md` §4 marked superseded with a §4a; `run_approach_frames.gd`'s stale header repaired.
+
 
 Run targeted + full suite/probes.
 
@@ -190,18 +375,23 @@ Remove superseded hacks/comments/dead code.
 
 ## DONE
 
+**Met at `fe992be`.** Production is `ONE movement solve → ONE authoritative
+stream → render consumers`, with the one honest exception recorded rather than
+hidden: 6.9% of drawn legs are corrections closing a residual whose cause is
+§D1, and each one is counted in `playback_continuity_mismatches`.
+
 Production:
 `ONE movement solve → ONE authoritative stream → render consumers`
 
 Required:
-- no migrated playback re-solve
-- no competing actor movement truth
-- momentum verified
-- receive moves+preps pre-contact
-- state/recovery continuity where supported
-- no endpoint cheats
-- deterministic suite passes
-- no unjustified scheduler/AAA expansion
+- no migrated playback re-solve — **met**, playback owns no movement model
+- no competing actor movement truth — **met**, five removed
+- momentum verified — **met**, `exit_velocity` on the contract; the 14,991-of-14,991 dead stop is gone
+- receive moves+preps pre-contact — **movement met; prep timed on true flight, §D2**
+- state/recovery continuity where supported — **met**, and it was already derived, §P5
+- no endpoint cheats — **met**, both deleted with `_integrate_phase_path`
+- deterministic suite passes — **met**, 2 of 2,262, both pre-existing
+- no unjustified scheduler/AAA expansion — **met**, nothing added
 
 Work continuously P0→P7 unless a gate fails.
 Commit logical passes; push; clean tree.
