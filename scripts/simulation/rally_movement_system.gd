@@ -204,6 +204,17 @@ static func estimate_movement(
 	var acceleration := float(profile.acceleration)
 	var facing_fit := float(profile.facing_fit)
 	var direction_change_delay := float(profile.direction_change_delay)
+	## **Momentum must not be discarded here either.** This function is the third
+	## traversal formula in the engine -- it prices the *window* a contact is
+	## allotted, while `_leg_seconds` prices the leg the body walks -- and the
+	## comment above records that consolidating onto one profile was meant to stop
+	## the two drifting apart. C2 gave `_leg_seconds` an arrest cost and this copy
+	## did not get one, so a window was sized from a body that turns for free while
+	## the leg was charged for turning. Measured, that put the SET family's
+	## traversal-to-window ratio at 1.366 against a 1.06 gate.
+	## NOTE the same arrest, in the third place that needed it -- EMBODIED_MOVEMENT_CONTINUITY.md C2.5
+	var estimate_arrest := arrest_terms(actor.velocity, direction, acceleration)
+	movement_distance += float(estimate_arrest.ground_lost)
 	var acceleration_time := maxf(
 		(maximum_speed - current_speed) / maxf(acceleration, 0.1), 0.0
 	)
@@ -220,7 +231,11 @@ static func estimate_movement(
 		else:
 			movement_time = acceleration_time \
 				+ (movement_distance - acceleration_distance) / maxf(maximum_speed, 0.1)
-	var travel_time := direction_change_delay + movement_time \
+	## The turn is charged only to a body with nothing to arrest, exactly as
+	## `_leg_seconds` does it -- otherwise one direction change is priced twice.
+	var travel_time := float(estimate_arrest.seconds) + movement_time \
+		+ (direction_change_delay if float(estimate_arrest.seconds) <= 0.0 \
+			and current_speed <= 0.0 else 0.0) \
 		if movement_distance > 0.001 else 0.0
 	var usable_time := maxf(available_time - direction_change_delay, 0.0)
 	var capacity_acceleration_time := minf(usable_time, acceleration_time)

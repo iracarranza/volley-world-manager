@@ -683,6 +683,70 @@ change twice. That is an argument, not a measurement. The alternative — both
 charged — would make every off-axis entry more expensive again, and nothing in
 the repo settles which is right.
 
+## C2.5 The suite found a third traversal formula
+
+The suite came back **3 of 2,279** — a genuine regression, and the third failure
+was `"Allotted duration and the movement model agree for every phase type"`.
+
+`MovementTimingRatioCalibration` divides a modelled traversal by the window the
+resolver *allotted* that contact. After C2:
+
+| family | before | after C2 | band |
+|---|---:|---:|---|
+| RECEPTION | — | 0.9974 | 0.95–1.06 ✓ |
+| ATTACK | — | 1.0453 | 0.95–1.12 ✓ |
+| DIG | — | 0.9988 | 0.95–1.06 ✓ |
+| **SET** | 0.8344 | **1.3656** | 0.80–1.06 ✗ |
+| overall mean | — | 1.0753 | 0.97–1.04 ✗ |
+
+**Two wrong diagnoses first, both rejected by measurement.**
+
+1. *Stale momentum.* `live_velocities` keeps a value until overwritten and C1.7
+   showed most boundaries do not adjoin, so a body could be charged to arrest a
+   velocity it shed seconds ago. A decay at the body's own deceleration rate
+   made SET **worse**, 1.366 → 1.510 — because most carried momentum is *aligned*
+   and helping, so decaying it removed a credit. Reverted.
+2. *The setter-choice estimator.* `_spatial_setter_choice` sizes a window with
+   `_movement_time` and passed no entry velocity. Wiring it through produced a
+   **byte-identical** probe, because that arm is the legacy one — its own comment
+   says so — and production takes the `physical_choice` path.
+
+**The real cause is a third copy of the traversal model.**
+`RallyMovementSystem.estimate_movement` prices the *window* a contact is
+allotted, `_leg_seconds` prices the *leg* the body walks, and they are separate
+code. C2 gave `_leg_seconds` an arrest cost and this copy did not get one, so a
+window was sized from a body that turns for free while the leg was charged for
+turning.
+
+The function's own comment had already warned about this:
+
+> Restating the speed curve, mass penalty, facing fit, and turn cost here is how
+> this function and `_movement_profile()` drifted apart in the first place — the
+> copy had to be found and patched separately every time the model changed.
+
+It drifted again, on exactly the term C2 added, and the suite caught it.
+
+`estimate_movement` now calls the same `arrest_terms`, adds `ground_lost` to the
+distance it prices, and applies the same rule about not charging a turn on top of
+an arrest. Three consumers, one model.
+
+| figure | after C2 | after C2.5 | band |
+|---|---:|---:|---|
+| **SET** | 1.3656 | **0.8846** | 0.80–1.06 ✓ |
+| overall mean | 1.0753 | **0.9923** | 0.97–1.04 ✓ |
+| perceptible rate | 0.0471 | **0.0109** | < 0.07 ✓ |
+| ATTACK | 1.0453 | 1.0436 | ✓ |
+| RECEPTION / DIG / COVERAGE | — | 0.9974 / 0.9988 / 0.9943 | ✓ |
+
+Every band passes, and the overall agreement is **better than it was before C2**
+— 0.9923 against 1.0753, with the perceptible rate down four-fold. Consolidating
+the third copy improved a number C2 had not set out to touch.
+
+**Balance after the consolidation**, against C2 alone: contacts 4.663 → 4.630,
+kill 0.519 → 0.524, dig 0.528 → 0.522, stuff 0.104 → 0.108, block touch 0.800,
+ace 0.099 and serve error 0.194 unchanged. P15 clean at **0 of 8,368**. Kill
+remains outside its band and below the 0.535 the audit recorded at A0.
+
 ---
 
 # C3 — Supply meaningful facing
