@@ -7,11 +7,38 @@ Instruments written for this pass and kept:
 
 - `tools/audit_embodied_locomotion.gd` — A3 counterfactuals and the A8 split,
   driven through `RallyMovementSystem` and `ShadowMovementSystem` directly.
-- `tools/audit_six_player_space.gd` — A6 same-team conflict and A7 environment,
-  on one shared rally clock.
+- `tools/audit_six_player_space.gd` — A6 same-team conflict, A7 environment and
+  A2 production continuity, on one shared rally clock. Takes `rallies=N`.
+- `tools/audit_target_sources.gd` — A4 publisher competition, per body-event.
+- `tools/probe_resolve_cost.gd` — the performance control, because the number the
+  contract records had no instrument in the repo.
 
 Existing instruments re-run: `tools/audit_playback_corrections.gd`,
 `tools/run_rally_balance_probe.gd`.
+
+**No production file was altered.** The pass adds four instruments and one
+regression test (`4f67cdb`) and changes nothing the game runs, which is what
+makes the A0 reproduction and the suite delta readable.
+
+## Status against the spec's DONE criteria
+
+| criterion | where |
+|---|---|
+| every factor classified by production causality | A9 matrix, 13 factors incl. two the spec did not list |
+| continuity across action transitions | A1/A2, 5,800 production leg pairs |
+| direction, facing, body state, attributes, interactions | A3.1–A3.4, A3.1b/c, A3.2b, A3.3b, A3.4b |
+| tactical target origins mapped | A4, 3,802 body-events |
+| perception / claim / coordination / personality | A5, A5b — perception causal, personality causal via claim, neither in locomotion |
+| teammates stressed in space and time, 3+ clusters | A6, 403,710 pair observations, 32 clusters at 0.50 m |
+| legal off-court vs impossible traversal | A7 |
+| the reachability split, and **all** its consumers | A8, A8b — five consumers enumerated |
+| confounders controlled, stratified or documented | A6 stratification, A3 interaction crossings, Instrument errors |
+| defects challenged with falsification tests | A8 falsifies the spec's own A8 hypothesis |
+| rare contexts exercised or marked uncertain | A6 census — `ATTACK_COVERAGE` closed at n=20; four items left open in E |
+| P15 invariants hold | A0 |
+| suite, determinism, balance, performance recorded | Validation |
+| search saturation | Search saturation |
+| next pass narrowed to evidence-backed defects | Minimum evidence-backed implementation sequence |
 
 ---
 
