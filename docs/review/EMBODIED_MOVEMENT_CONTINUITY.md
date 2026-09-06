@@ -227,7 +227,19 @@ as a latent bug.
 | exit-state probe | 26 of 29 rows agree to 0.000; the 3 are truncated, by contract |
 | **P15 playback corrections** | **0 of 8,636 drawn legs, worst 0.0000 court units** |
 | 700-rally balance | contacts 4.630→**4.633**, kill 0.535→**0.537**, dig 0.522→**0.520**, stuff 0.101, ace 0.099, serve error 0.194 unchanged |
-| regression added | `_test_leg_exit_velocity_is_one_number` |
+| **full suite** | **2 of 2,270**, the same two known failures, no third |
+| regression added | `_test_leg_exit_velocity_is_one_number`, 3 checks |
+
+**Three checks written, three gained, and the predecessor was measured on this
+tree** — 2 of 2,267 at `4e2c42d`. So the delta is authorship and nothing else.
+
+That is worth one line, because it is the *interesting* case rather than the
+usual one: C0 changed rally outcomes (contacts 4.630 → 4.633, and the drawn-leg
+population 8,733 → 8,636), and **no sampling gate drew a different number of
+checks anyway**. A count that moves by exactly what was written normally means
+nothing moved underneath it; here something demonstrably did, and the sampling
+gates happened not to be sensitive to it. The balance probe is the instrument
+that saw the change; the count was never going to.
 
 **Rally outcomes moved, and that is correct rather than tolerated.** Fix 3
 changes how long a moving body takes to travel, so contacts resolve at different

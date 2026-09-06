@@ -12,8 +12,28 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `4f67cdb`: **2 of 2,267 checks
+Current branch baseline, verified 2026-09-06 at `6cd7f54`: **2 of 2,270 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Three checks written, three gained, and the outcome mix moved anyway.** 2,267
+at `4e2c42d` is the measured predecessor, so the delta is authorship alone. What
+makes this one worth reading is that C0 *did* change rally outcomes -- contacts
+4.630 to 4.633, drawn legs 8,733 to 8,636 -- and no sampling gate drew a
+different number of checks regardless. A count that moves by exactly what you
+wrote usually means nothing moved underneath it; here something did, and the
+count could not see it. The balance probe is the instrument that could. See
+`docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C0.
+
+**One leg, one exit velocity.** `project_toward`'s `carry_through` had expressed
+the arrive-versus-run-through contract since it was written and **no caller had
+ever passed it `true`**, so every arrival in the game zeroed. Turning it on
+exposed three more defects underneath it, each hidden by the one before -- the
+worst being that `_leg_seconds`'s turn guard tested its parameter instead of the
+opening speed it computes, so every moving body was charged a turn it had already
+made while the integrator was not. Do not read the old 62.8/117 ms figures or the
+A0 balance line as unaffected: contacts, kill and dig all moved.
+
+Before it, 2,267 at `4f67cdb`.
 
 **Two checks written, two gained, and the predecessor was measured on this tree.**
 2,265 at `899458f` is directly comparable -- same tree, same seeds -- and
