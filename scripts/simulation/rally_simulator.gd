@@ -4884,6 +4884,25 @@ func _resolve_opponent_transition(
 			"option_evaluation": opponent_option_evaluation,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
+			"movement_target": opponent_setter_position,
+			## **The setter's own leg onto the ball, which this side never published.**
+			##
+			## `movement_start` and `movement_duration` were both here and the
+			## journey between them was not, so playback had nothing to interpolate
+			## and closed the gap as a correction whenever it opened past 0.0005.
+			## Budgeted by the journey rather than by what is left of the second
+			## contact window: that remainder goes non-positive on an emergency set,
+			## and `_committed_path` then publishes nothing at exactly the moment a
+			## body is furthest from its contact.
+			## NOTE C1 surfaced this; it did not cause it -- EMBODIED_MOVEMENT_CONTINUITY.md C1.3
+			"movement_path": _committed_path(
+				opponent_setter, setter_start, opponent_setter_position,
+				maxf(_movement_time(
+					opponent_setter, setter_start, opponent_setter_position,
+					"lateral",
+				), 0.0),
+				"lateral", rally_clock,
+			),
 			"body_contact_position": Vector2(physical_choice.get(
 				"body_contact_position", opponent_setter_position
 			)),
@@ -6688,9 +6707,12 @@ func _resolve_home_continuation(
 		## last population doing so. The natural duration of the journey is the
 		## window: a staging walk is not truncated by a phase, it simply takes
 		## as long as it takes. AUTHORITATIVE_MOVEMENT_EXECUTION.md P10.
+		## NOTE budgeted from where the body actually is, not from setter_choice -- EMBODIED_MOVEMENT_CONTINUITY.md C1.3
+		var staged_from := Vector2(live_positions.get(setter.id, setter_start))
 		defense_event_for_staging.metadata["staged_next_path"] = _committed_path(
-			setter, Vector2(live_positions.get(setter.id, setter_start)),
-			setter_start, maxf(setter_move_time, 0.0), "lateral", rally_clock,
+			setter, staged_from, setter_start,
+			maxf(_movement_time(setter, staged_from, setter_start, "lateral"), 0.0),
+			"lateral", rally_clock,
 		)
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 	var hitter := _fallback_hitter(
@@ -6895,6 +6917,23 @@ func _resolve_home_continuation(
 			"emergency_setter": emergency_setter,
 			"first_contact_id": defender.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
+			"movement_target": set_contact,
+			## **The settle into the contact, which nobody published.**
+			##
+			## The staging walk to `setter_start` is published on the previous
+			## event; the short leg from there onto the ball was not, on either SET
+			## site. It stayed invisible while the two points sat inside playback's
+			## 0.0005 threshold, and C1 moved the coverage landing enough to open
+			## it -- one drawn leg in 8,529, at 0.0104 court units. Publishing it
+			## is what every other contact site already does.
+			## NOTE C1 surfaced this; it did not cause it -- EMBODIED_MOVEMENT_CONTINUITY.md C1.3
+			"movement_path": _committed_path(
+				setter, setter_start, set_contact,
+				maxf(_movement_time(
+					setter, setter_start, set_contact, "lateral"
+				), 0.0),
+				"lateral", rally_clock,
+			),
 			"body_contact_position": Vector2(physical_choice.get(
 				"body_contact_position", set_contact
 			)),
@@ -12129,6 +12168,8 @@ func _resolve_overpass_into_home(
 		return null
 	var contact_pos := Vector2(contact.get("contact_position", seat))
 	live_positions[actor.id] = contact_pos
+	## NOTE a contact resets the body's momentum -- EMBODIED_MOVEMENT_CONTINUITY.md C1.1
+	live_velocities[actor.id] = Vector2.ZERO
 	_add_event(
 		result, RallyEventModel.EventType.RECEPTION, actor.id, actor.display_name,
 		Vector2(free_flight.get("start_position", contact_pos)), contact_pos,
@@ -12192,6 +12233,8 @@ func _resolve_overpass_into_opponent(
 		return null
 	var contact_pos := Vector2(contact.get("contact_position", seat))
 	opponent_live_positions[actor.id] = contact_pos
+	## NOTE a contact resets the body's momentum -- EMBODIED_MOVEMENT_CONTINUITY.md C1.1
+	opponent_live_velocities[actor.id] = Vector2.ZERO
 	_add_event(
 		result, RallyEventModel.EventType.RECEPTION, actor.id, actor.display_name,
 		Vector2(free_flight.get("start_position", contact_pos)), contact_pos,
@@ -16218,18 +16261,25 @@ func _transition_phase_map(
 				## volis a sprint every rally for standing about.
 				intent = CourtConstants.slot_position(slot)
 				mode = "lateral"
-		var reached := _reached_point(player, here, intent, window_seconds, mode)
+		## NOTE what this body walked out of its last leg with -- EMBODIED_MOVEMENT_CONTINUITY.md C1
+		var carried: Vector2 = live_velocities.get(player.id, Vector2.ZERO)
+		var reached := _reached_point(
+			player, here, intent, window_seconds, mode,
+			0.0, 0.0, Vector2.ZERO, true, carried,
+		)
 		targets[player.id] = reached
-		out_intents[player.id] = _travel_intent(
+		var journey := _travel_intent(
 			player,
 			&"receiving" if player.id == chase_id \
 				else (&"preparing_attack" if mode == "transition" else &"defending"),
-			here, intent, reached, mode, window_seconds,
+			here, intent, reached, mode, window_seconds, carried,
 		)
+		out_intents[player.id] = journey
 		## NOTE the resolver has to believe what playback draws -- leaving these
 		## out of `live_positions` separates the drawn and simulated courts from
 		## the second contact onward
 		live_positions[player.id] = reached
+		live_velocities[player.id] = journey.get("exit_velocity", Vector2.ZERO)
 	return targets
 
 
@@ -16260,6 +16310,8 @@ func _opponent_transition_phase_map(
 			out_intents[player.id] = _travel_intent(
 				player, &"recovering", here, here, here, "lateral", window_seconds
 			)
+			## NOTE recovering from a contact starts the next leg at rest -- EMBODIED_MOVEMENT_CONTINUITY.md C1.1
+			opponent_live_velocities[player.id] = Vector2.ZERO
 			continue
 		if player == null or player.id == first_contact_id or player.id == setter_id:
 			continue
@@ -16281,19 +16333,27 @@ func _opponent_transition_phase_map(
 		)
 		var intent := set_contact if player.id == chase_id \
 			else Vector2(opponent_team.court_position(player.id, "transition"))
+		var carried: Vector2 = opponent_live_velocities.get(
+			player.id, Vector2.ZERO
+		)
 		var reached := _reached_point(
 			player, here, intent, window_seconds,
 			"transition" if player.id == chase_id else "lateral",
+			0.0, 0.0, Vector2.ZERO, true, carried,
 		)
 		targets[player.id] = reached
-		out_intents[player.id] = _travel_intent(
+		var journey := _travel_intent(
 			player,
 			&"receiving" if player.id == chase_id else &"defending",
 			here, intent, reached,
 			"transition" if player.id == chase_id else "lateral",
-			window_seconds,
+			window_seconds, carried,
 		)
+		out_intents[player.id] = journey
 		opponent_live_positions[player.id] = reached
+		opponent_live_velocities[player.id] = journey.get(
+			"exit_velocity", Vector2.ZERO
+		)
 	return targets
 
 
@@ -16385,6 +16445,11 @@ func _cover_phase_map(
 			out_intents[player.id] = _travel_intent(
 				player, &"recovering", here, here, here, "lateral", window_seconds
 			)
+			## NOTE recovering from a swing starts the next leg at rest -- EMBODIED_MOVEMENT_CONTINUITY.md C1.1
+			if opponent_side:
+				opponent_live_velocities[player.id] = Vector2.ZERO
+			else:
+				live_velocities[player.id] = Vector2.ZERO
 			continue
 		var assignment: Resource = defensive_plan.assignment_for(player.id) \
 			if defensive_plan != null else null
@@ -16414,7 +16479,13 @@ func _cover_phase_map(
 				)
 				ordinary_cover_index += 1
 				mode = "transition"
-		var reached := _reached_point(player, here, intent, window_seconds, mode)
+		var carried: Vector2 = (
+			opponent_live_velocities if opponent_side else live_velocities
+		).get(player.id, Vector2.ZERO)
+		var reached := _reached_point(
+			player, here, intent, window_seconds, mode,
+			0.0, 0.0, Vector2.ZERO, true, carried,
+		)
 		targets[player.id] = reached
 		var cue_intent := &"covering"
 		match responsibility:
@@ -16423,16 +16494,20 @@ func _cover_phase_map(
 			"Take second contact":
 				cue_intent = &"setting"
 		var cover_journey := _travel_intent(
-			player, cue_intent, here, intent, reached, mode, window_seconds
+			player, cue_intent, here, intent, reached, mode, window_seconds,
+			carried,
 		)
 		## The leg's own landing, as everywhere else -- see `_travel_intent`.
 		var cover_landed: Vector2 = cover_journey.get("reached_position", reached)
+		var cover_exit: Vector2 = cover_journey.get("exit_velocity", Vector2.ZERO)
 		targets[player.id] = cover_landed
 		out_intents[player.id] = cover_journey
 		if opponent_side:
 			opponent_live_positions[player.id] = cover_landed
+			opponent_live_velocities[player.id] = cover_exit
 		else:
 			live_positions[player.id] = cover_landed
+			live_velocities[player.id] = cover_exit
 	return targets
 
 
