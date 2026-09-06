@@ -585,3 +585,59 @@ merely redundant.
 **Not fully DONE.** Two criteria are outstanding and both are scoped, not
 blocked: migrate the 3D replay consumer, and migrate the 10 off-ball legs behind
 the one playback change in P6.1.
+
+---
+
+## P8 — 3D CONSUMER · a fourth movement truth, found and removed
+
+### P8.1 The discovery pass
+
+Broad search for competing truths, not just the two documented:
+
+| Solver | Site | Status |
+|---|---|---|
+| Resolver closed form | `_movement_time` → `traversal_result` | authoritative |
+| 2D playback re-integration | `tactical_court.gd:755` | bypassed for migrated legs (P2/P3) |
+| **3D plan straight-line lerp** | **`match_court_3d._plan_sample`** | **found here** |
+| Actor speed/facing reconstruction | `player_actor_3d.gd:1005`, `:1060` | **migrated here** |
+
+`_plan_sample` was `start.lerp(target, fraction)` — constant speed, **no
+acceleration, no turn cost, no movement model at all**. The 3D court was not a
+second opinion about the leg; it was a fourth, and the crudest of the four.
+
+### P8.2 What that cost, measured
+
+81 legs over 60 seeds, comparing the old lerp against the solved path at 20
+steps per leg:
+
+| Divergence | Worst |
+|---|---:|
+| **Position, mid-leg** | **0.5481 m** |
+| **Speed** | **2.4455 m/s** |
+
+0.55 m is most of a body width. 2.45 m/s is roughly walk-versus-run — and since
+the actor's gait is driven by speed, the drawn *stride* was wrong by that much
+too, not only the position.
+
+### P8.3 What changed
+
+- `_set_plan_target` carries the event's `movement_path`;
+- `_plan_sample` samples it when present, keeping the lerp only for unmigrated legs;
+- new `_plan_motion` extracts `{velocity, facing}` per frame;
+- `set_player_position` and `PlayerActor3D.set_tactical_position` take a
+  `motion` dictionary;
+- the actor uses the **solved speed unsmoothed** — smoothing exists to hide
+  noise in a per-frame difference, and a sampled velocity has none — and turns
+  onto the **solved heading**, converted court→metres via `court_delta_meters`
+  because the court is 9 m by 18 m and a court-space direction is not an angle.
+
+`should_open_up` still decides *whether* the body turns onto travel. That is a
+presentation rule with measured constants which the path does not encode, and
+it is what lets a voli shuffle or backpedal with their eyes on the ball.
+
+### P8.4 Verified
+
+Sampled profile on a real reception leg — 0 → 1.599 → 2.932 → 2.932 → 0 m/s:
+acceleration, cruise and arrival, none of which a lerp can express.
+
+Suite: **2 of 2,261**, the two known failures, unchanged from P1/P2/P3.

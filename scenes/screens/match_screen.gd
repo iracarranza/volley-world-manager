@@ -1738,7 +1738,8 @@ func _build_movement_plan(
 	if event_actor_id >= 0 and event.metadata.has("movement_target") \
 			and match_court_3d.live_positions.has(event_actor_id):
 		_set_plan_target(
-			plan, event_actor_id, Vector2(event.metadata["movement_target"]), true
+			plan, event_actor_id, Vector2(event.metadata["movement_target"]), true,
+			event.metadata.get("movement_path", null),
 		)
 	var staged_id := int(event.metadata.get("staged_next_actor_id", -1))
 	if staged_id >= 0:
@@ -1779,7 +1780,10 @@ func _build_movement_plan(
 			str(player_handedness.get(next_actor_id, "Right")),
 			Dictionary(player_physical_profiles.get(next_actor_id, {})),
 		)
-		_set_plan_target(plan, next_actor_id, action_target, true)
+		_set_plan_target(
+			plan, next_actor_id, action_target, true,
+			next_contact.metadata.get("movement_path", null),
+		)
 		## Start the drawn journey where the simulator timed it from, not
 		## wherever the previous leg happened to leave this actor standing. The
 		## two disagreed most sharply for a blocker who then dug their own
@@ -2653,14 +2657,21 @@ func _set_plan_target(
 	player_id: int,
 	target: Vector2,
 	protected: bool = false,
+	## The leg the resolver solved, when this player's contact published one.
+	## Carried through so the 3D court samples the same movement the 2D court
+	## does and the resolver priced, rather than lerping between two endpoints.
+	## Null for every leg not yet migrated -- those keep the straight line.
+	movement_path: Variant = null,
 ) -> void:
 	if not match_court_3d.live_positions.has(player_id):
 		return
 	var start := Vector2(match_court_3d.live_positions[player_id])
 	var was_protected := bool(plan.get(player_id, {}).get("protected", false))
+	var carried: Variant = plan.get(player_id, {}).get("path", null)
 	plan[player_id] = {
 		"start": start, "target": target,
 		"protected": protected or was_protected,
+		"path": movement_path if movement_path != null else carried,
 	}
 
 

@@ -375,7 +375,13 @@ func _apply_mesh_color(
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mesh_instance.material_override = material
 
-func set_player_position(player_id: int, position: Vector2) -> void:
+func set_player_position(
+	player_id: int,
+	position: Vector2,
+	## `{velocity, facing}` off the solved leg, empty when unsolved. See
+	## `PlayerActor3D.set_tactical_position`.
+	motion: Dictionary = {},
+) -> void:
 	if not player_actors.has(player_id):
 		return
 	## **Facing is the actor's decision, and this used to overrule it.**
@@ -403,7 +409,9 @@ func set_player_position(player_id: int, position: Vector2) -> void:
 	## One fact with two sources, and the cruder source ran first.
 	live_positions[player_id] = position
 	var actor := player_actors[player_id] as PlayerActor3D
-	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
+	actor.set_tactical_position(
+		position, tactical_to_world(position.x, position.y), motion
+	)
 
 
 ## How far along its own journey a leg is, which is not how far along the ball is.
@@ -495,9 +503,41 @@ static func step_quantised_fraction(
 
 
 ## Where a leg is at a given fraction of itself, corner included.
+## The solved leg's velocity and facing at this fraction, or empty when this
+## player's leg was not solved.
+func _plan_motion(movement: Dictionary, fraction: float) -> Dictionary:
+	var published: Variant = movement.get("path", null)
+	if published == null:
+		return {}
+	var path := published as RallyMovementPath
+	if path == null or not path.is_valid():
+		return {}
+	var at := path.sample(
+		path.start_time + clampf(fraction, 0.0, 1.0) * path.duration()
+	)
+	return {"velocity": at.velocity, "facing": at.facing}
+
+
 func _plan_sample(movement: Dictionary, fraction: float, fallback: Vector2) -> Vector2:
 	var start := Vector2(movement.get("start", fallback))
 	var target := Vector2(movement.get("target", start))
+	## **The solved leg, when there is one.**
+	##
+	## Everything below this is a straight line between two endpoints -- constant
+	## speed, no acceleration, no turn cost -- which is a fourth answer to a
+	## question the resolver already answered and the 2D court already draws
+	## correctly. Where the resolver published a path, sample it, so both courts
+	## and the resolver agree.
+	##
+	## `fraction` is progress along the leg, and the path's own duration is the
+	## leg, so the two index the same journey.
+	var published: Variant = movement.get("path", null)
+	if published != null:
+		var path := published as RallyMovementPath
+		if path != null and path.is_valid():
+			return Vector2(path.sample(
+				path.start_time + clampf(fraction, 0.0, 1.0) * path.duration()
+			).position)
 	var waypoint: Variant = movement.get("waypoint", null)
 	if not (waypoint is Vector2):
 		return start.lerp(target, fraction)
@@ -537,23 +577,31 @@ func apply_movement_plan(
 			continue
 		set_player_position(int(raw_player_id), Vector2(live_positions[raw_player_id]))
 	var sampled := {}
+	## Velocity and facing straight off the solved leg, for the players whose leg
+	## was solved. The actor derives both from successive placements otherwise --
+	## a reconstruction that cannot see acceleration and has to be smoothed
+	## against its own noise. Empty for unmigrated legs, which keep deriving.
+	var sampled_motion := {}
 	for raw_player_id in plan:
 		var player_id := int(raw_player_id)
 		var movement: Dictionary = plan[raw_player_id]
 		var fallback: Vector2 = live_positions.get(player_id, Vector2.ZERO)
-		sampled[player_id] = _plan_sample(
-			movement,
-			_stepped(player_id, movement, _plan_fraction(
-				movement, progress, window_seconds
-			), window_seconds),
-			fallback,
-		)
+		var fraction := _stepped(player_id, movement, _plan_fraction(
+			movement, progress, window_seconds
+		), window_seconds)
+		sampled[player_id] = _plan_sample(movement, fraction, fallback)
+		var motion := _plan_motion(movement, fraction)
+		if not motion.is_empty():
+			sampled_motion[player_id] = motion
 	## Target separation is solved once, when the movement plan is built. The
 	## former per-frame `_unstack` recomputed a shove axis from sampled positions;
 	## as two blockers crossed the overlap boundary that axis could flip, visibly
 	## swapping their order and making both bodies jitter.
 	for player_id in sampled:
-		set_player_position(int(player_id), Vector2(sampled[player_id]))
+		set_player_position(
+			int(player_id), Vector2(sampled[player_id]),
+			sampled_motion.get(int(player_id), {}),
+		)
 
 
 ## Push bodies out of each other, every frame.

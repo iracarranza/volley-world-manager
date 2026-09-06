@@ -9,6 +9,9 @@ const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 const StanceTransitionScript := preload("res://scripts/data/stance_transition.gd")
 const GaitBiomechanicsScript := preload("res://scripts/data/gait_biomechanics.gd")
+const RallyKinematicsScript := preload(
+	"res://scripts/simulation/rally_kinematics.gd"
+)
 const BlockBiomechanicsScript := preload("res://scripts/data/block_biomechanics.gd")
 const LandingBiomechanicsScript := preload(
 	"res://scripts/data/landing_biomechanics.gd"
@@ -976,8 +979,24 @@ func apply_ui_palette(light_mode: bool) -> void:
 	_refresh_surface_marks()
 
 
-func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
+## Place this body, and take its motion from whoever solved the leg.
+##
+## `motion` carries `{velocity, facing}` in court units off the resolver's
+## authoritative path. When it is present the gait runs on the solved speed and
+## the body turns onto the solved heading, and the reconstruction below is
+## skipped entirely -- it exists to recover from successive placements what the
+## simulation already knew and could not previously hand over.
+##
+## Empty for any leg not yet migrated, which keeps the derivation.
+func set_tactical_position(
+	position: Vector2, world_position: Vector3, motion: Dictionary = {}
+) -> void:
 	_ensure_node_bindings()
+	var supplied_velocity: Vector2 = Vector2(motion.get("velocity", Vector2.ZERO)) \
+		if motion.has("velocity") else Vector2.ZERO
+	var supplied_facing: Vector2 = Vector2(motion.get("facing", Vector2.ZERO)) \
+		if motion.has("facing") else Vector2.ZERO
+	var has_supplied_motion := motion.has("velocity")
 	if has_world_position:
 		var world_delta := world_position - self.position
 		var travelled := Vector2(
@@ -1044,20 +1063,44 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			## which is what the first version of this guard did.
 			self.position = world_position
 			return
-		var smoothing := 0.45 if instant_speed > ground_speed_mps else 0.18
-		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
+		if has_supplied_motion:
+			## The solved speed, unsmoothed. Smoothing exists to hide the noise in
+			## a per-frame difference; a sampled velocity has none to hide.
+			ground_speed_mps = RallyKinematicsScript.court_delta_meters(
+				Vector2.ZERO, supplied_velocity
+			).length()
+		else:
+			var smoothing := 0.45 if instant_speed > ground_speed_mps else 0.18
+			ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
 		## Face where you are going -- but only when you are going somewhere.
 		## NOTE accumulated, so the centimetre floor stays above the noise without
 		## making slow movement at a high refresh rate directionless
 		var heading_distance := Vector2(
 			_heading_travel_accumulator.x, _heading_travel_accumulator.z
 		).length()
-		if heading_distance > TRAVEL_HEADING_FLOOR_METERS:
+		var supplied_heading := Vector2.ZERO
+		if has_supplied_motion and supplied_facing.length_squared() > 0.000001:
+			## Court units are not world units -- the court is 9 m across and 18 m
+			## long -- so a court-space direction has to be scaled before it is an
+			## angle. `court_delta_meters` is the same conversion the resolver
+			## measures every distance with.
+			supplied_heading = RallyKinematicsScript.court_delta_meters(
+				Vector2.ZERO, supplied_facing
+			)
+		if supplied_heading.length_squared() > 0.000001 \
+				or heading_distance > TRAVEL_HEADING_FLOOR_METERS:
 			## Rate-limited by the contact turn speed, so a player rounding a
 			## corner leans rather than snaps.
 			## NOTE `set_pose` applies the contact actor's facing afterwards and
 			## still wins -- playing the ball beats footwork
+			##
+			## The solved leg supplies this heading when it has one. It is the
+			## direction of *travel*, not the body's chosen facing -- whether the
+			## body turns onto it is still `should_open_up`'s decision below, which
+			## is what lets a voli shuffle or backpedal with their eyes on the ball.
 			var travel_yaw := atan2(
+				-supplied_heading.x, -supplied_heading.y
+			) if supplied_heading.length_squared() > 0.000001 else atan2(
 				-_heading_travel_accumulator.x,
 				-_heading_travel_accumulator.z,
 			)
