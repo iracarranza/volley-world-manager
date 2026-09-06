@@ -496,3 +496,91 @@ the A7 block came back byte-identical to the 120-rally baseline — 34, 260, 305
 worst 0.88 m, same seed — which a 600-rally sweep cannot do. Quoting those as a
 600-rally result would have been the wrong-instrument failure `FAILURE_MODES.md`
 §0 is about.
+
+---
+
+# C2 — Charge braking and reversal
+
+## C2.0 Where the momentum is discarded
+
+Both models drop it in the same expression, one line each:
+
+```gdscript
+## RallyMovementSystem._leg_seconds
+var opening_speed := entry_speed if entry_speed > 0.0 \
+    else maxf(actor.velocity.dot(direction), 0.0)
+
+## RallyMovementSystem.project_toward
+var forward_speed := maxf(actor.velocity.dot(direction), 0.0)
+```
+
+`maxf(…, 0.0)` is the whole defect. Momentum along the travel direction is
+credited; **everything else is deleted rather than charged.** Perpendicular
+momentum vanishes for free, and a body sprinting away is treated as one standing
+still — which is A3.1's table: 6 m/s at 180° costs exactly what 0 m/s costs,
+1.0571 s, across every angle from 90° outward.
+
+`project_toward` discards it a second way. It writes
+`arrival_velocity = direction * ending_speed` every step, so the lateral
+component is not integrated away — it is overwritten. The drawn body turns
+instantly and for free.
+
+## C2.1 The model
+
+The requirement is a cost continuous in speed *and* angle, built from the
+locomotion model already there, with no categorical penalty and no second
+reversal system. Split the entry velocity against the travel direction:
+
+- `v_forward = v · d` — signed, and may be negative
+- `v_bad = v − max(v_forward, 0) · d` — everything that has to go
+
+Then the leg is **arrest, then the traversal it already models**:
+
+| term | value |
+|---|---|
+| arrest time | `t_a = ‖v_bad‖ / a` |
+| ground given up | `|v_forward| · t_a / 2` when `v_forward < 0`, else 0 |
+| opening speed | `max(v_forward, 0)` — unchanged |
+
+`a` is the profile's own acceleration, so nothing new is introduced or tuned.
+The second row is what separates turning from reversing: a body moving away
+keeps travelling away while it decelerates, so it must cover that ground again.
+
+Checking the ordering the spec asks for, at one speed and one distance:
+
+| entry | `‖v_bad‖` | arrest | ground lost | opening | rank |
+|---|---|---|---|---|---|
+| toward | lateral only (0 if aligned) | ~0 | 0 | `+s` | **fastest** |
+| stationary | 0 | 0 | 0 | 0 | baseline |
+| perpendicular | `s` | `s/a` | 0 | 0 | slower |
+| away | `s` | `s/a` | `s²/2a` | 0 | **slowest** |
+
+`toward < stationary < perpendicular < strongly away`, continuous in both
+variables, and it degenerates exactly to today's behaviour at zero entry speed.
+
+## C2.2 The integrator has to stop overwriting velocity
+
+Charging the closed form alone would break C0's contract: the two models must
+agree about the same leg. `project_toward` currently forces velocity onto the
+travel direction each step, which is why the integrator agrees with the *old*
+free-reversal closed form today.
+
+The fix is the one the spec prefers — use the existing integrator rather than
+add a system — by making the step apply acceleration **as a vector** toward the
+target and letting the velocity turn:
+
+```
+v' = v + a · Δt · d,  clamped to the profile's maximum speed
+```
+
+A body moving away then decelerates through zero and back out under its own
+model, and the arrest cost is an *emergent* consequence rather than a term. That
+is the same arithmetic the closed form's C2.1 split approximates in one shot, so
+the two stay reconcilable — and the C0 probe plus
+`_test_reachability_agrees_across_the_court` are the instruments that say whether
+they actually did.
+
+**This will move rally outcomes more than C0 or C1 did.** Reversal becoming
+expensive changes who reaches what, and the audit's A3.1 table is the size of the
+effect: up to 1.06 s on a 3 m leg. The balance probe is the measurement, and per
+the spec the drift is reported rather than normalised away.
