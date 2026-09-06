@@ -9105,6 +9105,12 @@ func _reached_point(
 	contact_height_meters: float = 0.0,
 	incoming_direction: Vector2 = Vector2.ZERO,
 	charge_exertion: bool = true,
+	## What this body is already carrying into the leg, from the leg it just
+	## finished. Defaults to nothing so a caller with no prior leg -- or one whose
+	## boundary is a contact, a recovery or a hold -- keeps the standing start it
+	## has always had.
+	## NOTE the three boundaries that legitimately reset -- EMBODIED_MOVEMENT_CONTINUITY.md C1.1
+	entry_velocity: Vector2 = Vector2.ZERO,
 ) -> Vector2:
 	## **Every committed journey in the game passes through here**, which is what
 	## makes this the honest place to charge for one. Charged on the distance *asked for*
@@ -9120,7 +9126,9 @@ func _reached_point(
 		)
 	if mover == null or available_time <= 0.0:
 		return start
-	if _movement_time(mover, start, target, mode) <= available_time:
+	if _movement_time(
+		mover, start, target, mode, null, entry_velocity
+	) <= available_time:
 		## **The body has to agree with the verdict.**
 		##
 		## NOTE promoting the read model worsened arrival without shortening the
@@ -9142,7 +9150,7 @@ func _reached_point(
 	for _iteration in range(REACHABLE_CONTACT_BISECTIONS):
 		var middle := (low + high) * 0.5
 		if _movement_time(
-			mover, start, start.lerp(target, middle), mode
+			mover, start, start.lerp(target, middle), mode, null, entry_velocity
 		) <= available_time:
 			low = middle
 		else:
@@ -16783,14 +16791,22 @@ func _travel_intent(
 	reached: Vector2,
 	mode: String,
 	window_seconds: float,
+	## The velocity this body carries out of the leg it just finished. Nineteen
+	## call sites reach this function and it is the only publisher of a
+	## `phase_intent` leg, so this parameter is what lets the whole population
+	## inherit momentum rather than each site being migrated separately.
+	## NOTE defaults to a standing start; C1.1 names the boundaries that keep one
+	entry_velocity: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
 	var traversal := 0.0
 	if mover != null:
 		traversal = minf(
-			_movement_time(mover, from, reached, mode), maxf(window_seconds, 0.0)
+			_movement_time(mover, from, reached, mode, null, entry_velocity),
+			maxf(window_seconds, 0.0),
 		)
 	var leg := _committed_path(
-		mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock
+		mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock,
+		entry_velocity,
 	)
 	return {
 		"intent": intent,
@@ -16819,6 +16835,11 @@ func _travel_intent(
 		## half was ever migrated. Callers that commit a position commit this one.
 		## AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.
 		"reached_position": leg.landing_position() if leg != null else reached,
+		## **What the next leg begins with**, taken from the published path rather
+		## than from `_travel`'s whole-journey answer -- the path is the authority
+		## on a truncated leg and the two agree everywhere else.
+		## NOTE the C0 contract, in the one field that carries it -- EMBODIED_MOVEMENT_CONTINUITY.md C0.4
+		"exit_velocity": leg.exit_velocity if leg != null else Vector2.ZERO,
 	}
 
 
