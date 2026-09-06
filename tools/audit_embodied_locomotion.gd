@@ -51,6 +51,12 @@ func _initialize() -> void:
 	_attribute_block()
 	_production_supply_block()
 	_reachability_split_block()
+	_mode_block()
+	_profile_block()
+	_facing_velocity_block()
+	_body_state_direction_block()
+	_truncation_block()
+	_exit_state_block()
 	quit()
 
 
@@ -316,3 +322,207 @@ func _reachability_split_block() -> void:
 	print("rows|%d" % rows)
 	print("rows_short_by_over_5cm|%d" % disagreeing)
 	print("worst_shortfall_m|%.3f" % worst)
+
+
+# --- every movement mode, not just one --------------------------------------
+
+## `_movement_mode_for_kind` maps production movement kinds onto three of the
+## five modes, and `RallyPlayerState` declares five. A3 originally exercised
+## TRANSITION alone, which cannot say whether the findings generalise.
+func _mode_block() -> void:
+	print("")
+	print("=== A3.1b movement modes, entry velocity zero ===")
+	print("mode|1.5m|3.0m|5.0m|facing_180_penalty_s")
+	var modes := {
+		"IDLE": RallyPlayerState.MovementMode.IDLE,
+		"LATERAL": RallyPlayerState.MovementMode.LATERAL,
+		"TRANSITION": RallyPlayerState.MovementMode.TRANSITION,
+		"APPROACH": RallyPlayerState.MovementMode.APPROACH,
+		"BLOCK_CLOSE": RallyPlayerState.MovementMode.BLOCK_CLOSE,
+		"RECOVERY": RallyPlayerState.MovementMode.RECOVERY,
+	}
+	for name in modes:
+		var mode: int = modes[name]
+		var row: Array[String] = []
+		for distance: float in [1.5, 3.0, 5.0]:
+			var target := _target_at(distance, 0.0)
+			row.append("%.4f" % _seconds_in(
+				_actor(Vector2.ZERO, Vector2.ZERO,
+					RallyPlayerState.BodyState.BALANCED, 0.0), target, mode
+			))
+		var target3 := _target_at(3.0, 0.0)
+		var aligned := _seconds_in(
+			_actor(Vector2.ZERO, Vector2(1.0, 0.0),
+				RallyPlayerState.BodyState.BALANCED, 0.0), target3, mode
+		)
+		var opposed := _seconds_in(
+			_actor(Vector2.ZERO, Vector2(-1.0, 0.0),
+				RallyPlayerState.BodyState.BALANCED, 0.0), target3, mode
+		)
+		print("%s|%s|%+.4f" % [
+			str(name), "|".join(row), opposed - aligned,
+		])
+
+
+func _seconds_in(actor: RallyPlayerState, target: Vector2, mode: int) -> float:
+	return float(Movement.traversal_result(actor, target, mode)["seconds"])
+
+
+# --- more than one body -----------------------------------------------------
+
+## Every A3 row above used one player, so none of them can distinguish a
+## property of the model from a property of Mira.
+func _profile_block() -> void:
+	print("")
+	print("=== A3.4b other bodies, 3.0 m, TRANSITION, entry velocity zero ===")
+	print("player|accel|mass|stationary_s|from_6mps_toward_s|facing_180_penalty_s")
+	var manager: Object = GameManagerScript.new()
+	manager.seed_vertical_slice_data()
+	var target := _target_at(3.0, 0.0)
+	var shown := 0
+	for candidate in manager.players:
+		if candidate == null or shown >= 6:
+			continue
+		shown += 1
+		var held := _player
+		_player = candidate
+		var still := _seconds(
+			_actor(Vector2.ZERO, Vector2.ZERO,
+				RallyPlayerState.BodyState.BALANCED, 0.0), target
+		)
+		var toward := _seconds(
+			_actor(Vector2(6.0, 0.0), Vector2.ZERO,
+				RallyPlayerState.BodyState.BALANCED, 0.0), target
+		)
+		var aligned := _seconds(
+			_actor(Vector2.ZERO, Vector2(1.0, 0.0),
+				RallyPlayerState.BodyState.BALANCED, 0.0), target
+		)
+		var opposed := _seconds(
+			_actor(Vector2.ZERO, Vector2(-1.0, 0.0),
+				RallyPlayerState.BodyState.BALANCED, 0.0), target
+		)
+		print("%s|%d|%.1f|%.4f|%.4f|%+.4f" % [
+			str(candidate.display_name), candidate.acceleration,
+			candidate.mass_kg, still, toward, opposed - aligned,
+		])
+		_player = held
+
+
+# --- interaction: facing x incoming velocity --------------------------------
+
+## The spec asks for interactions, not only main effects. Facing and carried
+## velocity both feed `_leg_seconds`, and the turn delay is gated on entry speed
+## while the facing penalty is inside that same delay -- so whether facing
+## matters at all may depend on what the body is carrying.
+func _facing_velocity_block() -> void:
+	print("")
+	print("=== A3.2b facing x incoming velocity, 3.0 m, TRANSITION ===")
+	print("entry_speed_mps|entry_angle_deg|facing_deg|seconds")
+	var target := _target_at(3.0, 0.0)
+	for speed: float in [0.0, 3.0, 6.0]:
+		for entry_degrees: float in [0.0, 180.0]:
+			for facing_degrees: float in [0.0, 180.0]:
+				var entry := deg_to_rad(entry_degrees)
+				var face := deg_to_rad(facing_degrees)
+				var actor := _actor(
+					Vector2(cos(entry), sin(entry)) * speed,
+					Vector2(cos(face), sin(face)),
+					RallyPlayerState.BodyState.BALANCED, 0.0
+				)
+				print("%.1f|%.0f|%.0f|%.4f" % [
+					speed, entry_degrees, facing_degrees, _seconds(actor, target),
+				])
+
+
+# --- interaction: body state x direction ------------------------------------
+
+func _body_state_direction_block() -> void:
+	print("")
+	print("=== A3.3b body state x movement direction, 3.0 m ===")
+	print("body_state|toward_6mps_s|away_6mps_s|stationary_s")
+	var target := _target_at(3.0, 0.0)
+	var names := RallyPlayerState.BodyState.keys()
+	for index in range(names.size()):
+		print("%s|%.4f|%.4f|%.4f" % [
+			str(names[index]),
+			_seconds(_actor(Vector2(6.0, 0.0), Vector2.ZERO, index, 0.0), target),
+			_seconds(_actor(Vector2(-6.0, 0.0), Vector2.ZERO, index, 0.0), target),
+			_seconds(_actor(Vector2.ZERO, Vector2.ZERO, index, 0.0), target),
+		])
+
+
+# --- interaction: truncation x incoming momentum ----------------------------
+
+## A leg cut short by its phase window is `_committed_path`'s common case
+## (`leg_seconds = min(travel, available)`). What the body carries *out* of a
+## truncated leg is what the next one would begin with, if anything read it.
+func _truncation_block() -> void:
+	print("")
+	print("=== A3.1c truncation x incoming momentum, 4.0 m target ===")
+	print("entry_speed_mps|window_s|distance_covered_m|exit_speed_mps|reached")
+	var target := _target_at(4.0, 0.0)
+	for speed: float in [0.0, 3.0, 6.0]:
+		for window: float in [0.25, 0.5, 0.75, 1.5]:
+			var actor := _actor(
+				Vector2(speed, 0.0), Vector2.ZERO,
+				RallyPlayerState.BodyState.BALANCED, 0.0
+			)
+			var integration: Dictionary = Integrator.integrate(
+				actor, target, window, RallyPlayerState.MovementMode.TRANSITION
+			)
+			var trail: Array = integration.get("trail", [])
+			if trail.is_empty():
+				print("%.1f|%.2f|-|-|unavailable" % [speed, window])
+				continue
+			var landing: Vector2 = Vector2(trail[trail.size() - 1])
+			var velocities: Array = integration.get("velocities", [])
+			var exit_speed := 0.0
+			if not velocities.is_empty():
+				exit_speed = Vector2(velocities[velocities.size() - 1]).length()
+			print("%.1f|%.2f|%.3f|%.3f|%s" % [
+				speed, window,
+				RallyKinematics.court_distance_meters(
+					Vector2(0.5, 0.5), landing
+				),
+				exit_speed,
+				str(integration.get("reached_target", false)),
+			])
+
+
+# --- the two models disagree about what a leg ends with ---------------------
+
+## `RallyMovementPath.exit_velocity` is the integration's last velocity sample.
+## `_travel`'s `exit_velocity` is the closed form's `exit_speed` along the
+## heading. `live_velocities` is written from the second and the drawn body
+## follows the first, so if they differ, the stored momentum is not the momentum
+## the body was drawn carrying.
+func _exit_state_block() -> void:
+	print("")
+	print("=== A8b exit state, closed form vs integrated, TRANSITION ===")
+	print("distance_m|entry_speed_mps|closed_form_exit_mps|integrated_exit_mps"
+		+ "|reached")
+	for distance: float in [1.5, 3.0, 5.0]:
+		var target := _target_at(distance, 0.0)
+		for speed: float in [0.0, 3.0, 6.0]:
+			var priced: Dictionary = Movement.traversal_result(
+				_actor(Vector2(speed, 0.0), Vector2.ZERO,
+					RallyPlayerState.BodyState.BALANCED, 0.0),
+				target, RallyPlayerState.MovementMode.TRANSITION
+			)
+			var seconds := float(priced["seconds"])
+			var integration: Dictionary = Integrator.integrate(
+				_actor(Vector2(speed, 0.0), Vector2.ZERO,
+					RallyPlayerState.BodyState.BALANCED, 0.0),
+				target, seconds, RallyPlayerState.MovementMode.TRANSITION
+			)
+			var velocities: Array = integration.get("velocities", [])
+			var integrated := 0.0
+			if not velocities.is_empty():
+				integrated = Vector2(velocities[velocities.size() - 1]).length()
+			print("%.1f|%.1f|%.3f|%.3f|%s" % [
+				distance, speed,
+				Vector2(priced.get("exit_velocity", Vector2.ZERO)).length(),
+				integrated,
+				str(integration.get("reached_target", false)),
+			])

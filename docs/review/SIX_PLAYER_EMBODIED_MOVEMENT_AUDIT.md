@@ -152,6 +152,73 @@ Acceleration dominates (0.52 s across its range). Fatigue is real. **Mass spans
 what facing 90° away would cost if facing were charged. It is causal but close to
 inert.
 
+## A3.1b Every movement mode, not just TRANSITION
+
+The first version of this audit exercised TRANSITION alone, which cannot say
+whether any finding generalises. All six declared modes, entry velocity zero:
+
+| mode | 1.5 m | 3.0 m | 5.0 m | facing-180 penalty |
+|---|---:|---:|---:|---:|
+| IDLE | 0.8159 | 1.3759 | 2.1227 | +0.1518 |
+| LATERAL | 0.7806 | 1.2727 | 1.9288 | +0.1491 |
+| TRANSITION | 0.7485 | 1.0571 | 1.4398 | +0.1512 |
+| APPROACH | 0.7518 | 1.1536 | 1.6893 | +0.1522 |
+| BLOCK_CLOSE | 0.7717 | 1.2421 | 1.8692 | +0.1515 |
+| RECOVERY | 0.7672 | 1.2254 | 1.8363 | +0.1518 |
+
+Modes differ in speed as they should, and the facing penalty is ~0.15 s in every
+one of them. The findings are properties of the model, not of one mode.
+
+## A3.4b More than one body
+
+| player | accel | mass | stationary | from 6 m/s toward | facing-180 penalty |
+|---|---:|---:|---:|---:|---:|
+| Mira | 74 | 77.0 | 1.0571 | 0.5908 | +0.1512 |
+| Tala | 78 | 84.0 | 1.0461 | 0.6053 | +0.1561 |
+| Boro | 80 | 98.0 | 1.0612 | 0.6679 | +0.1742 |
+| Sena | 62 | 99.0 | 1.1291 | 0.6794 | +0.1725 |
+| Ivo | 84 | 90.0 | 1.0237 | 0.5981 | +0.1518 |
+| Nemi | 90 | 69.0 | 0.9958 | 0.5658 | +0.1402 |
+
+Six bodies, same shape of result. The facing penalty is not a constant — it runs
+0.140–0.174 s and tracks the body — which strengthens rather than weakens the
+finding that it is never charged.
+
+## A3.2b Interaction: facing × incoming velocity
+
+| entry speed | entry angle | facing 0° | facing 180° | difference |
+|---|---|---:|---:|---:|
+| 0.0 | — | 1.0571 | 1.2083 | +0.1512 |
+| 3.0 | 0° (toward) | 0.6754 | 0.8266 | +0.1512 |
+| 3.0 | 180° (away) | 1.0571 | 1.2083 | +0.1512 |
+| 6.0 | 0° (toward) | 0.5908 | 0.7420 | +0.1512 |
+| 6.0 | 180° (away) | 1.0571 | 1.2083 | +0.1512 |
+
+**No interaction.** The facing penalty is exactly +0.1512 s in every cell — a
+constant additive turn cost, independent of what the body is carrying. It also
+re-confirms the reversal finding with facing varied: entry 180° at 3 and 6 m/s
+gives precisely the stationary time.
+
+## A3.3b Interaction: body state × movement direction
+
+All six body states give 0.5908 s moving toward, 1.0571 s moving away and
+1.0571 s stationary. Body state is inert in interaction as well as in isolation.
+
+## A3.1c Interaction: truncation × incoming momentum
+
+4.0 m target, integrated for a window shorter than the leg:
+
+| entry speed | 0.25 s | 0.50 s | 0.75 s | 1.50 s |
+|---|---:|---:|---:|---:|
+| 0.0 | 0.152 m | 0.654 m | 1.506 m | 4.000 m, reached |
+| 3.0 | 0.925 m | 2.171 m | 3.478 m | 4.000 m, reached |
+| 6.0 | 1.307 m | 2.613 m | 3.920 m | 4.000 m, reached |
+
+**The integrator honours carried momentum properly** — a body entering at 6 m/s
+covers 8.6× as much ground in the first quarter-second as one from rest. The
+model is not the problem; the wiring is. `_committed_path` never gives it the
+velocity to honour.
+
 ---
 
 # A4 — Where each body's destination comes from
@@ -231,9 +298,37 @@ body between legs is deliberately not interpolated.
 
 | clearance | pair-samples below | court-seconds below | instants with 3+ crowded |
 |---|---:|---:|---:|
-| 0.50 m | 529 | 21.2 s | 129 |
-| 0.72 m | 1,015 | 40.6 s | 0 |
-| 0.90 m | 1,750 | 70.0 s | 0 |
+| 0.50 m | 529 | 21.2 s | **1** |
+| 0.72 m | 1,015 | 40.6 s | **18** |
+| 0.90 m | 1,750 | 70.0 s | **61** |
+
+**The cluster column was wrong in the first version of this document and is
+corrected here.** It read 129 / 0 / 0. Two bugs: adjacency was counted inside the
+clearance loop, so a pair falling under all three thresholds was counted three
+times, and a `break` let only the tightest clearance ever record. A wider
+clearance reporting *fewer* clusters than a tighter one is impossible, and that
+is how the bug announced itself. Three-body clusters are rare at 0.50 m — one
+instant in 11,974 — and become common only at 0.90 m.
+
+### Which phase produces the traffic
+
+Pair-samples inside 0.50 m, by the flight being drawn and the side:
+
+| flight | side | samples |
+|---|---|---:|
+| RECEPTION | opponent | 183 |
+| DIG | opponent | 135 |
+| POINT | home | 60 |
+| BLOCK | home | 48 |
+| SET | opponent | 38 |
+| DIG | home | 29 |
+| POINT | opponent | 25 |
+
+Conflicts are not spread evenly: they concentrate where several bodies converge
+on one ball — the receiving side during a reception and the defending side
+during a dig. 85 samples occur during POINT, the dead ball, where no body has a
+phase intention at all; that is `BACKLOG.md`'s dead-ball tail showing up as
+spatial nonsense rather than as a separate problem.
 
 Worst eight closest approaches: 0.000, 0.016, 0.060, 0.063, 0.067, 0.067, 0.068,
 0.072 m. These are the same point, not near misses.
@@ -301,7 +396,36 @@ speed and entry angle as the source of the D1 split (46 of 1,679 legs, up to
 two-leg traversals, mode differences, or the clamp below are the candidates, and
 this pass did not discriminate between them.
 
-**One divergence was isolated, by accident and then deliberately.** With a target
+## A8b They also disagree about what the leg *ends* with
+
+Same leg, both models, exit speed in m/s:
+
+| distance | entry | closed form exit | integrated exit | reached |
+|---|---:|---:|---:|---|
+| 1.5 m | 0.0 | 4.194 | **0.000** | true |
+| 1.5 m | 6.0 | 5.227 | **0.000** | true |
+| 3.0 m | 0.0 | 5.227 | **0.000** | true |
+| 3.0 m | 6.0 | 5.227 | **0.000** | true |
+| 5.0 m | 0.0 | 5.227 | 5.227 | false |
+| 5.0 m | 6.0 | 5.227 | 5.227 | false |
+
+**They agree exactly when the body does not arrive, and disagree completely when
+it does.** A completed leg ends at rest in the drawn path and at full speed in
+the closed form.
+
+This matters because `live_velocities` is written from the *closed form*
+(`_travel`'s `exit_velocity`), while the body on screen follows the integrated
+path. So the stored momentum says a body that has just reached its target is
+still travelling at 5.2 m/s. Two consumers read that: the defender candidate
+search at `:11938`, which seeds `actor.velocity` from it, and `_commit_facing`,
+which derives a body's orientation from a velocity it does not have.
+
+It does not propagate into the next *drawn* leg only because `_committed_path`
+ignores entry velocity entirely — one defect masking another. Fixing the
+momentum wiring without fixing this would start feeding a wrong number into
+every leg.
+
+**One further divergence was isolated, by accident and then deliberately.** With a target
 off the court, the closed form times the journey to it and the integrator clamps
 the body at the boundary: a target at `x = 1.167` produced a landing exactly
 1.500 m short — the clamp distance, in every row. The two models do not agree
@@ -364,14 +488,16 @@ announced itself by producing a physically impossible number.
 | A1 | **Reversal is free.** Moving away from the target at any speed costs exactly what standing still costs. | A3.1, all of 0/1.5/3/4.5/6 m/s at 90–180° identical to stationary | high — it makes momentum one-directional |
 | A2 | **Carried velocity does not reach the committed solve.** 0 of 16 `_committed_path` and 0 of 18 `_reached_point` sites pass it. | A1/A2 call-site census | high |
 | A3 | **Facing is modelled and never charged**, and is overwritten with a value meaning "no penalty". | A3.2; 0 of 16 sites supply it | medium — worth up to 0.151 s |
-| A4 | **Body state is not a locomotion input.** | A3.3, six states identical | low as a defect, high as a documentation correction |
+| A4 | **Body state is not a locomotion input.** | A3.3 and A3.3b, six states identical in isolation and in interaction | low as a defect, high as a documentation correction |
+| A5 | **The two models disagree about a leg's exit state.** Closed form 4.2–5.2 m/s, integrated 0.000, whenever the body arrives. `live_velocities` stores the closed form; the drawn body follows the integrator. | A8b | high — it is the number a momentum repair would propagate |
 
 ## B. Six-player spatial-coherence defects
 
 | # | finding | evidence | severity |
 |---|---|---|---|
-| B1 | Same-team bodies occupy the same point. Minimum separation 0.000 m; 529 pair-samples and 21.2 s inside 0.50 m; 129 instants with three or more crowded. | A6 | high |
+| B1 | Same-team bodies occupy the same point. Minimum separation 0.000 m; 529 pair-samples and 21.2 s inside 0.50 m. Three-body clusters are rare at 0.50 m (1 instant) and common at 0.90 m (61). | A6 | high |
 | B2 | 93% of those are **both bodies moving** — converging traffic, not duplicated standing positions. | A6 context split | informs the fix |
+| B4 | Traffic concentrates on RECEPTION (183) and DIG (135) on the receiving/defending side, plus 85 samples during the dead ball where nothing has a phase intention. | A6 stratification | directs the fix |
 | B3 | Bodies cross the net plane by up to 0.88 m, 305 samples. | A7 | medium |
 
 ## C. Things that already work — preserve
@@ -399,16 +525,25 @@ still runs on true flight. Documented, not absorbed.
   wins; it does not establish which upstream decision chose that publisher's
   target, nor whether claim priority or assertiveness changed who moved. A
   controlled scenario differing only in claimant would be the test.
-- Interaction coverage is partial: velocity × angle and facing × distance were
-  measured; facing × incoming velocity, recovery × deadline and
-  attributes × turning were not.
-- One player profile was used for all A3 rows. Attribute *interactions* were not
-  crossed.
+- **Recovery × deadline was not measured.** Recovery gates when a body may
+  start, and no controlled test crossed that gate with a shrinking window.
+- **Attribute interactions were not crossed.** Six bodies were compared whole;
+  acceleration × mass × fatigue were not varied against each other.
+- **Teammate occupancy × route geometry was not tested**, because no production
+  mechanism consumes teammate positions as a route constraint — so there is
+  nothing to vary. That is an absence, not a measurement.
 
 ## Minimum evidence-backed implementation sequence
 
-1. **Pass carried velocity into `_committed_path` and `_reached_point`** — the
-   plumbing and the store already exist; this is wiring, not a new model.
+0. **Reconcile the exit state first.** The closed form and the integrator
+   disagree about what a completed leg ends with, and `live_velocities` stores
+   the losing answer. Wiring momentum in before fixing this would propagate
+   5.2 m/s into every leg that should begin at rest — a repair that makes the
+   simulation worse in a way the current disconnection hides.
+1. **Then pass carried velocity into `_committed_path` and `_reached_point`** —
+   the plumbing and the store already exist; this is wiring, not a new model,
+   and A3.1c shows the integrator already honours momentum correctly when given
+   it.
 2. **Charge reversal.** `_leg_seconds` must cost the component it currently
    discards, not merely decline to credit it.
 3. **Supply facing** to the committed solve, or delete `facing_fit` and the turn

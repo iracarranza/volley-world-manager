@@ -46,6 +46,7 @@ func _initialize() -> void:
 	var out_of_bounds := {"x": 0, "y": 0, "worst_x": 0.0, "worst_y": 0.0}
 	var wrong_side := {"count": 0, "worst_meters": 0.0, "example": ""}
 	var samples_by_action: Dictionary = {}
+	var by_action: Dictionary = {}
 
 	for seed_value in range(FIRST_SEED, FIRST_SEED + SEED_COUNT):
 		var manager: Object = GameManagerScript.new()
@@ -59,6 +60,7 @@ func _initialize() -> void:
 			side_of[int(raw_id)] = "home"
 		for raw_id in Dictionary(result.get("initial_opponent_positions")):
 			side_of[int(raw_id)] = "opponent"
+		var timeline := _action_timeline(result)
 		var paths := _collect_paths(result, side_of)
 		for player_id in side_of:
 			if paths.has(player_id) and not Array(paths[player_id]).is_empty():
@@ -114,7 +116,13 @@ func _initialize() -> void:
 			## A6: same-team pairs only, both live at this instant.
 			var ids: Array = live.keys()
 			ids.sort()
-			var near_counts := {}
+			## Separations first, clusters second. The previous version counted
+			## adjacency inside the clearance loop, so `near_counts` accumulated
+			## once per clearance a pair fell under and the `break` let only the
+			## tightest clearance ever record -- which is why 0.72 m and 0.90 m
+			## reported *fewer* clusters than 0.50 m, an impossibility that is
+			## how the bug announced itself.
+			var separations := {}
 			for i in range(ids.size()):
 				for j in range(i + 1, ids.size()):
 					var a := int(ids[i])
@@ -125,15 +133,11 @@ func _initialize() -> void:
 					var separation := RallyKinematics.court_distance_meters(
 						live[a]["position"], live[b]["position"]
 					)
+					separations["%d|%d" % [a, b]] = separation
 					pair_min.append(separation)
 					var key := "%d|%d|%d" % [seed_value, a, b]
 					if not closest.has(key) or separation < float(closest[key]):
 						closest[key] = separation
-					## **Parked or converging?** Two bodies sharing a point
-					## because two maps handed them the same standing position is
-					## a positioning defect; two bodies running into each other is
-					## a coordination one. They need different repairs, so they
-					## are counted apart rather than together.
 					if separation < 0.50:
 						var speed_a := Vector2(live[a]["velocity"]).length()
 						var speed_b := Vector2(live[b]["velocity"]).length()
@@ -145,23 +149,35 @@ func _initialize() -> void:
 						samples_by_action[kind] = int(
 							samples_by_action.get(kind, 0)
 						) + 1
-					for clearance in CLEARANCES:
-						if separation < clearance:
-							var bucket: Dictionary = below[clearance]
-							bucket["pairs"] = int(bucket.pairs) + 1
-							bucket["seconds"] = float(bucket.seconds) + STEP_SECONDS
-							near_counts[a] = int(near_counts.get(a, 0)) + 1
-							near_counts[b] = int(near_counts.get(b, 0)) + 1
-			## Three or more mutually close bodies at one instant.
+						var action := _action_at(timeline, t)
+						var action_key := "%s|%s" % [
+							action, str(side_of.get(a, "?"))
+						]
+						by_action[action_key] = int(
+							by_action.get(action_key, 0)
+						) + 1
 			for clearance in CLEARANCES:
+				var adjacency := {}
+				for pair_key in separations:
+					if float(separations[pair_key]) >= clearance:
+						continue
+					var parts: PackedStringArray = str(pair_key).split("|")
+					var a := int(parts[0])
+					var b := int(parts[1])
+					adjacency[a] = int(adjacency.get(a, 0)) + 1
+					adjacency[b] = int(adjacency.get(b, 0)) + 1
+					var bucket: Dictionary = below[clearance]
+					bucket["pairs"] = int(bucket.pairs) + 1
+					bucket["seconds"] = float(bucket.seconds) + STEP_SECONDS
+				## A cluster is three bodies each close to at least two others at
+				## this instant, which is what "three in one another's way" means.
 				var crowded := 0
-				for player_id in near_counts:
-					if int(near_counts[player_id]) >= 2:
+				for player_id in adjacency:
+					if int(adjacency[player_id]) >= 2:
 						crowded += 1
 				if crowded >= 3:
-					var bucket: Dictionary = below[clearance]
-					bucket["clusters"] = int(bucket.clusters) + 1
-					break
+					var bucket2: Dictionary = below[clearance]
+					bucket2["clusters"] = int(bucket2.clusters) + 1
 			t += STEP_SECONDS
 
 	pair_min.sort()
@@ -186,6 +202,11 @@ func _initialize() -> void:
 		])
 	var worst: Array = closest.values()
 	worst.sort()
+	print("--- pair-samples below 0.50 m, by the flight being drawn and side")
+	var action_keys: Array = by_action.keys()
+	action_keys.sort_custom(func(a, b): return int(by_action[a]) > int(by_action[b]))
+	for index in range(mini(12, action_keys.size())):
+		print("  %s|%d" % [str(action_keys[index]), int(by_action[action_keys[index]])])
 	print("--- pair-samples below 0.50 m, by what the two bodies were doing")
 	var kinds: Array = samples_by_action.keys()
 	kinds.sort()
@@ -204,6 +225,33 @@ func _initialize() -> void:
 	print("worst_net_incursion_m|%.2f" % float(wrong_side.worst_meters))
 	print("worst_case|%s" % str(wrong_side.example))
 	quit()
+
+
+## Which contact the rally is between at a given instant, so a conflict can be
+## attributed to the phase that produced it rather than reported as an average.
+func _action_timeline(result: Resource) -> Array:
+	var entries: Array = []
+	for event in result.events:
+		if event == null:
+			continue
+		entries.append({
+			"time": float(event.metadata.get("physical_time", 0.0)),
+			"action": str(RallyEventScript.EventType.keys()[
+				int(event.event_type)
+			]),
+		})
+	entries.sort_custom(func(a, b): return float(a.time) < float(b.time))
+	return entries
+
+
+func _action_at(timeline: Array, t: float) -> String:
+	var current := "pre_serve"
+	for entry in timeline:
+		if float(entry.time) <= t:
+			current = str(entry.action)
+		else:
+			break
+	return current
 
 
 ## Every path any of the four publishers put on any event, per player.
