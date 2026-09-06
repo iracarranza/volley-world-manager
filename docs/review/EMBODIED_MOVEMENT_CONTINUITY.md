@@ -399,6 +399,95 @@ starts in total and publisher pairs only for the *gap* population. Extending it
 to break dead starts down by publisher pair is the next step, because that is
 what distinguishes an unwired publisher from a legitimate reset.
 
+## C1.5 Classifying the remainder, which is what the gate asks for
+
+The gate says a decrease in dead starts is not enough and the remainder must be
+classified. The instrument could not do that — it reported dead starts only in
+total — so it was extended to report, per publisher pair, how many boundaries
+with a *moving predecessor* kept the momentum and how many dropped it.
+
+At 600 rallies after step 2, of 4,593 drops:
+
+| previous → next | dropped | classification |
+|---|---:|---|
+| `phase_hold → phase_intent` | 2,686 | **unwired**: `_hold_phase_intents` |
+| `phase_intent → phase_intent` | 744 | **unwired**: the remaining `_travel_intent` sites |
+| `movement_path → phase_hold` | 388 | **intentional**: a contact resets (C1.1) |
+| `movement_path → phase_intent` | 357 | **intentional**: a contact resets |
+| `phase_hold → movement_path` | 219 | **unwired** |
+| `phase_hold → phase_hold` | 117 | **unwired** |
+| `movement_path → movement_path` | 51 | **intentional** |
+| the rest | 31 | unwired |
+
+**796 intentional, 3,797 defects with a named upstream source**, and
+`_hold_phase_intents` is 3,035 of them on its own. No drop is unexplained, which
+is the gate.
+
+## C1.6 Wiring the rest, and a mistake worth the guard it produced
+
+`_hold_phase_intents` and `_setter_read_phase` are side-generic — they take the
+`live` positions dict as a parameter — so both now take the matching velocity
+store beside it. `phase_hold` legs are real journeys despite the name; the
+function's own comment records the pass that stopped them being published as
+zero-length holds.
+
+**Wiring them made the number worse: 705 carried boundaries fell to 243.** The
+cause is a distinction the store had not been making. `_committed_path` returns
+`null` for a zero-length leg and for a non-positive window, and `_travel_intent`
+then reports `exit_velocity` as a *default* rather than a measurement. Writing
+that back wiped the momentum the body was actually carrying.
+
+**A leg that published no path is not a statement that the body stopped.** All
+five store writes now go through `_record_exit_velocity`, which declines to
+record anything with no journey behind it. This is the same error as C0's idle
+threshold, in a different place: treating an absence of evidence as evidence.
+
+## C1.7 The worst gap grew, and it was mostly the metric
+
+After the wiring, `gap_m_worst` had gone 4.78 m → 7.54 m while the gap population
+held at 25.4%. Naming the worst case explained it in one line: **seed 61173,
+player 101, 3.128 s apart.**
+
+The pair loop skips only *overlapping* legs, so two legs separated by three
+seconds of rally clock still counted as consecutive — and a body covering 7.5 m
+in three seconds is walking, not teleporting. `gap_m_worst` was conflating real
+discontinuities with legal travel through intervals nobody published.
+
+The metric is now split at 0.10 s, and the two populations are very different
+sizes: **only 774 of 5,846 pairs actually adjoin.** The other 5,072 are the
+publication-coverage finding the audit already recorded as "24% of slots publish
+no path", arriving from a second direction.
+
+## C1.8 Attribution, measured on both trees with the same instrument
+
+The split instrument was run against `57230d2` — the pre-C0 production files,
+restored into the tree and then reverted — so the comparison is same instrument,
+same seeds, both sides.
+
+| measure | pre-C0 `57230d2` | after C0+C1 |
+|---|---:|---:|
+| **next leg begins at rest** | **5,800 of 5,800 (100%)** | **5,073 of 5,846 (86.8%)** |
+| previous leg ended moving | 801 | 5,324 |
+| pairs that actually adjoin | 647 of 5,800 | 774 of 5,846 |
+| **adjacent gaps over 10 cm** | **207 (32.0% of adjoining)** | **217 (28.0% of adjoining)** |
+| worst adjacent gap | **4.781 m in 0.010 s** | 5.151 m in 0.065 s |
+
+**773 boundaries now carry momentum, from zero.**
+
+**The teleport defect predates this pass and C1 improved its rate.** The
+pre-C0 worst case is 4.78 m in 10 ms — 478 m/s — against C1's 5.15 m in 65 ms,
+79 m/s. Both are impossible and the older one is the more extreme by a factor of
+six. The share of adjoining boundaries with a >10 cm gap *fell*, 32.0% to 28.0%,
+on 20% more adjoining pairs.
+
+So the tail figure moved and the defect did not: the worst case is a different
+seed, player and publisher pair, and the population it comes from is healthier.
+**That is not a C1 regression, and it is not fixed either** — 217 adjacent
+discontinuities remain, they are physically impossible, and they belong to a
+defect this pass did not create and has not repaired. C2 changes arrival times
+again, so it is recorded here with its instrument and left for the re-measurement
+after C2 rather than chased now.
+
 **An instrument error, recorded because it nearly became a conclusion.** The
 first re-measurement was invoked as `--script … audit_six_player_space.gd
 rallies=600`. The tool reads `OS.get_cmdline_user_args()`, which needs `--` before
