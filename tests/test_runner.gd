@@ -17418,11 +17418,15 @@ func _test_tactical_playback_reset_on_lineup_change() -> void:
 		),
 		"emergency setters move continuously from the initial rally snapshot",
 	)
+	## This fixture publishes no phase maps, so the resolver has said nothing
+	## about the other five. `_support_target_for_side` used to invent a drift
+	## for them; it was deleted once measured at none of 3,481 production legs,
+	## and a voli the simulation never moved is now not moved.
 	_check(
-		court.unit_movement_targets.size() == 6 \
-			and court.unit_movement_targets.has(1) \
+		court.unit_movement_targets.size() == 1 \
 			and court.unit_movement_targets.has(2),
-		"ball-flight playback moves the contact actor and supporting teammates",
+		"ball-flight playback moves the contact actor and nobody the resolver "
+		+ "did not place",
 	)
 	court.finish_event_animation()
 	var established_position := Vector2(0.49, 0.64)

@@ -1745,7 +1745,8 @@ func _build_movement_plan(
 	if staged_id >= 0:
 		_set_plan_target(
 			plan, staged_id,
-			Vector2(event.metadata.get("staged_next_position", action_target)), true
+			Vector2(event.metadata.get("staged_next_position", action_target)), true,
+			event.metadata.get("staged_next_path", null),
 		)
 	## The next SET owns the hitter's resolved pre-release preparation. For T0-T2
 	## that movement belongs in this incoming pass window, not compressed into the

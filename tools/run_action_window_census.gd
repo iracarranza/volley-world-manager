@@ -28,11 +28,12 @@ extends SceneTree
 ##                 event instead, which is where it can be drawn.
 ##
 ##   **silent**     nothing was published and they did not touch the ball.
-##                  `tactical_court._support_target_for_side` then invents a
+##                  `tactical_court._support_target_for_side` used to invent a
 ##                  target for them from their base position and the action
-##                  point -- which is presentation authoring movement the
-##                  resolver never decided, the thing `01_TARGET_AUTHORITY_STATE`
-##                  section 9 forbids in as many words.
+##                  point -- presentation authoring movement the resolver never
+##                  decided, which `01_TARGET_AUTHORITY_STATE` section 9 forbids
+##                  in as many words. It has since been deleted: measured over
+##                  60 rallies it reached none of 3,481 legs.
 ##
 ## **The `no leg` row is a correction to this file's own first headline.** It
 ## originally counted the serve's other eleven volis as silent and reported

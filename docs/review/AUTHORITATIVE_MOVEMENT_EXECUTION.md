@@ -724,3 +724,68 @@ measurement rather than a suspicion.
 
 All other 1,288 off-ball legs agree with their published target to within
 **0.038 court units**, and 1,273 to within 0.05.
+
+---
+
+## P10 — deleting a dead truth, and finding a live one
+
+### P10.1 The 2D lerp table was dead and is now gone
+
+`tactical_court._support_target_for_side` invented a drift toward the action for
+any voli the resolver had not published — a fifth movement truth, and once 35.6%
+of voli-legs by its own comment. It was overwritten in every case by
+`*_phase_positions` and the phase maps, which are applied after it.
+
+Measured over 60 rallies, **per playback leg** (event → next_contact, which is
+how the court actually reads targets): **0 of 3,481** legs reached it. Deleted,
+50 lines, along with its two call sites and the unused parameter they needed.
+
+A first measurement said 15.9% and was wrong: it counted events rather than
+legs, so it charged the SERVE event with 660 uncovered legs. Nothing precedes
+the first contact of a rally, so the serve leg reads the *reception* event's
+maps, which are complete. The instrument was the defect.
+
+### P10.2 The staged walk is solved
+
+Three sites published `staged_next_actor_id` and `staged_next_position` and no
+journey — the setter's walk across during a pass flight. They now publish
+`staged_next_path`, read by `match_screen` and by `tactical_court` off the event
+being *played* rather than the contact being approached. The other two staged
+sites already routed through the phase maps and were covered by P9.
+
+Balance probe byte-identical again, all nineteen figures.
+
+### P10.3 The real coverage number, from playback rather than from the resolver
+
+Every census up to here was taken on resolver output, which is the wrong
+instrument: it can say what was published but not what playback *selects*. A
+headless `TacticalCourt` driven through 10 rallies leg by leg says:
+
+| source | legs | share |
+|---|---|---|
+| authoritative published path | 264 | 41.8% |
+| **legacy local re-integration** | **317** | **50.2%** |
+| hold, no path needed | 51 | 8.1% |
+
+So half of production playback still re-solves. The source is now known and is
+not any of the four truths already removed: those legs get their target from
+`*_phase_positions`, the map `_add_event` stamps on every event with the
+resolver's live positions for the ten players not making the contact. It is a
+*fact* — "this body is here now" — with no journey attached, and playback walks
+the drawn body to it over the phase.
+
+Displacements are real, 0.04 to 0.27 court units, concentrated on RECEPTION,
+SET, BLOCK and ATTACK legs.
+
+**This is the remaining gap to DONE and it is not closed.** Two readings are
+possible and they demand different fixes:
+
+1. the resolver moved these bodies without publishing the journey, in which case
+   the journey has to be published, as everywhere else in P9 and P10; or
+2. playback's drawn body drifted from `live_positions` on an earlier leg and
+   this is a *correction*, in which case walking it is papering over a
+   continuity break that `playback_continuity_mismatches` should be recording.
+
+Distinguishing them means comparing each such target against the same player's
+previous published target, per leg, in playback order. That measurement has not
+been taken and nothing should be changed until it has.

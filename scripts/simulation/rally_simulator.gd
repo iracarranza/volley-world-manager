@@ -1755,6 +1755,15 @@ func resolve(
 	if reception_event_for_staging != null:
 		reception_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		reception_event_for_staging.metadata["staged_next_position"] = setter_start
+		## **The staged walk, solved.** This leg publishes a destination and an
+		## actor and nothing else, so playback re-integrated it locally -- the
+		## last population doing so. The natural duration of the journey is the
+		## window: a staging walk is not truncated by a phase, it simply takes
+		## as long as it takes. AUTHORITATIVE_MOVEMENT_EXECUTION.md P10.
+		reception_event_for_staging.metadata["staged_next_path"] = _committed_path(
+			setter, Vector2(live_positions.get(setter.id, setter_start)),
+			setter_start, maxf(setter_move_time, 0.0), "lateral", rally_clock,
+		)
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 	## Re-stated because an emergency second contact replaces the setter named
 	## at the top of the rally, and the commentary should name whoever actually
@@ -4263,6 +4272,17 @@ func _resolve_home_serve(
 		if opponent_setter_id == receiver.id:
 			opponent_setter_id = -1
 		if opponent_setter_id >= 0:
+			## Read before the write below: this is where the body starts, and
+			## the next line is where the model decides it ends up.
+			var opponent_setter_from := Vector2(opponent_live_positions.get(
+				opponent_setter_id, opponent_setter_release
+			))
+			var opponent_setter_body: VolleyballPlayer = null
+			for raw_entry in opponent_team.on_court_players():
+				var candidate := raw_entry as VolleyballPlayer
+				if candidate != null and candidate.id == opponent_setter_id:
+					opponent_setter_body = candidate
+					break
 			opponent_live_positions[opponent_setter_id] = opponent_setter_release
 			## And playback has to be told to *walk* them there.
 			##
@@ -4280,6 +4300,21 @@ func _resolve_home_serve(
 					opponent_setter_id
 				opponent_reception_event.metadata["staged_next_position"] = \
 					opponent_setter_release
+				## **The staged walk, solved.** This leg publishes a destination and an
+				## actor and nothing else, so playback re-integrated it locally -- the
+				## last population doing so. The natural duration of the journey is the
+				## window: a staging walk is not truncated by a phase, it simply takes
+				## as long as it takes. AUTHORITATIVE_MOVEMENT_EXECUTION.md P10.
+				opponent_reception_event.metadata["staged_next_path"] = \
+					_committed_path(
+						opponent_setter_body,
+						opponent_setter_from, opponent_setter_release,
+						_movement_time(
+							opponent_setter_body, opponent_setter_from,
+							opponent_setter_release, "lateral",
+						) if opponent_setter_body != null else 0.0,
+						"lateral", rally_clock,
+					)
 	## The pass has to find them, rather than arrive on them.
 	##
 	## Staging the setter fixed where they start; it left the ball landing on
@@ -6586,6 +6621,15 @@ func _resolve_home_continuation(
 	if defense_event_for_staging != null:
 		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		defense_event_for_staging.metadata["staged_next_position"] = setter_start
+		## **The staged walk, solved.** This leg publishes a destination and an
+		## actor and nothing else, so playback re-integrated it locally -- the
+		## last population doing so. The natural duration of the journey is the
+		## window: a staging walk is not truncated by a phase, it simply takes
+		## as long as it takes. AUTHORITATIVE_MOVEMENT_EXECUTION.md P10.
+		defense_event_for_staging.metadata["staged_next_path"] = _committed_path(
+			setter, Vector2(live_positions.get(setter.id, setter_start)),
+			setter_start, maxf(setter_move_time, 0.0), "lateral", rally_clock,
+		)
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 	var hitter := _fallback_hitter(
 		players, lineup, setter.id, incoming_quality, setter, current_match_flow

@@ -706,6 +706,11 @@ func _authoritative_phase_path(player_id: int) -> Dictionary:
 		published = pending_contact_event.metadata.get("movement_path", null)
 	else:
 		published = _published_offball_path(player_id)
+	## The staged walk is published on the event being *played*, not on the
+	## contact being approached, because it is that leg's own journey.
+	if published == null and playback_event != null \
+			and int(playback_event.metadata.get("staged_next_actor_id", -1)) == player_id:
+		published = playback_event.metadata.get("staged_next_path", null)
 	if published == null:
 		return {}
 	var path := published as RallyMovementPath
@@ -940,17 +945,15 @@ func _append_movement_trail(player_id: int, point: Vector2) -> void:
 	movement_trails[player_id] = trail
 
 
-func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionary:
+func _unit_support_targets(event: Resource, _action_target: Vector2) -> Dictionary:
 	var targets := {}
 	if lineup == null:
 		return targets
-	var event_type := int(event.event_type)
-	var event_side_opponent := str(event.metadata.get("side", "")) == "opponent"
 	## The resolver stages the setter and hitter for their own upcoming contact
 	## one leg ahead (setter_start during the serve's flight, the hitter's
 	## approach mark during the set's flight). Without honoring that hint here,
-	## this leg draws them with the generic side lerp below, and the next leg
-	## has to visibly correct onto the real line instead of already being there.
+	## this leg draws them where they already stand, and the next leg has to
+	## visibly correct onto the real line instead of already being there.
 	var staged_actor_id := int(event.metadata.get("staged_next_actor_id", -1))
 	var staged_position := Vector2(event.metadata.get(
 		"staged_next_position", Vector2.ZERO
@@ -961,36 +964,15 @@ func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionar
 			continue
 		if player_id == staged_actor_id:
 			targets[player_id] = staged_position
-			continue
-		var base := _base_or_defensive_position(player_id, slot_number)
-		targets[player_id] = _support_target_for_side(
-			base, action_target, event_type, slot_number,
-			false, event_side_opponent,
-		)
-	if opponent_team != null:
-		var opponent_lineup: RotationLineup = opponent_team.current_lineup()
-		if opponent_lineup != null:
-			for slot_number in range(1, 7):
-				var player_id := opponent_lineup.player_at_slot(slot_number)
-				if player_id == movement_player_id:
-					continue
-				var base: Vector2 = opponent_live_player_positions.get(
-					player_id, opponent_team.court_position(player_id, "defense")
-				)
-				targets[player_id] = _support_target_for_side(
-					base, action_target, event_type, slot_number,
-					true, event_side_opponent,
-				)
-	## **The resolver's own answer beats this file's guess.**
+	## **Only the resolver says where a voli walks.**
 	##
-	## Everything above filled `targets` from `_support_target_for_side`, a table
-	## of lerps that invents where a voli walks when nothing published it -- 35.6%
-	## of voli-legs at the last count. `*_phase_positions` is published on every
-	## event by `_add_event` and says where that side actually stood, which is a
-	## fact the resolver owns; the real phase maps below say where it walked. So
-	## the order is: invented guess, overwritten by the held fact, overwritten by
-	## the stated journey. A voli the simulation never moved is now drawn where
-	## the simulation left them instead of drifting toward the action.
+	## `_support_target_for_side` used to fill this map first -- a table of lerps
+	## that invented a drift toward the action for anyone the simulation had not
+	## published, once 35.6% of voli-legs. Measured over 60 rallies it now reaches
+	## **zero of 3,481** legs: `*_phase_positions` covers where a side stood and
+	## the phase maps cover where it walked, and both overwrote the guess every
+	## time. It has been deleted rather than left as a fallback nothing selects.
+	## `docs/review/AUTHORITATIVE_MOVEMENT_EXECUTION.md` P10.
 	for side_key in ["home_phase_positions", "opponent_phase_positions"]:
 		var held: Dictionary = event.metadata.get(side_key, {})
 		for raw_player_id in held:
@@ -1013,56 +995,6 @@ func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionar
 		if player_id != movement_player_id and opponent_players_by_id.has(player_id):
 			targets[player_id] = Vector2(opponent_phase_targets[raw_player_id])
 	return targets
-
-
-func _support_target_for_side(
-	base: Vector2,
-	action_target: Vector2,
-	event_type: int,
-	slot_number: int,
-	team_is_opponent: bool,
-	event_side_opponent: bool,
-) -> Vector2:
-	## Work in a shared orientation where each team's net is toward decreasing
-	## Y, then mirror the opponent result back into whole-court coordinates.
-	var local_base := Vector2(base.x, 1.0 - base.y) if team_is_opponent else base
-	var local_action := Vector2(action_target.x, 1.0 - action_target.y) \
-		if team_is_opponent else action_target
-	var target := local_base
-	var own_phase := team_is_opponent == event_side_opponent
-	var front_row := CourtConstants.is_front_row_slot(slot_number)
-	if own_phase:
-		match event_type:
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
-				target = local_base.lerp(local_action, 0.10 if front_row else 0.18)
-			RallyEventModel.EventType.SET:
-				target = local_base.lerp(Vector2(
-					local_action.x, maxf(local_base.y - 0.05, 0.56)
-				), 0.22)
-			RallyEventModel.EventType.ATTACK:
-				var distance := 0.10 + float(slot_number % 3) * 0.035
-				target = local_action.lerp(local_base, 0.52) + Vector2(
-					-distance if slot_number % 2 == 0 else distance, 0.08
-				)
-			RallyEventModel.EventType.BLOCK:
-				target = local_base.lerp(Vector2(local_action.x, local_base.y), 0.22)
-	else:
-		match event_type:
-			RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
-				if front_row:
-					target.x = lerpf(local_base.x, local_action.x, 0.30)
-					target.y = lerpf(local_base.y, 0.54, 0.55)
-				else:
-					target.x = lerpf(local_base.x, local_action.x, 0.16)
-					target.y = clampf(local_base.y, 0.70, 0.92)
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
-				target = local_base.lerp(Vector2(local_action.x, local_base.y), 0.05)
-			RallyEventModel.EventType.BLOCK:
-				target = local_base.lerp(local_action, 0.10)
-	target = Vector2(
-		clampf(target.x, 0.06, 0.94), clampf(target.y, 0.53, 0.96)
-	)
-	return Vector2(target.x, 1.0 - target.y) if team_is_opponent else target
 
 
 func _gui_input(event: InputEvent) -> void:
