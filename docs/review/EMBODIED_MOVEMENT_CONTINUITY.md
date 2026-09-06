@@ -245,3 +245,72 @@ The regression test fails on the predecessor by construction: it sweeps the same
 five distances and three entry speeds as the probe's `reached` block, where the
 predecessor disagreed on 15 of 15 rows by 4.289–5.227 m/s against a 0.01 m/s
 gate.
+
+---
+
+# C1 — Carry momentum across production leg boundaries
+
+## C1.0 Where the boundary actually is
+
+The audit's population is 5,800 consecutive leg pairs, all 5,800 beginning at
+rest, with 569 of the 1,482 >10 cm gaps attributed to
+`phase_intent → phase_intent`. Tracing that publisher to its source:
+
+**`_travel_intent` is the single publisher of every `phase_intent` leg.** Nineteen
+call sites reach it, it calls `_committed_path` once, and it already commits the
+authoritative landing (`reached_position`) rather than the closed form's answer —
+the P15 repair went through this same function for the same reason. It is
+therefore the one place a velocity carry has to be added for the whole
+`phase_intent` population to inherit it.
+
+The phase maps around it already thread *position* across legs, and the pattern
+is uniform:
+
+```gdscript
+var here: Vector2 = live_positions.get(player.id, <a formation default>)
+...
+var reached := _reached_point(player, here, intent, window_seconds, mode)
+out_intents[player.id] = _travel_intent(player, cue, here, intent, reached, ...)
+live_positions[player.id] = <the leg's landing>
+```
+
+`live_positions` carries the position out of one leg and into the next.
+**`live_velocities` exists beside it and no phase map writes to it** — the audit
+found only three writers, all of them hitter sites. So the store the carry needs
+is already there and only the hitter path has ever used it.
+
+## C1.1 Classification: which boundaries must *not* join
+
+The spec requires legitimate discontinuities be preserved rather than
+mechanically joined. Three classes reset, and each is identifiable in the code
+rather than by judgement:
+
+| class | where | why it resets |
+|---|---|---|
+| **a contact** | `live_positions[actor.id] = contact_pos` (`:12123`, `:12186`) | the body played the ball; the leg after a contact is a new physical action |
+| **a recovery** | `&"recovering"` intents (`:16252`, `:16377`) | the same body, immediately after its own contact |
+| **a hold** | `_travel_intent(p, cue, here, here, here, …)` | zero-length; `_committed_path` returns `null` and there is no leg to inherit from |
+
+Everything else — an off-ball body shuffling from one defensive shape to the next,
+a coverer fanning out, a blocker sliding along the net — is an ordinary
+consecutive boundary and is what C1 is for.
+
+## C1.2 Planned increments
+
+Three attributable steps rather than one, because the first must provably change
+nothing:
+
+1. **Plumbing, no behaviour.** `entry_velocity` parameters on `_reached_point`
+   and `_travel_intent`, defaulting to `Vector2.ZERO` and forwarded to
+   `_movement_time` and `_committed_path`; `_travel_intent` publishes
+   `exit_velocity` from the path. With every caller still passing the default
+   this must leave the balance probe byte-identical, and that is the check.
+2. **Wire the phase maps.** Thread the carry through the transition, cover,
+   setter-read and hold phases, honouring C1.1's three reset classes.
+3. **Re-measure** the 600-rally continuity population — dead-start rate,
+   moving-predecessor count, >10 cm gaps, publisher-pair breakdown, worst gap —
+   against the audit's recorded baseline.
+
+Step 1 exists to make step 2's drift attributable. A single commit doing both
+would leave no way to tell a wiring mistake from a real timing change, which is
+the failure the audit spent a section on.
