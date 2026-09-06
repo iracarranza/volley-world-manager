@@ -12,8 +12,28 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `6cd7f54`: **2 of 2,270 checks
+Current branch baseline, verified 2026-09-06 at `721af16`: **2 of 2,272 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**No checks written and the count moved by two, which means the opposite of the
+entry below it.** 2,270 was measured at `6cd7f54` on this tree and C1 authored no
+test, so the whole delta is sampling gates drawing against a different
+population -- which is what a pass that changes arrival times has to look like.
+Read the two together: C0's +3 was *entirely* authorship while the population
+moved invisibly underneath, and C1's +2 is *entirely* population. Same size,
+opposite meaning.
+
+**Momentum crosses a leg boundary for the first time.** 773 of 5,846 boundaries
+now begin with the speed the previous leg ended with, against 0 of 5,800 before.
+Two cautions for whoever reads the continuity numbers next. `gap_m_worst` was
+two things under one name -- it counted legs seconds apart, where covering
+metres is walking rather than teleporting -- so read `adjacent_gap_worst`, which
+is 217 real discontinuities of 774 adjoining pairs and is a defect *older* than
+this pass. And `previous_leg_ended_moving` jumped 801 to 5,324 because C0 made
+exit velocities real, not because bodies started moving.
+See `docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C1.
+
+Before it, 2,270 at `6cd7f54`.
 
 **Three checks written, three gained, and the outcome mix moved anyway.** 2,267
 at `4e2c42d` is the measured predecessor, so the delta is authorship alone. What

@@ -497,6 +497,28 @@ worst 0.88 m, same seed — which a 600-rally sweep cannot do. Quoting those as 
 600-rally result would have been the wrong-instrument failure `FAILURE_MODES.md`
 §0 is about.
 
+## C1.9 Validation
+
+| control | result |
+|---|---|
+| **P15 playback corrections** | **0 of 8,580 drawn legs, worst 0.0000** |
+| **full suite** | **2 of 2,272**, the same two known failures, no third |
+| 700-rally balance | contacts 4.633→**4.593**, dig 0.520→**0.510**, stuff 0.101→**0.099**, block touch 0.804→**0.794**, kill 0.537 and ace 0.099 unchanged |
+| swing balance | 0.973 → **0.950**, away from 1.00 — advisory, recorded not acted on |
+
+**No checks were written and the count moved by two, which is the opposite
+reading from C0's and means the opposite thing.** 2,270 was measured at
+`6cd7f54` on this tree. C1 authored no test, so the whole delta is sampling
+gates drawing against a different population — which is exactly what a pass that
+changes arrival times has to look like. C0's +3 was entirely authorship with the
+population moving invisibly underneath; C1's +2 is entirely population. The two
+deltas are the same size and carry no common meaning, which is the point
+`CLAUDE.md` keeps making about this number.
+
+Every gated band that was inside stays inside. Kill (0.537 against 0.45–0.50) and
+ace (0.099 against 0.05–0.09) remain outside and were outside at the audit's A0;
+neither has been touched to move them.
+
 ---
 
 # C2 — Charge braking and reversal
