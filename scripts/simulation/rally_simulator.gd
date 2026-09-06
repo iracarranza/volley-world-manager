@@ -8259,7 +8259,18 @@ func _form_opponent_block(
 		if player != null and (assignment == null or bool(assignment.block_participation)):
 			front_blockers.append(player)
 			var slot_number := lineup.slot_for_player(player.id)
-			var start: Vector2 = CourtConstants.slot_position(slot_number)
+			## **This is the opponent's wall, so it needs the opponent's frame.**
+			##
+			## `slot_position` answers in home coordinates, and every blocker this
+			## builds a pull position for is on the far side, so all six front-row
+			## marks were published across the net plane. Measured: 1,666 of 1,694
+			## wrong-side body samples over 600 rallies came from this one cue, up
+			## to 0.97 m into the other team's court, and the remaining 28 are legs
+			## that end legally and drift.
+			## NOTE C5's cause: a frame, not a route -- EMBODIED_MOVEMENT_CONTINUITY.md C5
+			var start := CourtConstants.mirror_to_opponent(
+				CourtConstants.slot_position(slot_number)
+			)
 			var discipline := clampf(
 				(_rating(player, "tactical_discipline") * 0.65
 				+ _rating(player, "anticipation") * 0.35), 0.0, 1.0

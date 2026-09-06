@@ -39,6 +39,8 @@ const CLEARANCES: Array[float] = [0.50, 0.72, 0.90]
 
 ## Which publisher produced each path, so a discontinuity can be attributed.
 var _source_of: Dictionary = {}
+## And which tactical cue it was published under, for C5.
+var _cue_of: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -60,7 +62,10 @@ func _initialize() -> void:
 	var players_without_path := 0
 	var players_with_path := 0
 	var out_of_bounds := {"x": 0, "y": 0, "worst_x": 0.0, "worst_y": 0.0}
-	var wrong_side := {"count": 0, "worst_meters": 0.0, "example": ""}
+	var wrong_side := {
+		"count": 0, "worst_meters": 0.0, "example": "",
+		"target_side": 0, "path_side": 0, "no_leg": 0, "cues": {},
+	}
 	var samples_by_action: Dictionary = {}
 	var by_action: Dictionary = {}
 	## A2: does leg N+1 begin where leg N landed, and carrying what it carried?
@@ -258,6 +263,37 @@ func _initialize() -> void:
 						wrong_side["example"] = "seed %d, player %d, %s, %.2f m" % [
 							seed_value, player_id, side, over,
 						]
+					## **C5's discriminating question, in one line per sample.**
+					##
+					## A body on the wrong side either was *sent* there -- its leg's
+					## committed landing is already across the net, so the fault is
+					## in whatever chose the target -- or it drifted there during a
+					## leg that ends legally, which would make it the integrator or
+					## the clamp. These two cannot both be the cause, and nothing
+					## has counted which.
+					## NOTE target-side versus path-side -- EMBODIED_MOVEMENT_CONTINUITY.md C5
+					var owner := _leg_covering(paths.get(player_id, []), t)
+					if owner == null:
+						wrong_side["no_leg"] = int(wrong_side.no_leg) + 1
+					else:
+						var landing := owner.landing_position()
+						var landing_over := (0.5 - landing.y) if side == "home" \
+							else (landing.y - 0.5)
+						if landing_over > 0.0006:
+							wrong_side["target_side"] = int(
+								wrong_side.target_side
+							) + 1
+							var cue := "%s/%s" % [
+								str(_source_of.get(owner, "?")),
+								str(_cue_of.get(owner, "-")),
+							]
+							var tally: Dictionary = wrong_side.get("cues", {})
+							tally[cue] = int(tally.get(cue, 0)) + 1
+							wrong_side["cues"] = tally
+						else:
+							wrong_side["path_side"] = int(
+								wrong_side.path_side
+							) + 1
 			## A6: same-team pairs only, both live at this instant.
 			var ids: Array = live.keys()
 			ids.sort()
@@ -432,6 +468,16 @@ func _initialize() -> void:
 	print("samples_past_the_net_plane|%d" % int(wrong_side.count))
 	print("worst_net_incursion_m|%.2f" % float(wrong_side.worst_meters))
 	print("worst_case|%s" % str(wrong_side.example))
+	print("--- C5: was the body sent across, or did it drift across?")
+	print("committed_landing_already_across|%d" % int(wrong_side.target_side))
+	print("landing_legal_body_drifted|%d" % int(wrong_side.path_side))
+	print("no_leg_covering_the_sample|%d" % int(wrong_side.no_leg))
+	print("--- which published cue sent them across")
+	var cue_tally: Dictionary = wrong_side.get("cues", {})
+	var cue_keys: Array = cue_tally.keys()
+	cue_keys.sort_custom(func(a, b): return int(cue_tally[a]) > int(cue_tally[b]))
+	for key in cue_keys:
+		print("  %s|%d" % [str(key), int(cue_tally[key])])
 	quit()
 
 
@@ -482,6 +528,9 @@ func _collect_paths(result: Resource, side_of: Dictionary) -> Dictionary:
 					var entry: Variant = Dictionary(intents)[raw_id]
 					if entry is Dictionary and entry.get("path", null) != null:
 						_append(paths, int(raw_id), entry["path"], "phase_intent")
+						## The cue this leg was published under, so C5's answer can
+						## name the intent rather than only the publisher.
+						_cue_of[entry["path"]] = str(entry.get("intent", "?"))
 			var holds: Variant = metadata.get("%s_phase_hold_paths" % side, {})
 			if holds is Dictionary:
 				for raw_id in Dictionary(holds):
@@ -500,6 +549,18 @@ func _append(
 		paths[player_id] = []
 	Array(paths[player_id]).append(typed)
 	_source_of[typed] = source
+
+
+## The published leg whose window contains `at_time`, if any.
+static func _leg_covering(legs: Array, at_time: float) -> RallyMovementPath:
+	for entry in legs:
+		var path := entry as RallyMovementPath
+		if path == null or not path.is_valid():
+			continue
+		if at_time >= path.start_time - 0.0001 \
+				and at_time <= path.end_time() + 0.0001:
+			return path
+	return null
 
 
 func _window(paths: Dictionary) -> Vector2:

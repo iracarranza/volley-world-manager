@@ -885,3 +885,106 @@ can only be supplied where a prior leg published one, and it is supplied on
 exactly the boundaries where momentum is — a leg that publishes a path yields
 both, a leg that publishes none yields neither. The remaining 5,248 are the same
 publication-coverage gap C1.7 measured from the other direction.
+
+---
+
+# C4 — Six-player traffic, re-measured after C0–C3
+
+The spec forbids choosing a teammate-routing fix from the stale baseline, so this
+is the first look at the population since the audit. Same instrument, same seeds,
+600 rallies.
+
+| measure | audit baseline | after C0–C3 |
+|---|---:|---:|
+| pair observations | 403,710 | 393,892 |
+| minimum separation | 0.000 m | 0.000 m |
+| p01 | 0.580 | **0.644** |
+| p05 | 1.324 | **1.468** |
+| p50 | 4.046 | **4.175** |
+| **pair-samples inside 0.50 m** | 3,142 (0.778%) | **2,611 (0.663%)** |
+| court-seconds inside 0.50 m | 125.7 s | **104.4 s** |
+| 3+ clusters at 0.50 m | 32 | **26** |
+| inside 0.72 m | 6,056 | **4,720** |
+| inside 0.90 m | 10,360 | **8,121** |
+| both moving | 90.9% | 87.9% |
+
+**Traffic fell by roughly a fifth with no avoidance of any kind added.** The
+relative rate inside 0.50 m is down 15%, the 0.72 m and 0.90 m populations by
+22%, and every percentile of separation improved. Fixing *when* bodies arrive
+moved *where* they are, which is the ordering the spec insisted on and the reason
+it forbade choosing a fix from the old numbers.
+
+The stratification also moved, and not uniformly: `DIG|opponent` fell 599 → 352
+and `BLOCK|home` 463 → 341, while `RECEPTION|opponent` rose 786 → 955. The
+reception phase is now the clear single concentration rather than one of three.
+
+**The decision the spec asks for: teammate semantics are still required.**
+Minimum separation is still 0.000 m, 2,611 pair-samples and 104 court-seconds
+remain inside 0.50 m, and 26 instants still put three bodies there. Momentum and
+reversal were worth a fifth of the problem and are not the whole of it. That is a
+follow-up spec against *this* population, not this pass — and no generic
+collision, bounce, slide or avoidance was added here.
+
+---
+
+# C5 — Net-plane traversal, diagnosed and repaired
+
+## C5.1 The discriminating question
+
+The audit recorded 1,669 samples past the net plane, ~2.6% of every body-instant,
+and could not say why. The candidates the spec lists are tactical target,
+waypoint, contact/body offset, integrator/clamp, or coordinate transform — and
+they split cleanly on one question: **is the leg's committed landing already
+across, or does a body drift across during a leg that ends legally?**
+
+The instrument now answers it per sample, and names the publishing cue.
+
+| | count |
+|---|---:|
+| **committed landing already across** | **1,666** |
+| landing legal, body drifted | 28 |
+| no leg covering the sample | 0 |
+| **offending cue** | **`phase_intent/blocking`, 1,666 of 1,666** |
+
+98.3% were *sent*. The integrator and the clamp are exonerated — they walked
+bodies faithfully to targets that were already wrong — and every single one came
+from one cue.
+
+## C5.2 The cause is a coordinate frame
+
+`_block_formation` builds the **opponent's** wall and reads:
+
+```gdscript
+var start: Vector2 = CourtConstants.slot_position(slot_number)
+```
+
+`slot_position` answers in **home** coordinates. Every front-row blocker on the
+far side was therefore given a pull position on the near side of the net, and
+`_setter_read_phase` published it as a `blocking` intent for the body to walk to.
+
+That is C5's "coordinate transform" candidate, and it explains the shape of the
+audit's finding better than any routing theory: the worst cases were always
+opponent players, the rate was stable across sample sizes because it is
+systematic rather than seeded, and it is one cue rather than a spread.
+
+`CourtConstants.mirror_to_opponent` already existed. The repair is one call.
+
+## C5.3 Measured
+
+| measure | before | after |
+|---|---:|---:|
+| **samples past the net plane** | **1,694** | **28** |
+| share of all body-instants | 2.6% | **0.043%** |
+| committed landing already across | 1,666 | **0** |
+| worst incursion | 0.97 m | 0.81 m |
+| P15 corrections | 0 of 8,368 | **0 of 8,238** |
+
+Balance: contacts 4.631 → 4.636, kill 0.524 → 0.527, dig 0.521 → 0.519, stuff
+0.108 → 0.104, swing balance 0.948 → **0.954**. Every gated band holds.
+
+**The 28 that remain are the other class**, and they are left rather than
+clamped. Their legs end legally and the body crosses in between — which is either
+interpolation across a leg whose endpoints straddle the plane, or genuine
+overshoot. The spec is explicit that legal off-court pursuit must not be clamped,
+and a body near the net is the case where a blanket clamp would do the most
+damage. 28 samples in 65,036 is recorded, not chased.
