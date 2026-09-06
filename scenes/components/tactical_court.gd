@@ -167,6 +167,12 @@ var playback_continuity_mismatches: Array[Dictionary] = []
 ## own movement model instead of interpolated by this script. See
 ## `_build_movement_paths`.
 var movement_paths: Dictionary = {}
+## The last authoritative `RallyMovementPath` handed to each player, kept so a
+## journey that outran its phase can be *continued* on the next leg instead of
+## re-solved locally. Measured before this: 214 of 632 production playback legs
+## re-aimed at a target the body had not reached and re-integrated the rest of
+## the walk from scratch. AUTHORITATIVE_MOVEMENT_EXECUTION.md P11.
+var carried_movement_paths: Dictionary = {}
 var shadow_reception_trace: Dictionary = {}
 var shadow_overlay_layers: int = SHADOW_LAYER_DEFAULT
 var visualization_layers: int = VISUAL_ALL
@@ -602,6 +608,7 @@ func begin_rally_playback(
 	unit_movement_starts.clear()
 	unit_movement_targets.clear()
 	unit_movement_waypoints.clear()
+	carried_movement_paths.clear()
 	playback_continuity_mismatches.clear()
 	if lineup == null:
 		queue_redraw()
@@ -685,7 +692,7 @@ func _phase_path(
 	target: Vector2,
 	waypoint: Variant,
 ) -> Dictionary:
-	var authoritative := _authoritative_phase_path(player_id)
+	var authoritative := _authoritative_phase_path(player_id, start, target)
 	if not authoritative.is_empty():
 		return authoritative
 	return _integrate_phase_path(profile, player_id, start, target, waypoint)
@@ -698,7 +705,9 @@ func _phase_path(
 ## separately reported one: by the P1 contract those are the same number, so
 ## this is a change of index and not a rescale. The endpoint is the path's own
 ## landing, so there is nothing to snap onto.
-func _authoritative_phase_path(player_id: int) -> Dictionary:
+func _authoritative_phase_path(
+	player_id: int, start: Vector2, target: Vector2
+) -> Dictionary:
 	if pending_contact_event == null:
 		return {}
 	var published: Variant = null
@@ -711,22 +720,57 @@ func _authoritative_phase_path(player_id: int) -> Dictionary:
 	if published == null and playback_event != null \
 			and int(playback_event.metadata.get("staged_next_actor_id", -1)) == player_id:
 		published = playback_event.metadata.get("staged_next_path", null)
+	## **The same journey, continued.**
+	##
+	## A leg truncated by its phase leaves the body short, and the resolver
+	## re-publishes the same destination on the next event with no new solve --
+	## because there is no new journey, only the rest of this one. Resuming the
+	## carried path from where the body actually stands is interpolation of the
+	## one authoritative answer; re-integrating it here would be a second one.
+	if published == null:
+		published = _carried_path_toward(player_id, target)
 	if published == null:
 		return {}
 	var path := published as RallyMovementPath
 	if path == null or not path.is_valid():
 		return {}
-	var span := path.duration()
+	carried_movement_paths[player_id] = path
+	var from_index := _path_index_at(path, start)
+	var head: float = path.sample_times[from_index]
+	var span: float = path.sample_times[path.sample_times.size() - 1] - head
 	if span <= 0.0001:
 		return {}
 	var points: Array[Vector2] = []
 	var times: Array[float] = []
-	for index in path.positions.size():
+	for index in range(from_index, path.positions.size()):
 		points.append(path.positions[index])
-		times.append(clampf(
-			(path.sample_times[index] - path.start_time) / span, 0.0, 1.0
-		))
+		times.append(clampf((path.sample_times[index] - head) / span, 0.0, 1.0))
+	if points.size() < 2:
+		return {}
 	return {"points": points, "times": times, "authoritative": true}
+
+
+## The carried path for this player, if it is still going where this leg is.
+func _carried_path_toward(player_id: int, target: Vector2) -> Variant:
+	var carried: Variant = carried_movement_paths.get(player_id, null)
+	if carried == null:
+		return null
+	var path := carried as RallyMovementPath
+	if path == null or not path.is_valid():
+		return null
+	return path if path.landing_position().distance_to(target) <= 0.005 else null
+
+
+## The sample this body has already reached, so the tail is what remains.
+static func _path_index_at(path: RallyMovementPath, position: Vector2) -> int:
+	var best := 0
+	var best_gap := 1.0e9
+	for index in path.positions.size() - 1:
+		var gap: float = path.positions[index].distance_to(position)
+		if gap < best_gap:
+			best_gap = gap
+			best = index
+	return best
 
 
 ## The off-ball leg for a player who is not making this contact.

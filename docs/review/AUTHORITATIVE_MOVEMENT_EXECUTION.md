@@ -789,3 +789,49 @@ possible and they demand different fixes:
 Distinguishing them means comparing each such target against the same player's
 previous published target, per leg, in playback order. That measurement has not
 been taken and nothing should be changed until it has.
+
+---
+
+## P11 — a truncated journey is continued, not re-solved
+
+P10.3 split the 317 re-integrating legs two ways: 214 re-aimed at a target the
+body had never reached, and 103 aimed somewhere new. The first group is not a
+new journey at all. The resolver re-publishes the same destination because the
+rest of the walk is still owed; playback was answering that by solving it again.
+
+`tactical_court` now carries the last authoritative path per player and, when a
+leg's target matches that path's own landing, resumes it — the tail from the
+sample nearest the body's current position, renormalised over what remains. That
+is interpolation of the one solved answer. `carried_movement_paths` is cleared by
+`begin_rally_playback`, so nothing survives a rally.
+
+**Matched measurement**, 10 rallies through a headless court seeded with the
+same `initial_home_positions` production uses:
+
+| | before | after |
+|---|---|---|
+| authoritative | 264 | **488** |
+| legacy re-integration | 296 | **78** |
+| hold, none needed | 72 | 66 |
+| continuity mismatches | 21 (worst 0.366) | 21 (worst 0.366) |
+
+The mismatch count is the important control. It is the court's own record of the
+drawn body disagreeing with the resolver's reported start, and it did not move —
+so the 218 legs that stopped re-solving were not silently absorbing a teleport.
+
+An earlier reading of this same measurement said 317 legacy legs and 51 holds.
+It was taken without `begin_rally_playback` between rallies and without the
+initial snapshot, so the court began each rally wherever the last one left off.
+Both numbers above use the production call.
+
+### P11.1 The 78 that remain, by source
+
+| source | n | where |
+|---|---|---|
+| `*_phase_positions` | ~40 | mostly POINT, the settle after the rally ends |
+| `movement_player` | ~21 | **SET, ATTACK and BLOCK contacts publish no `movement_path`** |
+| `*_phase_targets` | ~8 | BLOCK, DIG, SET |
+
+The middle row is the next real gap: the eight migrated contact sites are the
+receptions, the coverages and the defences. A setter's chase, a hitter's approach
+and a blocker's close are still solved twice.
