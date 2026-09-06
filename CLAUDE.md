@@ -12,8 +12,37 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `bc0f178`: **2 of 2,271 checks
+Current branch baseline, verified 2026-09-06 at `ddf9833`: **2 of 2,274 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Movement is continuously embodied now, and five things moved.** C0-C5 of
+`docs/specs/EMBODIED_MOVEMENT_CONTINUITY.md`, written up in
+`docs/review/EMBODIED_MOVEMENT_CONTINUITY.md`:
+
+- one exit velocity per leg, five consumers agreeing, where the two models used
+  to differ by 4.2-5.2 m/s on every completed leg;
+- **773 of 5,846 leg boundaries inherit momentum**, against 0 of 5,800 before;
+- **reversal costs what it should** -- 6 m/s directly away from a target used to
+  reach it in the time a standing body did, and now costs +1.67 s;
+- facing reaches the solve on 527 legs, from none;
+- **bodies past the net plane: 1,694 to 28.** The cause was a coordinate frame,
+  not a route: the opponent's wall was built from `CourtConstants.slot_position`,
+  which answers in home coordinates.
+
+Six-player traffic fell about a fifth as a *consequence* of the timing repairs,
+with no avoidance added -- pair-samples inside 0.50 m 3,142 to 2,611. Teammate
+occupancy is still not a route constraint and minimum separation is still
+0.000 m; that wants its own spec against the new population, not the audit's.
+
+**Three checks gained and none written**, so the whole delta is sampling. That is
+the fourth distinct meaning this number has carried in five passes -- see the
+entries below, and read the FAIL line instead.
+
+**Resolve cost is 109 ms median** (114.0 / 105.5 / 109.2) against 117 ms at
+`4e2c42d`, same instrument and same hardware, which is the only comparison worth
+making. Three runs a side: read it as "not slower", not as a result.
+
+Before it, 2,271 at `bc0f178`.
 
 **Three checks written and the count *fell* by one, and that is the third
 distinct meaning this number has carried in three passes.** 2,272 at `721af16`

@@ -988,3 +988,61 @@ interpolation across a leg whose endpoints straddle the plane, or genuine
 overshoot. The spec is explicit that legal off-court pursuit must not be clamped,
 and a body near the net is the case where a blanket clamp would do the most
 damage. 28 samples in 65,036 is recorded, not chased.
+
+---
+
+# Final state, against the spec's DONE criteria
+
+| # | criterion | where | state |
+|---|---|---|---|
+| 1 | one internally consistent exit-velocity contract | C0.4, C0.6 | 26 of 29 probe rows at 0.000; the 3 are truncated legs, by contract |
+| 2 | all production exit-velocity consumers receive it | C0.5 | five enumerated and validated |
+| 3 | ordinary legs inherit prior velocity | C1.4–C1.8 | 527–773 of ~5,800 boundaries, from 0 |
+| 4 | reversal/braking physically causal | C2.3 | 6 m/s away: 0 s → +1.67 s; ordering holds at every speed |
+| 5 | facing reaches the solve, or the model is removed | C3.3 | causal, therefore kept; 527 of 5,775 legs |
+| 6 | continuity measured and remainder classified | C1.5, C1.7 | 796 intentional, 3,797 with a named source; the gap metric split |
+| 7 | no P15 regression | every checkpoint | **0 corrections throughout**, worst 0.0000 |
+| 8 | determinism, suite, balance, comparable performance | below | recorded |
+| 9 | A6 re-measured only after C0–C3 | C4 | traffic down ~20%; fix deferred to a new spec |
+| 10 | net-plane cause and narrow repair or scoped follow-up | C5 | frame defect, one-call repair, 1,694 → 28 |
+| 11 | no scheduler, generic navigation/collision, body-state penalty, perception rewrite or animation workaround | — | none added |
+
+## Criterion 8, in full
+
+| control | result |
+|---|---|
+| **full suite** | **2 of 2,274**, the two failures older than this branch, no third |
+| determinism | 700-rally probe byte-identical across two consecutive runs |
+| P15 | 0 corrections of 8,238 drawn legs |
+| **resolve cost** | **109 ms median** (114.0 / 105.5 / 109.2) against **117 ms** (117.3 / 116.4 / 121.7) at `4e2c42d` |
+
+**The resolve-cost comparison is the one kind that is allowed.** Same instrument
+(`tools/probe_resolve_cost.gd`), same hardware, same session as the baseline it
+is compared against — which is exactly what the contract's 62.8 ms figure could
+not offer. The two three-run ranges do not overlap, so the ~7% improvement is
+probably real; it is three runs a side and should be read as "not slower" rather
+than as a performance result. Nothing in this pass was aimed at speed.
+
+**Suite delta: three checks gained, none written.** 2,271 at `bc0f178`, and C3
+and C5 authored no test, so the whole delta is sampling gates drawing against a
+changed population — the fourth distinct reading this number has produced in five
+passes. It is a combined C3+C5 figure rather than two attributable ones, because
+a suite running against the C3 tree was killed when C5 changed production
+underneath it; the two are separately validated by their own probes.
+
+## What this pass did not fix, stated plainly
+
+- **217 adjacent discontinuities** (C1.7/C1.8) — bodies whose legs adjoin within
+  0.10 s and whose endpoints disagree by more than 10 cm, the worst implying
+  79 m/s. Older than this pass; its *rate* improved, 32.0% → 28.0% of adjoining
+  boundaries, but nothing repaired it.
+- **Teammate occupancy is still not a route constraint** (C4). Minimum separation
+  is still 0.000 m. The population is a fifth smaller and is the right baseline
+  for the follow-up spec.
+- **28 net-plane samples** of the drift class (C5.3), deliberately not clamped.
+- **Kill rate 0.527 and ace 0.099** remain outside their bands. Both were outside
+  at the audit's A0 (0.535, 0.099); kill is lower than it was and neither was
+  tuned.
+- **`estimate_movement` is still a third copy of the traversal model** (C2.5). It
+  now agrees with the other two about arrest, but the duplication that let them
+  diverge is intact.
