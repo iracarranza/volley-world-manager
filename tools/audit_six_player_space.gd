@@ -28,6 +28,11 @@ const FIRST_SEED: int = 61000
 const SEED_COUNT: int = 120
 const STEP_SECONDS: float = 0.04
 
+## Two legs closer together than this are one journey continuing; further apart,
+## the body had unpublished time in between and any distance it covered is
+## legal travel rather than a discontinuity.
+const ADJACENT_SECONDS: float = 0.10
+
 ## Centre-to-centre separations to report. 0.72 m is two of the only body
 ## dimension in the repo; the other two bracket it.
 const CLEARANCES: Array[float] = [0.50, 0.72, 0.90]
@@ -66,7 +71,9 @@ func _initialize() -> void:
 	## many kept the momentum and how many dropped it.
 	var drop_sources: Dictionary = {}
 	var continuity := {
-		"pairs": 0, "gap": 0.0, "worst_gap": 0.0, "big_gaps": 0,
+		"pairs": 0, "gap": 0.0, "worst_gap": 0.0, "worst_note": "", "big_gaps": 0,
+		"adjacent_pairs": 0, "adjacent_big": 0, "worst_adjacent": 0.0,
+		"worst_adjacent_note": "",
 		"cold_starts": 0, "hot_ends": 0,
 	}
 
@@ -122,7 +129,44 @@ func _initialize() -> void:
 					first.landing_position(), second.start_position()
 				)
 				continuity["gap"] = float(continuity.gap) + gap
-				continuity["worst_gap"] = maxf(float(continuity.worst_gap), gap)
+				var idle_seconds := second.start_time - first.end_time()
+				if gap > float(continuity.worst_gap):
+					continuity["worst_gap"] = gap
+					## Named, because a worst case that cannot be reproduced is an
+					## anecdote. C1 moved this tail and the total could not say why.
+					continuity["worst_note"] = \
+						"seed %d, player %d, %s -> %s, %.3f s apart" % [
+							seed_value, int(player_id),
+							str(_source_of.get(first, "?")),
+							str(_source_of.get(second, "?")),
+							idle_seconds,
+						]
+				## **Two different things were being called one number.**
+				##
+				## This loop skips only *overlapping* legs, so a pair separated by
+				## seconds of rally clock still counts as consecutive -- and a body
+				## with three seconds of unpublished interval between its legs walks
+				## metres perfectly legally. That is a publication-coverage finding,
+				## not a teleport, and it was dominating `gap_m_worst`: the worst
+				## case sat 3.128 s apart.
+				##
+				## A discontinuity proper is leg N ending and leg N+1 beginning
+				## somewhere else *at the same instant*. Only the adjacent figure
+				## measures that.
+				## NOTE the split, and why the tail moved -- EMBODIED_MOVEMENT_CONTINUITY.md C1.7
+				if idle_seconds <= ADJACENT_SECONDS:
+					continuity["adjacent_pairs"] = int(continuity.adjacent_pairs) + 1
+					if gap > float(continuity.worst_adjacent):
+						continuity["worst_adjacent"] = gap
+						continuity["worst_adjacent_note"] = \
+							"seed %d, player %d, %s -> %s, %.3f s apart" % [
+								seed_value, int(player_id),
+								str(_source_of.get(first, "?")),
+								str(_source_of.get(second, "?")),
+								idle_seconds,
+							]
+					if gap > 0.10:
+						continuity["adjacent_big"] = int(continuity.adjacent_big) + 1
 				if gap > 0.10:
 					continuity["big_gaps"] = int(continuity.big_gaps) + 1
 					var pair_key := "%s -> %s" % [
@@ -325,8 +369,19 @@ func _initialize() -> void:
 	print("gap_m_mean|%.4f" % (
 		float(continuity.gap) / maxf(float(continuity.pairs), 1.0)
 	))
-	print("gap_m_worst|%.4f" % float(continuity.worst_gap))
+	print("gap_m_worst|%.4f|%s" % [
+		float(continuity.worst_gap), str(continuity.worst_note),
+	])
 	print("pairs_with_gap_over_10cm|%d" % int(continuity.big_gaps))
+	print("--- legs that actually adjoin (<= %.2f s apart): the real discontinuities"
+		% ADJACENT_SECONDS)
+	print("adjacent_pairs|%d of %d" % [
+		int(continuity.adjacent_pairs), int(continuity.pairs),
+	])
+	print("adjacent_gap_over_10cm|%d" % int(continuity.adjacent_big))
+	print("adjacent_gap_worst|%.4f|%s" % [
+		float(continuity.worst_adjacent), str(continuity.worst_adjacent_note),
+	])
 	print("next_leg_starts_at_rest|%d of %d" % [
 		int(continuity.cold_starts), int(continuity.pairs),
 	])
