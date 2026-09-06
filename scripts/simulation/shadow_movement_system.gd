@@ -28,12 +28,16 @@ extends RefCounted
 ##    then added back to the requested step so the effective moved time is
 ##    exactly the step.
 ##
-## 2. **Arrival zeroes velocity.** That is correct for arriving at a contact and
-##    wrong for a waypoint, which is passed through rather than stopped at. On
-##    reaching a waypoint the travel velocity is preserved, and the next step's
-##    `velocity.dot(direction)` sheds whatever is not aligned with the new
-##    heading. The corner curve and its speed dip are emergent from that, not
-##    authored.
+## 2. **Arrival keeps its speed.** `project_toward` zeroed velocity on arrival
+##    and no caller had ever asked it not to, so every leg in the engine ended at
+##    a dead stop. It now carries through, and a body that arrives with time still
+##    on the leg is brought to rest explicitly instead.
+##
+## 3. **A redirection is charged before the leg starts.** Momentum that does not
+##    point at the target has to be arrested, and a retreating body gives up
+##    ground while it sheds it. Both terms come from `RallyMovementSystem`'s own
+##    `arrest_terms`, so the stepped and closed forms cannot disagree about the
+##    price of a turn. EMBODIED_MOVEMENT_CONTINUITY.md C2.
 
 const MovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
 const KinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
@@ -83,12 +87,25 @@ static func integrate(
 	## ATTACK became the one phase where the stepper billed a turn the closed
 	## form skipped, and the two models parted by 13% on that phase alone while
 	## agreeing to better than 0.6% on the three that still start from rest.
-	var opening_speed := maxf(stepper.velocity.dot(opening_direction), 0.0)
-	var turn_delay := 0.0 if opening_speed > 0.0 else float(
-		MovementModel.movement_profile(stepper, opening_direction, mode)
-		.get("direction_change_delay", 0.0)
+	var opening_profile: Dictionary = MovementModel.movement_profile(
+		stepper, opening_direction, mode
 	)
-	var moving_time := maxf(duration - turn_delay, 0.0)
+	## The same three terms the closed form charges, from the same helper, so the
+	## two models cannot drift apart about what a redirection costs.
+	## NOTE one arrest model, two consumers -- EMBODIED_MOVEMENT_CONTINUITY.md C2.2
+	var arrest: Dictionary = MovementModel.arrest_terms(
+		stepper.velocity, opening_direction,
+		float(opening_profile.get("acceleration", 0.1)),
+	)
+	var opening_speed := float(arrest.opening_speed)
+	var arrest_seconds := float(arrest.seconds)
+	var turn_delay := 0.0 if (arrest_seconds > 0.0 or opening_speed > 0.0) \
+		else float(opening_profile.get("direction_change_delay", 0.0))
+	var moving_time := maxf(duration - turn_delay - arrest_seconds, 0.0)
+	## Everything the loop stamps is offset past the turn *and* the arrest, or the
+	## arrest sample would land after the first step and the path's times would
+	## run backwards.
+	var time_base := turn_delay + arrest_seconds
 	## What an aligned step costs *this* player. Every step below sets facing to
 	## the direction of travel, so this is the charge `project_toward()` will
 	## apply, and handing exactly it back keeps each step moving for its full
@@ -108,6 +125,26 @@ static func integrate(
 	## authoritative path exists to remove.
 	var facings: Array[Vector2] = [stepper.facing]
 	var velocities: Array[Vector2] = [stepper.velocity]
+	## **The arrest, drawn rather than assumed.** A body shedding momentum it
+	## cannot use is still moving while it does so, and if it was retreating it
+	## gives up ground it then has to cover again. Only the component along the
+	## heading is applied, which is exactly the closed form's `ground_lost`; the
+	## lateral drift is ignored by both, so neither can disagree about it.
+	if arrest_seconds > 0.0001:
+		var retreat := minf(stepper.velocity.dot(opening_direction), 0.0)
+		var drift_meters := opening_direction * (retreat * arrest_seconds * 0.5)
+		stepper.apply_position(
+			stepper.position + Vector2(
+				drift_meters.x / KinematicsModel.COURT_WIDTH_METERS,
+				drift_meters.y / KinematicsModel.COURT_LENGTH_METERS,
+			),
+			opening_direction * opening_speed,
+		)
+		trail.append(stepper.position)
+		sample_times.append(time_base)
+		speeds.append(opening_speed)
+		facings.append(stepper.facing)
+		velocities.append(stepper.velocity)
 	var waypoint_reached := waypoint == null
 	var elapsed := 0.0
 	var steps := 0
@@ -134,7 +171,7 @@ static func integrate(
 		elapsed += slice
 		steps += 1
 		trail.append(stepper.position)
-		sample_times.append(turn_delay + elapsed)
+		sample_times.append(time_base + elapsed)
 		speeds.append(stepper.velocity.length())
 		facings.append(stepper.facing)
 		velocities.append(stepper.velocity)
@@ -159,7 +196,7 @@ static func integrate(
 			and stepper.position.distance_to(target) <= 0.002:
 		stepper.apply_position(stepper.position, Vector2.ZERO)
 		trail.append(stepper.position)
-		sample_times.append(turn_delay + moving_time)
+		sample_times.append(time_base + moving_time)
 		speeds.append(0.0)
 		facings.append(stepper.facing)
 		velocities.append(Vector2.ZERO)

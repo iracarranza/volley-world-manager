@@ -474,6 +474,44 @@ static func _with_exit_velocity(
 	}
 
 
+## What a body has to undo before it can travel along `direction`, priced from
+## its own acceleration.
+##
+## `maxf(velocity.dot(direction), 0.0)` credited momentum toward the target and
+## **deleted everything else** -- so perpendicular momentum vanished for free and
+## a body sprinting away was priced as one standing still. Measured, 6 m/s at
+## 180 degrees cost exactly what 0 m/s cost.
+##
+## Three terms, continuous in speed and angle, no constant of their own:
+##
+##   opening_speed  what survives as forward progress, `max(v·d, 0)`
+##   seconds        arresting everything else, `‖v − opening_speed·d‖ / a`
+##   ground_lost    the retreat a body covers while it decelerates, which it
+##                  then has to cover again
+##
+## The third is what separates turning from reversing: a body moving sideways
+## loses time, a body moving away loses time *and* distance.
+## NOTE the reversal model -- EMBODIED_MOVEMENT_CONTINUITY.md C2.1
+static func arrest_terms(
+	carried: Vector2, direction: Vector2, acceleration: float
+) -> Dictionary:
+	var forward := carried.dot(direction)
+	var opening_speed := maxf(forward, 0.0)
+	var unwanted := (carried - direction * opening_speed).length()
+	if unwanted <= 0.001:
+		return {
+			"opening_speed": opening_speed, "seconds": 0.0, "ground_lost": 0.0,
+		}
+	var seconds := unwanted / maxf(acceleration, 0.1)
+	return {
+		"opening_speed": opening_speed,
+		"seconds": seconds,
+		## Only a body actually going backwards gives up ground. Averaged over
+		## the arrest because the retreat speed falls linearly to zero.
+		"ground_lost": absf(minf(forward, 0.0)) * seconds * 0.5,
+	}
+
+
 static func _leg_seconds(
 	actor: RallyPlayerState,
 	from: Vector2,
@@ -501,18 +539,26 @@ static func _leg_seconds(
 	var profile := _movement_profile(actor, direction, mode)
 	var maximum_speed := maxf(float(profile.maximum_speed), 0.05)
 	var acceleration := maxf(float(profile.acceleration), 0.1)
-	## A caller-supplied carried speed wins; otherwise read the actor's own.
-	var opening_speed := entry_speed if entry_speed > 0.0 \
-		else maxf(actor.velocity.dot(direction), 0.0)
-	var seconds := _accelerated_seconds(
-		distance, opening_speed, maximum_speed, acceleration
+	## A caller-supplied carried speed is already aligned with this heading -- the
+	## waypoint form resolves it against the outgoing leg before handing it over --
+	## so only the actor's own velocity can be pointing somewhere else.
+	var carried := direction * entry_speed if entry_speed > 0.0 \
+		else actor.velocity
+	var arrest := arrest_terms(carried, direction, acceleration)
+	var opening_speed := float(arrest.opening_speed)
+	var seconds := float(arrest.seconds) + _accelerated_seconds(
+		distance + float(arrest.ground_lost),
+		opening_speed, maximum_speed, acceleration,
 	)
-	## Turning is only charged when the traversal actually starts from rest;
-	## a player already carrying speed into this leg has already turned.
-	##
-	## NOTE tests the opening speed, not the parameter -- EMBODIED_MOVEMENT_CONTINUITY.md C0.5
-	if opening_speed <= 0.0:
+	## Turning is charged only against a body with nothing to arrest. One that had
+	## to shed momentum has already been billed for the redirection, and charging
+	## both would price the same change of direction twice.
+	## NOTE the arrest replaces the turn for a moving body -- EMBODIED_MOVEMENT_CONTINUITY.md C2.1
+	if float(arrest.seconds) <= 0.0 and opening_speed <= 0.0:
 		seconds += float(profile.direction_change_delay)
+	## The extra ground a retreating body has to cover is real distance, so it
+	## reaches the target faster than it would have -- but from further back.
+	distance += float(arrest.ground_lost)
 	return {
 		"seconds": seconds,
 		## Solved over the distance rather than the duration, because the duration

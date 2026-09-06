@@ -295,6 +295,7 @@ func _initialize() -> void:
 	_test_authoritative_movement_path_contract()
 	_test_reachability_agrees_across_the_court()
 	_test_leg_exit_velocity_is_one_number()
+	_test_reversal_costs_more_than_standing_still()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_commentary_routing_contract()
@@ -24990,6 +24991,90 @@ func _test_leg_exit_velocity_is_one_number() -> void:
 	_check(worst <= 0.01,
 		"one exit velocity per leg, worst %.3f m/s%s" % [
 			worst, "" if worst_row.is_empty() else " -- " + worst_row,
+		])
+	manager.free()
+
+
+## C2: momentum that does not point at the target has to be arrested.
+##
+## Before the repair `maxf(velocity.dot(direction), 0.0)` deleted it, so every
+## angle from 90 degrees outward cost exactly what standing still cost -- 1.0571 s
+## at every entry speed, including 6 m/s sprinting directly away. This sweep
+## fails on that predecessor at the first assertion.
+##
+## The ordering is the claim, not the numbers: toward beats stationary, and
+## stationary beats perpendicular beats away. See
+## `docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C2.
+func _test_reversal_costs_more_than_standing_still() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var profile: VolleyballPlayer = null
+	for candidate in manager.players:
+		if candidate != null:
+			profile = candidate
+			break
+	if profile == null:
+		_check(false, "reversal sweep finds a player")
+		manager.free()
+		return
+	var mode := RallyPlayerState.MovementMode.TRANSITION
+	var target := Vector2(0.5, 0.5) + Vector2(
+		0.0, 3.0 / RallyKinematics.COURT_LENGTH_METERS
+	)
+	var stationary := RallyPlayerState.create(
+		profile, &"home", -1, Vector2(0.5, 0.5)
+	)
+	var baseline := float(RALLY_MOVEMENT_SCRIPT.traversal_result(
+		stationary, target, mode
+	)["seconds"])
+	var monotonic_speed := true
+	var ordered_by_angle := true
+	var toward_helps := true
+	for speed in [1.5, 3.0, 4.5, 6.0]:
+		var previous := -1.0
+		for degrees in [0.0, 90.0, 135.0, 180.0]:
+			## 0 degrees points at the target; 180 is sprinting away from it.
+			var radians := deg_to_rad(float(degrees))
+			var actor := RallyPlayerState.create(
+				profile, &"home", -1, Vector2(0.5, 0.5)
+			)
+			actor.velocity = Vector2(
+				sin(radians), cos(radians)
+			) * float(speed)
+			var seconds := float(RALLY_MOVEMENT_SCRIPT.traversal_result(
+				actor, target, mode
+			)["seconds"])
+			if degrees == 0.0:
+				if seconds >= baseline:
+					toward_helps = false
+			elif seconds <= baseline:
+				## Anything not pointing at the target must cost more than
+				## standing still, which is the whole finding.
+				ordered_by_angle = false
+			if previous >= 0.0 and seconds < previous - 0.0001:
+				ordered_by_angle = false
+			previous = seconds
+		if not monotonic_speed:
+			break
+	## A faster body reversing must pay more than a slower one reversing.
+	var away_by_speed: Array[float] = []
+	for speed in [1.5, 3.0, 4.5, 6.0]:
+		var actor := RallyPlayerState.create(
+			profile, &"home", -1, Vector2(0.5, 0.5)
+		)
+		actor.velocity = Vector2(0.0, -1.0) * float(speed)
+		away_by_speed.append(float(RALLY_MOVEMENT_SCRIPT.traversal_result(
+			actor, target, mode
+		)["seconds"]))
+	for index in range(1, away_by_speed.size()):
+		if away_by_speed[index] <= away_by_speed[index - 1]:
+			monotonic_speed = false
+	_check(toward_helps, "momentum toward the target still helps")
+	_check(ordered_by_angle,
+		"every angle off the target costs more than standing still, and more the further off")
+	_check(monotonic_speed,
+		"reversing faster costs more (%.4f -> %.4f s at 1.5 -> 6.0 m/s)" % [
+			away_by_speed[0], away_by_speed[away_by_speed.size() - 1],
 		])
 	manager.free()
 

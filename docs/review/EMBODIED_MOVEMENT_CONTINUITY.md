@@ -606,3 +606,72 @@ they actually did.
 expensive changes who reaches what, and the audit's A3.1 table is the size of the
 effect: up to 1.06 s on a 3 m leg. The balance probe is the measurement, and per
 the spec the drift is reported rather than normalised away.
+
+## C2.3 Measured: the ordering the spec asked for
+
+`audit_embodied_locomotion.gd`, 3.0 m target, TRANSITION, seconds to target and
+the delta against a body standing still:
+
+| entry | 0° | 45° | 90° | 135° | 180° |
+|---|---:|---:|---:|---:|---:|
+| 0.0 | 1.0571 | 1.0571 | 1.0571 | 1.0571 | 1.0571 |
+| 1.5 | 0.8111 | 1.0595 | 1.3080 | 1.3351 | 1.3464 |
+| 3.0 | 0.6586 | 1.1171 | 1.5756 | 1.6843 | 1.7293 |
+| 4.5 | 0.5830 | 1.2131 | 1.8433 | 2.0877 | 2.1890 |
+| 6.0 | 0.5740 | 1.3476 | 2.1110 | 2.5455 | **2.7255** |
+
+Against the audit's predecessor, where every cell from 90° outward read 1.0571
+regardless of speed:
+
+**6 m/s directly away from the target cost nothing and now costs +1.67 s.** The
+surface is monotonic in both variables and increases smoothly with angle rather
+than stepping at a threshold, which is the "continuous rather than categorical"
+requirement. The 45° column is the one that shows it is not a reversal special
+case: it crosses from a small credit at 1.5 m/s to a real charge at 6.0, because
+the lateral share of the momentum grows with speed while the forward share stays
+useful.
+
+Ordering holds in every row: `toward < stationary < perpendicular < strongly
+away`. No evidence-backed exception was found, so none is documented.
+
+## C2.4 Validation
+
+| control | result |
+|---|---|
+| **C0 exit-state contract** | **26 of 29 rows agree at 0.000**; the same three truncated rows, unchanged |
+| **P15 playback corrections** | **0 of 8,380 drawn legs, worst 0.0000** |
+| 700-rally balance | see below |
+
+**The contract row is the one that mattered most.** Charging arrest in the closed
+form alone would have re-opened the C0 split, because `project_toward` was
+agreeing with the *free-reversal* closed form. Both now call the same
+`arrest_terms`, and the probe says they still land together everywhere they did
+before.
+
+**Balance moved, and it moved toward the gates rather than away.**
+
+| figure | C1 | C2 | band |
+|---|---:|---:|---|
+| contacts per rally | 4.593 | 4.663 | — |
+| **kill rate** | 0.537 | **0.519** | 0.45–0.50 |
+| dig rate | 0.510 | 0.528 | 0.35–0.55 ✓ |
+| stuff rate | 0.099 | 0.104 | 0.08–0.14 ✓ |
+| block touch | 0.794 | 0.800 | — |
+| swing balance | 0.950 | 0.964 | near 1.00 |
+| ace | 0.099 | 0.099 | 0.05–0.09 ✗ |
+| serve error | 0.194 | 0.194 | 0.12–0.20 ✓ |
+
+Kill rate is **still outside its band** and this is not a claim to have fixed it.
+It is the closest it has been in this pass — 0.535 at the audit's A0, 0.537 after
+C1 — and it moved without anything being tuned toward it, which is the only kind
+of movement worth anything. Swing balance likewise recovered toward 1.00 rather
+than continuing away from it, reversing the drift C1 recorded as an observation.
+
+Ace remains outside at 0.099, untouched by all of C0–C2, and is
+`BACKLOG.md`'s existing item rather than this pass's.
+
+The mechanism is worth one line, because the direction is initially
+counter-intuitive: charging reversal slows *everyone*, including hitters carrying
+speed into an approach, so attacks arrive marginally worse-timed (attack quality
+0.474 → 0.470) and more balls come up (dig 0.510 → 0.528). Fewer kills is the
+consequence of a worse attack, not of a better defence.
