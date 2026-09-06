@@ -32,6 +32,9 @@ const STEP_SECONDS: float = 0.04
 ## dimension in the repo; the other two bracket it.
 const CLEARANCES: Array[float] = [0.50, 0.72, 0.90]
 
+## Which publisher produced each path, so a discontinuity can be attributed.
+var _source_of: Dictionary = {}
+
 
 func _initialize() -> void:
 	var pair_min: Array[float] = []
@@ -47,6 +50,12 @@ func _initialize() -> void:
 	var wrong_side := {"count": 0, "worst_meters": 0.0, "example": ""}
 	var samples_by_action: Dictionary = {}
 	var by_action: Dictionary = {}
+	## A2: does leg N+1 begin where leg N landed, and carrying what it carried?
+	var gap_sources: Dictionary = {}
+	var continuity := {
+		"pairs": 0, "gap": 0.0, "worst_gap": 0.0, "big_gaps": 0,
+		"cold_starts": 0, "hot_ends": 0,
+	}
 
 	for seed_value in range(FIRST_SEED, FIRST_SEED + SEED_COUNT):
 		var manager: Object = GameManagerScript.new()
@@ -69,6 +78,39 @@ func _initialize() -> void:
 				players_without_path += 1
 		if paths.is_empty():
 			continue
+		for player_id in paths:
+			var legs: Array = Array(paths[player_id]).duplicate()
+			legs.sort_custom(func(a, b):
+				return (a as RallyMovementPath).start_time \
+					< (b as RallyMovementPath).start_time
+			)
+			for index in range(legs.size() - 1):
+				var first := legs[index] as RallyMovementPath
+				var second := legs[index + 1] as RallyMovementPath
+				## Only genuinely consecutive legs: an overlapping pair is two
+				## publishers describing the same window, which A4 counts.
+				if second.start_time < first.end_time() - 0.001:
+					continue
+				continuity["pairs"] = int(continuity.pairs) + 1
+				var gap := RallyKinematics.court_distance_meters(
+					first.landing_position(), second.start_position()
+				)
+				continuity["gap"] = float(continuity.gap) + gap
+				continuity["worst_gap"] = maxf(float(continuity.worst_gap), gap)
+				if gap > 0.10:
+					continuity["big_gaps"] = int(continuity.big_gaps) + 1
+					var pair_key := "%s -> %s" % [
+						str(_source_of.get(first, "?")),
+						str(_source_of.get(second, "?")),
+					]
+					gap_sources[pair_key] = int(
+						gap_sources.get(pair_key, 0)
+					) + 1
+				if first.exit_velocity.length() > 0.4:
+					continuity["hot_ends"] = int(continuity.hot_ends) + 1
+				if second.velocities.size() > 0 \
+						and Vector2(second.velocities[0]).length() <= 0.01:
+					continuity["cold_starts"] = int(continuity.cold_starts) + 1
 		var window := _window(paths)
 		var start_time := float(window.x)
 		var end_time := float(window.y)
@@ -216,6 +258,23 @@ func _initialize() -> void:
 	for index in range(mini(8, worst.size())):
 		print("  %.3f m" % float(worst[index]))
 	print("")
+	print("=== A2 leg-to-leg continuity, from published paths ===")
+	print("consecutive_leg_pairs|%d" % int(continuity.pairs))
+	print("gap_m_mean|%.4f" % (
+		float(continuity.gap) / maxf(float(continuity.pairs), 1.0)
+	))
+	print("gap_m_worst|%.4f" % float(continuity.worst_gap))
+	print("pairs_with_gap_over_10cm|%d" % int(continuity.big_gaps))
+	print("next_leg_starts_at_rest|%d of %d" % [
+		int(continuity.cold_starts), int(continuity.pairs),
+	])
+	print("previous_leg_ended_moving|%d" % int(continuity.hot_ends))
+	print("--- gaps over 10 cm, by which publishers the two legs came from")
+	var gap_keys: Array = gap_sources.keys()
+	gap_keys.sort_custom(func(a, b): return int(gap_sources[a]) > int(gap_sources[b]))
+	for key in gap_keys:
+		print("  %s|%d" % [str(key), int(gap_sources[key])])
+	print("")
 	print("=== A7 court and environment ===")
 	print("samples_outside_x_bounds|%d" % int(out_of_bounds.x))
 	print("worst_x_excursion_m|%.2f" % float(out_of_bounds.worst_x))
@@ -263,32 +322,35 @@ func _collect_paths(result: Resource, side_of: Dictionary) -> Dictionary:
 		var metadata: Dictionary = event.metadata
 		var actor_id := int(event.actor_id)
 		if actor_id >= 0 and metadata.get("movement_path", null) != null:
-			_append(paths, actor_id, metadata["movement_path"])
+			_append(paths, actor_id, metadata["movement_path"], "movement_path")
 		var staged := int(metadata.get("staged_next_actor_id", -1))
 		if staged >= 0 and metadata.get("staged_next_path", null) != null:
-			_append(paths, staged, metadata["staged_next_path"])
+			_append(paths, staged, metadata["staged_next_path"], "staged_next")
 		for side in ["home", "opponent"]:
 			var intents: Variant = metadata.get("%s_phase_intents" % side, {})
 			if intents is Dictionary:
 				for raw_id in Dictionary(intents):
 					var entry: Variant = Dictionary(intents)[raw_id]
 					if entry is Dictionary and entry.get("path", null) != null:
-						_append(paths, int(raw_id), entry["path"])
+						_append(paths, int(raw_id), entry["path"], "phase_intent")
 			var holds: Variant = metadata.get("%s_phase_hold_paths" % side, {})
 			if holds is Dictionary:
 				for raw_id in Dictionary(holds):
 					if Dictionary(holds)[raw_id] != null:
-						_append(paths, int(raw_id), Dictionary(holds)[raw_id])
+						_append(paths, int(raw_id), Dictionary(holds)[raw_id], "phase_hold")
 	return paths
 
 
-func _append(paths: Dictionary, player_id: int, path: Variant) -> void:
+func _append(
+	paths: Dictionary, player_id: int, path: Variant, source: String = "?"
+) -> void:
 	var typed := path as RallyMovementPath
 	if typed == null or not typed.is_valid():
 		return
 	if not paths.has(player_id):
 		paths[player_id] = []
 	Array(paths[player_id]).append(typed)
+	_source_of[typed] = source
 
 
 func _window(paths: Dictionary) -> Vector2:

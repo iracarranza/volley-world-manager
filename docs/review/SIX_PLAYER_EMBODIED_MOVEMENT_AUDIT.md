@@ -85,6 +85,48 @@ information exists and travels. It simply never reaches the committed solve.
 `rally_movement_system.gd`, setting `REACHING` on a snapshot, and never in the
 arithmetic. Measured below.
 
+## Measured in production data, not inferred from call sites
+
+`tools/audit_six_player_space.gd` sorts every published leg per player and
+compares each leg to the next, over 120 rallies — **1,044 consecutive leg
+pairs**:
+
+| measure | value |
+|---|---:|
+| **next leg begins at rest** | **1,044 of 1,044** |
+| previous leg ended moving (>0.4 m/s) | 149 |
+| mean position gap between legs | 0.352 m |
+| worst position gap | **4.781 m** |
+| pairs gapped by more than 10 cm | 268 |
+
+**Every leg in the game begins from a standstill.** Not "most" and not "the ones
+that were not given a velocity" — all 1,044. In 149 of them the previous leg
+genuinely ended moving, and that momentum was dropped at the boundary. This is
+the call-site census of A1 confirmed against the record the game actually
+publishes.
+
+**A quarter of leg boundaries also move the body.** Attributing the 268 gaps to
+the publisher pair that produced them:
+
+| previous → next | gaps > 10 cm |
+|---|---:|
+| `phase_intent` → `phase_intent` | **102** |
+| `movement_path` → `phase_hold` | 77 |
+| `phase_hold` → `phase_intent` | 43 |
+| `movement_path` → `phase_intent` | 14 |
+| others | 32 |
+
+The discriminating result is the first row: 102 gaps are **one publisher's own
+consecutive journeys** failing to join, which cannot be explained as two sources
+describing different things.
+
+**Two caveats, because not every gap is a defect.** A contact legitimately places
+its actor, so `movement_path → *` transitions can move a body by design. And the
+zero-correction metric does not contradict this: a "correction" is defined as *no
+published path* plus a disagreement, so a next leg that publishes a path starting
+somewhere else is invisible to it. These 268 are a different population from the
+425 corrections P15 removed, and they were previously unmeasured.
+
 ---
 
 # A3 — Controlled locomotion counterfactuals
@@ -525,8 +567,12 @@ still runs on true flight. Documented, not absorbed.
   wins; it does not establish which upstream decision chose that publisher's
   target, nor whether claim priority or assertiveness changed who moved. A
   controlled scenario differing only in claimant would be the test.
-- **Recovery × deadline was not measured.** Recovery gates when a body may
-  start, and no controlled test crossed that gate with a shrinking window.
+- **Recovery × deadline has no interaction to measure inside the model.**
+  `rally_movement_system.gd` mentions recovery twice, both times copying
+  `recovery_time_seconds` onto an opportunity object, and never in its locomotion
+  arithmetic. Recovery acts upstream by shortening the available window, so the
+  interaction lives in the callers, not in the solve. Recorded as resolved rather
+  than untested.
 - **Attribute interactions were not crossed.** Six bodies were compared whole;
   acceleration × mass × fatigue were not varied against each other.
 - **Teammate occupancy × route geometry was not tested**, because no production
