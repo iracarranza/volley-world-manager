@@ -2482,6 +2482,7 @@ func resolve(
 		opponent_team.on_court_players(), opponent_live_positions,
 		Dictionary(opponent_block_formation.get("setter_pull_positions", {})),
 		second_contact_window, opponent_setter_read_intents,
+		opponent_live_velocities,
 	)
 	if set_event != null and set_decision_event != null:
 		var home_pass_targets: Dictionary = set_event.metadata.get(
@@ -2510,13 +2511,13 @@ func resolve(
 		set_event.metadata["home_phase_targets"] = {}
 		set_event.metadata["home_phase_intents"] = _hold_phase_intents(
 			_lineup_players(players, lineup), live_positions, home_pass_targets,
-			home_release_sources, release_interval,
+			home_release_sources, release_interval, live_velocities,
 		)
 		set_event.metadata["opponent_phase_targets"] = {}
 		set_event.metadata["opponent_phase_intents"] = _hold_phase_intents(
 			opponent_team.on_court_players(), opponent_live_positions,
 			opponent_setter_read_targets, opponent_setter_read_intents,
-			release_interval,
+			release_interval, opponent_live_velocities,
 		)
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
@@ -16279,7 +16280,7 @@ func _transition_phase_map(
 		## out of `live_positions` separates the drawn and simulated courts from
 		## the second contact onward
 		live_positions[player.id] = reached
-		live_velocities[player.id] = journey.get("exit_velocity", Vector2.ZERO)
+		_record_exit_velocity(live_velocities, player.id, journey)
 	return targets
 
 
@@ -16351,9 +16352,7 @@ func _opponent_transition_phase_map(
 		)
 		out_intents[player.id] = journey
 		opponent_live_positions[player.id] = reached
-		opponent_live_velocities[player.id] = journey.get(
-			"exit_velocity", Vector2.ZERO
-		)
+		_record_exit_velocity(opponent_live_velocities, player.id, journey)
 	return targets
 
 
@@ -16499,15 +16498,16 @@ func _cover_phase_map(
 		)
 		## The leg's own landing, as everywhere else -- see `_travel_intent`.
 		var cover_landed: Vector2 = cover_journey.get("reached_position", reached)
-		var cover_exit: Vector2 = cover_journey.get("exit_velocity", Vector2.ZERO)
 		targets[player.id] = cover_landed
 		out_intents[player.id] = cover_journey
 		if opponent_side:
 			opponent_live_positions[player.id] = cover_landed
-			opponent_live_velocities[player.id] = cover_exit
+			_record_exit_velocity(
+				opponent_live_velocities, player.id, cover_journey
+			)
 		else:
 			live_positions[player.id] = cover_landed
-			live_velocities[player.id] = cover_exit
+			_record_exit_velocity(live_velocities, player.id, cover_journey)
 	return targets
 
 
@@ -16518,6 +16518,8 @@ func _setter_read_phase(
 	pull_positions: Dictionary,
 	window_seconds: float,
 	out_intents: Dictionary,
+	## The side's velocity store, paired with `live` -- see `_hold_phase_intents`.
+	live_velocity: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
 	for entry in players:
@@ -16527,22 +16529,29 @@ func _setter_read_phase(
 		var here: Vector2 = live.get(player.id, pull_positions.get(
 			player.id, Vector2.ZERO
 		))
+		var carried: Vector2 = live_velocity.get(player.id, Vector2.ZERO)
 		if pull_positions.has(player.id):
 			var intended := Vector2(pull_positions[player.id])
 			var reached := _reached_point(
 				player, here, intended, window_seconds, "lateral",
-				0.0, 0.0, Vector2.ZERO, false,
+				0.0, 0.0, Vector2.ZERO, false, carried,
 			)
 			targets[player.id] = reached
-			out_intents[player.id] = _travel_intent(
+			var journey := _travel_intent(
 				player, &"blocking", here, intended, reached,
-				"lateral", window_seconds,
+				"lateral", window_seconds, carried,
 			)
+			out_intents[player.id] = journey
+			_record_exit_velocity(live_velocity, player.id, journey)
 		else:
 			out_intents[player.id] = _travel_intent(
 				player, &"watching", here, here, here,
-				"lateral", window_seconds,
+				"lateral", window_seconds, carried,
 			)
+			## A body told to watch is not told to stop -- it holds whatever it
+			## was carrying into the read, and the zero-length leg publishes no
+			## path to say otherwise.
+			live_velocity[player.id] = carried
 	return targets
 
 
@@ -16553,6 +16562,12 @@ func _hold_phase_intents(
 	resolved_positions: Dictionary,
 	source_intents: Dictionary,
 	window_seconds: float,
+	## The side's velocity store, paired with `live`. These legs are real
+	## journeys rather than holds -- the comment below records the pass that
+	## stopped them being published as zero-length -- so a body arrives at one
+	## carrying speed and leaves it carrying speed.
+	## NOTE the largest unwired publisher, 3,035 of 4,593 drops -- EMBODIED_MOVEMENT_CONTINUITY.md C1.5
+	live_velocity: Dictionary = {},
 ) -> Dictionary:
 	var intents := {}
 	for entry in players:
@@ -16571,10 +16586,13 @@ func _hold_phase_intents(
 		)
 		var here: Vector2 = live.get(player.id, target)
 		var source: Dictionary = source_intents.get(player.id, {})
-		intents[player.id] = _travel_intent(
+		var carried: Vector2 = live_velocity.get(player.id, Vector2.ZERO)
+		var journey := _travel_intent(
 			player, StringName(source.get("intent", &"watching")),
-			here, target, target, "lateral", window_seconds,
+			here, target, target, "lateral", window_seconds, carried,
 		)
+		intents[player.id] = journey
+		_record_exit_velocity(live_velocity, player.id, journey)
 	return intents
 
 
@@ -16858,6 +16876,23 @@ func _wall_close_intent(
 
 
 ## NOTE One off-ball journey, published with when it ended and not only where -- RALLY_SIMULATOR_NOTES.md
+## Store the velocity a published leg ends with.
+##
+## **A leg that published no path is not a statement that the body stopped.** It
+## is the absence of a journey -- `_committed_path` returns null for a zero-length
+## leg and for a non-positive window -- and `exit_velocity` is then a default
+## rather than a measurement. Writing it back wipes the momentum the body was
+## actually carrying, which is measurable: doing so unconditionally took the
+## carried population from 705 boundaries down to 243.
+## NOTE absence of a journey is not evidence of rest -- EMBODIED_MOVEMENT_CONTINUITY.md C1.6
+func _record_exit_velocity(
+	store: Dictionary, player_id: int, journey: Dictionary
+) -> void:
+	if journey.get("path", null) == null:
+		return
+	store[player_id] = journey.get("exit_velocity", Vector2.ZERO)
+
+
 func _travel_intent(
 	mover: VolleyballPlayer,
 	intent: StringName,

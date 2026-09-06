@@ -62,6 +62,9 @@ func _initialize() -> void:
 	var context_census: Dictionary = {}
 	var rally_lengths: Array[int] = []
 	var gap_sources: Dictionary = {}
+	## Per publisher pair, of the boundaries whose predecessor ended moving: how
+	## many kept the momentum and how many dropped it.
+	var drop_sources: Dictionary = {}
 	var continuity := {
 		"pairs": 0, "gap": 0.0, "worst_gap": 0.0, "big_gaps": 0,
 		"cold_starts": 0, "hot_ends": 0,
@@ -129,11 +132,30 @@ func _initialize() -> void:
 					gap_sources[pair_key] = int(
 						gap_sources.get(pair_key, 0)
 					) + 1
-				if first.exit_velocity.length() > 0.4:
+				var ended_moving := first.exit_velocity.length() > 0.4
+				var started_cold := second.velocities.size() > 0 \
+					and Vector2(second.velocities[0]).length() <= 0.01
+				if ended_moving:
 					continuity["hot_ends"] = int(continuity.hot_ends) + 1
-				if second.velocities.size() > 0 \
-						and Vector2(second.velocities[0]).length() <= 0.01:
+				if started_cold:
 					continuity["cold_starts"] = int(continuity.cold_starts) + 1
+				## The C1 gate's question: where a body *had* momentum, which
+				## publisher pair kept it and which dropped it. The total says a
+				## carry exists; only this says which boundary is still unwired.
+				## NOTE classification, not a count -- EMBODIED_MOVEMENT_CONTINUITY.md C1.5
+				if ended_moving:
+					var carry_key := "%s -> %s" % [
+						str(_source_of.get(first, "?")),
+						str(_source_of.get(second, "?")),
+					]
+					var bucket: Dictionary = drop_sources.get(
+						carry_key, {"dropped": 0, "kept": 0}
+					)
+					if started_cold:
+						bucket["dropped"] = int(bucket.dropped) + 1
+					else:
+						bucket["kept"] = int(bucket.kept) + 1
+					drop_sources[carry_key] = bucket
 		var window := _window(paths)
 		var start_time := float(window.x)
 		var end_time := float(window.y)
@@ -314,6 +336,20 @@ func _initialize() -> void:
 	gap_keys.sort_custom(func(a, b): return int(gap_sources[a]) > int(gap_sources[b]))
 	for key in gap_keys:
 		print("  %s|%d" % [str(key), int(gap_sources[key])])
+	print("--- boundaries whose predecessor ended moving: kept vs dropped")
+	var drop_keys: Array = drop_sources.keys()
+	drop_keys.sort_custom(func(a, b):
+		return int(Dictionary(drop_sources[a]).dropped) \
+			> int(Dictionary(drop_sources[b]).dropped)
+	)
+	for key in drop_keys:
+		var bucket: Dictionary = drop_sources[key]
+		var kept := int(bucket.kept)
+		var dropped := int(bucket.dropped)
+		print("  %s|dropped %d|kept %d|%.0f%% carried" % [
+			str(key), dropped, kept,
+			100.0 * float(kept) / maxf(float(kept + dropped), 1.0),
+		])
 	print("")
 	print("=== A7 court and environment ===")
 	print("samples_outside_x_bounds|%d" % int(out_of_bounds.x))
