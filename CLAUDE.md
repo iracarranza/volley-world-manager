@@ -12,9 +12,27 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-02 on the merge of
-`claude/system-fit-serve-receive-von64k` into this branch: **2 of 2,242 checks
+Current branch baseline, verified 2026-09-06 at `23903f5`: **2 of 2,262 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Three checks written, twenty gained across six commits, and every predecessor
+was measured** -- 2,242 to 2,261 to 2,262, with the intermediate 2,259 recorded
+too. The nineteen unattributed to authorship are sampling gates drawing more,
+which is what a pass that publishes a solved path for every drawn leg has to
+look like. The 700-rally balance probe is **byte-identical on all nineteen
+figures across all six commits**, so no rally outcome moved: the integrator that
+now runs per leg touches no RNG, and that was verified rather than assumed.
+
+The pass removed **five competing movement truths** and left production with
+one. Playback owns no movement model: over 150 rallies and 9,473 drawn legs,
+81.9% are the resolver's published path, 6.9% are corrections *recorded* rather
+than re-solved, 11.3% are holds, and there are zero contract violations. See
+`docs/review/AUTHORITATIVE_MOVEMENT_EXECUTION.md`, P9 through P14.
+
+One caveat on the count, and it is the usual one. The two known failures moved
+from "22 walls" to "22 walls" unchanged, but `_test_playback_samples_resolved_movement`
+was rewritten mid-pass -- it drove a code path that no longer exists -- so 2,259
+appears between 2,261 and 2,262 and is not a regression.
 
 **Six checks written, six gained, and both sides of the merge were measured** --
 so the delta is attributable and says no sampling population moved. This branch
