@@ -127,6 +127,23 @@ published path* plus a disagreement, so a next leg that publishes a path startin
 somewhere else is invisible to it. These 268 are a different population from the
 425 corrections P15 removed, and they were previously unmeasured.
 
+**Re-run at 600 rallies, and every proportion holds.** 5,800 consecutive leg
+pairs — 5.6× the sample — and the shape does not move:
+
+| measure | 120 rallies | 600 rallies |
+|---|---:|---:|
+| next leg begins at rest | 1,044 of 1,044 | **5,800 of 5,800** |
+| previous leg ended moving | 149 (14.3%) | 801 (13.8%) |
+| pairs gapped by more than 10 cm | 268 (25.7%) | 1,482 (25.6%) |
+| mean gap | 0.352 m | 0.340 m |
+| worst gap | 4.781 m | 4.781 m |
+| `phase_intent → phase_intent` share of the gaps | 102 (38.1%) | 569 (38.4%) |
+
+The "begins at rest" row is the one that matters: it is not a small-sample
+artefact and it is not a majority — it is every leg the game publishes, at both
+sample sizes. The worst gap is the *same* 4.781 m, so 480 additional rallies
+found nothing worse than the 120 already had.
+
 ---
 
 # A3 — Controlled locomotion counterfactuals
@@ -397,6 +414,60 @@ those want different repairs.
 at all and were never sampled. Conflicts involving those bodies cannot appear in
 these numbers.
 
+### Confirmed at 600 rallies, with one figure corrected upward
+
+63,564 instants, **403,710 pair observations**, 5.5× the first sweep. The rates
+hold; two things change.
+
+| measure | 120 rallies | 600 rallies |
+|---|---:|---:|
+| minimum separation | 0.000 m | **0.000 m** |
+| p01 | 0.606 m | 0.580 m |
+| p05 | 1.347 m | 1.324 m |
+| p50 | 4.083 m | 4.046 m |
+| pair-samples inside 0.50 m | 529 (0.72%) | 3,142 (0.78%) |
+| court-seconds inside 0.50 m | 21.2 s | **125.7 s** |
+| instants with 3+ bodies inside 0.50 m | 1 | **32** |
+| instants with 3+ inside 0.90 m | 61 (0.51%) | 342 (0.54%) |
+| slots publishing no path | 27% | 24% |
+
+**The three-body cluster rate at 0.50 m was under-measured, and the reason is that
+it was one observation.** 1 instant in 11,974 is not a rate; 32 in 63,564 is
+0.050%, six times the point estimate the smaller sweep gave. Nothing changed in
+the code — the first number was a single event being read as a frequency, which
+is the same class of error as a threshold measured against the wrong
+distribution. The 0.90 m row, which had 61 observations to begin with, moves by
+6% and confirms the sweep itself is stable.
+
+Stratification also sharpens, and one row moves rank:
+
+| flight | side | 120 | 600 | share at 600 |
+|---|---|---:|---:|---:|
+| RECEPTION | opponent | 183 | 786 | 25.0% |
+| DIG | opponent | 135 | 599 | 19.1% |
+| **BLOCK** | home | 48 | **463** | **14.7%** |
+| POINT | home | 60 | 407 | 13.0% |
+| DIG | home | 29 | 278 | 8.8% |
+| POINT | opponent | 25 | 184 | 5.9% |
+| ATTACK | home | — | 139 | 4.4% |
+| SET | opponent | 38 | 135 | 4.3% |
+| ATTACK_COVERAGE | both | — | 75 | 2.4% |
+
+BLOCK on the home side was the fourth-largest source at 120 rallies and is the
+third at 600, at nearly ten times the count — a three-body wall converging on one
+point is exactly the geometry that produces this, and the small sweep under-sampled
+it. The reception/dig concentration is unchanged as the headline.
+
+The causal split is unchanged: **2,856 of 3,142 (90.9%) are both bodies moving**,
+245 both parked, 41 one moving. Converging traffic, at both sample sizes.
+
+**`ATTACK_COVERAGE` is now measured rather than guessed at.** It appeared in 2 of
+120 rallies, which was too thin to conclude anything; at 600 it appears in **20**
+(3.3%) and contributes 75 of the 3,142 close samples (2.4%). It is genuinely
+rare, and it is *not* disproportionately conflict-prone — its share of the
+traffic is slightly below its share of the rallies. That closes it as a candidate
+hot spot rather than leaving it open.
+
 ---
 
 # A7 — Court and environment
@@ -418,6 +489,21 @@ unclamped targets.
 A body 0.88 m across the centre line has walked through the net. This is
 impossible traversal rather than legal off-court movement, and it is the one A7
 finding that is not explainable as pursuit.
+
+**At 600 rallies the rate holds and the tail extends, which is what a tail does.**
+
+| measure | 120 | 600 | rate at 120 | rate at 600 |
+|---|---:|---:|---:|---:|
+| outside x | 34 (worst 0.32 m) | 212 (worst 0.34 m) | 0.28% | 0.33% |
+| outside y | 260 (worst 1.00 m) | 1,276 (worst 1.00 m) | 2.17% | 2.01% |
+| **past the net plane** | 305 (worst 0.88 m) | **1,669 (worst 0.96 m)** | 2.55% | 2.63% |
+
+2.6% of every sampled body-instant is on the wrong side of the net, at both
+sample sizes — this is not a rare seed. The worst case moves 0.88 m to 0.96 m
+(seed 61575, player 102, opponent side) because five times the sample reaches
+further into the same distribution; the y excursion, which is bounded by
+legitimate pursuit, does not move at all. A quantity that grows with sampling and
+one that does not is the distinction between a tail and a limit.
 
 ---
 
@@ -555,10 +641,10 @@ announced itself by producing a physically impossible number.
 
 | # | finding | evidence | severity |
 |---|---|---|---|
-| B1 | Same-team bodies occupy the same point. Minimum separation 0.000 m; 529 pair-samples and 21.2 s inside 0.50 m. Three-body clusters are rare at 0.50 m (1 instant) and common at 0.90 m (61). | A6 | high |
-| B2 | 93% of those are **both bodies moving** — converging traffic, not duplicated standing positions. | A6 context split | informs the fix |
-| B4 | Traffic concentrates on RECEPTION (183) and DIG (135) on the receiving/defending side, plus 85 samples during the dead ball where nothing has a phase intention. | A6 stratification | directs the fix |
-| B3 | Bodies cross the net plane by up to 0.88 m, 305 samples. | A7 | medium |
+| B1 | Same-team bodies occupy the same point. Minimum separation 0.000 m; **3,142 pair-samples and 125.7 s inside 0.50 m over 600 rallies**, 0.78% of all pair observations. Three-body clusters: 32 instants at 0.50 m, 342 at 0.90 m. | A6 | high |
+| B2 | **90.9%** of those are **both bodies moving** — converging traffic, not duplicated standing positions. | A6 context split, stable 120→600 | informs the fix |
+| B4 | Traffic concentrates on RECEPTION (25.0%) and DIG (19.1%) on the receiving/defending side, then the **home BLOCK (14.7%)**, plus 18.8% during the dead ball where nothing has a phase intention. | A6 stratification at 600 | directs the fix |
+| B3 | Bodies cross the net plane by up to **0.96 m**, **1,669 samples — 2.6% of every body-instant**, at both sample sizes. | A7 | medium |
 
 ## C. Things that already work — preserve
 
@@ -576,8 +662,10 @@ still runs on true flight. Documented, not absorbed.
 
 ## E. Uncertain / under-exercised
 
-- **27% of player-rally slots publish no path** and are invisible to A6. The
-  conflict numbers are a lower bound and the true rate is unknown.
+- **24% of player-rally slots publish no path** and are invisible to A6. The
+  conflict numbers are a lower bound and the true rate is unknown. The figure was
+  27% at 120 rallies; the wider sweep does not close it, it only measures it
+  better.
 - **The D1 split's actual cause is not identified.** Controlled geometry agrees;
   the 46 disagreeing production legs must come from waypoints, mode, or the
   clamp, and no discriminating test was run.
@@ -596,6 +684,38 @@ still runs on true flight. Documented, not absorbed.
 - **Teammate occupancy × route geometry was not tested**, because no production
   mechanism consumes teammate positions as a route constraint — so there is
   nothing to vary. That is an absence, not a measurement.
+
+## Search saturation
+
+The spec asks the audit to keep widening until the search stops producing new
+kinds of finding. It has. The evidence for that claim is that the last widening
+changed *numbers* and no *classes*:
+
+| axis | how far it was taken | what the last widening added |
+|---|---|---|
+| production sampling | 120 → 600 rallies (5.5× pair observations) | sharper rates, one rank change (home BLOCK 4th → 3rd), one corrected estimate that had been n=1. **No new defect.** |
+| leg continuity | 1,044 → 5,800 leg pairs | every proportion within 0.5 points; the worst gap is the identical 4.781 m |
+| locomotion counterfactuals | 6 modes × 6 body profiles × 5 entry speeds × 5 entry angles × 3 distances, plus three explicit interaction crossings | facing × velocity additive with no interaction; body state × direction inert in interaction as in isolation; truncation × momentum honoured. **No interaction produced an effect its factors did not have alone.** |
+| reachability split | 60 controlled rows across distance × entry speed × entry angle | 0.000 m agreement throughout, which *falsified* the spec's own hypothesis rather than confirming it |
+| call-site census | exhaustive, not sampled — 16 `_committed_path`, 18 `_reached_point`, 33 `_movement_time`, 7 `_travel` | nothing left to widen; the population is the whole codebase |
+| target-source contest | 3,802 body-events, every event | — |
+
+Saturation is a claim about the questions asked, not about the system. Four
+things remain open and they are open *by construction*, not for want of samples —
+each needs an instrument this audit does not have:
+
+1. **The D1 split's cause.** Controlled geometry agrees exactly, so the
+   discriminating variable is waypoints, mode, or the clamp. A two-leg waypointed
+   fixture would answer it; running more rallies will not.
+2. **The 24% of slots that publish no path.** They cannot be sampled by an
+   instrument that reads published paths. Closing this needs a different source,
+   not a larger `rallies=`.
+3. **Claim versus coordination.** A4 says which publisher wins; isolating which
+   upstream decision chose it needs a scenario that differs only in claimant.
+4. **Attribute cross-interactions.** Six whole bodies were compared;
+   acceleration × mass × fatigue were not crossed against each other. A3.4 makes
+   this low-yield — mass moves the answer by 0.030 s across a 60 kg range — but it
+   is untested, and low-yield is a prediction, not a measurement.
 
 ## Minimum evidence-backed implementation sequence
 
