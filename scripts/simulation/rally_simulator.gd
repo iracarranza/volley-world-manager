@@ -3147,8 +3147,13 @@ func resolve(
 		for raw_floor_id in opponent_floor_intents:
 			opponent_stage_intents[int(raw_floor_id)] = \
 				opponent_floor_intents[raw_floor_id]
+		## The blockers' committed positions are corrected to their own legs'
+		## landings here rather than at the bulk write above, which stamps the
+		## intended wall for everybody. A blocker who cannot close inside the set
+		## flight is recorded where they got to. See the home mirror of this at
+		## `home_wall_intents` -- AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.
 		if opponent_blocker != null:
-			opponent_stage_intents[opponent_blocker.id] = _wall_close_intent(
+			var opponent_primary_close := _wall_close_intent(
 				opponent_blocker,
 				opponent_wall_starts.get(
 					opponent_blocker.id, Vector2(opponent_wall.primary_position)
@@ -3156,8 +3161,17 @@ func resolve(
 				Vector2(opponent_wall.primary_position),
 				float(set_flight_time),
 			)
+			opponent_stage_intents[opponent_blocker.id] = opponent_primary_close
+			opponent_block_stage[opponent_blocker.id] = Vector2(
+				opponent_primary_close.get(
+					"reached_position", opponent_wall.primary_position
+				)
+			)
+			opponent_live_positions[opponent_blocker.id] = Vector2(
+				opponent_block_stage[opponent_blocker.id]
+			)
 		if assisting_blocker != null:
-			opponent_stage_intents[assisting_blocker.id] = _wall_close_intent(
+			var opponent_assist_close := _wall_close_intent(
 				assisting_blocker,
 				opponent_wall_starts.get(
 					assisting_blocker.id, Vector2(opponent_wall.assist_position)
@@ -3165,6 +3179,16 @@ func resolve(
 				Vector2(opponent_wall.assist_position),
 				float(set_flight_time),
 			)
+			opponent_stage_intents[assisting_blocker.id] = opponent_assist_close
+			opponent_block_stage[assisting_blocker.id] = Vector2(
+				opponent_assist_close.get(
+					"reached_position", opponent_wall.assist_position
+				)
+			)
+			opponent_live_positions[assisting_blocker.id] = Vector2(
+				opponent_block_stage[assisting_blocker.id]
+			)
+		attack_event.metadata["opponent_phase_targets"] = opponent_block_stage
 		attack_event.metadata["opponent_phase_intents"] = opponent_stage_intents
 	## NOTE FD-003, the attacking side's own six -- RALLY_SIMULATOR_NOTES.md
 	var home_cover_stage_intents := {}
@@ -3550,6 +3574,7 @@ func resolve(
 				recycle_target,
 				float(opponent_block_trajectory.get("duration", 0.30)),
 				false, home_coverage_leg_intents,
+				coverer.id if coverer != null else -1,
 			),
 			"home_phase_intents": home_coverage_leg_intents}
 		if not coverage_flight.is_empty():
@@ -3750,10 +3775,23 @@ func resolve(
 			opponent_scramble_by_id[opponent_scramble_player.id] = \
 				opponent_scramble_player
 	var opponent_scramble_intents := {}
+	## **Committed, where it used to be published and disbelieved.**
+	##
+	## This passed a *copy* of the live map and `commit_journey = false`, so the
+	## defensive scramble reached playback and never reached the simulation --
+	## deliberately, to hold the balance baseline; see
+	## `OFFBALL_BLOCK_DIG_AUTHORITY.md`. The home mirror of the same phase has
+	## always committed, so one dig moved bodies and the other did not.
+	##
+	## It was the largest single source of playback corrections: the drawn body
+	## walked to the published target and the next event reported it still
+	## standing where it began. Exertion and claimant authority stay uncharged --
+	## only the position is now believed.
+	## AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.
 	var opponent_scramble_targets := _deflection_adjust_map(
-		opponent_live_positions.duplicate(true), attack_target, opponent_defender.id,
+		opponent_live_positions, attack_target, opponent_defender.id,
 		opponent_defense_time, true, opponent_scramble_by_id,
-		opponent_scramble_intents, false,
+		opponent_scramble_intents,
 	)
 	var home_post_attack_intents := {}
 	var home_post_attack_targets := _post_attack_phase_map(
@@ -5241,9 +5279,17 @@ func _resolve_opponent_transition(
 	## one, because both legs happen inside the same opponent set flight and two
 	## keys for one window is the correct-then-clobbered shape this file has been
 	## bitten by before.
+	## **The wall a blocker can actually close to.**
+	##
+	## These committed the *intended* wall position while publishing a path that
+	## the set flight can cut short, so a blocker who could not close in time was
+	## drawn where they got to and recorded where they were sent -- up to 0.292
+	## court units apart, and the last population of contact-actor corrections.
+	## `reached_position` is the leg's own landing.
+	## AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.
 	var home_wall_intents := {}
 	if staged_home_primary != null:
-		home_wall_intents[staged_home_primary.id] = _wall_close_intent(
+		var primary_close := _wall_close_intent(
 			staged_home_primary,
 			Vector2(live_positions.get(
 				staged_home_primary.id, home_wall_positions.primary_position
@@ -5251,11 +5297,12 @@ func _resolve_opponent_transition(
 			Vector2(home_wall_positions.primary_position),
 			float(set_flight_time),
 		)
-		live_positions[staged_home_primary.id] = Vector2(
-			home_wall_positions.primary_position
-		)
+		home_wall_intents[staged_home_primary.id] = primary_close
+		live_positions[staged_home_primary.id] = Vector2(primary_close.get(
+			"reached_position", home_wall_positions.primary_position
+		))
 	if staged_home_assist != null:
-		home_wall_intents[staged_home_assist.id] = _wall_close_intent(
+		var assist_close := _wall_close_intent(
 			staged_home_assist,
 			Vector2(live_positions.get(
 				staged_home_assist.id, home_wall_positions.assist_position
@@ -5263,9 +5310,10 @@ func _resolve_opponent_transition(
 			Vector2(home_wall_positions.assist_position),
 			float(set_flight_time),
 		)
-		live_positions[staged_home_assist.id] = Vector2(
-			home_wall_positions.assist_position
-		)
+		home_wall_intents[staged_home_assist.id] = assist_close
+		live_positions[staged_home_assist.id] = Vector2(assist_close.get(
+			"reached_position", home_wall_positions.assist_position
+		))
 	if opponent_set_event != null and not home_wall_intents.is_empty():
 		var home_stage_targets: Dictionary = opponent_set_event.metadata.get(
 			"home_phase_targets", {}
@@ -6180,6 +6228,7 @@ func _resolve_opponent_transition(
 				home_block_target,
 				float(home_block_trajectory.get("duration", 0.30)),
 				true, opponent_coverage_leg_intents,
+				coverer.id if coverer != null else -1,
 			),
 			"opponent_phase_intents": opponent_coverage_leg_intents,
 		}
@@ -7851,6 +7900,7 @@ func _resolve_home_continuation(
 				block_event_end,
 				float(cont_block_trajectory.get("duration", 0.30)),
 				false, continuation_coverage_leg_intents,
+				coverer.id if coverer != null else -1,
 			),
 			"home_phase_intents": continuation_coverage_leg_intents,
 		}
@@ -8036,10 +8086,11 @@ func _resolve_home_continuation(
 		if cont_scramble_player != null:
 			cont_scramble_by_id[cont_scramble_player.id] = cont_scramble_player
 	var cont_scramble_intents := {}
+	## Same as the first-ball dig above: published, and now also believed.
 	var cont_scramble_targets := _deflection_adjust_map(
-		opponent_live_positions.duplicate(true), attack_target,
+		opponent_live_positions, attack_target,
 		opponent_defender.id, cont_defense_time, true, cont_scramble_by_id,
-		cont_scramble_intents, false,
+		cont_scramble_intents,
 	)
 	var cont_post_attack_intents := {}
 	var cont_post_attack_targets := _post_attack_phase_map(
@@ -16252,6 +16303,14 @@ func _cover_phase_map(
 	## where a voli is told what to do when a ball is struck -- and until this
 	## parameter existed it was read, turned into a coordinate, and dropped.
 	out_intents: Dictionary = {},
+	## The voli making this contact, when the map is published on their own
+	## event. A coverer was appearing twice on one event -- once as the actor at
+	## their resolved contact, and once in this map walking to base -- and this
+	## map is built second, so it overwrote the contact position the actor leg
+	## had just committed. The other phase maps all exclude their actor; this one
+	## had no way to be told who it was.
+	## AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.5.
+	contact_actor_id: int = -1,
 ) -> Dictionary:
 	var targets := {}
 	if lineup == null or window_seconds <= 0.0:
@@ -16307,6 +16366,8 @@ func _cover_phase_map(
 		) as VolleyballPlayer
 		if player == null:
 			continue
+		if player.id == contact_actor_id:
+			continue
 		var here: Vector2 = (
 			opponent_live_positions if opponent_side else live_positions
 		).get(player.id, CourtConstants.slot_position(slot_number))
@@ -16353,13 +16414,17 @@ func _cover_phase_map(
 				cue_intent = &"preparing_attack"
 			"Take second contact":
 				cue_intent = &"setting"
-		out_intents[player.id] = _travel_intent(
+		var cover_journey := _travel_intent(
 			player, cue_intent, here, intent, reached, mode, window_seconds
 		)
+		## The leg's own landing, as everywhere else -- see `_travel_intent`.
+		var cover_landed: Vector2 = cover_journey.get("reached_position", reached)
+		targets[player.id] = cover_landed
+		out_intents[player.id] = cover_journey
 		if opponent_side:
-			opponent_live_positions[player.id] = reached
+			opponent_live_positions[player.id] = cover_landed
 		else:
-			live_positions[player.id] = reached
+			live_positions[player.id] = cover_landed
 	return targets
 
 
@@ -16527,11 +16592,13 @@ func _tool_pursuit_map(
 		return targets
 	var here: Vector2 = live.get(chaser.id, landing)
 	var reached := _reached_point(chaser, here, landing, window_seconds, "transition")
-	targets[chaser.id] = reached
-	out_intents[chaser.id] = _travel_intent(
+	var chase := _travel_intent(
 		chaser, &"defending", here, landing, reached, "transition", window_seconds
 	)
-	live[chaser.id] = reached
+	var chase_landed: Vector2 = chase.get("reached_position", reached)
+	targets[chaser.id] = chase_landed
+	out_intents[chaser.id] = chase
+	live[chaser.id] = chase_landed
 	return targets
 
 
@@ -16562,12 +16629,17 @@ func _deflection_adjust_map(
 			player, here, intended, window_seconds, "lateral", 0.0, 0.0,
 			Vector2.ZERO, commit_journey,
 		)
-		targets[player_id] = reached
-		out_intents[player_id] = _travel_intent(
+		var journey := _travel_intent(
 			player, &"defending", here, intended, reached, "lateral", window_seconds
 		)
+		## The realised landing, not the closed form's answer -- see
+		## `_travel_intent`. Both the published target and the committed position
+		## are the same point, which is the whole of the fix.
+		var landed: Vector2 = journey.get("reached_position", reached)
+		targets[player_id] = landed
+		out_intents[player_id] = journey
 		if commit_journey:
-			live[player_id] = reached
+			live[player_id] = landed
 	return targets
 
 
@@ -16609,10 +16681,27 @@ func _post_attack_phase_map(
 			player, here, intended, window_seconds, "lateral", 0.0, 0.0,
 			Vector2.ZERO, false,
 		)
-		targets[player_id] = reached
-		out_intents[player_id] = _travel_intent(
+		var journey := _travel_intent(
 			player, intent, here, intended, reached, "lateral", window_seconds
 		)
+		var landed: Vector2 = journey.get("reached_position", reached)
+		targets[player_id] = landed
+		out_intents[player_id] = journey
+		## **And the resolver believes its own answer.**
+		##
+		## This map published a target and a journey and then left `live`
+		## untouched -- alone among the phase maps; the deflection map, the serve
+		## transition and the chaser all commit. So playback walked six bodies
+		## into the post-swing shape and the next event reported them still
+		## standing where they had been, which playback then had to correct.
+		## Measured: 380 of 425 playback corrections, the single largest
+		## population, worst 0.322 court units.
+		##
+		## `charge_exertion` stays false above: not charging the journey and not
+		## opening claimant authority are deliberate and unchanged. Where the body
+		## *is* afterwards is a different question, and pretending it did not move
+		## was the contradiction. AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.
+		live[player_id] = landed
 	return targets
 
 
@@ -16642,11 +16731,13 @@ func _serve_transition_map(
 		## most, and charging it as a sprint would bill six volis a sprint every
 		## single rally -- which the fatigue model would then faithfully believe.
 		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
-		targets[player_id] = reached
-		out_intents[player_id] = _travel_intent(
+		var journey := _travel_intent(
 			player, &"defending", here, intended, reached, "lateral", window_seconds
 		)
-		live[player_id] = reached
+		var landed: Vector2 = journey.get("reached_position", reached)
+		targets[player_id] = landed
+		out_intents[player_id] = journey
+		live[player_id] = landed
 	return targets
 
 
@@ -16698,6 +16789,9 @@ func _travel_intent(
 		traversal = minf(
 			_movement_time(mover, from, reached, mode), maxf(window_seconds, 0.0)
 		)
+	var leg := _committed_path(
+		mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock
+	)
 	return {
 		"intent": intent,
 		"progress": _travel_fraction(from, intended, reached),
@@ -16710,9 +16804,21 @@ func _travel_intent(
 		## use. Twenty call sites reach this function, so publishing it here
 		## migrates every staging and rebase journey at once rather than at each
 		## of them. Playback interpolates it instead of lerping two endpoints.
-		"path": _committed_path(
-			mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock
-		),
+		"path": leg,
+		## **Where the body actually ends up.**
+		##
+		## `reached` is the closed form's answer, from `_movement_time`; `leg` is
+		## the stepped integration that gets drawn. P0 measured those two agreeing
+		## to 0.18 mm on a projection, and on real legs they do not: 46 of 1,679
+		## published paths fail to arrive inside a window the closed form says
+		## they fit in, worst 0.377 court units. Committing `reached` while
+		## drawing `leg` is the single largest source of playback corrections.
+		##
+		## The spec has required this since P1 -- *movement used to decide
+		## reachability must be the movement rendered* -- and only the rendering
+		## half was ever migrated. Callers that commit a position commit this one.
+		## AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.
+		"reached_position": leg.landing_position() if leg != null else reached,
 	}
 
 

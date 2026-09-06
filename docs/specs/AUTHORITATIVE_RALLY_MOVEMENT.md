@@ -70,6 +70,32 @@ appended to `playback_continuity_mismatches` with `correction: true`. Inventing
 a plausible-looking journey to cover the gap is the specific thing this spec
 forbids, and it is what `_integrate_phase_path` did for years.
 
+**In production this path is now dead: the correction count is zero** (P15).
+Every correction that existed was a resolver statement contradicting another
+resolver statement, and each was fixed at the resolver. The mechanism stays as
+the instrument that will notice if one comes back — a non-zero correction count
+is a bug report about the simulation, not about playback.
+
+### C5a. A phase map that publishes a journey commits to it
+
+Any map that publishes `targets` and `_travel_intent` for a body **must** write
+that body's `live` position, and must write `reached_position` — the leg's own
+landing — not the closed form's `reached`. Publishing a journey to playback that
+the simulation declines to believe is forbidden however carefully it is
+justified: it was done deliberately once, to hold a balance number, and it cost
+380 of 425 corrections. `OFFBALL_BLOCK_DIG_AUTHORITY.md`, P15.3.
+
+A map published on an event **must exclude that event's own actor**. The actor's
+position is the contact, and a body cannot be in two places on one event.
+
+### C5b. A contact target is where the body is, not where the ball is
+
+Playback aims the contact actor at the body position the resolver committed. For
+a BLOCK that is `blocker_live_positions`, never the event's `start_position`,
+which is the ball's crossing at the tape. A block is a reach; the difference
+between the two is the blocker's arms, and walking it was a journey nobody
+solved. P15.4.
+
 ### C6. Consumers
 
 ```
@@ -101,9 +127,9 @@ leg by leg with the production `begin_rally_playback` snapshot.
 
 | property | value | taken at |
 |---|---|---|
-| drawn legs authoritative | 81.9% (7,756 of 9,473) | `23903f5`, 150 rallies, six seed bands |
-| recorded corrections | 6.9% (651) | same |
-| holds | 11.3% (1,066) | same |
+| drawn legs authoritative | 87.1% (11,292 of 12,971) | P15, 200 rallies, eight seed bands |
+| **recorded corrections** | **0** | same |
+| holds | 12.9% (1,679) | same |
 | path contract violations | **0** | same |
 | balance probe, 700 rallies | byte-identical across all six code commits | `5d8782a`…`23903f5` |
 | suite | 2 of 2,262, both pre-existing | `fe992be` |
@@ -116,21 +142,28 @@ leg by leg with the production `begin_rally_playback` snapshot.
 Both were surfaced by this work and both need changes that move rally outcomes,
 which the goal ruled out of this pass.
 
-### D1. Reachability — the cause of the 6.9%
+### D1. Reachability — **closed at P15**, with one half left open
 
-The resolver commits bodies to endpoints their own solved paths land short of.
-`_reached_point()` tests one point and commits the body to
-`_body_behind_contact()` of it, whose reachability is never tested;
-`_wall_close_intent()` passes an untruncated target and the blocker is then
-placed there regardless of whether they could close.
+The resolver used to commit bodies to endpoints their own solved paths land
+short of. Every committing site now writes `reached_position`, the landing of
+the leg that gets drawn, so the two agree by construction and the correction
+population is zero.
 
-| population | n | worst shortfall |
-|---|---|---|
-| off-ball intents vs the phase-target map | 15 of 1,303 | 0.457 court units |
-| published contact paths vs their event target | 13 of 277 | 0.075 court units |
+What is **not** fixed is why they disagreed. `_reached_point` decides
+reachability with a closed form (`_movement_time`) and `_committed_path` draws a
+stepped integration, and on 46 of 1,679 published legs those differ by up to
+0.377 court units about the same journey. The resolver now believes the one it
+draws, which removes the contradiction without removing the split. Making them
+one model is the real repair and is open.
 
-Fixing it changes block and approach positions and therefore outcomes.
-`AUTHORITATIVE_MOVEMENT_EXECUTION.md` P9.5.
+Cost of closing it, 700 rallies: kill rate 0.520 → 0.535 against a 0.45–0.50
+gate it was already outside. `AUTHORITATIVE_MOVEMENT_EXECUTION.md` P15.7.
+
+### D3. Bodies drawn outside the sidelines
+
+Visible in every rendered rally: traces cross `x = 0` and `x = 1`. Chasing a
+ball off court is legitimate and nothing distinguishes that from an unclamped
+target. No probe checks it. P15.8.
 
 ### D2. Perceived versus true prep timing — **P4 is not done**
 

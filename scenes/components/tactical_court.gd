@@ -899,6 +899,20 @@ func _movement_action_target(event: Resource) -> Vector2:
 		RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
 			return event.start_position
 		RallyEventModel.EventType.BLOCK:
+			## **A block is a reach, not a journey.**
+			##
+			## A BLOCK event's `start_position` is where the *ball* crossed the
+			## tape, and walking the blocker onto it was drawing a leg the
+			## resolver never described -- the last population of contact-actor
+			## corrections, 17 of 24, up to 0.292 court units of sideways shuffle
+			## along the net that is really the blocker's arms.
+			##
+			## `blocker_live_positions` is the resolver's own answer for where
+			## those two bodies stand, published on this event for exactly this.
+			## AUTHORITATIVE_MOVEMENT_EXECUTION.md P15.4.
+			var wall: Variant = event.metadata.get("blocker_live_positions", {})
+			if wall is Dictionary and wall.has(movement_player_id):
+				return Vector2(wall[movement_player_id])
 			return event.start_position
 	return event.start_position
 

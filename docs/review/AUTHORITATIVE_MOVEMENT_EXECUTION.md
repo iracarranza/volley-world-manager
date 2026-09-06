@@ -988,3 +988,170 @@ own instruction to keep them separate:
    rally outcomes.
 2. **Perceived versus true prep timing.** Preparation is still timed on the
    ball's true flight; no consumer reads `perceived_arrival`.
+
+---
+
+## P15 — the correction population, traced to its causes and eliminated
+
+P14 left 6.9% of drawn legs as *corrections*: the body was not where the
+simulation said, no journey explained the gap, and playback closed it and
+recorded it. Those records were the audit surface for this pass.
+`tools/audit_playback_corrections.gd` classifies every one by action, target
+source, role, and the leg it follows.
+
+**Baseline, six seed bands, 8,181 drawn legs: 425 corrections (5.19%).**
+(P14 reported 651 of 9,473; that harness omitted `finish_event_animation`
+between legs, which production calls. This one is the faithful instrument and
+both ends of every measurement below use it.)
+
+| population | n | traced to |
+|---|---|---|
+| POINT after DIG | 380 | §15.1, §15.2 |
+| ATTACK after SET | 24 | §15.1 |
+| BLOCK after ATTACK | 15→21 | §15.3, §15.4 |
+| SET after ATTACK_COVERAGE | 6 | §15.5 |
+
+Every one turned out to be a resolver statement contradicting another resolver
+statement. **None was a playback defect, and nothing in playback was changed to
+hide one.**
+
+### P15.1 A phase map that published a journey and did not believe it
+
+`_post_attack_phase_map` — the attacking six recovering after their own swing —
+was the only phase map in the file that published `targets` and `_travel_intent`
+and never wrote `live`. The deflection map, the serve transition and the chaser
+all commit. So the drawn body walked into the post-swing shape and the next
+event reported it still standing where it began.
+
+Mean journey 0.244 court units, worst 0.582. Its effect on defence is close to
+neutral, which is worth stating because it rules out "the shape is just bad
+positioning": across 399 legs, 207 ended closer to the eventual dig point and
+192 farther, mean gain 0.134 against mean loss 0.129.
+
+**425 → 212.**
+
+### P15.2 Two answers about how far a body gets, and the wrong one committed
+
+`_reached_point` decides reachability from `_movement_time` — a **closed form**.
+`_committed_path` draws the leg with `ShadowMovementSystem.integrate` — a
+**stepped integration**. P0 measured those agreeing to 0.18 mm on a projection.
+On real legs they do not: **46 of 1,679 published paths fail to arrive inside a
+window the closed form says they fit in**, worst 0.377 court units, and a further
+21 are legitimately capped by the phase.
+
+The resolver committed the closed form's answer and drew the integrator's. The
+spec has required otherwise since P1 — *movement used to decide reachability must
+be the movement rendered* — and only the rendering half was ever migrated.
+
+`_travel_intent` now publishes `reached_position`, the leg's own landing, and
+every caller that commits a position commits that. Applied to the deflection
+map, the serve transition, the chaser, the post-attack map, the coverage map and
+both walls.
+
+### P15.3 The opponent's scramble was published and disbelieved on purpose
+
+The two opponent dig sites passed a `.duplicate(true)` of the live map *and*
+`commit_journey = false` — two independent guarantees that the defensive
+scramble would reach playback and never reach the simulation.
+`OFFBALL_BLOCK_DIG_AUTHORITY.md` says why, plainly: committing it moved contacts
+per rally 4.636→4.640 and kill rate 0.526→0.519, and "separating an uncommitted
+reach query from a committed journey restored the exact baseline".
+
+That is a decision to hold a number by making the simulation disagree with the
+picture. The home mirror of the same phase has always committed, so one dig
+moved bodies and the other did not. Both now commit; exertion and claimant
+authority stay uncharged, which is the part of that boundary that was about
+authority rather than position.
+
+**212 → 28**, and the POINT-after-DIG population went 186 → 1.
+
+### P15.4 A block is a reach, not a journey
+
+A `BLOCK` event's `start_position` is where the **ball** crossed the tape
+(`_block_contact_point`, `y = 0.53`), and playback's
+`_movement_action_target` walked the blocker onto it. The blocker's body stands
+on the wall line at `y = 0.532`; the sideways gap is the block's own reach.
+
+17 of the remaining 24 corrections were this — up to 0.292 court units of
+shuffle along the net that is really the blocker's arms. The resolver already
+publishes `blocker_live_positions` on that event for exactly this purpose, and
+playback now reads it. This is a target-selection fix, not a movement one: no
+solve moved.
+
+The two wall closes also committed the *intended* wall while publishing a path
+the set flight can cut short; they now commit the landing (§15.2).
+
+**28 → 7.**
+
+### P15.5 A coverer standing in two places on one event
+
+`_cover_phase_map` had no way to be told who was making the contact, so on an
+`ATTACK_COVERAGE` event the coverer appeared twice: once as the actor at their
+resolved contact, and once in the coverage map walking to base. The map is built
+second, inside the same metadata literal, so it overwrote the contact position
+the actor leg had just committed — and the next event then reported the coverer
+at base while the drawn body stood at the contact.
+
+Every other phase map excludes its own actor. This one now takes
+`contact_actor_id` and does too.
+
+**7 → 0.**
+
+### P15.6 Result
+
+| | before | after |
+|---|---|---|
+| drawn legs | 8,181 | 8,733 |
+| **corrections** | **425 (5.19%)** | **0 (0.00%)** |
+| worst spatial disagreement | 0.322 court units | **0.000** |
+
+Wider stress, eight seed bands, 200 rallies, 12,971 legs: **11,292
+authoritative, 0 corrections, 1,679 holds, 0 contract violations**, 44 emergency
+second contacts exercised.
+
+`playback_continuity_mismatches` is now empty in production. The instrument
+stays; it is the thing that will notice if this comes back.
+
+**Truncation did not disappear, it moved.** 909 of 2,581 published off-ball legs
+still cover less than the journey they intended, down to none of it — that is
+recorded as `progress` against the intended point. What no longer exists is a
+path whose *own* target it fails to reach, because the target is now the landing.
+
+### P15.7 Outcome drift, measured
+
+The goal permits outcome change where a demonstrated contradiction requires it.
+Three fixes required it: §15.1, §15.2 and §15.3 all change where bodies stand
+when the next contact is resolved. 700 rallies, both serving sides:
+
+| measure | before | after | band |
+|---|---:|---:|---|
+| contacts per rally | 4.563 | 4.630 | above 6.0 (advisory) |
+| **kill rate** | 0.520 | **0.535** | 0.45–0.50 — **was already failing** |
+| dig rate | 0.534 | 0.522 | 0.35–0.55 ✓ |
+| stuff rate | 0.102 | 0.101 | 0.08–0.14 ✓ |
+| block touch | 0.780 | 0.802 | advisory |
+| swing balance | 0.973 | 0.967 | advisory |
+| ace / serve error | unchanged | unchanged | ✓ |
+| dig quality | 0.349 | 0.351 | |
+
+Every gated band still holds except kill rate, **which was outside its gate
+before this pass and is now 0.015 further out**. That is the honest cost: six
+defenders now stand where the simulation said they walked, and attacking is
+correspondingly easier. It is not a threshold to re-tune blind — see
+`FAILURE_MODES.md` §0 — and the sampling population under it has genuinely
+moved, so it wants a defensive-model pass rather than a knob.
+
+Determinism: two full probe runs byte-identical. Suite 2 of 2,265, the two known
+pre-existing failures. Resolve cost 66.20 ms/rally against 62.81 before, +5.4%.
+
+### P15.8 Discovered, not addressed
+
+- **Bodies are drawn outside the sidelines.** Visible in every rendered rally as
+  traces crossing `x = 0` and `x = 1`. Chasing a ball off court is legitimate,
+  but nothing distinguishes that from an unclamped target, and no probe checks.
+- The `_reached_point` closed-form-versus-integrator split (§15.2) is now
+  *reconciled at commit time* rather than removed. The two models still disagree
+  by up to 0.377 court units about the same journey; the resolver simply believes
+  the one it draws. Making them one model is the real repair.
+- Perceived-versus-true preparation timing is untouched, per instruction. See
+  the spec's §D2.
