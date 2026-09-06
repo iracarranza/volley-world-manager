@@ -154,6 +154,68 @@ inert.
 
 ---
 
+# A4 — Where each body's destination comes from
+
+`tactical_court._authoritative_phase_path` reads four publishers in a fixed
+priority order and takes the first that answers. That order only matters when
+more than one answers, and nothing had counted how often that happens.
+`tools/audit_target_sources.gd`, 120 rallies, **3,802 body-events**:
+
+| | count |
+|---|---:|
+| exactly one source | 1,870 |
+| **two or more sources** | **1,932 (51%)** |
+
+| publisher | answers | wins a contest |
+|---|---:|---:|
+| `movement_path` | 503 | 91 |
+| `phase_intent` | 2,789 | 1,841 |
+| `phase_hold` | 2,427 | **0** |
+| `staged_next` | 27 | 0 |
+
+**Half of all body-events carry two competing journeys.** The contract intends
+this — a stated journey beats a hold — and `phase_hold` correctly never wins a
+contest, only answering when uncontested. What the contract does not say is
+whether the loser was the same journey restated or a different destination:
+
+| winner-vs-loser endpoint distance | value |
+|---|---:|
+| agree within 1 cm | **1,737 of 1,932 (90%)** |
+| median | 0.000 m |
+| p90 | 0.151 m |
+| **worst** | **4.139 m** |
+
+So one contested body-event in ten has a discarded source pointing somewhere
+materially different, up to 4.14 m away. The priority order is doing real work,
+not just tie-breaking. Contests are overwhelmingly `phase_intent` vs
+`phase_hold` — a body simultaneously told to travel and to stand still — led by
+RECEPTION (570), DIG (523) and SET (341).
+
+This is reported as a **measured property, not a defect**: playback resolves it
+deterministically and by the documented rule. It matters because any *other*
+consumer that reads a hold path without applying the same priority would place
+that body up to 4.14 m from where the court draws it.
+
+---
+
+# A5 — Perception and coordination reaching movement
+
+**Perception is causal for defensive arrival, and this is a category-C
+finding.** `_reached_point` takes a `shortfall_meters` — how far short a mover
+stops because they read the ball somewhere else — and **4 of its 18 call sites
+pass one**, fed by `_read_error_meters`, which builds a `BallContactSignature`
+from the flight's real launch speed and spin. The setter path additionally moves
+to a `perceived_body_position` rather than the true one (`:2293`).
+
+So the naive reading — that perception is tactical decoration — is wrong: it
+changes where a defender physically ends up, at the defensive sites and nowhere
+else. The approach and coverage sites deliberately keep exact arrival.
+
+What is *not* fixed remains D2: preparation timing still runs on the ball's true
+flight. That is out of scope here and is not absorbed into this pass.
+
+---
+
 # A6 — Six-player spatial conflict
 
 120 rallies, 40 ms steps, 11,974 instants, **73,525 same-team pair observations**.
@@ -303,9 +365,10 @@ still runs on true flight. Documented, not absorbed.
 - **The D1 split's actual cause is not identified.** Controlled geometry agrees;
   the 46 disagreeing production legs must come from waypoints, mode, or the
   clamp, and no discriminating test was run.
-- **A4 (tactical target origin) and A5 (claim/coordination) are traced only at
-  the call-site level**, not measured. Which target source wins for a given body
-  in a given phase has not been enumerated.
+- **Claim and coordination were not isolated.** A4 enumerates which *publisher*
+  wins; it does not establish which upstream decision chose that publisher's
+  target, nor whether claim priority or assertiveness changed who moved. A
+  controlled scenario differing only in claimant would be the test.
 - Interaction coverage is partial: velocity × angle and facing × distance were
   measured; facing × incoming velocity, recovery × deadline and
   attributes × turning were not.
