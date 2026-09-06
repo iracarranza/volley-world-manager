@@ -1,0 +1,31 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://tools/arm_joint_continuity_prototype.gd" id="1"]
+
+[sub_resource type="Environment" id="Environment_arm"]
+background_mode = 1
+background_color = Color(0.075, 0.082, 0.095, 1)
+ambient_light_source = 3
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.65
+
+[node name="ArmJointContinuityPrototype" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_arm")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-28, -24, 0)
+light_energy = 1.25
+shadow_enabled = true
+
+[node name="FillLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(20, 155, 0)
+light_energy = 0.55
+
+[node name="Camera3D" type="Camera3D" parent="."]
+position = Vector3(0, 0, 8.6)
+projection = 1
+size = 5.8
+current = true
