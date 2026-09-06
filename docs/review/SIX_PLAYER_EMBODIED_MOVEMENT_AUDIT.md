@@ -340,6 +340,33 @@ else. The approach and coverage sites deliberately keep exact arrival.
 What is *not* fixed remains D2: preparation timing still runs on the ball's true
 flight. That is out of scope here and is not absorbed into this pass.
 
+## A5b Personality and coordination — present in the claim, absent from the walk
+
+The spec asks for personality effects on movement specifically, and the answer
+splits cleanly, so it is worth stating both halves rather than one.
+
+**Temperament decides who claims.** `_second_contact_claim_score` adds
+`_second_contact_temperament`, which is `ego`, `leadership` and `aggression` each
+centred on 50 and weighted 0.050 / 0.025 / 0.015. `attempt_judgment.gd` runs the
+same currency on whether a recognised overreach is attempted at all. So
+personality changes *which body is sent*, and therefore which body moves — a real
+movement consequence, arriving through the claim rather than the locomotion.
+
+**Teammate position is also read, and only for claim quality.**
+`_support_term(support_count, nearest_teammate_meters)` is consumed at `:1235`
+(home reception) and `:4112` (opponent reception), with a crowding floor at
+1.05 m and a help peak at 2.40 m — a teammate too close makes the reception
+*worse*. Defence records `nearest_teammate_meters` in metadata at `:6489`
+without consuming it.
+
+**Neither reaches locomotion.** No personality term and no teammate distance
+appears in `rally_movement_system.gd`, in `_travel`, in `_committed_path` or in
+`_reached_point`. The game knows where a body's teammates are and uses it to
+decide who should play the ball and how well; nothing uses it to decide where a
+body walks. That distinction is the precise shape of the B-series defect, and it
+is why "teammate occupancy is absent" — the claim made in the first draft of the
+A9 matrix — was too strong and is corrected there.
+
 ---
 
 # A6 — Six-player spatial conflict
@@ -541,12 +568,36 @@ Same leg, both models, exit speed in m/s:
 it does.** A completed leg ends at rest in the drawn path and at full speed in
 the closed form.
 
-This matters because `live_velocities` is written from the *closed form*
-(`_travel`'s `exit_velocity`), while the body on screen follows the integrated
-path. So the stored momentum says a body that has just reached its target is
-still travelling at 5.2 m/s. Two consumers read that: the defender candidate
-search at `:11938`, which seeds `actor.velocity` from it, and `_commit_facing`,
-which derives a body's orientation from a velocity it does not have.
+This matters because `live_velocities` is written from the *closed form*, while
+the body on screen follows the integrated path. So the stored momentum says a
+body that has just reached its target is still travelling at 5.2 m/s.
+
+### Every production consumer of the wrong number
+
+Three writes, all from `_travel` — the closed form — and all of the reads:
+
+| site | what it is | what receives the value |
+|---|---|---|
+| **w** `:2349` | home hitter's approach leg | `live_velocities[hitter.id]` |
+| **w** `:5197` | opponent hitter's approach leg | `opponent_live_velocities[...]` |
+| **w** `:7096` | home continuation leg | `live_velocities[hitter.id]` |
+| **r** `:2229` | home attack preparation | `hitter_actor.apply_position(...)` → `ApproachMechanicsModel.prepare_for_attack` → `prepared_velocity_mps` |
+| **r** `:5071` | opponent attack preparation | the same, opponent side |
+| **r** `:6968` | continuation transition state | **every home player's `velocity`**, in a loop over `transition_state.home_players` |
+| **r** `:11938` | `_candidate_actors` defender search | `actor.velocity` for every candidate |
+| **r** `:11535` | `_commit_facing` | reads `exit_velocity` **off the leg directly**, not via the store, and sets `player_facing` from it |
+
+**The first version of this section named two consumers. There are five, and the
+widest was the one missed:** `:6968` seeds the velocity of all six home bodies in
+the continuation transition, not just the hitter's. `_commit_facing` is a separate
+path again — it never touches `live_velocities`, it reads the same closed-form
+number straight off the leg dictionary, so fixing the store alone would leave
+facing derived from a velocity the body does not have.
+
+`:2229` carries a NOTE recording that this store was previously returning zero
+for 91% of hitters. That is the same plumbing, and it means the store is not
+vestigial — it was deliberately wired, and it is now carrying a number that is
+wrong in the other direction whenever the body arrived.
 
 It does not propagate into the next *drawn* leg only because `_committed_path`
 ignores entry velocity entirely — one defect masking another. Fixing the
@@ -615,7 +666,7 @@ announced itself by producing a physically impossible number.
 |---|---|---|---|---|---|---|---|---|
 | position | supplied everywhere | yes | yes | all 6 modes, 6 profiles, 120–600 rallies | — | no | — | preserve |
 | carried velocity | stored, mostly unconsumed | partly — approach timing and candidate search only | **no** for committed legs | 5 speeds × 5 angles × 6 modes; 1,044 production leg pairs | × facing (none), × truncation (integrator honours it) | **yes** | high | wire into `_committed_path` / `_reached_point` after the exit state is reconciled |
-| exit velocity | two models disagree | yes — stored value feeds candidate search and `_commit_facing` | **wrong when the body arrives** | 3 distances × 3 entry speeds | reached vs not reached | **yes** | high | reconcile first; it is the number a momentum repair would propagate |
+| exit velocity | two models disagree | yes — **five** production consumers, incl. all six home bodies at `:6968` | **wrong when the body arrives** | 3 distances × 3 entry speeds | reached vs not reached | **yes** | high | reconcile first; it is the number a momentum repair would propagate |
 | facing | modelled, plumbed, overwritten with zero | no | no | 5 angles × 3 distances × 6 modes × 6 profiles | × velocity: additive, no interaction | **yes** | medium (0.14–0.17 s) | supply it, or delete `facing_fit` as dead weight |
 | body/action state | not an input | no | no | 6 states × 3 directions | × direction: inert | no — a documentation error | low | correct the assumption; do not build a consequence |
 | recovery | upstream window gate | yes, as a delay | indirectly | call-site trace | no in-model interaction to test | no | — | preserve |
@@ -624,7 +675,8 @@ announced itself by producing a physically impossible number.
 | mass | full input | yes | yes, weakly | 3 values + 6 profiles | — | no | — | preserve; note 0.030 s across 58–118 kg |
 | perceived ball state | reaches reachability | yes | **yes** at 4 of 18 `_reached_point` sites | call-site trace | — | no | — | preserve |
 | target source priority | 4 publishers, fixed order | yes | yes | 3,802 body-events | 51% contested; 10% of those disagree, worst 4.14 m | no, but load-bearing | medium | document; any new consumer must apply the same order |
-| teammate occupancy | **absent** | no | no | — | nothing to vary | **yes, by absence** | high | see B |
+| teammate occupancy | read for claim quality, **never as a route constraint** | yes, for *who* plays the ball; no, for where a body walks | no | `_support_term` at 2 sites; 0 sites in the movement system | crowding floor 1.05 m vs help peak 2.40 m | **yes**, as a route input | high | see B; the plumbing exists and the solve does not read it |
+| personality / temperament | claim input only | yes — it changes which body is sent | no | `_second_contact_temperament`, `attempt_judgment.gd` | ego/leadership/aggression, weights 0.050/0.025/0.015 | no | — | preserve; it is not a locomotion factor and should not become one |
 | court bounds | integrator clamps, closed form does not | yes | yes | 60 controlled rows + 600 rallies | — | **yes** | medium | make the two agree about off-court legality |
 
 ## A. Physical locomotion defects
@@ -682,8 +734,11 @@ still runs on true flight. Documented, not absorbed.
 - **Attribute interactions were not crossed.** Six bodies were compared whole;
   acceleration × mass × fatigue were not varied against each other.
 - **Teammate occupancy × route geometry was not tested**, because no production
-  mechanism consumes teammate positions as a route constraint — so there is
-  nothing to vary. That is an absence, not a measurement.
+  mechanism consumes teammate positions as a *route* constraint — so there is
+  nothing to vary. That is an absence, not a measurement. It is not an absence of
+  data: `_support_term` already reads `nearest_teammate_meters` for reception
+  quality (A5b), so a repair would be wiring an existing quantity into the solve,
+  not inventing one.
 
 ## Search saturation
 
