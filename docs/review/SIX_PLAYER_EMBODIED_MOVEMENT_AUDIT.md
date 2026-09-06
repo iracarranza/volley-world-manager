@@ -623,10 +623,49 @@ about whether a body may be off court.
 | balance probe, 700 rallies | reproduces `a41f285` exactly |
 | production behaviour changed | **none** — this pass added instruments and one test, and altered no production file |
 
-**Resolve cost was not measured.** The contract records 62.8 ms/rally at
-`8bb09ca`, and the only window in which to re-measure it was one where the full
-suite was running; a timing figure taken next to a saturated CPU would be worse
-than no figure. It is recorded as unmeasured rather than estimated.
+## Suite
+
+**2 of 2,267 checks fail**, and they are the two that fail on `origin/main`
+unchanged — `_test_tempo_buys_flight_time` and
+`_test_playback_geometry_is_drawable`. The predecessor is 2 of 2,265, measured on
+this tree and recorded in `CLAUDE.md`.
+
+**Two checks written, two gained.** `_test_reachability_agrees_across_the_court`
+emits exactly two on its passing path, and `4f67cdb` is the only commit since the
+predecessor to touch `tests/`, `scripts/` or `scenes/` at all. So the delta is
+fully attributable to authorship and no sampling population changed size — which
+is the only count a pass that added instruments and one test is allowed to
+produce.
+
+## Resolve cost, re-measured with a named instrument
+
+`tools/probe_resolve_cost.gd`, 200 rallies from seed 61000, 10 warm-up resolves
+discarded, `resolve_active_rally` alone on the clock:
+
+| run | median | mean | p90 |
+|---|---:|---:|---:|
+| 1 | 117.3 ms | 114.5 ms | 240.6 ms |
+| 2 | 116.4 ms | 111.1 ms | 234.4 ms |
+| 3 | **121.7 ms** | 116.0 ms | 247.7 ms |
+
+Median across three runs spans 2.3%, so the figure is stable enough to be a
+baseline. p10 is 3.7 ms and the worst rally is 503 ms — an ace and a
+twenty-contact rally are two orders of magnitude apart, which is why the median
+is quoted and not the mean. The mean tracks the outcome mix and will move
+whenever balance moves; the median tracks the resolver.
+
+**This is not comparable to the contract's 62.8 ms/rally, and reporting it as a
+1.9× regression would be the exact error this repository keeps writing down.**
+Two reasons. The instrument that produced 62.8 is not in the repo — this probe
+had to be written to take the measurement, and it is not the one that produced
+the recorded number. And the hardware is different: 62.8 was measured at
+`8bb09ca`, this on a remote container. A figure is worth the commit *and the
+instrument* it was measured on.
+
+What can be said without either: **this pass altered no production file**, so
+whatever the resolve cost is, this audit did not move it. 117 ms is published as
+a new baseline with its instrument named, so the next reader has something they
+can actually reproduce.
 
 ## Regression guard added
 

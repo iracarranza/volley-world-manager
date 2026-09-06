@@ -12,8 +12,26 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `899458f`: **2 of 2,265 checks
+Current branch baseline, verified 2026-09-06 at `4f67cdb`: **2 of 2,267 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Two checks written, two gained, and the predecessor was measured on this tree.**
+2,265 at `899458f` is directly comparable -- same tree, same seeds -- and
+`4f67cdb` is the only commit between them touching `tests/`, `scripts/` or
+`scenes/` at all. So the delta is authorship and nothing else: no sampling
+population changed size, which is what an audit pass that altered no production
+file is required to look like. The audit is
+`docs/review/SIX_PLAYER_EMBODIED_MOVEMENT_AUDIT.md`.
+
+**Resolve cost has a reproducible instrument now, and it is not 62.8 ms.**
+`AUTHORITATIVE_RALLY_MOVEMENT.md` records 62.8 ms/rally at `8bb09ca` and the tool
+that produced it is not in the repo. `tools/probe_resolve_cost.gd` measures
+**117 ms median** over 200 rallies (three runs spanning 2.3%). That is *not* a
+regression against 62.8 -- different instrument, different hardware -- and must
+not be quoted as one. Quote the median, never the mean: p10 is 3.7 ms and the
+worst rally 503 ms, so the mean tracks the outcome mix rather than the resolver.
+
+Before it, 2,265 at `899458f`.
 
 **Rally outcomes moved on this pass, deliberately, and here is the drift.** Six
 defenders now stand where the simulation said they walked -- three phase maps
