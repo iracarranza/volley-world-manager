@@ -37,6 +37,14 @@ var _source_of: Dictionary = {}
 
 
 func _initialize() -> void:
+	## Sample size is an argument because the context census showed
+	## ATTACK_COVERAGE occurring twice in 120 rallies, and the spec asks for more
+	## exercise where a class is rare rather than a conclusion drawn from two.
+	var rallies := SEED_COUNT
+	for entry in OS.get_cmdline_user_args():
+		var pair: PackedStringArray = str(entry).split("=", true, 1)
+		if pair.size() == 2 and pair[0] == "rallies":
+			rallies = maxi(int(pair[1]), 1)
 	var pair_min: Array[float] = []
 	var closest: Dictionary = {}
 	var below: Dictionary = {}
@@ -51,13 +59,15 @@ func _initialize() -> void:
 	var samples_by_action: Dictionary = {}
 	var by_action: Dictionary = {}
 	## A2: does leg N+1 begin where leg N landed, and carrying what it carried?
+	var context_census: Dictionary = {}
+	var rally_lengths: Array[int] = []
 	var gap_sources: Dictionary = {}
 	var continuity := {
 		"pairs": 0, "gap": 0.0, "worst_gap": 0.0, "big_gaps": 0,
 		"cold_starts": 0, "hot_ends": 0,
 	}
 
-	for seed_value in range(FIRST_SEED, FIRST_SEED + SEED_COUNT):
+	for seed_value in range(FIRST_SEED, FIRST_SEED + rallies):
 		var manager: Object = GameManagerScript.new()
 		manager.seed_vertical_slice_data()
 		manager.match_state.serving_home = (seed_value % 2) == 0
@@ -70,6 +80,19 @@ func _initialize() -> void:
 		for raw_id in Dictionary(result.get("initial_opponent_positions")):
 			side_of[int(raw_id)] = "opponent"
 		var timeline := _action_timeline(result)
+		## Context census: which movement classes this sample actually exercises,
+		## so "rare class insufficiently exercised" is a measurement rather than
+		## an impression.
+		var contacts := 0
+		for event in result.events:
+			if event == null:
+				continue
+			var name := str(RallyEventScript.EventType.keys()[
+				int(event.event_type)
+			])
+			context_census[name] = int(context_census.get(name, 0)) + 1
+			contacts += 1
+		rally_lengths.append(contacts)
 		var paths := _collect_paths(result, side_of)
 		for player_id in side_of:
 			if paths.has(player_id) and not Array(paths[player_id]).is_empty():
@@ -224,7 +247,7 @@ func _initialize() -> void:
 
 	pair_min.sort()
 	print("=== A6 same-team separation, %d rallies, %.0f ms steps ===" % [
-		SEED_COUNT, STEP_SECONDS * 1000.0,
+		rallies, STEP_SECONDS * 1000.0,
 	])
 	print("samples|%d" % samples_taken)
 	print("pair_observations|%d" % pairs_examined)
@@ -257,6 +280,23 @@ func _initialize() -> void:
 	print("--- closest approach per rally-pair, worst 8")
 	for index in range(mini(8, worst.size())):
 		print("  %.3f m" % float(worst[index]))
+	print("")
+	print("=== context census: what these %d rallies exercised ===" % rallies)
+	var census_keys: Array = context_census.keys()
+	census_keys.sort_custom(func(a, b):
+		return int(context_census[a]) > int(context_census[b])
+	)
+	for key in census_keys:
+		print("  %s|%d" % [str(key), int(context_census[key])])
+	rally_lengths.sort()
+	if not rally_lengths.is_empty():
+		print("  rally contacts min|%d" % rally_lengths[0])
+		print("  rally contacts median|%d" % rally_lengths[rally_lengths.size() / 2])
+		print("  rally contacts max|%d" % rally_lengths[rally_lengths.size() - 1])
+		var long_rallies := rally_lengths.filter(func(n): return n >= 8).size()
+		print("  rallies with 8+ contacts|%d of %d" % [
+			long_rallies, rally_lengths.size(),
+		])
 	print("")
 	print("=== A2 leg-to-leg continuity, from published paths ===")
 	print("consecutive_leg_pairs|%d" % int(continuity.pairs))
