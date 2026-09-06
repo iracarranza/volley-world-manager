@@ -326,3 +326,84 @@ nothing:
 Step 1 exists to make step 2's drift attributable. A single commit doing both
 would leave no way to tell a wiring mistake from a real timing change, which is
 the failure the audit spent a section on.
+
+## C1.3 The P15 regression, and the older defect under it
+
+Wiring the cover phase broke the correction invariant: **1 correction of 8,529
+drawn legs, 0.0104 court units, on a SET following ATTACK_COVERAGE.** Bisected by
+neutralising each wiring in turn — the two transition maps and the three reset
+classes are clean at 0, the cover carry is the trigger.
+
+The spec forbids restoring an invariant by hiding a contradiction, so it was
+traced. **Two hypotheses were wrong and measurement said so:**
+
+1. *The home continuation SET publishes no path.* True, and it was published —
+   still 1 correction, identical.
+2. *The staged leg is budgeted from a `setter_choice` that predates the coverage
+   carry, so it lands short.* Also true, also fixed — still 1 correction, byte
+   for byte.
+
+Both are real improvements and neither was the cause. Finding the cause needed
+the seed instrumented, and reproducing it needed the audit tool's own warm-up:
+`audit_playback_corrections.gd` resolves a band of seeds against **one** manager,
+so seed 22004 on a fresh manager is an ace and not the rally in question.
+
+**The failing leg is on the *opponent* SET**, not the home one that had been
+edited on hypothesis 1. Its metadata carries `movement_start` and
+`movement_duration` and has never carried a `movement_path` at all — the setter's
+step onto the ball is an unpublished journey, so playback closes it itself. It
+stayed invisible while those two points sat inside playback's 0.0005 threshold,
+and moving the coverage landing by roughly a centimetre opened it.
+
+**C1 surfaced this defect; it did not create it.** It is one of the audit's
+"slots publishing no path", on a contact actor rather than an off-ball body.
+
+Both SET sites now publish the leg, budgeted by **the journey's own duration**
+rather than by what remains of the second-contact window. That remainder goes
+non-positive on an emergency set, and `_committed_path` then publishes nothing at
+exactly the moment a body is furthest from its contact — the shape that hid this
+for as long as it did.
+
+P15 returns to **0 corrections of 8,529, worst 0.0000**.
+
+## C1.4 Measured: momentum crosses the boundary, and mostly still does not
+
+120 rallies, directly comparable to the audit's 120-rally baseline — same seeds,
+same instrument.
+
+| measure | audit baseline | after C0+C1 |
+|---|---:|---:|
+| consecutive leg pairs | 1,044 | 1,063 |
+| **next leg begins at rest** | **1,044 of 1,044 (100%)** | **946 of 1,063 (89.0%)** |
+| **previous leg ended moving** | 149 | **960** |
+| pairs gapped by more than 10 cm | 268 | 271 |
+| worst gap | 4.781 m | 4.781 m |
+| `phase_intent → phase_intent` gaps | 102 | 103 |
+
+**Two different things moved, and they are worth separating.**
+
+*117 legs now inherit momentum*, from a population where the audit found exactly
+zero. That is C1 working, and it is the first time in the engine's history that a
+leg has begun with the speed the previous one ended with.
+
+*`previous_leg_ended_moving` went 149 → 960*, and that is **C0**, not C1. Legs
+now report the exit velocity they actually have instead of a zero written at
+arrival, so six times as many boundaries are visibly discarding something. The
+audit's 149 was an undercount produced by the defect C0 removed.
+
+**Which leaves the number the C1 gate is actually about: 960 boundaries have a
+moving predecessor and 117 inherit it, so 843 still drop momentum.** The gate
+says a decrease in dead starts is not enough and the remainder must be classified
+rather than counted, and the instrument cannot classify it yet — it reports dead
+starts in total and publisher pairs only for the *gap* population. Extending it
+to break dead starts down by publisher pair is the next step, because that is
+what distinguishes an unwired publisher from a legitimate reset.
+
+**An instrument error, recorded because it nearly became a conclusion.** The
+first re-measurement was invoked as `--script … audit_six_player_space.gd
+rallies=600`. The tool reads `OS.get_cmdline_user_args()`, which needs `--` before
+its arguments, so it silently ran the 120-rally default. It announced itself:
+the A7 block came back byte-identical to the 120-rally baseline — 34, 260, 305,
+worst 0.88 m, same seed — which a 600-rally sweep cannot do. Quoting those as a
+600-rally result would have been the wrong-instrument failure `FAILURE_MODES.md`
+§0 is about.
