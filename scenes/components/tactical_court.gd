@@ -699,9 +699,13 @@ func _phase_path(
 ## this is a change of index and not a rescale. The endpoint is the path's own
 ## landing, so there is nothing to snap onto.
 func _authoritative_phase_path(player_id: int) -> Dictionary:
-	if pending_contact_event == null or player_id != movement_player_id:
+	if pending_contact_event == null:
 		return {}
-	var published: Variant = pending_contact_event.metadata.get("movement_path", null)
+	var published: Variant = null
+	if player_id == movement_player_id:
+		published = pending_contact_event.metadata.get("movement_path", null)
+	else:
+		published = _published_offball_path(player_id)
 	if published == null:
 		return {}
 	var path := published as RallyMovementPath
@@ -718,6 +722,24 @@ func _authoritative_phase_path(player_id: int) -> Dictionary:
 			(path.sample_times[index] - path.start_time) / span, 0.0, 1.0
 		))
 	return {"points": points, "times": times, "authoritative": true}
+
+
+## The off-ball leg for a player who is not making this contact.
+##
+## `_travel_intent` solves one of these for every staging and rebase journey and
+## publishes it in the side's phase-intent map. Before it was read here, only the
+## contact actor escaped the local re-integration below.
+func _published_offball_path(player_id: int) -> Variant:
+	for side in [&"home", &"opponent"]:
+		var intents: Variant = pending_contact_event.metadata.get(
+			"%s_phase_intents" % side, {}
+		)
+		if not (intents is Dictionary):
+			continue
+		var raw: Variant = intents.get(player_id, null)
+		if raw is Dictionary and raw.get("path", null) != null:
+			return raw["path"]
+	return null
 
 
 func _integrate_phase_path(

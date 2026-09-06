@@ -1046,6 +1046,13 @@ func resolve(
 			## journey be drawn over the serve's own flight.
 			"movement_start": opponent_serve_origin,
 			"movement_target": opponent_serve_base,
+			## The walk-in, solved once. It is the only contact leg the
+			## resolver published as two endpoints and no journey, so playback
+			## drew the server's return to court by re-integrating it locally.
+			"movement_path": _committed_path(
+				opponent_server, opponent_serve_origin, opponent_serve_base,
+				serve_time, "lateral", rally_clock,
+			),
 			"outgoing_trajectory": serve_trajectory,
 			## The same ball, in the form that can be asked where it is at a
 			## given time rather than only where it ends. Read by nobody yet --
@@ -3929,6 +3936,13 @@ func _resolve_home_serve(
 			## serve's own flight.
 			"movement_start": CourtConstants.serve_origin(0.82, true),
 			"movement_target": home_serve_base,
+			## The walk-in, solved once. It is the only contact leg the
+			## resolver published as two endpoints and no journey, so playback
+			## drew the server's return to court by re-integrating it locally.
+			"movement_path": _committed_path(
+				server, CourtConstants.serve_origin(0.82, true), home_serve_base,
+				serve_time, "lateral", rally_clock,
+			),
 			"outgoing_trajectory": serve_trajectory,
 			## The same ball, in the form that can be asked where it is at a
 			## given time rather than only where it ends. Read by nobody yet --
@@ -16278,13 +16292,21 @@ func _hold_phase_intents(
 		var player := entry as VolleyballPlayer
 		if player == null:
 			continue
-		var here: Vector2 = resolved_positions.get(
+		## **Where the body is, and separately where it is going.**
+		##
+		## `here` used to be read from `resolved_positions` first, so a player
+		## whose resolved spot had moved was told they were already standing on
+		## it and published a zero-length hold. Measured on 60 rallies: 38 legs
+		## of 0.05 to 0.24 court units described as standing still, and playback
+		## walked them anyway with no solved journey behind it.
+		var target: Vector2 = resolved_positions.get(
 			player.id, live.get(player.id, Vector2.ZERO)
 		)
+		var here: Vector2 = live.get(player.id, target)
 		var source: Dictionary = source_intents.get(player.id, {})
 		intents[player.id] = _travel_intent(
 			player, StringName(source.get("intent", &"watching")),
-			here, here, here, "lateral", window_seconds,
+			here, target, target, "lateral", window_seconds,
 		)
 	return intents
 
@@ -16564,6 +16586,13 @@ func _travel_intent(
 		"window_seconds": maxf(window_seconds, 0.0),
 		"arrival_progress": clampf(
 			traversal / maxf(window_seconds, 0.0001), 0.0, 1.0
+		),
+		## The off-ball leg, solved once, on the same contract the contact legs
+		## use. Twenty call sites reach this function, so publishing it here
+		## migrates every staging and rebase journey at once rather than at each
+		## of them. Playback interpolates it instead of lerping two endpoints.
+		"path": _committed_path(
+			mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock
 		),
 	}
 

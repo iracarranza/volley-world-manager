@@ -2620,8 +2620,15 @@ func _apply_explicit_targets(
 		## overlap cosmetic to move. In particular this protects a T1 hitter's
 		## release mark in the window before the set.
 		var player_id := int(raw_player_id)
+		var raw_intent: Variant = intents.get(raw_player_id, null)
+		var intent: Dictionary = raw_intent if raw_intent is Dictionary else {}
+		## The off-ball leg the resolver already solved. Without it these players
+		## fell through to playback's own re-integration -- the last consumer in
+		## production still deriving a second answer to a question the sim had
+		## answered. AUTHORITATIVE_MOVEMENT_EXECUTION.md P9.
 		_set_plan_target(
-			plan, player_id, Vector2(targets[raw_player_id]), true
+			plan, player_id, Vector2(targets[raw_player_id]), true,
+			intent.get("path", null),
 		)
 		if not plan.has(player_id):
 			continue
@@ -2638,10 +2645,6 @@ func _apply_explicit_targets(
 		##
 		## `_uniform_intents` publishes neither, and those legs keep the old
 		## behaviour exactly rather than being given an invented duration.
-		var raw_intent: Variant = intents.get(raw_player_id, null)
-		if not (raw_intent is Dictionary):
-			continue
-		var intent: Dictionary = raw_intent
 		if intent.has("traversal_seconds"):
 			plan[player_id]["seconds"] = maxf(
 				float(intent["traversal_seconds"]), 0.0

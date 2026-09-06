@@ -641,3 +641,86 @@ Sampled profile on a real reception leg — 0 → 1.599 → 2.932 → 2.932 → 
 acceleration, cruise and arrival, none of which a lerp can express.
 
 Suite: **2 of 2,261**, the two known failures, unchanged from P1/P2/P3.
+
+---
+
+## P9 — the off-ball migration, and what it found
+
+### P9.1 One publication point, twenty call sites
+
+`_travel_intent` is the choke point every staging, rebase and wall-close journey
+passes through. Publishing a `path` there migrated all of them in one edit
+rather than at each caller. `_wall_close_intent` and `_shape_intents` and
+`_hold_phase_intents` all delegate to it, so they are covered by construction.
+
+Consumers wired: `_apply_explicit_targets` in `match_screen.gd` now carries the
+intent's path into the plan entry, and `tactical_court._authoritative_phase_path`
+serves any player through the new `_published_offball_path` instead of only
+`movement_player_id`. The 3D court already samples the plan entry's path (P8).
+
+**Cost.** 60.24 ms/rally before, 64.06 ms/rally after — 6.3%, for an integration
+per moving off-ball player per event.
+
+**Outcomes.** The 700-rally balance probe is byte-identical across the whole
+pass, all nineteen figures, both serving sides. `ShadowMovementSystem.integrate`
+touches no RNG, so this is what it had to look like.
+
+**Suite.** 2 of 2,261, the two known pre-existing failures. Zero checks written,
+zero gained — no sampling population moved.
+
+### P9.2 The serve walk-in was the last pathless contact leg
+
+Both serve sites published `movement_start` and `movement_target` and no
+journey — the server's return to court, once per rally, drawn by playback's own
+re-integration. Measured before the fix: **60 of 60 rallies**. After: contact
+legs with real displacement are 127 with a path, **0 without**.
+
+### P9.3 A hold intent that was standing on its own destination
+
+`_hold_phase_intents` read `here` from `resolved_positions` first and only fell
+back to the live position, so a player whose resolved spot had moved was told
+they were already on it and published a zero-length hold. Playback walked them
+anyway. Measured: **38 legs of 0.05 to 0.24 court units described as standing
+still.** Now the leg starts at the live position and ends at the resolved one.
+
+### P9.4 Coverage, measured
+
+60 rallies, seeds 4000–4059:
+
+| | with path | stationary (none needed) | moving and pathless |
+|---|---|---|---|
+| contact legs | 127 | — | **0** |
+| off-ball legs | 1,303 | 642 | 38 |
+
+The 38 are the hitter's and first passer's recovery holds, which publish
+`targets[id] = here` — the target *is* the live position, so there is no journey
+to solve. They register as "moving" only against the *previous* event's target,
+which is the reachability finding below, not a missing path.
+
+### P9.5 Third reachability defect — surfaced, measured, not absorbed
+
+**15 legs of 1,303 land short of the target the resolver then adopts as the
+body's position.**
+
+| intent | n | worst shortfall |
+|---|---|---|
+| `blocking` | 6 | 0.109 court units |
+| `preparing_attack` | 9 | **0.457** court units |
+
+`_wall_close_intent` passes `to, to` — the intended block position as both the
+intended and the reached point, untruncated. `_travel_intent` then caps the
+journey at the window and the path lands where the body actually got, while the
+resolver's live position becomes `to`. The resolver blocks from a place the
+mover could not close to in time.
+
+This is the same family as the `_reached_point` defect recorded in P6: a
+reachability question asked of one point and answered for another. **It is a
+simulation defect, not a movement-contract defect** — the contract is now
+self-consistent (one solve, one path, every consumer reading it), and what
+disagrees is the resolver's own commitment. Fixing it moves block and approach
+positions and therefore rally outcomes, which is outside this pass by the goal's
+own separation of concerns. Recorded here with its size so the next pass has a
+measurement rather than a suspicion.
+
+All other 1,288 off-ball legs agree with their published target to within
+**0.038 court units**, and 1,273 to within 0.05.
