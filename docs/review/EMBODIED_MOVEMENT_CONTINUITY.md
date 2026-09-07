@@ -1307,3 +1307,75 @@ path is a sampled traversal between two legal points, and no resolver statement
 disagrees with any other. Clamping it is what the spec forbids, and a body near
 the net is where a blanket clamp would do most damage. 28 samples in 65,036 —
 0.043% — recorded and left.
+
+---
+
+# C11 — Connecting the avoidance, and what it cost
+
+C9 found the mechanism, not its absence. `_travel_intent` — the one function
+every off-ball staging, rebase, coverage and wall-close route passes through —
+now asks `_navigation_waypoint` the question the two setter chases were already
+asking, and hands the corner to both `_movement_time` and `_committed_path`.
+
+**Nothing was built and nothing is displaced.** The route bends; the bend costs
+time; `_movement_time` already stages a corner and carries speed through it. The
+clearance test is against the *route*, not a radius around the body, so
+converging traffic that does not actually cross is untouched — and the firing
+rate says so: **529 of 7,730 off-ball legs bend, 6.84%**, worst shortfall 1.141 m.
+
+| intent | legs bent |
+|---|---:|
+| covering | 248 |
+| defending | 192 |
+| preparing_attack | 43 |
+| blocking | 39 |
+| receiving | 7 |
+
+## C11.1 Traffic
+
+| measure | after C6–C8 | after C11 |
+|---|---:|---:|
+| **pair-samples inside 0.50 m** | 2,712 | **2,129** (−21.5%) |
+| court-seconds inside 0.50 m | 108.5 | **85.2** |
+| 3+ clusters at 0.50 m | 22 | **15** |
+| inside 0.72 m | 4,963 | 4,548 |
+| p01 separation | 0.616 m | **0.672 m** |
+| minimum separation | 0.000 m | **0.000 m** |
+
+The minimum does not move, and cannot: bending a *route* cannot separate two
+bodies whose committed **endpoints** coincide. That is the 163-sample
+both-parked class C9.4 named, and it is a formation defect — two stationary
+volis assigned the same ground — not a traffic one. Route avoidance is the wrong
+instrument for it and was not stretched to cover it.
+
+## C11.2 Invariants
+
+P15 **0 of 8,509**. Adjacent discontinuities 144 → 146, flat. Two probe runs
+byte-identical. Suite **2 of 2,271**, the two known failures. Resolve cost
+median 75.9 ms on `probe_resolve_cost.gd`, the named instrument.
+
+## C11.3 The outcome drift, which is real and is the user's call
+
+| measure | before C11 | after | band |
+|---|---:|---:|---|
+| **kill rate** | 0.527 | **0.541** | 0.45–0.50 ✗, already failing |
+| dig rate | 0.517 | 0.493 | 0.35–0.55 ✓ |
+| dig quality | 0.350 | 0.337 | |
+| stuff rate | 0.104 | 0.097 | 0.08–0.14 ✓ |
+| contacts per rally | 4.591 | 4.599 | |
+| swing balance | 0.947 | 0.966 | nearer 1.00 |
+| ace / serve error | unchanged | unchanged | ✓ |
+
+The mechanism is coherent and physical: a defender who can no longer walk through
+a teammate arrives later and digs less, so attacking is easier. Every gated band
+still holds except kill rate, which was already outside before this pass and is
+now 0.014 further out.
+
+**This is the evidence-backed design question the spec says to stop for.** Three
+passes have now each moved kill rate the same way for the same reason — bodies
+being made to obey a constraint they previously ignored — and each was individually
+justified. The band has not been re-tuned once, deliberately, because the
+population under it keeps moving and `FAILURE_MODES.md` §0 is about exactly that
+mistake. What it wants now is a defensive-model pass with the band re-derived from
+the current population, and that is a design decision rather than a repo-truth
+one.

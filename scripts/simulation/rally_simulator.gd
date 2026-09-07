@@ -17131,20 +17131,45 @@ func _travel_intent(
 	## NOTE an absent facing is a discount -- EMBODIED_MOVEMENT_CONTINUITY.md C3.0
 	entry_facing: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
+	## **The avoidance that already existed, on the routes that never asked it.**
+	##
+	## `_navigation_waypoint` is a volleyball-shaped route bend -- 0.715 m of
+	## clearance, a 1.6x berth for a teammate on the floor who cannot step aside,
+	## a per-mover scale, deterministic ties -- and it had exactly two call sites,
+	## both setter chases. Every other route in the game walked through its own
+	## teammates: 2,712 pair-samples inside half a metre, minimum separation
+	## 0.000 m, 163 of them with both bodies stationary.
+	##
+	## Nothing new is built here and nothing is displaced. The route bends and the
+	## bend costs time, which `_movement_time` already stages as a corner and
+	## carries speed through. Converging traffic that does not actually cross is
+	## untouched, because the clearance test is against the *route*, not a radius
+	## around the body.
+	## NOTE the census said connect, not build -- EMBODIED_MOVEMENT_CONTINUITY.md C9
+	var detour: Variant = null
+	if mover != null:
+		var side_bodies: Dictionary = opponent_live_positions \
+			if opponent_live_positions.has(mover.id) else live_positions
+		detour = _navigation_waypoint(mover, from, reached, side_bodies)
+	var corner: Variant = detour["corner"] if detour != null else null
 	var traversal := 0.0
 	if mover != null:
 		traversal = minf(
 			_movement_time(
-				mover, from, reached, mode, null, entry_velocity, entry_facing
+				mover, from, reached, mode, corner, entry_velocity, entry_facing
 			),
 			maxf(window_seconds, 0.0),
 		)
 	var leg := _committed_path(
 		mover, from, reached, maxf(window_seconds, 0.0), mode, rally_clock,
-		entry_velocity, entry_facing,
+		entry_velocity, entry_facing, corner,
 	)
 	return {
 		"intent": intent,
+		## Who this route went round, so playback can draw the near miss and a
+		## probe can falsify a bend that avoided nothing. Absent when the route
+		## was clear, which is most of them.
+		"navigation": detour,
 		"progress": _travel_fraction(from, intended, reached),
 		"traversal_seconds": traversal,
 		"window_seconds": maxf(window_seconds, 0.0),
