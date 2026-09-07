@@ -1164,3 +1164,146 @@ The first is the knot above, traced: between the DIG and the following SET,
 with no leg describing it, and `_setter_read_phase` then reads that origin as
 where the body is. Worst case seed 61223, player 2: the dig leg ends at
 (0.306, 0.720) and the blocking leg starts at (0.519, 0.667), 5.70 m away.
+
+---
+
+# C7 — The setter pull was a silent write
+
+`_form_home_block` drifts an undisciplined blocker toward the setter
+(`pull_weight = (1 - discipline) * 0.18`) and wrote the result straight into
+`live_positions` with no leg. It is real behaviour and it stays; what changes is
+that it is now described like every other movement — one `_travel_intent`, the
+leg's own landing committed, exit velocity and facing recorded, and the journeys
+merged onto the opponent set event the wall is reading.
+
+Coverage improves and the adjacent count does not move (144), because the pair
+this was suspected of causing is not it. P15 stays at 0 of 8,543. Suite 2 of
+2,270. Balance: contacts 4.633 → 4.591, kill 0.525 → 0.527, dig 0.521 → 0.517,
+block touch 0.798 → 0.791, every gated band holding.
+
+**A repair attempted and reverted, recorded because it was nearly kept.** The
+two writes at the block contest restate `home_wall_positions` over the landing
+the wall close had already committed, which looked like the cause of the worst
+case. Guarding them changed nothing measurable — `live_positions` always has an
+entry, so the guard never fires — which means the wall position reaching
+`_setter_read_phase` comes from somewhere else and the guard was a change with no
+attributable effect. Reverted rather than left in.
+
+---
+
+# C8 — `estimate_movement` no longer restates the traversal
+
+C2.5 made the third copy *agree* about arrest. It was still a copy: the same
+accelerate-then-cruise quadratic written out inline beside
+`_accelerated_seconds`, which `_leg_seconds` calls.
+
+It now calls `_accelerated_seconds` too, opening from `arrest_terms.opening_speed`
+rather than the raw directional component — so the window and the leg share the
+arithmetic *and* the state they start from.
+
+| figure | C2.5 | C8 | band |
+|---|---:|---:|---|
+| overall mean ratio | 0.9923 | **0.9925** | 0.97–1.04 ✓ |
+| SET | 0.8846 | 0.8830 | 0.80–1.06 ✓ |
+| RECEPTION / DIG / ATTACK | 0.9974 / 0.9988 / 1.0436 | 0.9974 / 0.9991 / 1.0444 | ✓ |
+| perceptible rate | 0.0109 | 0.0109 | < 0.07 ✓ |
+
+The numbers barely move, which is the point: the duplication is gone without
+changing what the model says, so the *next* change to locomotion cannot reach one
+copy and miss the other. That was the failure mode C2.5 documented and this
+removes its cause.
+
+---
+
+# C9 — The spatial census, before anything is built
+
+The spec forbids adding a teammate spatial system before characterising what
+already exists. Three findings.
+
+## C9.1 There is no engine-level collision anywhere
+
+```
+grep -rl "CollisionShape|CollisionObject|Area2D|Area3D|RigidBody|CharacterBody|
+          StaticBody|PhysicsBody|move_and_slide|move_and_collide|
+          intersect_ray|intersect_shape"  --include=*.gd --include=*.tscn
+  -> no matches
+grep -rl "collision_layer|collision_mask" --include=*.tscn  -> no matches
+```
+
+**Zero.** No physics bodies, no areas, no layers, no sweeps, in production or in
+any dead path. Every spatial fact in this game is simulation arithmetic. There is
+nothing engine-side to reuse, repair or connect, and nothing to accidentally
+double up on.
+
+## C9.2 A teammate avoidance mechanism already exists and is production-causal
+
+`RallySimulator._navigation_waypoint` is a real, volleyball-shaped avoidance:
+
+| property | value |
+|---|---|
+| clearance | `OBSTRUCTION_CLEARANCE_M = 0.715 m` |
+| grounded bodies | `× OBSTRUCTION_GROUNDED_BERTH = 1.6` — a voli on the floor cannot step aside, so the mover does all the avoiding |
+| per-mover scale | `_berth_scale(mover, other)`, from the mover's own settledness |
+| geometry | closest point on the segment, corner pushed out by the shortfall |
+| ties | the path's own normal, so it stays deterministic |
+| published | `obstructed_by`, `obstruction_position`, `obstruction_shortfall_meters` |
+| consumed | `_movement_time` stages the corner and carries speed through it |
+
+It is not a generic separation force, it does not bounce or slide, and it already
+does the two things a volleyball avoidance must: it bends a *route* rather than
+displacing a body, and it gives a grounded teammate a wider berth.
+
+## C9.3 It has two call sites
+
+`_spatial_setter_choice` (`:12726`) and the opponent setter release (`:4585`).
+**Both are setter chases.** Twenty-plus other route producers — every phase map,
+every wall close, every coverage and defensive shape — never consult it.
+
+So the mechanism is not missing, it is *unconnected*. Against the spec's
+question — reuse, repair, connect, replace or leave alone — the evidence says
+**connect**, and says explicitly that a new collision system is not required.
+
+## C9.4 The population it would act on, re-measured after C6–C8
+
+| measure | C4 baseline | after C6–C8 |
+|---|---:|---:|
+| pair observations | 393,892 | 385,145 |
+| minimum separation | 0.000 m | 0.000 m |
+| p01 / p05 / p50 | 0.644 / 1.468 / 4.175 | 0.616 / 1.457 / 4.154 |
+| pair-samples inside 0.50 m | 2,611 | 2,712 |
+| court-seconds inside 0.50 m | 104.4 | 108.5 |
+| 3+ clusters at 0.50 m | 26 | 22 |
+| both moving | 87.9% | **88.5%** |
+
+Continuity work moved this by nothing, which is itself the finding: C4's ~20%
+improvement came from fixing *arrival times*, and that source is now exhausted.
+The concentration is `RECEPTION|opponent` (921 of 2,712) and `DIG|opponent`
+(463), and 88.5% of it is two moving bodies — converging traffic, not two parked
+volis overlapping.
+
+**163 samples are both-parked**, and those are the ones that cannot be defended
+as volleyball: two stationary bodies inside half a metre is a formation defect,
+not traffic.
+
+---
+
+# C10 — Net-plane crossings, classified
+
+All 28 survive C6–C8 unchanged, and the classification is unchanged with them:
+
+| | count |
+|---|---:|
+| committed landing already across | **0** |
+| landing legal, body drifted across | **28** |
+| no leg covering the sample | 0 |
+
+Worst 0.81 m, seed 61345, player 3, home. C5's systematic cause — the opponent
+wall built in home coordinates — is gone and stayed gone; what remains is
+entirely the drift class, where a leg's endpoints both sit legally and the
+interpolated body passes the plane between them.
+
+That is a **legitimate discontinuity of the model, not a contradiction**: the
+path is a sampled traversal between two legal points, and no resolver statement
+disagrees with any other. Clamping it is what the spec forbids, and a body near
+the net is where a blanket clamp would do most damage. 28 samples in 65,036 —
+0.043% — recorded and left.

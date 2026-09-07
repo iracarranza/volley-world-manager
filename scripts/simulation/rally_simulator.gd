@@ -5065,6 +5065,9 @@ func _resolve_opponent_transition(
 	## `attack_power * 0.62 + set_quality * 0.20 + 0.08`: a third execution scale,
 	## with no approach term and no opposing block, compared against the same
 	## contest and the same error threshold as the home side's.
+	## The pull's own legs, merged onto the event that carries the wall below.
+	var home_pull_targets := {}
+	var home_pull_intents := {}
 	var home_block_formation := _form_home_block(
 		players, lineup, defensive_plan, opponent_contact.x,
 		opponent_tempo, opponent_set_quality,
@@ -5072,8 +5075,21 @@ func _resolve_opponent_transition(
 		## The opponent's own pass-to-release time. Mirrors what the home set
 		## gives the opponent block; the home block was reading this pass too.
 		DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS,
-		opponent_hitter, opponent_set_height_extra,
+		opponent_hitter, opponent_set_height_extra, {},
+		home_pull_targets, home_pull_intents,
 	)
+	## Published on the set the wall is reading, which is the leg it happens in.
+	if opponent_set_event != null and not home_pull_intents.is_empty():
+		var pulled_targets: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_targets", {}
+		).duplicate(true)
+		pulled_targets.merge(home_pull_targets, true)
+		var pulled_intents: Dictionary = opponent_set_event.metadata.get(
+			"home_phase_intents", {}
+		).duplicate(true)
+		pulled_intents.merge(home_pull_intents, true)
+		opponent_set_event.metadata["home_phase_targets"] = pulled_targets
+		opponent_set_event.metadata["home_phase_intents"] = pulled_intents
 	## NOTE The home block reads the opponent, the way the opponent block reads them -- RALLY_SIMULATOR_NOTES.md
 	var home_block_read_tags: Array[String] = []
 	var home_block_adaptation := 0.0
@@ -14390,6 +14406,20 @@ func _form_home_block(
 	set_height_extra_meters: float = 0.0,
 	## NOTE The drift this wall has already been given, if any -- RALLY_SIMULATOR_NOTES.md
 	applied_setter_pull: Dictionary = {},
+	## **The pull, as a journey rather than a silent write.**
+	##
+	## A blocker who has not read the setter drifts toward them, and this wrote
+	## the drift straight into `live_positions` and published nothing. It is the
+	## largest remaining adjacent discontinuity: the dig leg ends where the body
+	## was, `_setter_read_phase` then reads the pulled position as where it is,
+	## and the blocking leg starts up to 5.70 m from where the last one ended.
+	##
+	## The pull is real behaviour and stays. What changes is that it is described
+	## like every other movement in the game -- one solve, one leg, the leg's own
+	## landing committed. Callers merge these into the event they publish.
+	## NOTE the drift is a leg -- EMBODIED_MOVEMENT_CONTINUITY.md C7
+	out_pull_targets: Dictionary = {},
+	out_pull_intents: Dictionary = {},
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
 	var re_forming := not applied_setter_pull.is_empty()
@@ -14412,8 +14442,24 @@ func _form_home_block(
 			)
 			var pull_weight := (1.0 - discipline) * 0.18
 			var pulled_x := lerpf(start.x, opponent_setter_x, pull_weight)
-			setter_pull[player.id] = absf(pulled_x - start.x)
-			live_positions[player.id] = Vector2(pulled_x, start.y)
+			var pulled := Vector2(pulled_x, start.y)
+			var pull_window := maxf(
+				preset_window_seconds if preset_window_seconds > 0.0 \
+					else set_flight_time,
+				0.0,
+			)
+			var pull_journey := _travel_intent(
+				player, &"blocking", start, pulled, pulled, "lateral", pull_window,
+				live_velocities.get(player.id, Vector2.ZERO),
+				live_facings.get(player.id, Vector2.ZERO),
+			)
+			var pull_landed: Vector2 = pull_journey.get("reached_position", pulled)
+			setter_pull[player.id] = absf(pull_landed.x - start.x)
+			live_positions[player.id] = pull_landed
+			out_pull_targets[player.id] = pull_landed
+			out_pull_intents[player.id] = pull_journey
+			_record_exit_velocity(live_velocities, player.id, pull_journey)
+			_record_exit_facing(live_facings, player.id, pull_journey)
 	if front_blockers.is_empty():
 		return {
 			"primary": null, "assist": null, "primary_close": 0.0,

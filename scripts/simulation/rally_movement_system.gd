@@ -218,19 +218,26 @@ static func estimate_movement(
 	var acceleration_time := maxf(
 		(maximum_speed - current_speed) / maxf(acceleration, 0.1), 0.0
 	)
-	var acceleration_distance := current_speed * acceleration_time \
-		+ 0.5 * acceleration * acceleration_time * acceleration_time
 
+	## **One formula, not a copy that agrees.**
+	##
+	## This block restated `_accelerated_seconds` inline -- the same quadratic,
+	## written twice -- and C2.5 is the record of what that costs: the leg gained
+	## an arrest term, the copy did not, and the SET family's traversal-to-window
+	## ratio went to 1.366 against a 1.06 gate before the suite caught it. Making
+	## the two agree numerically was the repair for that symptom; this removes the
+	## second copy so the next change to the model cannot reach only one of them.
+	##
+	## The opening speed is the arrest's, not the raw directional component, which
+	## is what `_leg_seconds` uses -- so window and leg now open the travel phase
+	## from the same state as well as with the same arithmetic.
+	## NOTE the window and the leg share one traversal -- EMBODIED_MOVEMENT_CONTINUITY.md C8
 	var movement_time := 0.0
 	if movement_distance > 0.001:
-		if movement_distance <= acceleration_distance:
-			movement_time = (
-				-current_speed
-				+ sqrt(maxf(current_speed * current_speed + 2.0 * acceleration * movement_distance, 0.0))
-			) / maxf(acceleration, 0.1)
-		else:
-			movement_time = acceleration_time \
-				+ (movement_distance - acceleration_distance) / maxf(maximum_speed, 0.1)
+		movement_time = _accelerated_seconds(
+			movement_distance, float(estimate_arrest.opening_speed),
+			maximum_speed, maxf(acceleration, 0.1),
+		)
 	## The turn is charged only to a body with nothing to arrest, exactly as
 	## `_leg_seconds` does it -- otherwise one direction change is priced twice.
 	var travel_time := float(estimate_arrest.seconds) + movement_time \
