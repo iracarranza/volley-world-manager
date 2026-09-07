@@ -157,3 +157,61 @@ This pass is DONE only when:
 11. no scheduler, generic navigation/collision system, body-state penalty system, perception rewrite or animation workaround was added without a gate proving it necessary.
 
 Continue C0 -> C5 autonomously. Stop only for a genuine evidence-backed architecture choice that cannot be resolved from repo truth.
+
+---
+
+# C6-C12 — Follow-up pass, executed (see the review doc)
+
+Status: **the teammate-spatial follow-up this spec deferred is done, and did not
+need a new system.** Summary; evidence in
+`docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C6-C12.
+
+## What the census settled, before anything was built
+
+- **Zero Godot physics or collision exists in this repo** -- no bodies, areas,
+  layers, shapes or sweeps, in production or in any dead path. Every spatial
+  fact is simulation arithmetic.
+- **`_navigation_waypoint` already was a volleyball-shaped avoidance**: 0.715 m
+  clearance, a 1.6x berth for a teammate on the floor who cannot step aside, a
+  per-mover scale, deterministic ties, `obstructed_by` published for playback,
+  the corner consumed by `_movement_time`.
+- **It had two call sites, both setter chases.** The mechanism was unconnected,
+  not missing. So the answer to reuse/repair/connect/replace/leave-alone is
+  **connect**, and no collision system, separation force, bounce or slide was
+  added.
+
+## Measured outcome
+
+| population | `86e95ae` | now |
+|---|---:|---:|
+| adjacent discontinuities > 10 cm | 241 (30.7% of adjoining) | 146 (16.9%) |
+| at exactly zero interval | 117 | 6 |
+| pair-samples inside 0.50 m | 2,712 | 2,096 |
+| court-seconds inside 0.50 m | 108.5 | 83.8 |
+| 3+ clusters | 22 | 15 |
+| target pairs within 1 cm | 3 | 0 |
+| net-plane samples | 28 | 28, all drift class |
+| P15 corrections | 0 | 0 |
+
+`estimate_movement` no longer restates the traversal: it calls
+`_accelerated_seconds` and opens from the arrest's own speed, so the window and
+the leg share the arithmetic *and* the state. Timing-ratio bands all hold.
+
+## What remains open
+
+1. **The kill-rate band is the design choice this spec says to stop for.**
+   0.527 -> 0.543 across the pass, against a 0.45-0.50 gate it was already
+   outside. Three passes have moved it the same way for the same reason -- bodies
+   being made to obey constraints they previously ignored -- and it has never
+   been re-tuned, deliberately. It wants the band re-derived from the current
+   population by a defensive-model pass, which is a design decision.
+2. **One stacked wall, precisely located.** The closest published target pair is
+   0.0135 m: seed 61234, a BLOCK, opponent p101 and p104. Almost certainly the
+   same defect as the standing suite failure about two blockers standing inside
+   each other.
+3. **146 adjacent discontinuities**, 78 of them `defending -> blocking`, traced
+   to `live` moving a home blocker between the dig and the set with no leg
+   describing it. Two correct repairs for the surrounding knot are written up
+   with their measured P15 cost (24 and 294 corrections) rather than forced
+   through.
+4. **28 net-plane samples**, all the drift class, deliberately not clamped.
