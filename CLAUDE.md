@@ -12,8 +12,31 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-09-06 at `ddf9833`: **2 of 2,274 checks
+Current branch baseline, verified 2026-09-06 at `1d02f4e`: **2 of 2,271 checks
 fail**. A *third* failure is a regression; these two are not.
+
+**Two bodies no longer walk through each other, and no collision system was
+added.** The census that preceded it is the durable part: there is **zero Godot
+physics or collision anywhere in this repo** -- no bodies, areas, layers, shapes
+or sweeps, production or dead -- and `_navigation_waypoint` already was a
+volleyball-shaped avoidance (0.715 m clearance, 1.6x berth for a teammate on the
+floor, per-mover scale, deterministic ties) with **two call sites, both setter
+chases**. It was unconnected, not missing. `_travel_intent` now asks it, so every
+off-ball route does: it fires on 6.84% of legs, which is why converging traffic
+survives.
+
+Pair-samples inside 0.50 m 2,712 to 2,096, court-seconds 108.5 to 83.8, 3+ body
+instants 22 to 15, published target pairs within 1 cm **3 to 0**. Adjacent
+movement discontinuities 241 to 146, and those at *zero* interval 117 to 6.
+P15 stays at 0 corrections throughout. See
+`docs/review/EMBODIED_MOVEMENT_CONTINUITY.md` C6-C12.
+
+**Kill rate is now 0.543 against a 0.45-0.50 gate, and it is the open design
+question rather than a knob.** Three consecutive passes have moved it the same
+way for the same reason -- bodies being made to obey a constraint they had been
+ignoring -- and it has never been re-tuned, deliberately: the sampling
+population under it keeps moving, which is the §0 mistake. It wants the band
+re-derived by a defensive-model pass.
 
 **Movement is continuously embodied now, and five things moved.** C0-C5 of
 `docs/specs/EMBODIED_MOVEMENT_CONTINUITY.md`, written up in
