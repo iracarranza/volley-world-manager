@@ -1046,3 +1046,121 @@ underneath it; the two are separately validated by their own probes.
 - **`estimate_movement` is still a third copy of the traversal model** (C2.5). It
   now agrees with the other two about arrest, but the duplication that let them
   diverge is intact.
+
+---
+
+# C6 — The adjacent discontinuities, classified and mostly repaired
+
+The 217 were recorded and not chased. `tools/audit_adjacent_discontinuity.gd`
+classifies every one by publisher pair, cue pair, action pair, side and implied
+speed, and separates the two things the spec asks to be told apart.
+
+**Baseline at `86e95ae`, 600 rallies from seed 61000: 241 of 785 adjoining
+boundaries.** (The 217 in C1.8 is the same defect at a different sample; this
+instrument and this seed base are both ends of every figure below.)
+
+The separation is not close. **238 of 241 imply 12 m/s or more** — median
+175 m/s, maximum 4,224 m/s — and 117 sit at *exactly zero interval*. Three imply
+a speed a body could reach. So this is 238 simulation contradictions and 3
+legitimate fast joins, not a population of debatable cases.
+
+## C6.1 The serve walk-in committed an intention
+
+Both serve sites committed the intended base while publishing a path the serve
+flight can cut short: **62 of 200 walk-ins landed up to 1.585 m from the point
+the resolver then recorded.** The next leg for that body began at the recorded
+point, which the body had never reached.
+
+This is exactly the defect P15 fixed across the phase maps, at the two sites
+that are not phase maps. The walk is solved before the event, and the landing is
+what `live` and `movement_target` get.
+
+**241 → 186**, and `movement_path -> phase_intent[defending]` (56, all
+SERVE → RECEPTION) went to zero.
+
+## C6.2 An interval leg was stamped with the wrong clock
+
+`_phase_hold_paths` describes the interval **since** the last contact and was
+stamping it `rally_clock` — *now* — so it ran forward into the next event's
+window instead of backward over the one it describes. Legs published on three
+consecutive events shared a start time and overlapped.
+
+The instrument was hiding the damage rather than reporting it: overlapping pairs
+are skipped as "two publishers describing one window", so a leg pointing the
+wrong way in time was excluded from the adjacency test that should have caught
+it. With honest stamps the adjoining population rose 785 → 865 and the
+discontinuities it exposed rose with it.
+
+`_time_at_last_contact` is a new field beside `_positions_at_last_contact`:
+where the bodies were, and now when. The hold leg is stamped there, and its
+budget is the interval rather than a duration guessed from its own distance.
+
+## C6.3 Two legs for one interval
+
+With honest stamps the double-description became visible. The phase maps run
+while the metadata is built and write `live` as they go; `_phase_hold_paths`
+runs afterwards inside `_add_event`. A body with a stated intent on an event was
+getting **two** legs for one interval — the intent's, from where it started, and
+a hold over the same interval ending where the intent left it. Those adjoin and
+disagree by the whole journey.
+
+`_phase_hold_paths` now takes the ids this event's own phase intents already
+speak for and skips them. A stated journey wins; the hold fills silence.
+
+**397 → 144** with the stamp fix in place.
+
+## C6.4 Three more sites committing the closed form
+
+`_establish_shape` (both sides) and `_setter_read_phase` published
+`targets = reached` — `_reached_point`'s closed-form answer — while the leg they
+published landed where the stepped integrator got. Swept to `reached_position`,
+the same repair P15 made everywhere else.
+
+## C6.5 Result, and the two repairs held back
+
+| measure | `86e95ae` | after C6 |
+|---|---:|---:|
+| adjoining boundaries | 785 | 865 |
+| **adjacent discontinuities > 10 cm** | **241 (30.7%)** | **144 (16.6%)** |
+| implying >= 12 m/s | 238 | 142 |
+| at exactly zero interval | 117 | **1** |
+| median implied speed | 175 m/s | 87.5 m/s |
+| **P15 corrections** | **0 of 8,368** | **0 of 8,555** |
+
+Balance, 700 rallies: contacts 4.636 → 4.633, kill 0.527 → 0.525, dig 0.519 →
+0.521, block touch 0.800 → 0.798, stuff unchanged. Every gated band as before.
+Two probe runs byte-identical. Suite 2 of 2,274, the two known failures.
+
+**Two further repairs are correct and are not shipped, because each breaks the
+P15 zero-correction invariant.** Both are recorded with their measured cost
+rather than forced through:
+
+1. **The actor's leg ends at the contact, so the next should start there.**
+   `_positions_at_last_contact` snapshots `live`, which for the body that just
+   played the ball is wherever the resolver put them *afterwards*. Recording the
+   contact instead is worth **122 discontinuities** and costs **24 P15
+   corrections**, all on the POINT event, all the server, 0.15–0.22 court units.
+   The cause is that the serve's own walk-in never reaches playback: nothing
+   precedes the first contact, so the leg has no window to be drawn in, and the
+   server's body is only reconciled at the end of the rally.
+
+2. **`_setter_read_phase` should commit the wall pull it publishes.** It states
+   a journey and leaves `live` alone — the C5a violation. Committing it costs
+   **294 P15 corrections**, because a downstream site reads a stale origin for
+   the same blockers. Those two are one knot and want one repair, not two.
+
+## C6.6 The remaining 144
+
+| cue pair | n |
+|---|---:|
+| `phase_intent[defending] -> phase_intent[blocking]` | 78 |
+| `movement_path -> phase_intent[preparing_attack]` | 18 |
+| `phase_hold -> phase_intent[covering]` | 18 |
+| `phase_intent[defending] -> phase_intent[preparing_attack]` | 14 |
+| everything else | 16 |
+
+The first is the knot above, traced: between the DIG and the following SET,
+`live` for a home blocker moves from the dig shape to the setter-pull origin
+with no leg describing it, and `_setter_read_phase` then reads that origin as
+where the body is. Worst case seed 61223, player 2: the dig leg ends at
+(0.306, 0.720) and the blocking leg starts at (0.519, 0.667), 5.70 m away.

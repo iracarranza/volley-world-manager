@@ -712,6 +712,10 @@ var _positions_at_last_contact: Dictionary = {}
 ## Every voli in this rally by id, both sides, so `_add_event` can solve the leg
 ## a body just made without being handed a roster at each of its call sites.
 var _bodies_by_id: Dictionary = {}
+## When the last contact happened. `_positions_at_last_contact` says where every
+## body was; this says when, so the leg between then and now can be given the
+## interval it actually had instead of a duration guessed from its own distance.
+var _time_at_last_contact: float = 0.0
 ## The receiving side's own labels for its receive shape, captured where the
 ## shape is built.
 ##
@@ -894,6 +898,7 @@ func resolve(
 	exertion_cost = {}
 	receive_formation_intents = {}
 	_positions_at_last_contact = {}
+	_time_at_last_contact = 0.0
 	_bodies_by_id = {}
 	for raw_body in players:
 		var home_body := raw_body as VolleyballPlayer
@@ -991,6 +996,7 @@ func resolve(
 	var opponent_serve_origin := CourtConstants.serve_origin(
 		opponent_serve_base.x, false
 	)
+
 	## **Drawn and discarded.** The verdict this used to decide now comes off the
 	## flight, but the draw stays where it was so every downstream consumer of
 	## `rng` keeps the stream it had -- a serve pass that also reshuffled the
@@ -1022,6 +1028,21 @@ func resolve(
 		## NOTE `end_height` stays NAN, and that is a ruling rather than a gap -- RALLY_SIMULATOR_NOTES.md
 	)
 	_stamp_launch_state(serve_trajectory, canonical_serve)
+	## **The walk-in the server can actually complete.**
+	##
+	## This committed the intended base while publishing a path the serve flight
+	## can cut short: 62 of 200 walk-ins landed up to 1.585 m from the point the
+	## resolver then recorded, and the next leg for that body began *there* --
+	## 117 of 241 adjacent discontinuities, at exactly zero interval, implying
+	## speeds up to 4,224 m/s. The same defect P15 fixed in the phase maps, at
+	## the two sites that are not phase maps.
+	## NOTE the landing, not the intention -- EMBODIED_MOVEMENT_CONTINUITY.md C6.1
+	var opponent_serve_walk := _committed_path(
+		opponent_server, opponent_serve_origin, opponent_serve_base,
+		serve_time, "lateral", rally_clock,
+	)
+	if opponent_serve_walk != null:
+		opponent_serve_base = opponent_serve_walk.landing_position()
 	## Where this server belongs once the ball is gone: their own defensive spot,
 	## the same one every other opponent gets from `court_position`.
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
@@ -1067,10 +1088,7 @@ func resolve(
 			## The walk-in, solved once. It is the only contact leg the
 			## resolver published as two endpoints and no journey, so playback
 			## drew the server's return to court by re-integrating it locally.
-			"movement_path": _committed_path(
-				opponent_server, opponent_serve_origin, opponent_serve_base,
-				serve_time, "lateral", rally_clock,
-			),
+			"movement_path": opponent_serve_walk,
 			"outgoing_trajectory": serve_trajectory,
 			## The same ball, in the form that can be asked where it is at a
 			## given time rather than only where it ends. Read by nobody yet --
@@ -3972,6 +3990,21 @@ func _resolve_home_serve(
 	var home_serve_base: Vector2 = CourtConstants.slot_position(1)
 	if defensive_plan != null:
 		home_serve_base = defensive_plan.defender_position(server.id, home_serve_base)
+	## **The walk-in the server can actually complete.**
+	##
+	## These committed the intended base while publishing a path the serve flight
+	## can cut short: 62 of 200 walk-ins landed up to 1.585 m away from the point
+	## the resolver then recorded, and the next leg for that body began there --
+	## 117 of 241 adjacent discontinuities, at exactly zero interval, implying
+	## speeds up to 4,224 m/s. Same defect P15 fixed in the phase maps, at the two
+	## sites that are not phase maps.
+	## NOTE the landing, not the intention -- EMBODIED_MOVEMENT_CONTINUITY.md C6.1
+	var home_serve_walk := _committed_path(
+		server, CourtConstants.serve_origin(0.82, true), home_serve_base,
+		serve_time, "lateral", rally_clock,
+	)
+	if home_serve_walk != null:
+		home_serve_base = home_serve_walk.landing_position()
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
 		CourtConstants.serve_origin(0.82, true), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
@@ -4006,10 +4039,7 @@ func _resolve_home_serve(
 			## The walk-in, solved once. It is the only contact leg the
 			## resolver published as two endpoints and no journey, so playback
 			## drew the server's return to court by re-integrating it locally.
-			"movement_path": _committed_path(
-				server, CourtConstants.serve_origin(0.82, true), home_serve_base,
-				serve_time, "lateral", rally_clock,
-			),
+			"movement_path": home_serve_walk,
 			"outgoing_trajectory": serve_trajectory,
 			## The same ball, in the form that can be asked where it is at a
 			## given time rather than only where it ends. Read by nobody yet --
@@ -13438,24 +13468,75 @@ func _phase_hold_map(positions: Dictionary, actor_id: int) -> Dictionary:
 
 ## The leg between the previous contact and this one, for every body that made
 ## one. A body that did not move gets no entry rather than a zero-length path.
-func _phase_hold_paths(positions: Dictionary, actor_id: int) -> Dictionary:
+## **Only for bodies nothing else on this event describes.**
+##
+## The phase maps run while the metadata is built and write `live` as they go;
+## this runs afterwards, inside `_add_event`. So a body with a stated intent on
+## this event was getting *two* legs for one journey -- the intent's, from where
+## it started, and a hold from the same interval ending where the intent left it.
+## With honest timestamps those two adjoin and disagree by the whole journey:
+## 188 of 217 adjacent discontinuities, up to 4.95 m.
+##
+## A stated journey wins. This fills silence.
+## NOTE one leg per body per interval -- EMBODIED_MOVEMENT_CONTINUITY.md C6.4
+func _phase_hold_paths(
+	positions: Dictionary, actor_id: int, already_described: Dictionary = {}
+) -> Dictionary:
 	var paths := {}
 	for raw_id in positions:
 		var player_id := int(raw_id)
-		if player_id == actor_id or not _positions_at_last_contact.has(player_id):
+		if player_id == actor_id or already_described.has(player_id):
+			continue
+		if not _positions_at_last_contact.has(player_id):
 			continue
 		var here := Vector2(positions[raw_id])
 		var was := Vector2(_positions_at_last_contact[player_id])
 		var body := _bodies_by_id.get(player_id, null) as VolleyballPlayer
 		if body == null:
 			continue
-		var leg_seconds := _movement_time(body, was, here, "transition")
+		## **The interval, not a duration guessed from the distance.**
+		##
+		## This passed `_movement_time` as the budget, so `_committed_path` ran
+		## `min(closed form, closed form)` and the stepped integrator -- which
+		## needs slightly longer for the same journey, the split C2.5 named --
+		## landed short of a position the resolver had already committed. The next
+		## leg then began at the committed point, and the difference was a
+		## teleport: 56 of 57 remaining adjacent discontinuities, worst 5.70 m.
+		##
+		## The journey between two contacts had the time between two contacts.
+		## Capped below by the closed form so a leg is never given less than the
+		## model thinks it needs, and the integrator stops when it arrives.
+		## NOTE the interval is the budget -- EMBODIED_MOVEMENT_CONTINUITY.md C6.3
+		var leg_seconds := maxf(
+			_movement_time(body, was, here, "transition"),
+			rally_clock - _time_at_last_contact,
+		)
+		## **Stamped when it happened, not when it was published.**
+		##
+		## This leg is the interval *since* the last contact, and it was being
+		## stamped `rally_clock` -- now -- so it ran forward into the next
+		## event's window instead of backward over the one it describes. Legs
+		## from three consecutive events shared a start time and overlapped, and
+		## a body's own legs read as adjacent when they were concurrent.
+		## NOTE the leg starts when the interval did -- EMBODIED_MOVEMENT_CONTINUITY.md C6.3
 		var path := _committed_path(
-			body, was, here, leg_seconds, "transition", rally_clock
+			body, was, here, leg_seconds, "transition", _time_at_last_contact
 		)
 		if path != null:
 			paths[player_id] = path
 	return paths
+
+
+## Which bodies this event's own phase maps already speak for.
+static func _described_on(metadata: Dictionary, side: String) -> Dictionary:
+	var described := {}
+	var intents: Variant = metadata.get("%s_phase_intents" % side, {})
+	if intents is Dictionary:
+		for raw_id in Dictionary(intents):
+			var entry: Variant = Dictionary(intents)[raw_id]
+			if entry is Dictionary and entry.get("path", null) != null:
+				described[int(raw_id)] = true
+	return described
 
 
 func _add_event(
@@ -13492,10 +13573,10 @@ func _add_event(
 		## published that leg, this solves it once, here, from the one place that
 		## sees every contact. AUTHORITATIVE_MOVEMENT_EXECUTION.md P12.
 		metadata["home_phase_hold_paths"] = _phase_hold_paths(
-			live_positions, actor_id
+			live_positions, actor_id, _described_on(metadata, "home")
 		)
 		metadata["opponent_phase_hold_paths"] = _phase_hold_paths(
-			opponent_live_positions, actor_id
+			opponent_live_positions, actor_id, _described_on(metadata, "opponent")
 		)
 	## **And the actor's own leg, for the contacts that never published one.**
 	##
@@ -13518,8 +13599,13 @@ func _add_event(
 			))
 			var actor_path := _committed_path(
 				actor_body, actor_from, actor_to,
-				_movement_time(actor_body, actor_from, actor_to, "transition"),
-				"transition", rally_clock,
+				maxf(
+					_movement_time(actor_body, actor_from, actor_to, "transition"),
+					rally_clock - _time_at_last_contact,
+				),
+				## Same interval, same stamp: this journey ended at the contact
+				## being added, so it began at the contact before it.
+				"transition", _time_at_last_contact,
 			)
 			if actor_path != null:
 				metadata["movement_path"] = actor_path
@@ -13562,6 +13648,22 @@ func _add_event(
 		_positions_at_last_contact[int(player_id)] = Vector2(
 			opponent_live_positions[player_id]
 		)
+	## **The actor's leg ended at the contact, so that is where the next one
+	## starts.**
+	##
+	## The two lines above snapshot `live`, which for the body that just played
+	## the ball is wherever the resolver put them *after* the contact -- a landing
+	## blocker, a defender pushed into shape. The leg published for this contact
+	## ends at `body_contact_position`, so the next leg for that body began
+	## somewhere it had never been: 122 of 186 adjacent discontinuities, worst
+	## 2.27 m at zero interval.
+	##
+	## Recording the contact means the interval between the contact and wherever
+	## the resolver moved them becomes a *published leg* on the next event rather
+	## than a jump. It is not a clamp -- nothing is moved; a journey that was
+	## happening silently is now described.
+	## NOTE the contact is where the body was -- EMBODIED_MOVEMENT_CONTINUITY.md C6.2
+	_time_at_last_contact = rally_clock
 	result.events.append(event)
 
 
@@ -16296,18 +16398,24 @@ func _transition_phase_map(
 			player, here, intent, window_seconds, mode,
 			0.0, 0.0, Vector2.ZERO, true, carried, set_as,
 		)
-		targets[player.id] = reached
 		var journey := _travel_intent(
 			player,
 			&"receiving" if player.id == chase_id \
 				else (&"preparing_attack" if mode == "transition" else &"defending"),
 			here, intent, reached, mode, window_seconds, carried, set_as,
 		)
+		## The leg's own landing, not the closed form's answer -- the two differ
+		## on legs the stepped integrator cannot finish in the time the closed
+		## form allots, and committing the one that is not drawn is what makes
+		## the next leg start somewhere the body has never been.
+		## NOTE `reached_position` -- EMBODIED_MOVEMENT_CONTINUITY.md C6.5
+		var landed: Vector2 = journey.get("reached_position", reached)
+		targets[player.id] = landed
 		out_intents[player.id] = journey
 		## NOTE the resolver has to believe what playback draws -- leaving these
 		## out of `live_positions` separates the drawn and simulated courts from
 		## the second contact onward
-		live_positions[player.id] = reached
+		live_positions[player.id] = landed
 		_record_exit_velocity(live_velocities, player.id, journey)
 		_record_exit_facing(live_facings, player.id, journey)
 	return targets
@@ -16372,7 +16480,6 @@ func _opponent_transition_phase_map(
 			"transition" if player.id == chase_id else "lateral",
 			0.0, 0.0, Vector2.ZERO, true, carried, set_as,
 		)
-		targets[player.id] = reached
 		var journey := _travel_intent(
 			player,
 			&"receiving" if player.id == chase_id else &"defending",
@@ -16380,8 +16487,11 @@ func _opponent_transition_phase_map(
 			"transition" if player.id == chase_id else "lateral",
 			window_seconds, carried, set_as,
 		)
+		## The mirror of the home shape above -- `reached_position`, C6.5.
+		var landed: Vector2 = journey.get("reached_position", reached)
+		targets[player.id] = landed
 		out_intents[player.id] = journey
-		opponent_live_positions[player.id] = reached
+		opponent_live_positions[player.id] = landed
 		_record_exit_velocity(opponent_live_velocities, player.id, journey)
 		_record_exit_facing(opponent_live_facings, player.id, journey)
 	return targets
@@ -16576,11 +16686,15 @@ func _setter_read_phase(
 				player, here, intended, window_seconds, "lateral",
 				0.0, 0.0, Vector2.ZERO, false, carried, set_as,
 			)
-			targets[player.id] = reached
 			var journey := _travel_intent(
 				player, &"blocking", here, intended, reached,
 				"lateral", window_seconds, carried, set_as,
 			)
+			## `reached_position`, C6.5 -- and committed, C5a. This phase
+			## published a wall pull and left `live` alone, so the body walked
+			## there on screen and the next leg fetched it from where it started.
+			var landed: Vector2 = journey.get("reached_position", reached)
+			targets[player.id] = landed
 			out_intents[player.id] = journey
 			_record_exit_velocity(live_velocity, player.id, journey)
 			_record_exit_facing(live_facing, player.id, journey)
