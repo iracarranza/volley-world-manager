@@ -10129,11 +10129,33 @@ static func _block_wall_positions(
 	var wall_y := CourtConstants.NET_Y - BLOCK_NET_DEPTH if opponent_side \
 		else CourtConstants.NET_Y + BLOCK_NET_DEPTH
 	var inward := 1.0 if lane_x < 0.5 else -1.0
+	var primary_x := lane_x
+	var assist_x := lane_x + BLOCK_SHOULDER_OFFSET * inward
+	## **Clamping the two independently is what stacked them.**
+	##
+	## A lane at or past an antenna clamped both shoulders onto the same
+	## sideline, and the wall arrived as one body: measured at 0.0008 m apart,
+	## the closest pair of published targets in the game and the whole of the
+	## both-parked overlap that route avoidance cannot reach -- bending a route
+	## cannot separate two bodies sent to one point.
+	##
+	## The pair is shifted together instead, which is the technique
+	## `_block_wall_positions_preserving_order` already uses at the same two
+	## edges. The wall keeps its shoulder width and slides off the antenna.
+	## NOTE the shoulder survives the sideline -- EMBODIED_MOVEMENT_CONTINUITY.md C12
+	var lowest := minf(primary_x, assist_x)
+	var highest := maxf(primary_x, assist_x)
+	if lowest < 0.05:
+		var shift_right := 0.05 - lowest
+		primary_x += shift_right
+		assist_x += shift_right
+	elif highest > 0.95:
+		var shift_left := highest - 0.95
+		primary_x -= shift_left
+		assist_x -= shift_left
 	return {
-		"primary_position": Vector2(clampf(lane_x, 0.05, 0.95), wall_y),
-		"assist_position": Vector2(
-			clampf(lane_x + BLOCK_SHOULDER_OFFSET * inward, 0.05, 0.95), wall_y
-		),
+		"primary_position": Vector2(clampf(primary_x, 0.05, 0.95), wall_y),
+		"assist_position": Vector2(clampf(assist_x, 0.05, 0.95), wall_y),
 	}
 
 
@@ -16663,6 +16685,30 @@ func _cover_phase_map(
 					),
 					tight_depth if ordinary_cover_index == 0 else deep_depth,
 				)
+				## **Coverage is a ring around the hitter, not their feet.**
+				##
+				## The tight ring is placed on `contact.x`, and the hitter is
+				## recovering at their own contact, so the two targets could land
+				## 0.8 mm apart -- the closest published pair in the game, and the
+				## both-parked overlap route avoidance cannot reach: bending a
+				## route cannot separate two bodies *sent* to one point.
+				##
+				## Pushed off along the fan the ring already uses, by the same
+				## clearance every other body gets from `_navigation_waypoint`.
+				## NOTE the ring is around the hitter -- EMBODIED_MOVEMENT_CONTINUITY.md C12
+				var hitter_ground: Vector2 = (
+					opponent_live_positions if opponent_side else live_positions
+				).get(hitter_id, Vector2(-9.0, -9.0))
+				var ring_gap := RallyKinematics.court_distance_meters(
+					intent, hitter_ground
+				)
+				if ring_gap < OBSTRUCTION_CLEARANCE_M:
+					intent.x = clampf(
+						intent.x + fan_direction \
+							* (OBSTRUCTION_CLEARANCE_M - ring_gap) \
+							/ CourtConstants.COURT_WIDTH_METERS,
+						0.06, 0.94,
+					)
 				ordinary_cover_index += 1
 				mode = "transition"
 		var carried: Vector2 = (

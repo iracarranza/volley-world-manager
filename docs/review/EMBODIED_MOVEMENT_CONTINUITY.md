@@ -1379,3 +1379,81 @@ population under it keeps moving and `FAILURE_MODES.md` §0 is about exactly tha
 mistake. What it wants now is a defensive-model pass with the band re-derived from
 the current population, and that is a design decision rather than a repo-truth
 one.
+
+---
+
+# C12 — Formation spacing: two bodies sent to one point
+
+Route avoidance cannot separate bodies whose **targets** coincide, so the
+both-parked class needed a different question: how often does the resolver
+publish two targets on the same ground?
+
+**86 of 25,260 published target pairs (0.34%) inside 0.50 m, three of them
+within 1 cm.** The closest was 0.0008 m — the closest published pair in the game.
+
+## C12.1 The tight cover ring was the hitter's own feet
+
+`_cover_phase_map` places the first ordinary coverer at `Vector2(contact.x,
+tight_depth)` and the hitter recovers at their own contact. On a swing whose
+contact depth is near `tight_depth`, those are the same point: seed 61107,
+p1 `covering` at (0.8836, 0.5750) and p2 `recovering` at (0.8844, 0.5757).
+
+Coverage is a ring *around* the attacker; it is never their feet. The ring is
+now pushed off along the fan it already uses, by the same
+`OBSTRUCTION_CLEARANCE_M` every other body gets from `_navigation_waypoint` — no
+new constant, no new mechanism.
+
+Two co-location attempts were also made on `_block_wall_positions`, which clamps
+the two shoulders to `[0.05, 0.95]` independently and could collapse them onto
+one antenna. The pair is shifted together now, the technique
+`_block_wall_positions_preserving_order` already uses. **It changed nothing
+measurable**, so that clamp was not the source of any observed stack; the guard
+is correct in itself and is kept, and the claim that it fixed something is not
+made.
+
+| measure | before C12 | after |
+|---|---:|---:|
+| target pairs inside 0.50 m | 86 | **60** |
+| **target pairs within 1 cm** | **3** | **0** |
+| closest published pair | 0.0008 m | 0.0135 m |
+| pair-samples inside 0.50 m | 2,129 | **2,096** |
+| 3+ clusters | 15 | 15 |
+
+## C12.2 What remains, named
+
+The closest pair is now 0.0135 m — **seed 61234, a BLOCK, opponent p101 and
+p104**. Still two bodies in one place, still on a wall, and on the opponent
+side rather than the home side the shoulder guard addressed. That is almost
+certainly the same defect as the standing suite failure *"the two blockers stand
+beside each other, not inside each other (22 walls, 1 stacked, narrowest
+0.000 m)"*, which has now survived every pass in this file and is the single
+best-identified remaining contradiction: one named seed, one named pair, one
+named phase.
+
+It was not chased further in this pass because the next step is to find which of
+the several opponent wall producers publishes that pair, and that is a fresh
+trace rather than a continuation of this one.
+
+---
+
+# Final state of this pass
+
+| population | at `86e95ae` | now |
+|---|---:|---:|
+| adjacent discontinuities > 10 cm | 241 of 785 (30.7%) | **146 of 864 (16.9%)** |
+| — at exactly zero interval | 117 | **6** |
+| — median implied speed | 175 m/s | 87.5 m/s |
+| pair-samples inside 0.50 m | 2,712 | **2,096** (−23%) |
+| court-seconds inside 0.50 m | 108.5 | **83.8** |
+| 3+ clusters at 0.50 m | 22 | **15** |
+| published target pairs within 1 cm | 3 | **0** |
+| net-plane samples | 28 | 28, all drift class, 0 sent |
+| **P15 corrections** | **0** | **0 of 8,543** |
+| suite | 2 of 2,271 | **2 of 2,271** |
+| determinism | — | two probe runs byte-identical |
+| resolve cost | — | median 75.9 ms (`probe_resolve_cost.gd`) |
+| `estimate_movement` | third copy, numerically aligned | **calls the shared traversal** |
+
+Balance across the whole pass: contacts 4.636 → 4.589, dig 0.519 → 0.493,
+stuff 0.104 → 0.099, block touch 0.800 → 0.796, swing balance 0.954 → 0.966,
+ace and serve error unchanged, **kill 0.527 → 0.543**.
