@@ -1,0 +1,87 @@
+{
+  "analysis_kind": "SHADOW economic / Practical Reach input preflight",
+  "blocking_inputs": {
+    "missing_documents": [
+      "maps.md",
+      "objectives.md",
+      "infrastructure.md",
+      "classes.md",
+      "docs/manuscript/2026-09-14-Economic-Calibration-Supplement.md",
+      "docs/manuscript/2026-09-14-UAU-Work-Stock-and-Practical-Reach.md"
+    ],
+    "missing_seed_records": [
+      "930010639",
+      "930012642"
+    ]
+  },
+  "capability_keyword_inventory": {
+    "biome_or_ecology": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "cave": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "homeland_depth": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "opportunity_relationship": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "resource_or_ore": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "starter_route_or_handoff": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "structure_or_village": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "terrain_graph": {
+      "evidence_files": [],
+      "observable": false
+    },
+    "water": {
+      "evidence_files": [],
+      "observable": false
+    }
+  },
+  "guardrail": "A false capability or missing record must remain UNRESOLVED; this audit does not authorize inferred world facts or analytical substitutes.",
+  "measurement_ready": false,
+  "repository_root": ".",
+  "required_documents": {
+    "classes.md": {
+      "present": false
+    },
+    "docs/manuscript/2026-09-14-Economic-Calibration-Supplement.md": {
+      "present": false
+    },
+    "docs/manuscript/2026-09-14-UAU-Work-Stock-and-Practical-Reach.md": {
+      "present": false
+    },
+    "infrastructure.md": {
+      "present": false
+    },
+    "maps.md": {
+      "present": false
+    },
+    "objectives.md": {
+      "present": false
+    }
+  },
+  "schema_version": 1,
+  "seed_record_files": {
+    "930010639": [],
+    "930012642": []
+  },
+  "seeds": [
+    "930010639",
+    "930012642"
+  ]
+}
